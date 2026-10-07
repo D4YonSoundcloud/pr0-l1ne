@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PR0GRAM WORLDL1NE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <header class="toolbar">
+        <h1 class="brand">PR0L1NE</h1>
+        <label class="field">
+          <span class="visually-hidden">Language</span>
+          <select id="language" aria-label="Language"></select>
+        </label>
+        <label class="field">
+          <span class="visually-hidden">Open a program</span>
+          <select id="programs" aria-label="Open a saved program or an example"></select>
+        </label>
+        <div class="program" aria-label="Current program">
+          <span id="program-name" class="program-name">Untitled</span>
+          <span id="program-dirty" class="program-dirty" title="Unsaved changes" hidden>●</span>
+          <span class="visually-hidden" id="program-dirty-label"></span>
+        </div>
+        <button id="save" class="button" type="button" title="Save (Ctrl/Cmd + S). Save as a new program: Ctrl/Cmd + Shift + S">Save</button>
+        <button id="delete" class="button quiet" type="button" title="Delete this saved program" hidden>Delete</button>
+        <button id="run" class="button primary" type="button" title="Run (Ctrl/Cmd + Enter)">Run</button>
+        <label class="toggle" title="Re-run automatically as you type">
+          <input id="live" type="checkbox" checked /> Live
+        </label>
+        <span id="status" class="status" role="status" aria-live="polite">Loading Python…</span>
+        <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
+      </header>
+
+      <main class="workspace" id="workspace">
+        <section class="editor-pane" id="editor-pane" aria-label="Code editor">
+          <div id="editor" class="editor"></div>
+          <div class="console" aria-label="Program output">
+            <div class="pane-title">Output</div>
+            <pre id="output" class="output"></pre>
+          </div>
+        </section>
+
+        <div id="divider" class="divider" title="Drag to resize. Double-click to reset." role="separator" aria-orientation="vertical" aria-label="Resize panels" aria-valuemin="20" aria-valuemax="75" aria-valuenow="40" tabindex="0"></div>
+
+        <section class="canvas-pane" id="canvas-pane" aria-label="Visualization">
+          <div id="banner" class="banner" hidden></div>
+          <div class="canvas" id="canvas">
+            <section class="canvas-section" id="memory-section" aria-labelledby="memory-title">
+              <div class="section-head">
+                <h2 class="section-title" id="memory-title">Memory</h2>
+                <div class="segmented" role="group" aria-label="How references are drawn">
+                  <button type="button" id="mode-arrows" class="segment" aria-pressed="true" title="Every object is its own box, connected by arrows">Arrows</button>
+                  <button type="button" id="mode-nested" class="segment" aria-pressed="false" title="Objects only one thing refers to are drawn inside it">Nested</button>
+                </div>
+                <span class="section-hint">Drag boxes to rearrange them</span>
+              </div>
+              <div id="memory"></div>
+            </section>
+            <div id="canvas-divider" class="divider horizontal" role="separator" aria-orientation="horizontal" aria-label="Resize memory and loop history" aria-valuemin="15" aria-valuemax="85" aria-valuenow="55" tabindex="0" title="Drag to resize. Double-click to reset."></div>
+            <section class="canvas-section" id="loop-section" aria-labelledby="loop-title">
+              <div class="section-head">
+                <h2 class="section-title" id="loop-title">Loop history</h2>
+                <div id="loop-tabs" class="loop-tabs" role="tablist" aria-label="Choose a loop"></div>
+                <label class="toggle small">
+                  <input id="hide-quiet" type="checkbox" checked /> Collapse iterations with no changes
+                </label>
+              </div>
+              <div id="loop"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <footer class="timeline" aria-label="Step through execution">
+        <button id="first" class="button icon" type="button" aria-label="First step" title="First step (Home)">⏮</button>
+        <button id="prev" class="button icon" type="button" aria-label="Previous step" title="Previous step (←)">◀</button>
+        <button id="next" class="button icon" type="button" aria-label="Next step" title="Next step (→)">▶</button>
+        <button id="last" class="button icon" type="button" aria-label="Last step" title="Last step (End)">⏭</button>
+        <input id="scrubber" class="scrubber" type="range" min="0" max="0" value="0" aria-label="Step" />
+        <span id="step-label" class="step-label"></span>
+      </footer>
+    </div>
+    <dialog id="save-dialog" class="dialog" aria-labelledby="save-title">
+      <form method="dialog" id="save-form">
+        <h2 id="save-title" class="dialog-title">Save program</h2>
+        <label class="dialog-label" for="save-name">Name</label>
+        <input id="save-name" class="dialog-input" type="text" required maxlength="80" autocomplete="off" spellcheck="false" />
+        <p id="save-hint" class="dialog-hint">Saved programs stay in this browser.</p>
+        <div class="dialog-actions">
+          <button class="button" type="button" value="cancel">Cancel</button>
+          <button class="button primary" type="submit" value="save">Save</button>
+        </div>
+      </form>
+    </dialog>
+    <div id="announce" class="visually-hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

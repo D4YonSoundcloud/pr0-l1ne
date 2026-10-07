@@ -1,0 +1,35 @@
+{
+  "name": "algoviz",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "trace": "python3 src/worker/tracer.py",
+    "test:tracer": "python3 -m unittest discover -s src/worker -p 'test_*.py' -v",
+    "test:js": "vitest run",
+    "test": "vitest run && npm run test:tracer",
+    "instrument": "tsx src/js/cli.ts",
+    "trace:js": "tsx src/js/cli.ts --trace"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.4",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@babel/core": "^8.0.6",
+    "@babel/generator": "^8.0.6",
+    "@babel/parser": "^8.0.6",
+    "@babel/plugin-transform-typescript": "^8.0.6",
+    "@babel/traverse": "^8.0.6",
+    "@babel/types": "^8.0.6",
+    "monaco-editor": "^0.57.0",
+    "path-browserify": "^1.0.1"
+  }
+}

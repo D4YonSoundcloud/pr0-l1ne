@@ -1,0 +1,527 @@
+/*
+ * Visual idea: the canvas is engineering graph paper. Data structures are
+ * drawn in navy ink, references in blue ballpoint, and whatever just changed
+ * gets a highlighter-yellow fill with red-pen arrows, like a TA marking up a
+ * whiteboard trace. The editor stays dark and quiet so the paper stands out.
+ */
+
+:root {
+  --paper: #e8edf1;
+  --paper-grid: #d5dde5;
+  --paper-band: #dce3ea;
+  --paper-edge: #c9d3de;
+  --ink: #1d2b45;
+  --ink-soft: #5b6b85;
+  --ink-faint: #93a1b5;
+  --cell: #ffffff;
+  --cell-alt: #f3f6f9;
+  --header: #d6e0ea;
+  --highlight: #f6d743;
+  --highlight-soft: rgba(246, 215, 67, 0.22);
+  --redpen: #c2362f;
+  --ballpoint: #2f6fb0;
+  --v-str: #8b3a9e;
+  --v-num: #1d2b45;
+  --v-const: #2e7a57;
+
+  --chrome: #161b29;
+  --chrome-text: #c9d2e3;
+  --chrome-muted: #7f8aa3;
+  --editor-bg: #1f2537;
+  --editor-text: #dde3ee;
+  --editor-gutter: #5d6884;
+  --editor-active: rgba(255, 255, 255, 0.035);
+  --editor-selection: rgba(120, 150, 220, 0.3);
+  --editor-caret: #f6d743;
+
+  --syn-keyword: #9fb4ff;
+  --syn-function: #f2c46d;
+  --syn-definition: #e6ebf5;
+  --syn-class: #7fd1c2;
+  --syn-string: #e6a3d9;
+  --syn-number: #f29e74;
+  --syn-comment: #6c7792;
+  --syn-punct: #a8b2c8;
+
+  --font-ui: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  background: var(--chrome);
+  color: var(--chrome-text);
+}
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+:focus-visible { outline: 2px solid var(--highlight); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #262d42;
+}
+
+.brand {
+  margin: 0 8px 0 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.workspace {
+  --split: 40%;
+  display: grid;
+  grid-template-columns: var(--split) 6px 1fr;
+  min-height: 0;
+}
+
+/* Swapped: the canvas comes first. The DOM is reordered too (see main.ts), so
+   keyboard focus order matches what's on screen. --split stays the editor's
+   width either way. */
+.workspace.is-swapped { grid-template-columns: 1fr 6px var(--split); }
+
+.editor-pane {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--editor-bg);
+}
+
+/* Monaco sizes itself to this element (automaticLayout), so it must have a
+   definite size: the grid row gives it one. */
+.editor { min-height: 0; min-width: 0; overflow: hidden; }
+
+.divider {
+  background: #262d42;
+  cursor: col-resize;
+}
+.divider:hover, .divider:focus-visible, .divider.is-dragging { background: var(--ink-soft); }
+.divider { touch-action: none; }
+
+.canvas-pane {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--paper);
+  color: var(--ink);
+  color-scheme: light;
+}
+
+/* Memory and loop history stacked, with a divider between them. --canvas-split
+   is the memory section's share of the height. */
+.canvas {
+  --canvas-split: 55%;
+  /* Always the second row: the banner above is often hidden, and a hidden
+     item doesn't take a grid row, which would give the canvas no height. */
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: minmax(0, var(--canvas-split)) 6px minmax(0, 1fr);
+  min-height: 0;
+}
+.canvas.is-stale .viewport-layer { opacity: 0.5; }
+
+.canvas-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 6px 12px;
+  background: var(--paper-band);
+  border-bottom: 1px solid var(--paper-edge);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.section-hint { font-size: 12.5px; color: var(--ink-faint); }
+
+.divider.horizontal {
+  cursor: row-resize;
+  background: var(--paper-edge);
+  border-block: 1px solid #b9c4d1;
+}
+.divider.horizontal:hover, .divider.horizontal:focus-visible, .divider.horizontal.is-dragging { background: var(--ink-soft); }
+
+/* ------------------------------------------------------------- viewports */
+
+/* The graph paper lives here, and viewport.ts moves and scales it with the
+   drawing (background-position / background-size). */
+.viewport {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--paper-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.viewport:focus-visible { outline-offset: -3px; }
+.viewport.is-panning { cursor: grabbing; }
+.viewport.is-dragging-node, .viewport.is-dragging-node * { cursor: grabbing !important; }
+
+.viewport-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.viewport-layer svg { display: block; }
+
+.viewport-empty {
+  position: absolute;
+  inset: 12px 16px auto;
+  margin: 0;
+  max-width: 52ch;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.viewport-controls {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 0 2px 8px rgba(29, 43, 69, 0.12);
+  cursor: default;
+}
+.viewport-button {
+  font: inherit;
+  font-size: 13px;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.viewport-button:hover { background: var(--paper-band); }
+.viewport-button.zoom-label { min-width: 46px; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.viewport-button.wide { padding: 0 9px; border-right: 1px solid var(--paper-edge); border-radius: 5px 0 0 5px; margin-right: 2px; }
+
+/* Arrows | Nested switch in the memory header. */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+}
+.segment {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.segment:hover { color: var(--ink); }
+.segment[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+/* Nested ("container in container") boxes: lighter, so the outer box reads
+   as the container. */
+.box.is-nested > .box-body { stroke-width: 1; }
+.box.is-nested > .box-header { fill: var(--cell-alt); stroke-width: 1; }
+.box.is-nested > .box-title { font-size: 12px; }
+.cell.is-holder rect { fill: var(--cell-alt); stroke: var(--ink-faint); stroke-width: 1; }
+.cell.is-holder.is-changed rect { fill: var(--highlight-soft); stroke: var(--highlight); }
+
+/* Draggable boxes in the memory view. */
+#memory .node { cursor: grab; }
+#memory .node:hover .box-body,
+#memory .node:hover .seq .cell rect { filter: drop-shadow(0 2px 4px rgba(29, 43, 69, 0.18)); }
+.viewport.is-dragging-node .node .cell.is-changed rect { animation: none; }
+
+/* ---------------------------------------------------------------- chrome */
+
+.button {
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid #343c55;
+  border-radius: 6px;
+  padding: 5px 14px;
+  background: #222a3f;
+  color: var(--chrome-text);
+  cursor: pointer;
+}
+.button:hover { background: #2b3450; }
+.button:disabled { opacity: 0.4; cursor: default; }
+.button.primary { background: var(--highlight); border-color: var(--highlight); color: var(--ink); font-weight: 700; }
+.button.primary:hover { background: #ffe36a; }
+.button.icon { padding: 4px 9px; font-size: 12px; }
+.button.swap { font-size: 15px; padding: 2px 9px; }
+.button.swap[aria-pressed="true"] { border-color: var(--chrome-muted); }
+
+select {
+  font: inherit;
+  font-size: 14px;
+  background: #222a3f;
+  color: var(--chrome-text);
+  border: 1px solid #343c55;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.toggle.small { font-size: 13px; color: var(--ink-soft); }
+.toggle input { accent-color: var(--highlight); }
+.canvas-pane .toggle input { accent-color: var(--ink); }
+
+.program {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 22ch;
+}
+.program-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 14px;
+}
+.program-name.is-untitled { color: var(--chrome-muted); font-style: italic; }
+.program-dirty { color: var(--highlight); font-size: 11px; }
+.button.quiet { background: transparent; border-color: transparent; color: var(--chrome-muted); }
+.button.quiet:hover { color: #ff8f86; background: #2b3450; }
+
+.dialog {
+  border: 1px solid #343c55;
+  border-radius: 10px;
+  padding: 20px 22px 18px;
+  width: min(380px, calc(100vw - 32px));
+  background: #1f2537;
+  color: var(--chrome-text);
+}
+.dialog::backdrop { background: rgba(10, 13, 22, 0.55); }
+.dialog-title { margin: 0 0 14px; font-size: 17px; color: #fff; }
+.dialog-label { display: block; font-size: 13px; color: var(--chrome-muted); margin-bottom: 6px; }
+.dialog-input {
+  width: 100%;
+  font: inherit;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #343c55;
+  background: #161b29;
+  color: #fff;
+}
+.dialog-hint { margin: 8px 0 0; font-size: 13px; color: var(--chrome-muted); }
+.dialog-hint.is-warning { color: var(--highlight); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.status { margin-left: auto; font-size: 13px; color: var(--chrome-muted); }
+.status.is-error { color: #ff8f86; }
+
+.console {
+  border-top: 1px solid #2c344b;
+  max-height: 28vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.pane-title { padding: 6px 14px 0; font-size: 12px; color: var(--chrome-muted); }
+.output {
+  margin: 0;
+  padding: 4px 14px 10px;
+  min-height: 3.2em;
+  overflow: auto;
+  font-family: var(--font-code);
+  font-size: 13px;
+  color: var(--editor-text);
+  white-space: pre-wrap;
+}
+.output .error { color: #ff8f86; }
+
+.banner {
+  grid-row: 1;
+  margin: 10px 12px 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--redpen);
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  border-radius: 0 6px 6px 0;
+}
+.banner code { font-family: var(--font-code); font-size: 13px; }
+
+.timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid #262d42;
+}
+.scrubber { flex: 1; accent-color: var(--highlight); min-width: 80px; }
+.step-label { min-width: 22ch; font-size: 14px; color: var(--chrome-text); text-align: right; }
+
+.loop-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.loop-tab {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  border: 1px solid var(--ink-faint);
+  background: var(--cell);
+  color: var(--ink);
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.loop-tab[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* -------------------------------------------------------- editor markers */
+
+/* Monaco decorations: whole-line tint plus a bar in the gutter. */
+.monaco-editor .exec-line-next { background: rgba(246, 215, 67, 0.13); }
+.monaco-editor .exec-line-prev { background: rgba(120, 160, 230, 0.09); }
+.monaco-editor .exec-line-error { background: rgba(194, 54, 47, 0.28); }
+.monaco-editor .exec-bar-next,
+.monaco-editor .exec-bar-prev,
+.monaco-editor .exec-bar-error { width: 3px !important; margin-left: 4px; border-radius: 1px; }
+.monaco-editor .exec-bar-next { background: var(--highlight); }
+.monaco-editor .exec-bar-prev { background: #6f8fc9; }
+.monaco-editor .exec-bar-error { background: #ff6b61; }
+
+/* ------------------------------------------------------------ diagrams */
+
+.memory-svg, .loop-svg {
+  font-family: var(--font-code);
+  font-size: 13px;
+}
+
+.cell rect { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
+.cell.key rect { fill: none; stroke: none; }
+.cell.is-empty rect { fill: none; stroke-dasharray: 3 3; stroke: var(--ink-faint); }
+.cell.is-changed rect { fill: var(--highlight); animation: mark 450ms ease-out; }
+.tuple .cell rect { fill: var(--cell-alt); }
+.set .cell rect { rx: 14px; }
+
+@keyframes mark {
+  from { fill: #fff3a8; stroke-width: 2.5; }
+  to { fill: var(--highlight); stroke-width: 1.25; }
+}
+
+.value { fill: var(--v-num); }
+.value.v-str { fill: var(--v-str); }
+.value.v-bool, .value.v-none { fill: var(--v-const); font-style: italic; }
+.value.v-other { fill: var(--ink-soft); }
+
+.ref-dot { fill: var(--ballpoint); }
+
+.index { font-size: 10.5px; fill: var(--ink-faint); }
+.seq-label { font-family: var(--font-ui); font-size: 11.5px; font-style: italic; fill: var(--ink-soft); }
+
+.box-body { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
+.box-header { fill: var(--header); stroke: var(--ink); stroke-width: 1.25; }
+.box-title { font-family: var(--font-ui); font-size: 13px; font-weight: 700; fill: var(--ink); }
+.box-empty { font-family: var(--font-ui); font-size: 12px; font-style: italic; fill: var(--ink-faint); }
+.box.is-new > .box-body { stroke-dasharray: 5 3; stroke: var(--ballpoint); stroke-width: 1.75; }
+.seq.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; }
+
+.box.frame > .box-header { fill: var(--cell-alt); }
+.box.frame.is-active > .box-body { stroke-width: 2; }
+.box.frame.is-active > .box-header { fill: var(--ink); }
+.box.frame.is-active > .box-title { fill: #fff; }
+.box.function > .box-header, .box.class > .box-header { fill: #e2e7f5; }
+.box.function > .box-title, .box.class > .box-title { font-family: var(--font-code); font-weight: 500; font-size: 12.5px; }
+
+.row-label { fill: var(--ink); }
+.row .cell rect { stroke-width: 1; }
+.row.is-changed > .row-label { font-weight: 600; }
+.row.return-row > .row-label { fill: var(--redpen); font-style: italic; }
+
+.ref-arrow { fill: none; stroke: var(--ballpoint); stroke-width: 1.5; }
+.ref-arrow.is-changed { stroke-width: 2.25; }
+.arrowhead-ref { fill: var(--ballpoint); }
+.change-arrow { fill: none; stroke: var(--redpen); stroke-width: 1.6; }
+.arrowhead-change { fill: var(--redpen); }
+
+.pointer path { fill: var(--ballpoint); }
+.pointer text { font-size: 11px; font-weight: 600; fill: var(--ballpoint); }
+.pointer.is-changed path { fill: var(--redpen); }
+.pointer.is-changed text { fill: var(--redpen); }
+.pointer.is-out path { fill: none; stroke: var(--ink-faint); }
+.pointer.is-out text { fill: var(--ink-faint); }
+
+/* loop view */
+.iteration-label { font-family: var(--font-ui); font-size: 13px; font-weight: 700; fill: var(--ink-soft); }
+.loop-row.is-current .iteration-label { fill: var(--ink); }
+.current-band { fill: var(--highlight-soft); stroke: var(--highlight); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.scalars { font-size: 12.5px; fill: var(--ink-soft); }
+.scalars .is-changed { fill: var(--redpen); font-weight: 600; }
+.container-name { font-weight: 600; fill: var(--ink); }
+.loop-container.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
+.quiet-band line { stroke: var(--ink-faint); stroke-dasharray: 2 4; }
+/* Linked track: nodes in fixed columns, links as arrows */
+.link-slot rect { fill: var(--cell-alt); }
+.link-slot.is-changed rect { fill: var(--highlight); }
+.null-slash { stroke: var(--ink-soft); stroke-width: 1.4; }
+.link-arrow { fill: none; stroke: var(--ballpoint); stroke-width: 1.5; }
+.link-arrow.is-changed { stroke: var(--redpen); stroke-width: 1.9; }
+.linked-node.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
+.quiet-band rect { fill: var(--paper); }
+.quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
+.loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cell.is-changed rect { animation: none; }
+}
+
+/* ------------------------------------------------------------ small screens */
+
+@media (max-width: 820px) {
+  .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 40%) 0 1fr; }
+  .workspace.is-swapped { grid-template-columns: 1fr; grid-template-rows: 1fr 0 minmax(220px, 40%); }
+  .section-hint { display: none; }
+  .divider { display: none; }
+  .toolbar { flex-wrap: wrap; }
+  .status { margin-left: 0; width: 100%; }
+  .step-label { min-width: 0; font-size: 13px; }
+}
