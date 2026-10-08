@@ -6,6 +6,7 @@
  *   Ctrl/Cmd + scroll, pinch zoom around the pointer
  *   drag a [data-node-key]   move that box (reported through onNodeMove)
  *   + / - / 0 (focused)      zoom in / out / reset
+ *   Auto-fit                 refit the diagram on every step (see setContent)
  *
  * The diagram itself is drawn at its natural size; the viewport only applies
  * a CSS transform to it. The graph-paper background moves and scales with
@@ -24,15 +25,27 @@ export interface ViewportOptions {
    * units. `done` is true for the final call, when the pointer is released.
    */
   onNodeMove?(key: string, position: Point, done: boolean): void;
+  /** Called when Auto-fit is turned on or off, or its mode changes. */
+  onAutoFitChange?(state: AutoFit): void;
 }
+
+/**
+ * Auto-fit keeps the whole diagram in view as it changes from step to step.
+ *   "out"   only ever zooms out: once a step needed a wide view, it's kept,
+ *           so the picture doesn't pump in and out while you step.
+ *   "both"  zooms in again when the diagram gets smaller: always a snug fit.
+ */
+export type AutoFitMode = "out" | "both";
+export interface AutoFit { on: boolean; mode: AutoFitMode }
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
-const GRID = 24;            // graph-paper square size at 100%
+const GRID = 24;            // default graph-paper square size at 100%
 const DRAG_THRESHOLD = 3;   // px before a press becomes a drag
 const KEEP_VISIBLE = 60;    // px of content always left on screen when panning
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 type Gesture =
   | { kind: "pan"; startX: number; startY: number; panX: number; panY: number }
@@ -55,6 +68,15 @@ export class Viewport {
   private viewH = 0;
   private readonly pointers = new Map<number, Point>();
 
+  /** Size of a grid square at 100% zoom (see setGridSize). */
+  private gridSize = GRID;
+
+  private autoFit: AutoFit = { on: false, mode: "out" };
+  private readonly autoFitButton: HTMLButtonElement;
+  private readonly autoFitMenu: HTMLDivElement;
+  /** How a refit animates: the window's step animation (see setZoomAnimation). */
+  private zoomAnimation = { duration: 260, easing: "ease" };
+
   constructor(readonly el: HTMLElement, private readonly options: ViewportOptions) {
     el.classList.add("viewport");
     el.tabIndex = 0;
@@ -69,15 +91,51 @@ export class Viewport {
 
     this.controls = document.createElement("div");
     this.controls.className = "viewport-controls";
-    this.zoomLabel = this.button("100%", "Reset zoom (0)", () => this.reset());
+    this.zoomLabel = this.button("100%", "Reset zoom (0)", () => this.manual(() => this.reset()));
     this.zoomLabel.classList.add("zoom-label");
+    // Auto-fit: a toggle, and a menu for how it zooms.
+    this.autoFitButton = this.button("Auto-fit", "Auto-fit: keep the whole diagram in view on every step", () => this.setAutoFit({ ...this.autoFit, on: !this.autoFit.on }));
+    this.autoFitButton.classList.add("auto-fit");
+    this.autoFitButton.setAttribute("aria-pressed", "false");
+    const modeButton = this.button("▾", "How Auto-fit zooms", () => this.toggleAutoFitMenu());
+    modeButton.classList.add("auto-fit-mode");
+    modeButton.setAttribute("aria-haspopup", "true");
+    modeButton.setAttribute("aria-expanded", "false");
+    this.autoFitMenu = document.createElement("div");
+    this.autoFitMenu.className = "auto-fit-menu";
+    this.autoFitMenu.setAttribute("role", "menu");
+    this.autoFitMenu.hidden = true;
+    const choices: [AutoFitMode, string, string][] = [
+      ["out", "Zoom out only", "Keeps the widest view the run has needed, so the picture stays steady"],
+      ["both", "Zoom in and out", "Always fits snugly: zooms back in when the diagram gets smaller"],
+    ];
+    for (const [mode, label, detail] of choices) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "auto-fit-choice";
+      item.setAttribute("role", "menuitemradio");
+      item.dataset.mode = mode;
+      item.append(Object.assign(document.createElement("strong"), { textContent: label }), Object.assign(document.createElement("span"), { textContent: detail }));
+      item.addEventListener("click", () => {
+        this.setAutoFit({ on: true, mode });
+        this.toggleAutoFitMenu(false);
+      });
+      this.autoFitMenu.append(item);
+    }
+    const autoFitGroup = document.createElement("span");
+    autoFitGroup.className = "auto-fit-group";
+    autoFitGroup.append(this.autoFitButton, modeButton, this.autoFitMenu);
     this.controls.append(
-      this.button("−", "Zoom out (−)", () => this.zoomBy(1 / 1.25)),
+      autoFitGroup,
+      this.button("−", "Zoom out (−)", () => this.manual(() => this.zoomBy(1 / 1.25))),
       this.zoomLabel,
-      this.button("+", "Zoom in (+)", () => this.zoomBy(1.25)),
-      this.button("Fit", "Fit the whole diagram in view", () => this.fit()),
+      this.button("+", "Zoom in (+)", () => this.manual(() => this.zoomBy(1.25))),
+      this.button("Fit", "Fit the whole diagram in view once", () => this.fit()),
     );
     el.append(this.layer, this.empty, this.controls);
+    el.addEventListener("pointerdown", (e) => {
+      if (!(e.target as Element).closest(".auto-fit-group")) this.toggleAutoFitMenu(false);
+    }, true);
 
     el.addEventListener("pointerdown", (e) => this.onPointerDown(e));
     el.addEventListener("pointermove", (e) => this.onPointerMove(e));
@@ -89,6 +147,7 @@ export class Viewport {
       new ResizeObserver(([entry]) => {
         this.viewW = entry.contentRect.width;
         this.viewH = entry.contentRect.height;
+        if (this.autoFit.on) this.refit(false);
       }).observe(el);
     }
     this.apply();
@@ -107,7 +166,7 @@ export class Viewport {
    * `transition` (ms), things that moved since the last diagram slide from
    * where they were (see animate.ts).
    */
-  setContent(content: SVGSVGElement | null, emptyText = "", transition = 0): void {
+  setContent(content: SVGSVGElement | null, emptyText = "", transition = 0, easing?: string): void {
     const before = transition > 0 && content ? snapshot(this.layer) : null;
     if (content) {
       this.contentW = Number(content.getAttribute("width")) || 0;
@@ -120,7 +179,119 @@ export class Viewport {
     this.empty.textContent = emptyText;
     this.empty.hidden = !!content || !emptyText;
     this.controls.hidden = !content;
-    if (before) transition_(before, this.layer, transition);
+    if (before) transition_(before, this.layer, transition, easing);
+    if (this.autoFit.on && content) {
+      this.refit(!this.snugNext, this.snugNext);
+      this.snugNext = false;
+    }
+  }
+
+  // -- Auto-fit ---------------------------------------------------------------
+
+  get autoFitState(): AutoFit {
+    return { ...this.autoFit };
+  }
+
+  /** Turn Auto-fit on or off, or change how it zooms. */
+  setAutoFit(state: AutoFit, notify = true): void {
+    const turnedOn = state.on && !this.autoFit.on;
+    const modeChanged = state.mode !== this.autoFit.mode;
+    this.autoFit = { ...state };
+    this.autoFitButton.setAttribute("aria-pressed", String(state.on));
+    this.autoFitButton.classList.toggle("is-on", state.on);
+    for (const item of this.autoFitMenu.querySelectorAll<HTMLElement>("[data-mode]")) {
+      item.setAttribute("aria-checked", String(item.dataset.mode === state.mode));
+    }
+    // Turning it on (or changing mode) starts from a snug fit.
+    if (state.on && (turnedOn || modeChanged)) this.refit(true, true);
+    if (notify) this.options.onAutoFitChange?.(this.autoFitState);
+  }
+
+  /**
+   * "Zoom out only" remembers the widest view; forget it (a different
+   * program), so the next diagram gets a snug fit.
+   */
+  restartAutoFit(): void {
+    this.snugNext = true;
+  }
+  private snugNext = false;
+
+  /** How refits animate: the window's step animation from the Style panel. */
+  setZoomAnimation(duration: number, easing: string): void {
+    this.zoomAnimation = { duration, easing };
+  }
+
+  private toggleAutoFitMenu(open = this.autoFitMenu.hidden): void {
+    this.autoFitMenu.hidden = !open;
+    this.autoFitMenu.previousElementSibling?.setAttribute("aria-expanded", String(open));
+  }
+
+  /** Manual zooming or panning: the person is in charge now, so Auto-fit stops. */
+  private manual(action: () => void): void {
+    if (this.autoFit.on) this.setAutoFit({ ...this.autoFit, on: false });
+    action();
+  }
+
+  /**
+   * Fit the diagram for Auto-fit. In "out" mode the zoom never goes back up
+   * (unless `snug`, when Auto-fit starts). The view glides there.
+   */
+  private refit(animate: boolean, snug = false): void {
+    if (!this.contentW || !this.contentH) return;
+    // "Zoom out only" fits the biggest diagram seen so far, not just this
+    // one. Remembering sizes (not a zoom) keeps it right when the window
+    // is resized.
+    const keep = this.autoFit.mode === "out" && !snug;
+    this.fitSize = {
+      w: keep ? Math.max(this.fitSize.w, this.contentW) : this.contentW,
+      h: keep ? Math.max(this.fitSize.h, this.contentH) : this.contentH,
+    };
+    const z = this.fitZoom(this.fitSize.w, this.fitSize.h);
+    if (z === null) return; // not laid out yet: the ResizeObserver will call again
+    const x = Math.max(0, (this.viewW - this.contentW * z) / 2);
+    const y = 0;
+    if (Math.abs(z - this.z) < 1e-3 && Math.abs(x - this.x) < 0.5 && Math.abs(y - this.y) < 0.5) return;
+    const from = { x: this.x, y: this.y, z: this.z };
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.apply();
+    const { duration, easing } = this.zoomAnimation;
+    for (const a of this.glides) a.cancel(); // a new fit replaces one still gliding
+    this.glides = [];
+    if (animate && duration > 0 && !reducedMotion()) this.glide(from, duration, easing);
+  }
+
+  /** The biggest diagram "Zoom out only" has had to fit. */
+  private fitSize = { w: 0, h: 0 };
+
+  /** The zoom at which a diagram of this size fits (never above 100%), or null before layout. */
+  private fitZoom(w = this.contentW, h = this.contentH): number | null {
+    if (!this.viewW || !this.viewH) {
+      const view = this.el.getBoundingClientRect();
+      this.viewW = view.width;
+      this.viewH = view.height;
+    }
+    if (!w || !h || this.viewW < 40 || this.viewH < 40) return null;
+    return clamp(Math.min(this.viewW / w, (this.viewH - 8) / h, 1), MIN_ZOOM, 1);
+  }
+
+  private glides: Animation[] = [];
+
+  /** Animate the view (and its graph paper) from where it was to where it is now. */
+  private glide(from: { x: number; y: number; z: number }, duration: number, easing: string): void {
+    const grid = (z: number) => `${this.gridSize * z}px ${this.gridSize * z}px`;
+    if (typeof this.layer.animate !== "function") return;
+    this.glides = [this.layer.animate(
+      [{ transform: `translate(${from.x}px, ${from.y}px) scale(${from.z})` }, { transform: this.layer.style.transform }],
+      { duration, easing },
+    ), this.el.animate(
+      [
+        { backgroundSize: grid(from.z), backgroundPosition: `${from.x}px ${from.y}px` },
+        { backgroundSize: this.el.style.backgroundSize, backgroundPosition: this.el.style.backgroundPosition },
+      ],
+      { duration, easing },
+    )];
   }
 
   /**
@@ -129,7 +300,7 @@ export class Viewport {
    * so it doesn't force a layout right after the diagram was redrawn.
    */
   reveal(top: number, bottom: number, padding = 24): void {
-    if (this.gesture || !this.viewH) return; // never fight the person's hand
+    if (this.gesture || !this.viewH || this.autoFit.on) return; // never fight the person's hand, or Auto-fit
     const screenTop = this.y + top * this.z;
     const screenBottom = this.y + bottom * this.z;
     if (screenBottom > this.viewH - padding) this.y -= screenBottom - (this.viewH - padding);
@@ -152,10 +323,10 @@ export class Viewport {
 
   /** Scale down (never up) so the whole diagram is visible. */
   fit(): void {
-    const view = this.el.getBoundingClientRect();
-    if (!this.contentW || !this.contentH || !view.width) return;
-    this.z = clamp(Math.min(view.width / this.contentW, (view.height - 8) / this.contentH, 1), MIN_ZOOM, 1);
-    this.x = Math.max(0, (view.width - this.contentW * this.z) / 2);
+    const z = this.fitZoom();
+    if (z === null) return;
+    this.z = z;
+    this.x = Math.max(0, (this.viewW - this.contentW * this.z) / 2);
     this.y = 0;
     this.apply();
   }
@@ -179,6 +350,13 @@ export class Viewport {
     return button;
   }
 
+  /** Change the background grid's square size (at 100% zoom). */
+  setGridSize(size: number): void {
+    if (size === this.gridSize) return;
+    this.gridSize = size;
+    this.apply();
+  }
+
   private apply(): void {
     // Don't let the diagram be panned completely out of sight. Uses the
     // size the ResizeObserver last reported, so it never forces a layout.
@@ -187,7 +365,7 @@ export class Viewport {
       this.y = clamp(this.y, KEEP_VISIBLE - this.contentH * this.z, this.viewH - KEEP_VISIBLE);
     }
     this.layer.style.transform = `translate(${this.x}px, ${this.y}px) scale(${this.z})`;
-    const grid = GRID * this.z;
+    const grid = this.gridSize * this.z;
     this.el.style.backgroundSize = `${grid}px ${grid}px`;
     this.el.style.backgroundPosition = `${this.x}px ${this.y}px`;
     this.zoomLabel.textContent = `${Math.round(this.z * 100)}%`;
@@ -220,10 +398,14 @@ export class Viewport {
       this.gesture = { kind: "pan", startX: e.clientX, startY: e.clientY, panX: this.x, panY: this.y };
       this.el.classList.add("is-panning");
     }
+    this.pressMoved = false;
     e.preventDefault(); // no text selection or native image drag
   }
 
+  private pressMoved = false;
+
   private startPinch(): void {
+    this.manual(() => {});
     const [a, b] = [...this.pointers.values()];
     this.gesture = {
       kind: "pinch",
@@ -244,6 +426,11 @@ export class Viewport {
     if (!g) return;
 
     if (g.kind === "pan") {
+      // A real drag of the paper (not just a click) takes over from Auto-fit.
+      if (!this.pressMoved && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) >= DRAG_THRESHOLD) {
+        this.pressMoved = true;
+        this.manual(() => {});
+      }
       this.x = g.panX + (e.clientX - g.startX);
       this.y = g.panY + (e.clientY - g.startY);
       this.apply();
@@ -295,6 +482,7 @@ export class Viewport {
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.el.clientHeight : 1;
+    this.manual(() => {});
     if (e.ctrlKey || e.metaKey) {
       // Trackpad pinches also arrive as Ctrl + wheel.
       this.zoomBy(Math.exp(-e.deltaY * unit * 0.0025), { x: e.clientX, y: e.clientY });
@@ -319,7 +507,7 @@ export class Viewport {
     const action = actions[e.key];
     if (action) {
       e.preventDefault();
-      action();
+      this.manual(action);
     }
   }
 }

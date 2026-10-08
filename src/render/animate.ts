@@ -54,16 +54,16 @@ function splitCell(key: string): [string, string] {
   return [key.slice(0, at), key.slice(at + 1)];
 }
 
-const EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+export const DEFAULT_EASING = "cubic-bezier(0.2, 0.7, 0.2, 1)";
 
 /** Animate `root`'s elements from their places in `before` to where they are now. */
-export function transition(before: Snapshot | null, root: ParentNode | null, duration: number): void {
+export function transition(before: Snapshot | null, root: ParentNode | null, duration: number, easing = DEFAULT_EASING): void {
   if (!before || !root || duration <= 0) return;
   const slide = (el: Element, dx: number, dy: number) => {
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
     el.animate(
       [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0px, 0px)" }],
-      { duration, easing: EASE },
+      { duration, easing },
     );
   };
   const fadeIn = (el: Element) => {

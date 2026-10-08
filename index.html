@@ -30,11 +30,12 @@
         </div>
         <button id="save" class="button" type="button" title="Save (Ctrl/Cmd + S). Save as a new program: Ctrl/Cmd + Shift + S">Save</button>
         <button id="delete" class="button quiet" type="button" title="Delete this saved program" hidden>Delete</button>
-        <button id="run" class="button primary" type="button" title="Run (Ctrl/Cmd + Enter, or Ctrl + ')">Run</button>
+        <button id="run" class="button primary" type="button" title="Run (Ctrl + ')">Run</button>
         <label class="toggle" title="Re-run automatically as you type">
           <input id="live" type="checkbox" checked /> Live
         </label>
         <span id="status" class="status" role="status" aria-live="polite">Loading Python…</span>
+        <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
       </header>
 
@@ -85,7 +86,7 @@
       <footer class="timeline" aria-label="Step through execution">
         <button id="first" class="button icon" type="button" aria-label="First step" title="First step (Home)">⏮</button>
         <button id="prev" class="button icon step" type="button" aria-label="Previous step" title="Previous step (←, Shift + F10)">‹</button>
-        <button id="play" class="button play" type="button" aria-pressed="false" title="Play through the steps (Space)">Play</button>
+        <button id="play" class="button play" type="button" aria-pressed="false" title="Play through the steps (Space). Ctrl/Cmd + Enter plays from here; press it again to go back to where it started.">Play</button>
         <button id="next" class="button icon step" type="button" aria-label="Next step" title="Next step (→, F10)">›</button>
         <button id="last" class="button icon" type="button" aria-label="Last step" title="Last step (End)">⏭</button>
         <label class="speed">

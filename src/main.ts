@@ -6,7 +6,9 @@ import { ProgramStore, type Program } from "./programs";
 import { renderLoopHistory } from "./render/loopView";
 import { prefersReducedMotion } from "./render/animate";
 import { applyFocus, renderMemory, type MemoryMode, type Point } from "./render/memory";
-import { Viewport } from "./render/viewport";
+import { Viewport, type AutoFit } from "./render/viewport";
+import { APPEARANCE_KEY, applyAppearance, parseAppearance, type Appearance } from "./appearance";
+import { StylePanel } from "./stylePanel";
 import { diffSteps } from "./trace/diff";
 import { availableLoops, buildLoopHistory, type LoopHistory, type LoopRow } from "./trace/loopHistory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
@@ -109,6 +111,9 @@ const els = {
   editorPane: byId<HTMLElement>("editor-pane"),
   canvasPane: byId<HTMLElement>("canvas-pane"),
   swap: byId<HTMLButtonElement>("swap"),
+  style: byId<HTMLButtonElement>("style"),
+  memorySection: byId<HTMLElement>("memory-section"),
+  loopSection: byId<HTMLElement>("loop-section"),
 };
 
 // ---------------------------------------------------------------- running code
@@ -264,6 +269,17 @@ function setMemoryMode(mode: MemoryMode): void {
 }
 let draggingNode: string | null = null;
 
+/** Auto-fit (see Viewport) is remembered per window. */
+const autoFitKey = (pane: "memory" | "loop") => `algoviz:auto-fit:${pane}`;
+function storedAutoFit(pane: "memory" | "loop"): AutoFit {
+  try {
+    const raw = JSON.parse(stored(autoFitKey(pane)) ?? "null") as Partial<AutoFit> | null;
+    return { on: raw?.on === true, mode: raw?.mode === "both" ? "both" : "out" };
+  } catch {
+    return { on: false, mode: "out" };
+  }
+}
+
 const memoryView = new Viewport(els.memory, {
   label: "Memory diagram",
   onNodeMove(key, position, done) {
@@ -272,8 +288,49 @@ const memoryView = new Viewport(els.memory, {
     renderMemoryView();
     updateResetLayout();
   },
+  onAutoFitChange: (state) => store(autoFitKey("memory"), JSON.stringify(state)),
 });
-const loopView = new Viewport(els.loop, { label: "Loop history" });
+const loopView = new Viewport(els.loop, {
+  label: "Loop history",
+  onAutoFitChange: (state) => store(autoFitKey("loop"), JSON.stringify(state)),
+});
+memoryView.setAutoFit(storedAutoFit("memory"), false);
+loopView.setAutoFit(storedAutoFit("loop"), false);
+
+// ---------------------------------------------------------------- style
+
+/** How the canvas looks (the Style panel). Applied as CSS variables, live. */
+let appearance: Appearance = parseAppearance(stored(APPEARANCE_KEY));
+let saveAppearanceTimer = 0;
+function setAppearance(next: Appearance): void {
+  appearance = next;
+  applyAppearance(appearance, { canvas: els.canvas, memory: els.memorySection, loop: els.loopSection },
+    (pane, size) => (pane === "memory" ? memoryView : loopView).setGridSize(size));
+  // Auto-fit glides with each window's step animation.
+  memoryView.setZoomAnimation(appearance.memory.duration, appearance.memory.easing);
+  loopView.setZoomAnimation(appearance.loop.duration, appearance.loop.easing);
+  window.clearTimeout(saveAppearanceTimer);
+  saveAppearanceTimer = window.setTimeout(() => store(APPEARANCE_KEY, JSON.stringify(appearance)), 250);
+}
+setAppearance(appearance);
+new StylePanel({
+  host: els.editorPane,
+  button: els.style,
+  get: () => appearance,
+  set: setAppearance,
+  replay: () => replayStep(),
+});
+
+/** Draw the step before this one, then animate into this one (previews easing). */
+function replayStep(): void {
+  if (!trace) return;
+  const target = stepIndex;
+  const from = target > firstStep() ? target - 1 : target + 1;
+  if (from >= trace.steps.length) return;
+  stepIndex = from;
+  render(false);
+  goTo(target);
+}
 
 const resetLayoutButton = memoryView.addControl("Reset layout", "Put every box back in its automatic position", () => {
   positions.clear();
@@ -295,7 +352,8 @@ updateResetLayout();
 function renderMemoryView(): void {
   if (!trace || !trace.steps.length) return;
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
-  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode }), "", pendingTransition);
+  const animation = animationFor("memory");
+  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode }), "", animation.duration, animation.easing);
   refreshFocus();
 }
 
@@ -379,7 +437,8 @@ function render(updateMarks = true): void {
   }));
   if (history && history.rows.length) {
     const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live }), "", live ? pendingTransition : 0);
+    const animation = animationFor("loop");
+    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live }), "", live ? animation.duration : 0, animation.easing);
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
     if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
@@ -417,22 +476,31 @@ function goTo(index: number, how: { playing?: boolean } = {}): void {
   if (!how.playing) setPlaying(false);
   const next = Math.max(firstStep(), Math.min(trace.steps.length - 1, index));
   const single = Math.abs(next - stepIndex) === 1;
-  pendingTransition = single && !prefersReducedMotion()
-    ? Math.round(how.playing ? Math.min(ANIMATION_MS, (0.75 * 1000) / speed) : ANIMATION_MS)
-    : 0;
+  pendingAnimation = single && !prefersReducedMotion() ? { playing: !!how.playing } : null;
   stepIndex = next;
   try {
     render();
   } finally {
-    pendingTransition = 0;
+    pendingAnimation = null;
   }
 }
 
 // ---------------------------------------------------------------- animation
 
-const ANIMATION_MS = 260;
-/** How long the next render should animate for (set by goTo). */
-let pendingTransition = 0;
+/** Set by goTo while it draws a single step, so that render animates. */
+let pendingAnimation: { playing: boolean } | null = null;
+
+/**
+ * How a window animates the step being drawn: its own easing and duration
+ * (from the Style panel), shortened while playing so an animation always
+ * ends before the next step starts. Duration 0 means no animation.
+ */
+function animationFor(pane: "memory" | "loop"): { duration: number; easing: string } {
+  const { duration, easing } = appearance[pane];
+  if (!pendingAnimation) return { duration: 0, easing };
+  const cap = pendingAnimation.playing ? (0.75 * 1000) / speed : Infinity;
+  return { duration: Math.round(Math.min(duration, cap)), easing };
+}
 
 // Loop history: a row per iteration, or one live row that animates.
 const LOOP_MODE_KEY = "algoviz:loop-mode";
@@ -477,7 +545,25 @@ function setPlaying(on: boolean): void {
   els.play.setAttribute("aria-pressed", String(on));
   if (!on || !trace) return;
   if (stepIndex >= trace.steps.length - 1) goTo(firstStep(), { playing: true }); // play again from the start
+  playOrigin = stepIndex;
   scheduleTick();
+}
+
+/** The step the current (or last) playback started from. */
+let playOrigin: number | null = null;
+
+/**
+ * Ctrl/Cmd + Enter: play from the current step. Pressed again while playing,
+ * it stops and goes back to the step playing started from, so you can watch
+ * the same stretch again.
+ */
+function playOrRewind(): void {
+  if (!trace) return;
+  if (playing && playOrigin !== null) {
+    goTo(playOrigin); // goTo pauses
+    return;
+  }
+  setPlaying(true);
 }
 
 function scheduleTick(): void {
@@ -528,6 +614,7 @@ const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId
     lastStep: () => goTo(Infinity),
     swapPanels: () => setSwapped(!swapped),
     togglePlay: () => setPlaying(!playing),
+    playOrRewind: () => playOrRewind(),
     toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
   },
 });
@@ -678,6 +765,8 @@ els.programs.addEventListener("change", () => {
   }
   selectedLoop = null;
   clearLayout(); // a different program has different boxes
+  memoryView.restartAutoFit();
+  loopView.restartAutoFit();
   setOpenProgram(program ?? null); // before setCode, so the dirty dot is right
   editor.setCode(program?.code ?? example!.code);
   updateProgramUI();
@@ -699,6 +788,8 @@ els.language.addEventListener("change", () => {
   updateProgramUI();
   // A trace from the other language has nothing to do with this code.
   trace = null;
+  memoryView.restartAutoFit();
+  loopView.restartAutoFit();
   stepIndex = 0;
   selectedLoop = null;
   clearLayout();
@@ -724,10 +815,16 @@ document.addEventListener("keydown", (event) => {
   // Inside the editor, Monaco handles its own keys (including F10 / Shift+F10).
   if (target.closest(".monaco-editor")) return;
 
-  // Ctrl + ' runs, like Ctrl/Cmd + Enter, from anywhere on the page.
+  // Ctrl + ' runs, and Ctrl/Cmd + Enter plays (or goes back to where
+  // playing started), from anywhere on the page, not just the editor.
   if (event.ctrlKey && (event.code === "Quote" || event.key === "'")) {
     event.preventDefault();
     runNow();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    playOrRewind();
     return;
   }
 
@@ -750,6 +847,8 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) return;
+  // Keys inside the Style panel belong to its controls.
+  if (target.closest(".style-panel")) return;
   // Space plays and pauses, except where it already means something.
   if (event.key === " " && !(target instanceof HTMLButtonElement) && !(target instanceof HTMLTextAreaElement)) {
     event.preventDefault();

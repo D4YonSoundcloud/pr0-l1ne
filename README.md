@@ -121,13 +121,14 @@ The same topics exist in every language, written the way that language would wri
 
 The editor on the left is [Monaco](https://microsoft.github.io/monaco-editor/), the editor component VS Code is built on, so VS Code's editing and navigation keys work as you'd expect: multi-cursor (`Ctrl/Cmd + D`, `Alt + Click`), move and copy lines (`Alt + ↑/↓`, `Shift + Alt + ↑/↓`), toggle comments (`Ctrl/Cmd + /`), go to line (`Ctrl + G`), find and replace, bracket jumping, folding, and the command palette (`F1`).
 
-With **Live** checked, the program re-runs 600 ms after you stop typing. Otherwise, press **Run**, `Ctrl/Cmd + Enter` or `Ctrl + '`. Your code is saved in the browser, so it survives a reload. The **Open…** menu has your [saved programs](#saving-programs) and starter examples that each exercise a different part of the canvas. Opening a program or an example is a normal edit, so `Ctrl/Cmd + Z` brings the previous code back.
+With **Live** checked, the program re-runs 600 ms after you stop typing. Otherwise, press **Run** or `Ctrl + '`. Your code is saved in the browser, so it survives a reload. The **Open…** menu has your [saved programs](#saving-programs) and starter examples that each exercise a different part of the canvas. Opening a program or an example is a normal edit, so `Ctrl/Cmd + Z` brings the previous code back.
 
 PR0L1NE adds a few commands of its own, borrowing VS Code's debugger keys for stepping:
 
 | Keys | Command |
 | --- | --- |
-| `Ctrl/Cmd + Enter` or `Ctrl + '` | Run (`Ctrl + '` works anywhere on the page, not just in the editor, and is `Ctrl` on a Mac too) |
+| `Ctrl + '` | Run. Works anywhere on the page, not just in the editor, and is `Ctrl` on a Mac too |
+| `Ctrl/Cmd + Enter` | Play from the current step. Pressed again while playing, it stops and goes back to the step it started from. Works anywhere on the page |
 | `Ctrl/Cmd + S` | Save (asks for a name the first time) |
 | `Ctrl/Cmd + Shift + S` | Save as a new program |
 | `F10` | Next step |
@@ -154,6 +155,23 @@ Drag the divider between the panels to resize them, or focus it with `Tab` and u
 
 Inside the canvas, **Memory** and **Loop history** are separate sections with a divider of their own. It works the same way: drag it, use `↑`/`↓` when it's focused, or double-click to reset. Its position is remembered.
 
+### Styling the canvas
+
+**Style** in the toolbar opens a panel for how the canvas looks. Every change shows up on the canvas as you make it, and is remembered in this browser. The panel floats over the editor, whichever side the editor is on, so the canvas stays fully in view and keeps working while it's open. Close it with **×**, `Esc`, or the **Style** button.
+
+![The Style panel with the Night theme](docs/style-night.png)
+
+| Section | What you can change |
+| --- | --- |
+| **Theme** | A starting point: **Graph paper** (the default), **Whiteboard** (white, no grid), **Dot grid**, **Blueprint** (white lines on blue), **Night** (dark) and **High contrast**. Changing anything after that makes it **Custom**. **Reset all** goes back to Graph paper. |
+| **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. And its **duration**, from 0 (no animation) to 1000 ms. **Same as the memory window** copies all of it to the loop history. |
+| **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
+| **Lines and text** | **Arrow thickness** (0.5× to 3×), **box outlines**, **cell corners** (square to round), the **code font** used in the diagrams, and whether changed cells **flash** when they turn yellow. |
+
+**Previewing animation.** Next to the easing menu, a curve shows its shape, and a dot slides back and forth with your easing and duration. **▶ Replay this step** at the bottom redraws the previous step and animates into the current one, so you can watch the real thing. Bubble sort is a good example to try it on, since its swaps slide.
+
+The window headers (the strips with "Memory" and the Arrows | Nested switch) take their colors from each window's background, so a dark theme is dark all the way up.
+
 ### Moving around the canvas
 
 Each canvas section is its own sheet of graph paper that you can move around independently:
@@ -164,10 +182,24 @@ Each canvas section is its own sheet of graph paper that you can move around ind
 | Zoom | `Ctrl/Cmd` + scroll, pinch on a trackpad or touch screen, or the **−** / **+** buttons |
 | Reset the view | Click the zoom percentage, or press `0` with the section focused |
 | See everything | **Fit** shrinks the diagram until it all fits (it never enlarges) |
+| Keep everything in view | **Auto-fit** refits on every step (see below) |
 
 With a section focused (click it or `Tab` to it), `+` and `−` zoom too. The arrow keys still step through the program.
 
 Zooming centers on the pointer, so you can zoom into the part you're looking at. Each section keeps its own position and zoom as you step and as your code re-runs. While you step through a loop, the loop history pans just enough to keep the running iteration in view.
+
+#### Auto-fit
+
+**Auto-fit**, next to the zoom buttons, keeps the whole diagram in view on every step. When a step needs a different zoom (a new object appears, a tree grows a level, the loop history gains a row), the canvas glides there with the same easing and duration as that window's step animation in the [Style panel](#styling-the-canvas). The memory view and the loop history each have their own Auto-fit, and both are remembered.
+
+The **▾** next to it picks how it zooms:
+
+- **Zoom out only** (the default) keeps the widest view the run has needed. Stepping back to a small early step, or a diagram that shrinks, doesn't zoom back in, so the picture stays steady while you step back and forth.
+- **Zoom in and out** always fits snugly. It zooms back in when the diagram gets smaller.
+
+Like **Fit**, it never zooms in past 100%. Zooming or panning by hand turns Auto-fit off, so it never fights you, and pressing **Auto-fit** turns it back on with a fresh, snug fit. Opening another program also starts fresh.
+
+![Auto-fit and its two modes](docs/auto-fit.png)
 
 ### Rearranging the memory view
 
@@ -202,9 +234,9 @@ When you edit code while sitting on the last step, the view stays on the last st
 
 #### Playing a program
 
-**Play** steps forward on its own at the speed chosen next to it (½, 1, 2, 4, 8 or 16 steps per second; your choice is remembered). `Space` plays and pauses when the editor doesn't have focus, and "AlgoViz: Play / Pause" is in the command palette for when it does. Playback stops at the last step, and pressing Play there starts again from the first step. Any other way of moving (the buttons, the slider, the keys), editing the code, or running it pauses playback.
+**Play** steps forward on its own at the speed chosen next to it (½, 1, 2, 4, 8 or 16 steps per second; your choice is remembered). `Space` plays and pauses when the editor doesn't have focus, and "AlgoViz: Play / Pause" is in the command palette for when it does. Playback stops at the last step, and pressing Play there starts again from the first step. **`Ctrl/Cmd + Enter`** plays from the step you're on, from anywhere, including the editor. Press it again while it's playing to stop and jump back to the step it started from, so you can watch the same stretch again. Any other way of moving (the buttons, the slider, the keys), editing the code, or running it pauses playback.
 
-Moving one step at a time, whether playing or pressing `F10`, is **animated**: boxes and pointer markers slide to their new places, values that moved within a list slide from their old cell to their new one (so a swap is two values crossing), and new boxes and markers fade in. Arrows don't animate: each one is simply drawn in its new place, so they never flicker. Jumps (dragging the slider, `Home`/`End`) aren't animated, since there's nothing meaningful to tween across many steps. Each animation lasts 260 ms, or less at high speeds so it always finishes before the next step. If your system asks for reduced motion, nothing animates.
+Moving one step at a time, whether playing or pressing `F10`, is **animated**: boxes and pointer markers slide to their new places, values that moved within a list slide from their old cell to their new one (so a swap is two values crossing), and new boxes and markers fade in. Arrows don't animate: each one is simply drawn in its new place, so they never flicker. Jumps (dragging the slider, `Home`/`End`) aren't animated, since there's nothing meaningful to tween across many steps. Each animation lasts 260 ms with a smooth ease-out by default (both can be changed per window in the [Style panel](#styling-the-canvas)), or less at high speeds so it always finishes before the next step. If your system asks for reduced motion, nothing animates.
 
 ### The memory view
 
@@ -782,6 +814,8 @@ All input goes through pointer events, so mouse, pen and touch share one code pa
 
 Wheel events pan, except with `Ctrl` or `Cmd` held, when they zoom. Browsers report trackpad pinches as `Ctrl` + wheel, so pinching works with no extra code. Panning is clamped so at least 60 px of the diagram stays on screen.
 
+**Auto-fit** lives in the viewport too, so both sections have it. After `setContent()` puts in a new step's diagram, `refit()` computes the zoom that fits it from the cached view size and the diagram's `width`/`height` attributes, so it never measures the page. "Zoom out only" fits the largest diagram size seen since Auto-fit started, rather than remembering a zoom level, which keeps it right when the window is resized. When the view changes, `glide()` animates from the old transform to the new one with the Web Animations API, on both the diagram layer and the graph paper's `background-size`/`background-position`, so they move together. It uses the window's easing and duration (`setZoomAnimation()`), and a new fit cancels a glide that's still running, so fast playback never queues them up. Any manual pan, wheel, pinch, zoom button or zoom key goes through `manual()`, which switches Auto-fit off first.
+
 The dividers in [`main.ts`](src/main.ts) share one helper, `makeDivider()`, which handles dragging, arrow keys, double-click to reset, the `aria-valuenow` for screen readers, and remembering the position.
 
 ### 11. Drawing the loop history
@@ -829,9 +863,19 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 **Why it's fast.** Positions come from `data-x`/`data-y` attributes the renderers write in diagram units, never from `getBoundingClientRect()`, so a step never forces the browser to compute layout before painting. Only `transform` and `opacity` are animated, with the Web Animations API (`element.animate`), so the browser can run them on the compositor without repainting the diagram. The viewport also caches its own size with a `ResizeObserver` instead of measuring, and its "keep the current iteration in view" scrolling works in diagram units. Together, rendering and starting the animations takes about 2 ms per step (10 ms at worst) on the examples, which keeps 16 steps per second at 60 fps.
 
-**Playback** in `main.ts` is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step, for `min(260 ms, 0.75 × interval)`, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
+**Playback** in `main.ts` is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step. Each window then animates with its own easing and duration from the Style panel (`animationFor()`), capped at `0.75 × interval` while playing, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
 
-### 14. Graphs
+### 14. Styling
+
+[`appearance.ts`](src/appearance.ts) holds the settings: one `PaneStyle` per window (background, grid, easing, duration), a color per entry in `COLOR_FIELDS`, line weights, the font and the presets. Everything visual is a CSS custom property, so `applyAppearance()` only sets variables, with nothing re-rendered, which is why changes show up immediately:
+
+- **Diagram colors and line weights** are set on the `#canvas` element, so they don't leak into the toolbar or the editor. The stylesheet draws everything in terms of them: `stroke-width: calc(1.5px * var(--arrow-width))`, `rx: var(--cell-radius)`, `fill: var(--paper-ink-soft)` for text on the background, and so on.
+- **Each window's background** (`--paper`, `--paper-grid`, `--grid-image`) is set on its section, so the header strip and the viewport both inherit it. The header's tint and borders are `color-mix()`es of the background and ink, so they suit any background. The grid's square size isn't CSS, because the viewport scales it with the zoom, so `Viewport.setGridSize()` takes it.
+- **Easing and duration** aren't CSS either. `main.ts` reads them for each window when it animates a step, and passes them to `transition()` in `animate.ts`.
+
+Saved settings are read by `parseAppearance()`, which checks every field and falls back to the default for anything missing or invalid, so an old or hand-edited setting can't break the canvas. [`stylePanel.ts`](src/stylePanel.ts) builds the panel from the same field lists. Each control registers a `sync()` that re-reads its value, so choosing a preset updates every control at once.
+
+### 15. Graphs
 
 [`trace/graph.ts`](src/trace/graph.ts) is pure, like `linked.ts`, and has its own tests ([`graph.test.ts`](src/trace/graph.test.ts)). It does four things.
 
@@ -860,7 +904,7 @@ In the memory view, a graph is one box drawn in place of its *host*: the dict or
 
 Pointer markers under a list are chosen in two ways. First, any name used as a subscript of that list anywhere in the code (found by the `ast` pass in Python, or the Babel analysis pass in JavaScript and TypeScript) is shown if it currently holds a whole number. So `arr[j]` makes `j` a pointer on `arr`. Second, for lists that the code indexes, a few conventional names are always considered: `lo`, `hi`, `low`, `high`, `left`, `right`, `l`, `r`, `start`, `end`, `mid`, `slow`, `fast`. That's how binary search gets `lo` and `hi` markers even though the code only ever writes `nums[mid]`. Third, a [`viz: pointers` hint](#hints-viz-comments) adds names explicitly, by merging them into the same index analysis. A marker for an index equal to the list's length (one past the end) is drawn hollow. The list is in [`render/draw.ts`](src/render/draw.ts) (`CONVENTIONAL_POINTERS`).
 
-### 15. The editor
+### 16. The editor
 
 The editor is Monaco, set up across two files.
 
@@ -898,6 +942,9 @@ algoviz/
     ├── programs.test.ts        Saved program tests
     ├── monaco.ts               Lean Monaco build: editor features + 3 languages
     ├── editor.ts               Monaco setup, theme, commands and line markers
+    ├── appearance.ts           Canvas style settings, presets, applying them
+    ├── appearance.test.ts      Style settings tests
+    ├── stylePanel.ts           The Style panel in the toolbar
     ├── examples/
     │   ├── index.ts            The Example type (group, name, code)
     │   ├── python.ts           Python examples, grouped by topic
@@ -946,7 +993,7 @@ algoviz/
         └── test_tracer.py      Python tracer tests
 ```
 
-The diagram styling lives in the `/* diagrams */` section of `styles.css`. Colors are CSS custom properties on `:root`, so retheming the canvas is a matter of changing a handful of variables.
+The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every color, line weight and corner radius there is a CSS custom property. The Style panel sets them (see [Styling](#14-styling)), and the defaults on `:root` match the Graph paper theme. To add a theme, add an entry to `PRESETS` in `appearance.ts`.
 
 ---
 
@@ -1039,6 +1086,8 @@ Everything after the worker only depends on the trace format, so any language wo
 - **Only single steps animate.** Jumping with the slider or `Home`/`End` redraws without tweening. Arrows don't animate at all; they jump to their new route, which can briefly look detached while a box is still sliding into place.
 - **Hints apply to the whole program.** There's no way yet to scope a hint to one function or loop, so `hide x` hides every `x`.
 - **Arrows assume the automatic layout.** Once you drag boxes around, arrows still route through the gaps they'd normally use, so they can cross boxes you've moved. They always reach the right box.
+- **Styles can't change text size.** Layout is computed from fixed text metrics, so sizes are fixed, and the code font must be monospace (the font list only offers monospace fonts). Zoom in for bigger text.
+- **Styles belong to this browser.** Like saved programs, they're stored in `localStorage`.
 - **Moving boxes needs a pointer.** Boxes can be dragged with a mouse, pen or finger, but not moved with the keyboard. Zooming works from the keyboard, but panning doesn't, since the arrow keys step through the program.
 - **Loop history rows can't be rearranged.** Rows are aligned so changes line up vertically, so the loop view pans and zooms but has no draggable boxes.
 
@@ -1081,7 +1130,7 @@ Everything listed for JavaScript applies, plus:
 
 **"Couldn't load the language runtime: …" in the status bar (Python).** Usually a failed or partial download. Reload the page. If it persists, try another browser to rule out an extension.
 
-**The page takes a while to load in dev.** That's Monaco being served as individual modules (see [The editor](#15-the-editor)). Later loads are faster because the browser caches them, and production builds don't have this cost.
+**The page takes a while to load in dev.** That's Monaco being served as individual modules (see [The editor](#16-the-editor)). Later loads are faster because the browser caches them, and production builds don't have this cost.
 
 **A keyboard shortcut does something different from VS Code.** Monaco includes VS Code's editor keybindings, but not workbench-level ones (like `Ctrl/Cmd + P` for quick open or `Ctrl/Cmd + B` for the sidebar), since there's no workbench. A few shortcuts can also be taken by the browser before the page sees them, such as `Ctrl/Cmd + W` and `Ctrl/Cmd + T`.
 
@@ -1089,7 +1138,7 @@ Everything listed for JavaScript applies, plus:
 
 **"Couldn't save: the browser's storage for this site is full or unavailable."** Browsers allow about 5 MB per site, which is a lot of source code. Delete programs you no longer need. Some privacy modes disable storage entirely. In that case programs still save, but only until the page is closed.
 
-**Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl/Cmd + Enter` (or `Ctrl + '`). A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
+**Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl + '`. A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
 
 **"Stopped after 3,000 steps."** The program hit the step budget. Usually that's an infinite loop, but a correct program on bigger input can hit it too. Use a smaller input, or raise `MAX_STEPS` in `main.ts`.
 
@@ -1121,4 +1170,5 @@ Everything listed for JavaScript applies, plus:
 - Exporting and importing saved programs as files, to move them between browsers or share them.
 - Saving the memory layout with a saved program, so a carefully arranged tree comes back when you reopen it.
 - Moving boxes with the keyboard.
+- Exporting and importing styles, to share a theme.
 - Routing arrows around boxes you've dragged, not just the automatic layout.

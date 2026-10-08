@@ -26,6 +26,7 @@ export interface EditorCommands {
   swapPanels(): void;
   toggleNested(): void;
   togglePlay(): void;
+  playOrRewind(): void;
 }
 
 export interface EditorHandle {
@@ -121,11 +122,13 @@ export function createEditor(
   document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
 
   const { KeyMod, KeyCode } = monaco;
+  // Ctrl + ' means the Control key everywhere. In Monaco, CtrlCmd is Cmd on
+  // a Mac, and WinCtrl is Control there (but the Windows key elsewhere).
   const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const CTRL = IS_MAC ? KeyMod.WinCtrl : KeyMod.CtrlCmd;
   const actions: [string, string, number[], () => void][] = [
-    // Ctrl + ' means the Control key everywhere. In Monaco, CtrlCmd is Cmd on
-    // a Mac and WinCtrl is Control there (but the Windows key elsewhere).
-    ["algoviz.run", "AlgoViz: Run", [KeyMod.CtrlCmd | KeyCode.Enter, (IS_MAC ? KeyMod.WinCtrl : KeyMod.CtrlCmd) | KeyCode.Quote], callbacks.commands.run],
+    ["algoviz.run", "AlgoViz: Run", [CTRL | KeyCode.Quote], callbacks.commands.run],
+    ["algoviz.playOrRewind", "AlgoViz: Play From Here / Back to Where Play Started", [KeyMod.CtrlCmd | KeyCode.Enter], callbacks.commands.playOrRewind],
     ["algoviz.save", "AlgoViz: Save Program", [KeyMod.CtrlCmd | KeyCode.KeyS], callbacks.commands.save],
     ["algoviz.saveAs", "AlgoViz: Save Program As…", [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS], callbacks.commands.saveAs],
     ["algoviz.nextStep", "AlgoViz: Next Step", [KeyCode.F10], callbacks.commands.nextStep],

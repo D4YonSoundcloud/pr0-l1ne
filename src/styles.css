@@ -26,6 +26,17 @@
   --visited: #cde7d8;
   --frontier: #d9822b;
   --path: #7a4fb5;
+  --tree: #2e7a57;
+  --header-code: #e2e7f5;
+  --paper-ink: #1d2b45;
+  --paper-ink-soft: #5b6b85;
+  --paper-ink-faint: #93a1b5;
+  /* Line weights, corners and the diagram font: see src/appearance.ts. */
+  --arrow-width: 1;
+  --border-width: 1.25px;
+  --cell-radius: 3px;
+  --diagram-font: var(--font-code);
+  --flash: mark 450ms ease-out;
 
   --chrome: #161b29;
   --chrome-text: #c9d2e3;
@@ -108,6 +119,7 @@ body {
 .workspace.is-swapped { grid-template-columns: 1fr 6px var(--split); }
 
 .editor-pane {
+  position: relative;
   display: grid;
   grid-template-rows: 1fr auto;
   min-width: 0;
@@ -150,7 +162,19 @@ body {
 }
 .canvas.is-stale .viewport-layer { opacity: 0.5; }
 
+/* Each window's background (set by appearance.ts on the section) also
+   tints its header strip and edges. */
+.canvas {
+  --highlight-soft: color-mix(in srgb, var(--highlight) 22%, transparent);
+  --paper-edge: color-mix(in srgb, var(--paper) 80%, var(--ink));
+}
 .canvas-section {
+  --paper-band: color-mix(in srgb, var(--paper) 91%, var(--ink));
+  --paper-edge: color-mix(in srgb, var(--paper) 80%, var(--ink));
+  /* The default grid; appearance.ts replaces it per window. */
+  --grid-image:
+    linear-gradient(var(--paper-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
@@ -170,14 +194,14 @@ body {
   margin: 0;
   font-size: 14px;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--paper-ink);
 }
-.section-hint { font-size: 12.5px; color: var(--ink-faint); }
+.section-hint { font-size: 12.5px; color: var(--paper-ink-faint); }
 
 .divider.horizontal {
   cursor: row-resize;
   background: var(--paper-edge);
-  border-block: 1px solid #b9c4d1;
+  border-block: 1px solid color-mix(in srgb, var(--paper) 70%, var(--ink));
 }
 .divider.horizontal:hover, .divider.horizontal:focus-visible, .divider.horizontal.is-dragging { background: var(--ink-soft); }
 
@@ -193,9 +217,7 @@ body {
   touch-action: none;
   overscroll-behavior: contain;
   background-color: var(--paper);
-  background-image:
-    linear-gradient(var(--paper-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+  background-image: var(--grid-image);
   background-size: 24px 24px;
 }
 .viewport:focus-visible { outline-offset: -3px; }
@@ -216,7 +238,7 @@ body {
   inset: 12px 16px auto;
   margin: 0;
   max-width: 52ch;
-  color: var(--ink-soft);
+  color: var(--paper-ink-soft);
   pointer-events: none;
 }
 
@@ -228,9 +250,9 @@ body {
   gap: 2px;
   padding: 3px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--cell) 92%, transparent);
   border: 1px solid var(--paper-edge);
-  box-shadow: 0 2px 8px rgba(29, 43, 69, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   cursor: default;
 }
 .viewport-button {
@@ -247,6 +269,31 @@ body {
 }
 .viewport-button:hover { background: var(--paper-band); }
 .viewport-button.zoom-label { min-width: 46px; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+/* Auto-fit: a toggle, and a menu (opening upward) for how it zooms. */
+.auto-fit-group { position: relative; display: inline-flex; margin-right: 2px; padding-right: 2px; border-right: 1px solid var(--paper-edge); }
+.viewport-button.auto-fit { padding: 0 8px; border-radius: 5px 0 0 5px; }
+.viewport-button.auto-fit.is-on { background: var(--ink); color: var(--cell); }
+.viewport-button.auto-fit-mode { min-width: 18px; padding: 0 4px; border-radius: 0 5px 5px 0; color: var(--ink-soft); font-size: 11px; }
+.auto-fit-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 250px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--cell);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.auto-fit-menu[hidden] { display: none; }
+.auto-fit-choice {
+  display: block; width: 100%; text-align: left; font: inherit; border: 0; border-radius: 6px;
+  padding: 6px 8px 6px 26px; background: transparent; color: var(--ink); cursor: pointer; position: relative;
+}
+.auto-fit-choice:hover { background: var(--paper-band); }
+.auto-fit-choice strong { display: block; font-size: 13px; }
+.auto-fit-choice span { display: block; font-size: 11.5px; color: var(--ink-soft); line-height: 1.3; }
+.auto-fit-choice[aria-checked="true"]::before { content: "✓"; position: absolute; left: 9px; top: 6px; font-size: 13px; color: var(--ink); }
 .viewport-button.wide { padding: 0 9px; border-right: 1px solid var(--paper-edge); border-radius: 5px 0 0 5px; margin-right: 2px; }
 
 /* Arrows | Nested switch in the memory header. */
@@ -264,11 +311,11 @@ body {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--ink-soft);
+  color: var(--paper-ink-soft);
   cursor: pointer;
 }
-.segment:hover { color: var(--ink); }
-.segment[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.segment:hover { color: var(--paper-ink); }
+.segment[aria-pressed="true"] { background: var(--ink); color: var(--cell); }
 
 /* Nested ("container in container") boxes: lighter, so the outer box reads
    as the container. */
@@ -280,7 +327,7 @@ body {
 
 /* Focus: hovering a box highlights its arrows and the boxes they connect. */
 .memory-svg.has-focus .ref-arrow { opacity: 0.14; }
-.memory-svg.has-focus .ref-arrow.is-focus { opacity: 1; stroke-width: 2.25; }
+.memory-svg.has-focus .ref-arrow.is-focus { opacity: 1; stroke-width: calc(2.25px * var(--arrow-width)); }
 .memory-svg .node.is-focus > .node-hit { stroke: var(--ballpoint); stroke-width: 2; }
 .memory-svg .node.is-related > .node-hit { stroke: var(--ballpoint); stroke-width: 1.5; stroke-dasharray: 5 3; }
 
@@ -325,7 +372,7 @@ select {
 }
 
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
-.toggle.small { font-size: 13px; color: var(--ink-soft); }
+.toggle.small { font-size: 13px; color: var(--paper-ink-soft); }
 .toggle input { accent-color: var(--highlight); }
 .canvas-pane .toggle input { accent-color: var(--ink); }
 
@@ -346,6 +393,8 @@ select {
 .program-name.is-untitled { color: var(--chrome-muted); font-style: italic; }
 .program-dirty { color: var(--highlight); font-size: 11px; }
 .button.quiet { background: transparent; border-color: transparent; color: var(--chrome-muted); }
+.button.small { font-size: 13px; padding: 3px 10px; }
+.style-button[aria-expanded="true"] { border-color: var(--highlight); color: #fff; }
 .button.quiet:hover { color: #ff8f86; background: #2b3450; }
 
 .dialog {
@@ -443,7 +492,7 @@ select {
   border-radius: 5px;
   cursor: pointer;
 }
-.loop-tab[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.loop-tab[aria-selected="true"] { background: var(--ink); color: var(--cell); border-color: var(--ink); }
 
 /* -------------------------------------------------------- editor markers */
 
@@ -462,20 +511,20 @@ select {
 /* ------------------------------------------------------------ diagrams */
 
 .memory-svg, .loop-svg {
-  font-family: var(--font-code);
+  font-family: var(--diagram-font);
   font-size: 13px;
 }
 
-.cell rect { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
+.cell rect { fill: var(--cell); stroke: var(--ink); stroke-width: var(--border-width); rx: var(--cell-radius); }
 .cell.key rect { fill: none; stroke: none; }
 .cell.is-empty rect { fill: none; stroke-dasharray: 3 3; stroke: var(--ink-faint); }
-.cell.is-changed rect { fill: var(--highlight); animation: mark 450ms ease-out; }
+.cell.is-changed rect { fill: var(--highlight); animation: var(--flash); }
 .tuple .cell rect { fill: var(--cell-alt); }
 .set .cell rect { rx: 14px; }
 
 @keyframes mark {
-  from { fill: #fff3a8; stroke-width: 2.5; }
-  to { fill: var(--highlight); stroke-width: 1.25; }
+  from { fill: color-mix(in srgb, var(--highlight) 45%, white); stroke-width: calc(var(--border-width) * 2); }
+  to { fill: var(--highlight); stroke-width: var(--border-width); }
 }
 
 .value { fill: var(--v-num); }
@@ -485,78 +534,80 @@ select {
 
 .ref-dot { fill: var(--ballpoint); }
 
-.index { font-size: 10.5px; fill: var(--ink-faint); }
-.seq-label { font-family: var(--font-ui); font-size: 11.5px; font-style: italic; fill: var(--ink-soft); }
+/* Text drawn straight on the background uses the --paper-ink colors. */
+.index { font-size: 10.5px; fill: var(--paper-ink-faint); }
+.seq-label { font-family: var(--font-ui); font-size: 11.5px; font-style: italic; fill: var(--paper-ink-soft); }
+.box .index, .box .seq-label { fill: var(--ink-faint); }
 
-.box-body { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
-.box-header { fill: var(--header); stroke: var(--ink); stroke-width: 1.25; }
+.box-body { fill: var(--cell); stroke: var(--ink); stroke-width: var(--border-width); }
+.box-header { fill: var(--header); stroke: var(--ink); stroke-width: var(--border-width); }
 .box-title { font-family: var(--font-ui); font-size: 13px; font-weight: 700; fill: var(--ink); }
 .box-empty { font-family: var(--font-ui); font-size: 12px; font-style: italic; fill: var(--ink-faint); }
 .box.is-new > .box-body { stroke-dasharray: 5 3; stroke: var(--ballpoint); stroke-width: 1.75; }
 .seq.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; }
 
 .box.frame > .box-header { fill: var(--cell-alt); }
-.box.frame.is-active > .box-body { stroke-width: 2; }
+.box.frame.is-active > .box-body { stroke-width: calc(var(--border-width) * 1.6); }
 /* A paused generator or async function: off the stack, waiting. */
 .box.frame.is-suspended > .box-body { stroke-dasharray: 6 4; stroke: var(--ink-soft); }
 .box.frame.is-suspended > .box-header { fill: var(--paper-band); stroke: var(--ink-soft); stroke-dasharray: 6 4; }
 .box.frame.is-suspended > .box-title { font-weight: 600; fill: var(--ink-soft); font-style: italic; }
 .box.frame.is-active > .box-header { fill: var(--ink); }
-.box.frame.is-active > .box-title { fill: #fff; }
-.box.function > .box-header, .box.class > .box-header { fill: #e2e7f5; }
+.box.frame.is-active > .box-title { fill: var(--cell); }
+.box.function > .box-header, .box.class > .box-header { fill: var(--header-code); }
 .box.function > .box-title, .box.class > .box-title { font-family: var(--font-code); font-weight: 500; font-size: 12.5px; }
 
 .row-label { fill: var(--ink); }
-.row .cell rect { stroke-width: 1; }
+.row .cell rect { stroke-width: calc(var(--border-width) * 0.8); }
 .row.is-changed > .row-label { font-weight: 600; }
 .row.return-row > .row-label { fill: var(--redpen); font-style: italic; }
 
-.ref-arrow { fill: none; stroke: var(--ballpoint); stroke-width: 1.5; }
-.ref-arrow.is-changed { stroke-width: 2.25; }
+.ref-arrow { fill: none; stroke: var(--ballpoint); stroke-width: calc(1.5px * var(--arrow-width)); }
+.ref-arrow.is-changed { stroke-width: calc(2.25px * var(--arrow-width)); }
 .arrowhead-ref { fill: var(--ballpoint); }
-.change-arrow { fill: none; stroke: var(--redpen); stroke-width: 1.6; }
+.change-arrow { fill: none; stroke: var(--redpen); stroke-width: calc(1.6px * var(--arrow-width)); }
 .arrowhead-change { fill: var(--redpen); }
 
 .pointer path { fill: var(--ballpoint); }
 .pointer text { font-size: 11px; font-weight: 600; fill: var(--ballpoint); }
 .pointer.is-changed path { fill: var(--redpen); }
 .pointer.is-changed text { fill: var(--redpen); }
-.pointer.is-out path { fill: none; stroke: var(--ink-faint); }
-.pointer.is-out text { fill: var(--ink-faint); }
+.pointer.is-out path { fill: none; stroke: var(--paper-ink-faint); }
+.pointer.is-out text { fill: var(--paper-ink-faint); }
 
 /* loop view */
-.iteration-label { font-family: var(--font-ui); font-size: 13px; font-weight: 700; fill: var(--ink-soft); }
-.loop-row.is-current .iteration-label { fill: var(--ink); }
+.iteration-label { font-family: var(--font-ui); font-size: 13px; font-weight: 700; fill: var(--paper-ink-soft); }
+.loop-row.is-current .iteration-label { fill: var(--paper-ink); }
 .current-band { fill: var(--highlight-soft); stroke: var(--highlight); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.scalars { font-size: 12.5px; fill: var(--ink-soft); }
+.scalars { font-size: 12.5px; fill: var(--paper-ink-soft); }
 .scalars .is-changed { fill: var(--redpen); font-weight: 600; }
-.container-name { font-weight: 600; fill: var(--ink); }
+.container-name { font-weight: 600; fill: var(--paper-ink); }
 .loop-container.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
-.quiet-band line { stroke: var(--ink-faint); stroke-dasharray: 2 4; }
+.quiet-band line { stroke: var(--paper-ink-faint); stroke-dasharray: 2 4; }
 /* Linked track: nodes in fixed columns, links as arrows */
 .linked-track .pointer text { paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
-.loop-row.is-current .linked-track .pointer text { stroke: #ece6c4; }
+.loop-row.is-current .linked-track .pointer text { stroke: color-mix(in srgb, var(--highlight) 22%, var(--paper)); }
 .link-slot rect { fill: var(--cell-alt); }
 .link-slot.is-changed rect { fill: var(--highlight); }
 .null-slash { stroke: var(--ink-soft); stroke-width: 1.4; }
-.link-arrow { fill: none; stroke: var(--ballpoint); stroke-width: 1.5; }
-.link-arrow.is-changed { stroke: var(--redpen); stroke-width: 1.9; }
+.link-arrow { fill: none; stroke: var(--ballpoint); stroke-width: calc(1.5px * var(--arrow-width)); }
+.link-arrow.is-changed { stroke: var(--redpen); stroke-width: calc(1.9px * var(--arrow-width)); }
 .linked-node.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
 /* Graphs: nodes and edges, with the algorithm's state drawn on them. */
-.box.graph-box > .box-body { fill: #fbfcfd; }
-.graph-edge { fill: none; stroke: var(--ink-soft); stroke-width: 1.5; }
-.graph-edge.is-new { stroke: var(--redpen); stroke-width: 2; }
-.graph-edge.is-tree { stroke: var(--v-const); stroke-width: 3; }
-.graph-edge.is-path { stroke: var(--path); stroke-width: 3.25; }
-.graph-edge.is-extra { stroke-dasharray: 6 4; stroke-width: 2.25; }
+.box.graph-box > .box-body { fill: var(--cell); }
+.graph-edge { fill: none; stroke: var(--ink-soft); stroke-width: calc(1.5px * var(--arrow-width)); }
+.graph-edge.is-new { stroke: var(--redpen); stroke-width: calc(2px * var(--arrow-width)); }
+.graph-edge.is-tree { stroke: var(--tree); stroke-width: calc(3px * var(--arrow-width)); }
+.graph-edge.is-path { stroke: var(--path); stroke-width: calc(3.25px * var(--arrow-width)); }
+.graph-edge.is-extra { stroke-dasharray: 6 4; stroke-width: calc(2.25px * var(--arrow-width)); }
 .arrowhead-graph { fill: var(--ink-soft); }
-.arrowhead-tree { fill: var(--v-const); }
+.arrowhead-tree { fill: var(--tree); }
 .arrowhead-path { fill: var(--path); }
 .edge-label { font-size: 11px; font-weight: 600; fill: var(--ink-soft); paint-order: stroke; stroke: var(--cell); stroke-width: 4px; stroke-linejoin: round; }
 .edge-label.is-new { fill: var(--redpen); }
-.graph-node .node-body { fill: var(--cell); stroke: var(--ink); stroke-width: 1.5; }
+.graph-node .node-body { fill: var(--cell); stroke: var(--ink); stroke-width: calc(var(--border-width) * 1.2); }
 .graph-node .node-text { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
-.graph-node.is-visited .node-body { fill: var(--visited); stroke: var(--v-const); stroke-width: 2; }
+.graph-node.is-visited .node-body { fill: var(--visited); stroke: var(--tree); stroke-width: calc(var(--border-width) * 1.6); }
 .graph-node.is-frontier .node-body { stroke: var(--frontier); stroke-width: 2.5; stroke-dasharray: 5 3; }
 .graph-node.is-path .node-body { stroke: var(--path); stroke-width: 2.5; }
 .graph-node.is-new .node-body { stroke: var(--ballpoint); stroke-dasharray: 4 2; }
@@ -567,23 +618,89 @@ select {
 .node-label { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; fill: var(--ink); }
 .graph-pointers .pointer text { paint-order: stroke; stroke: var(--cell); stroke-width: 4px; stroke-linejoin: round; }
 .loop-svg .graph-pointers .pointer text { stroke: var(--paper); }
-.loop-row.is-current .graph-pointers .pointer text { stroke: #ece6c4; }
+.loop-row.is-current .graph-pointers .pointer text { stroke: color-mix(in srgb, var(--highlight) 22%, var(--paper)); }
 .loop-svg .edge-label { stroke: var(--paper); }
 .graph-legend text { font-family: var(--font-ui); font-size: 11.5px; fill: var(--ink-soft); }
+.loop-svg .graph-legend text { fill: var(--paper-ink-soft); }
 .graph-legend .swatch { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
-.graph-legend .swatch.is-visited { fill: var(--visited); stroke: var(--v-const); stroke-width: 1.75; }
+.graph-legend .swatch.is-visited { fill: var(--visited); stroke: var(--tree); stroke-width: 1.75; }
 .graph-legend .swatch.is-frontier { stroke: var(--frontier); stroke-width: 2; stroke-dasharray: 3 2; }
 .graph-legend .swatch.is-label { fill: var(--paper); stroke: var(--ink-faint); }
-.graph-legend line.swatch.is-tree { stroke: var(--v-const); stroke-width: 3; }
+.graph-legend line.swatch.is-tree { stroke: var(--tree); stroke-width: 3; }
 .graph-legend line.swatch.is-path { stroke: var(--path); stroke-width: 3; }
 
 .quiet-band rect { fill: var(--paper); }
-.quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
-.loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
+.quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
+.loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
 
 @media (prefers-reduced-motion: reduce) {
   .cell.is-changed rect { animation: none; }
 }
+
+/* ------------------------------------------------------------ style panel */
+
+/* Floats over the editor (whichever side it's on), so the canvas stays in
+   view while you change how it looks. */
+.style-panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 20;
+  width: min(370px, calc(100% - 20px));
+  max-height: calc(100% - 20px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #343c55;
+  border-radius: 10px;
+  background: #1c2233;
+  color: var(--chrome-text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 13.5px;
+}
+.style-panel[hidden] { display: none; }
+.style-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px 8px; border-bottom: 1px solid #2c344b; }
+.style-title { margin: 0; font-size: 15px; color: #fff; }
+.style-note { font-size: 12px; color: var(--chrome-muted); }
+.style-close {
+  margin-left: auto; align-self: center; border: 0; background: transparent; color: var(--chrome-muted);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: 4px;
+}
+.style-close:hover { color: #fff; background: #2b3450; }
+.style-body { overflow-y: auto; padding: 4px 14px 0; }
+.style-section { border-bottom: 1px solid #2a3147; }
+.style-section > summary { cursor: pointer; padding: 10px 0; font-weight: 700; color: #fff; }
+.style-group { padding: 0 0 10px; }
+.style-subhead { margin: 10px 0 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--chrome-muted); }
+.style-row { display: grid; grid-template-columns: 9.5em 1fr auto; align-items: center; gap: 8px; min-height: 30px; }
+.style-row > label, .style-label { color: var(--chrome-text); }
+.style-theme { grid-template-columns: 4.5em 1fr auto; padding: 10px 0; border-bottom: 1px solid #2a3147; }
+.style-actions { grid-template-columns: 1fr; justify-items: start; padding-top: 4px; }
+.style-select, .style-text { width: 100%; font-size: 13px; padding: 4px 6px; }
+.style-text { font-family: var(--font-code); border-radius: 6px; border: 1px solid #343c55; background: #161b29; color: #fff; }
+.style-text.is-invalid { border-color: #ff8f86; }
+.style-color-wrap { display: inline-flex; align-items: center; gap: 8px; }
+.style-color { width: 34px; height: 24px; padding: 0; border: 1px solid #343c55; border-radius: 5px; background: none; cursor: pointer; }
+.style-hex { font-family: var(--font-code); font-size: 12px; color: var(--chrome-muted); }
+.style-range { width: 100%; accent-color: var(--highlight); }
+.style-value { min-width: 4.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--chrome-muted); font-size: 12.5px; }
+.style-segmented { background: #161b29; border-color: #343c55; justify-self: start; }
+.style-segmented .segment { color: var(--chrome-muted); }
+.style-segmented .segment[aria-pressed="true"] { background: var(--chrome-text); color: var(--chrome); }
+.easing-preview { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; margin: 4px 0 2px; }
+.easing-curve { background: #161b29; border-radius: 6px; }
+.easing-axes { fill: none; stroke: #3a4460; stroke-width: 0.02; }
+.easing-path { fill: none; stroke: var(--highlight); stroke-width: 0.045; }
+.easing-track { position: relative; height: 24px; border-radius: 12px; background: #161b29; }
+.easing-ball {
+  position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--highlight);
+}
+@keyframes easing-preview {
+  0%, 15% { left: 4px; }
+  50%, 65% { left: calc(100% - 20px); }
+  100% { left: 4px; }
+}
+.style-foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px 12px; border-top: 1px solid #2c344b; }
 
 /* ------------------------------------------------------------ small screens */
 
