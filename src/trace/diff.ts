@@ -2,7 +2,7 @@
  * Compares two consecutive snapshots and reports what changed. The renderer
  * uses this to highlight cells and variables; it never inspects code.
  */
-import type { HeapObject, Step, Value } from "./types";
+import { liveFrames, type HeapObject, type Step, type Value } from "./types";
 
 /** A string that is equal for equal values, used for comparison and as map keys. */
 export function valueKey(value: Value): string {
@@ -75,8 +75,8 @@ export function diffSteps(prev: Step | undefined, next: Step): StepDiff {
   };
   if (!prev) return diff;
 
-  const prevFrames = new Map(prev.stack.map((frame) => [frame.id, frame]));
-  for (const frame of next.stack) {
+  const prevFrames = new Map(liveFrames(prev).map((frame) => [frame.id, frame]));
+  for (const frame of liveFrames(next)) {
     const before = prevFrames.get(frame.id);
     if (!before) {
       diff.newFrames.add(frame.id);

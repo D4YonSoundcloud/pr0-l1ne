@@ -12,6 +12,8 @@
  * the content, so the paper and the drawing feel like one sheet.
  */
 
+import { snapshot, transition as transition_ } from "./animate";
+
 export interface Point { x: number; y: number }
 
 export interface ViewportOptions {
@@ -48,6 +50,9 @@ export class Viewport {
   private contentW = 0;
   private contentH = 0;
   private gesture: Gesture | null = null;
+  /** The viewport's size, kept up to date by a ResizeObserver. */
+  private viewW = 0;
+  private viewH = 0;
   private readonly pointers = new Map<number, Point>();
 
   constructor(readonly el: HTMLElement, private readonly options: ViewportOptions) {
@@ -80,6 +85,12 @@ export class Viewport {
     el.addEventListener("pointercancel", (e) => this.onPointerUp(e));
     el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     el.addEventListener("keydown", (e) => this.onKey(e));
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(([entry]) => {
+        this.viewW = entry.contentRect.width;
+        this.viewH = entry.contentRect.height;
+      }).observe(el);
+    }
     this.apply();
   }
 
@@ -91,8 +102,13 @@ export class Viewport {
     return button;
   }
 
-  /** Show a diagram, or an explanation when there's nothing to draw. */
-  setContent(content: SVGSVGElement | null, emptyText = ""): void {
+  /**
+   * Show a diagram, or an explanation when there's nothing to draw. With a
+   * `transition` (ms), things that moved since the last diagram slide from
+   * where they were (see animate.ts).
+   */
+  setContent(content: SVGSVGElement | null, emptyText = "", transition = 0): void {
+    const before = transition > 0 && content ? snapshot(this.layer) : null;
     if (content) {
       this.contentW = Number(content.getAttribute("width")) || 0;
       this.contentH = Number(content.getAttribute("height")) || 0;
@@ -104,16 +120,20 @@ export class Viewport {
     this.empty.textContent = emptyText;
     this.empty.hidden = !!content || !emptyText;
     this.controls.hidden = !content;
+    if (before) transition_(before, this.layer, transition);
   }
 
-  /** Pan just enough to bring an element into view (vertically). */
-  reveal(element: Element, padding = 24): void {
-    if (this.gesture) return; // never fight the person's hand
-    const box = element.getBoundingClientRect();
-    const view = this.el.getBoundingClientRect();
-    if (!box.height || !view.height) return;
-    if (box.bottom > view.bottom - padding) this.y -= box.bottom - view.bottom + padding;
-    else if (box.top < view.top + padding) this.y += view.top + padding - box.top;
+  /**
+   * Pan just enough to bring a span of the diagram into view (vertically),
+   * given in diagram units. Works from numbers, not by measuring the page,
+   * so it doesn't force a layout right after the diagram was redrawn.
+   */
+  reveal(top: number, bottom: number, padding = 24): void {
+    if (this.gesture || !this.viewH) return; // never fight the person's hand
+    const screenTop = this.y + top * this.z;
+    const screenBottom = this.y + bottom * this.z;
+    if (screenBottom > this.viewH - padding) this.y -= screenBottom - (this.viewH - padding);
+    else if (screenTop < padding) this.y += padding - screenTop;
     else return;
     this.apply();
   }
@@ -160,11 +180,11 @@ export class Viewport {
   }
 
   private apply(): void {
-    // Don't let the diagram be panned completely out of sight.
-    const view = this.el.getBoundingClientRect();
-    if (view.width && this.contentW) {
-      this.x = clamp(this.x, KEEP_VISIBLE - this.contentW * this.z, view.width - KEEP_VISIBLE);
-      this.y = clamp(this.y, KEEP_VISIBLE - this.contentH * this.z, view.height - KEEP_VISIBLE);
+    // Don't let the diagram be panned completely out of sight. Uses the
+    // size the ResizeObserver last reported, so it never forces a layout.
+    if (this.viewW && this.contentW) {
+      this.x = clamp(this.x, KEEP_VISIBLE - this.contentW * this.z, this.viewW - KEEP_VISIBLE);
+      this.y = clamp(this.y, KEEP_VISIBLE - this.contentH * this.z, this.viewH - KEEP_VISIBLE);
     }
     this.layer.style.transform = `translate(${this.x}px, ${this.y}px) scale(${this.z})`;
     const grid = GRID * this.z;

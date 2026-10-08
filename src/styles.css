@@ -275,6 +275,16 @@ body {
 .cell.is-holder rect { fill: var(--cell-alt); stroke: var(--ink-faint); stroke-width: 1; }
 .cell.is-holder.is-changed rect { fill: var(--highlight-soft); stroke: var(--highlight); }
 
+/* Focus: hovering a box highlights its arrows and the boxes they connect. */
+.memory-svg.has-focus .ref-arrow { opacity: 0.14; }
+.memory-svg.has-focus .ref-arrow.is-focus { opacity: 1; stroke-width: 2.25; }
+.memory-svg .node.is-focus > .node-hit { stroke: var(--ballpoint); stroke-width: 2; }
+.memory-svg .node.is-related > .node-hit { stroke: var(--ballpoint); stroke-width: 1.5; stroke-dasharray: 5 3; }
+
+/* Grids (lists of lists): the cell that grid[i][j] points at. */
+.grid-focus { fill: none; stroke: var(--ballpoint); stroke-width: 2; stroke-dasharray: 4 2; }
+.row-pointers .pointer text { font-size: 11px; }
+
 /* Draggable boxes in the memory view. */
 #memory .node { cursor: grab; }
 #memory .node:hover .box-body,
@@ -400,6 +410,10 @@ select {
   padding: 8px 16px;
   border-top: 1px solid #262d42;
 }
+.button.step { font-size: 18px; line-height: 1; padding: 2px 10px 4px; }
+.button.play { min-width: 64px; font-weight: 700; }
+.button.play[aria-pressed="true"] { background: var(--highlight); border-color: var(--highlight); color: var(--ink); }
+.speed select { font-size: 13px; padding: 4px 6px; }
 .scrubber { flex: 1; accent-color: var(--highlight); min-width: 80px; }
 .step-label { min-width: 22ch; font-size: 14px; color: var(--chrome-text); text-align: right; }
 
@@ -419,14 +433,15 @@ select {
 /* -------------------------------------------------------- editor markers */
 
 /* Monaco decorations: whole-line tint plus a bar in the gutter. */
-.monaco-editor .exec-line-next { background: rgba(246, 215, 67, 0.13); }
-.monaco-editor .exec-line-prev { background: rgba(120, 160, 230, 0.09); }
+/* prev = the line that just ran (yellow), next = the line that runs next (blue) */
+.monaco-editor .exec-line-prev { background: rgba(246, 215, 67, 0.13); }
+.monaco-editor .exec-line-next { background: rgba(120, 160, 230, 0.09); }
 .monaco-editor .exec-line-error { background: rgba(194, 54, 47, 0.28); }
 .monaco-editor .exec-bar-next,
 .monaco-editor .exec-bar-prev,
 .monaco-editor .exec-bar-error { width: 3px !important; margin-left: 4px; border-radius: 1px; }
-.monaco-editor .exec-bar-next { background: var(--highlight); }
-.monaco-editor .exec-bar-prev { background: #6f8fc9; }
+.monaco-editor .exec-bar-prev { background: var(--highlight); }
+.monaco-editor .exec-bar-next { background: #6f8fc9; }
 .monaco-editor .exec-bar-error { background: #ff6b61; }
 
 /* ------------------------------------------------------------ diagrams */
@@ -467,6 +482,10 @@ select {
 
 .box.frame > .box-header { fill: var(--cell-alt); }
 .box.frame.is-active > .box-body { stroke-width: 2; }
+/* A paused generator or async function: off the stack, waiting. */
+.box.frame.is-suspended > .box-body { stroke-dasharray: 6 4; stroke: var(--ink-soft); }
+.box.frame.is-suspended > .box-header { fill: var(--paper-band); stroke: var(--ink-soft); stroke-dasharray: 6 4; }
+.box.frame.is-suspended > .box-title { font-weight: 600; fill: var(--ink-soft); font-style: italic; }
 .box.frame.is-active > .box-header { fill: var(--ink); }
 .box.frame.is-active > .box-title { fill: #fff; }
 .box.function > .box-header, .box.class > .box-header { fill: #e2e7f5; }
@@ -500,6 +519,8 @@ select {
 .loop-container.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
 .quiet-band line { stroke: var(--ink-faint); stroke-dasharray: 2 4; }
 /* Linked track: nodes in fixed columns, links as arrows */
+.linked-track .pointer text { paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
+.loop-row.is-current .linked-track .pointer text { stroke: #ece6c4; }
 .link-slot rect { fill: var(--cell-alt); }
 .link-slot.is-changed rect { fill: var(--highlight); }
 .null-slash { stroke: var(--ink-soft); stroke-width: 1.4; }

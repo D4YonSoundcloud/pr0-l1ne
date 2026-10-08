@@ -93,6 +93,11 @@ export interface Frame {
   func: string;
   line: number;
   locals: [string, Value][];
+  /**
+   * "suspended" for a generator or async function paused at a yield or
+   * await. Suspended frames aren't on the call stack; see Step.suspended.
+   */
+  state?: "suspended";
 }
 
 /** Which loops are running at a step, and on which iteration. */
@@ -106,18 +111,33 @@ export interface LoopContext {
 }
 
 export interface Step {
-  event: "call" | "line" | "return" | "exception";
+  /**
+   * yield / await: a generator or async function pauses (its frame moves
+   * from the stack to `suspended`). resume: it picks up again.
+   */
+  event: "call" | "line" | "return" | "exception" | "yield" | "await" | "resume";
   /** The line about to run (for "line"), or where the event happened. */
   line: number;
   /** Outermost frame first. The last frame is the one executing. */
   stack: Frame[];
+  /**
+   * Generators and async functions that are paused, oldest first. Their
+   * variables are kept, so they can be shown next to the stack.
+   */
+  suspended?: Frame[];
   /** Every heap object reachable from the stack at this step. */
   heap: Record<string, HeapObject>;
   /** How much of `Trace.stdout` had been printed by this step. */
   stdoutLength: number;
   loops: LoopContext[];
+  /** The returned value (return) or the yielded value (yield). */
   returnValue?: Value;
   exception?: { type: string; message: string };
+}
+
+/** Every live frame: the call stack, then paused generators/async functions. */
+export function liveFrames(step: Step): Frame[] {
+  return step.suspended?.length ? [...step.stack, ...step.suspended] : step.stack;
 }
 
 export interface LoopInfo {
@@ -128,6 +148,32 @@ export interface LoopInfo {
   bodyEnd: number;
   /** Source text of the loop header, e.g. "for i in range(n)". */
   header: string;
+}
+
+/** A `# viz:` / `// viz:` comment, as written. Parsed by trace/hints.ts. */
+export interface RawHint {
+  line: number;
+  /** Everything after "viz:", trimmed. */
+  text: string;
+}
+
+/** `viz: tree Node(left, right)` or `viz: list Node(next)`. */
+export interface LinkedHint {
+  shape: "tree" | "list";
+  typeName: string;
+  links: string[];
+  line: number;
+}
+
+/** Parsed hints (trace/hints.ts), kept on the trace for the renderers. */
+export interface VizHints {
+  hide: string[];
+  show: string[];
+  /** Extra index names, keyed like Trace.indexNames ("nums", "grid[]"). */
+  pointers: Record<string, string[]>;
+  linked: LinkedHint[];
+  /** Hints that couldn't be understood, to show to the person. */
+  warnings: { line: number; message: string }[];
 }
 
 export interface TraceError {
@@ -144,11 +190,17 @@ export interface Trace {
   loops: LoopInfo[];
   /**
    * Which names are used to index which containers, from static analysis.
-   * `arr[j + 1]` in the code gives { arr: ["j"] }.
+   * `arr[j + 1]` in the code gives { arr: ["j"] }. For nested indexing,
+   * `grid[i][j]` gives { grid: ["i"], "grid[]": ["j"] }: the "[]" key holds
+   * names that index the inner lists.
    */
   indexNames: Record<string, string[]>;
   stdout: string;
   error: TraceError | null;
   /** True when the step budget ran out before the program finished. */
   truncated: boolean;
+  /** `# viz:` / `// viz:` comments in the program (see README, "Hints"). */
+  hints?: RawHint[];
+  /** The hints, parsed and applied (added by applyHints, not by tracers). */
+  viz?: VizHints;
 }

@@ -7,15 +7,15 @@
 import type { Trace } from "../trace/types";
 import type { FromWorker, ToWorker } from "../worker/protocol";
 
-export function serve(label: string, trace: (source: string, maxSteps: number) => Trace): void {
+export function serve(label: string, trace: (source: string, maxSteps: number) => Promise<Trace>): void {
   const ctx = self as unknown as DedicatedWorkerGlobalScope;
   const post = (message: FromWorker) => ctx.postMessage(message);
 
-  ctx.onmessage = (event: MessageEvent<ToWorker>) => {
+  ctx.onmessage = async (event: MessageEvent<ToWorker>) => {
     const { runId, source, maxSteps } = event.data;
     const started = performance.now();
     try {
-      post({ type: "result", runId, trace: trace(source, maxSteps), elapsedMs: performance.now() - started });
+      post({ type: "result", runId, trace: await trace(source, maxSteps), elapsedMs: performance.now() - started });
     } catch (error) {
       post({ type: "crash", runId, message: error instanceof Error ? error.message : String(error) });
     }

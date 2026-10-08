@@ -53,6 +53,21 @@ print("found at", found)
 `,
   },
   {
+    name: "Grid paths (dynamic programming)",
+    code: `rows, cols = 3, 4
+grid = [[0] * cols for _ in range(rows)]
+
+for i in range(rows):
+    for j in range(cols):
+        if i == 0 or j == 0:
+            grid[i][j] = 1
+        else:
+            grid[i][j] = grid[i - 1][j] + grid[i][j - 1]
+
+print(grid[rows - 1][cols - 1], "paths")
+`,
+  },
+  {
     name: "Reverse a linked list",
     code: `class Node:
     def __init__(self, val, next=None):
@@ -127,6 +142,22 @@ counter()
 `,
   },
   {
+    name: "Generator (Fibonacci)",
+    code: `def fibonacci():
+    a, b = 0, 1
+    while True:
+        yield a
+        a, b = b, a + b
+
+fib = fibonacci()
+first = []
+for _ in range(6):
+    first.append(next(fib))
+
+print(first)
+`,
+  },
+  {
     name: "Word frequency (dict)",
     code: `words = "the cat and the hat and the bat".split()
 counts = {}
@@ -192,6 +223,25 @@ while (lo <= hi) {
 }
 
 console.log("found at", found);
+`,
+  },
+  {
+    name: "Grid paths (dynamic programming)",
+    code: `const rows = 3;
+const cols = 4;
+const grid = Array.from({ length: rows }, () => new Array(cols).fill(0));
+
+for (let i = 0; i < rows; i++) {
+  for (let j = 0; j < cols; j++) {
+    if (i === 0 || j === 0) {
+      grid[i][j] = 1;
+    } else {
+      grid[i][j] = grid[i - 1][j] + grid[i][j - 1];
+    }
+  }
+}
+
+console.log(grid[rows - 1][cols - 1], "paths");
 `,
   },
   {
@@ -281,6 +331,48 @@ counter();
 `,
   },
   {
+    name: "Generator (Fibonacci)",
+    code: `function* fibonacci() {
+  let a = 0;
+  let b = 1;
+  while (true) {
+    yield a;
+    [a, b] = [b, a + b];
+  }
+}
+
+const fib = fibonacci();
+const first = [];
+for (let i = 0; i < 6; i++) {
+  first.push(fib.next().value);
+}
+
+console.log(first);
+`,
+  },
+  {
+    name: "Async tasks and timers",
+    code: `const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function download(name, ms) {
+  console.log("start", name);
+  await sleep(ms);
+  console.log("done", name);
+  return name.length;
+}
+
+async function main() {
+  const sizes = await Promise.all([
+    download("photo.png", 300),
+    download("notes.txt", 100),
+  ]);
+  console.log("sizes", sizes);
+}
+
+main();
+`,
+  },
+  {
     name: "Word frequency (object as a map)",
     code: `const words = "the cat and the hat and the bat".split(" ");
 const counts = {};
@@ -343,6 +435,25 @@ console.log(arr);
 
 const nums = [2, 5, 8, 12, 16, 23, 38, 56, 72];
 console.log("found at", binarySearch(nums, 23));
+`,
+  },
+  {
+    name: "Grid paths (dynamic programming)",
+    code: `const rows = 3;
+const cols = 4;
+const grid: number[][] = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+
+for (let i = 0; i < rows; i++) {
+  for (let j = 0; j < cols; j++) {
+    if (i === 0 || j === 0) {
+      grid[i][j] = 1;
+    } else {
+      grid[i][j] = grid[i - 1][j] + grid[i][j - 1];
+    }
+  }
+}
+
+console.log(grid[rows - 1][cols - 1], "paths");
 `,
   },
   {
@@ -493,6 +604,48 @@ function makeCounter(start: number): Counter {
 const counter: Counter = makeCounter(10);
 counter();
 counter();
+`,
+  },
+  {
+    name: "Generator (Fibonacci)",
+    code: `function* fibonacci(): Generator<number> {
+  let a = 0;
+  let b = 1;
+  while (true) {
+    yield a;
+    [a, b] = [b, a + b];
+  }
+}
+
+const fib = fibonacci();
+const first: number[] = [];
+for (let i = 0; i < 6; i++) {
+  first.push(fib.next().value);
+}
+
+console.log(first);
+`,
+  },
+  {
+    name: "Async tasks and timers",
+    code: `const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function download(name: string, ms: number): Promise<number> {
+  console.log("start", name);
+  await sleep(ms);
+  console.log("done", name);
+  return name.length;
+}
+
+async function main(): Promise<void> {
+  const sizes = await Promise.all([
+    download("photo.png", 300),
+    download("notes.txt", 100),
+  ]);
+  console.log("sizes", sizes);
+}
+
+main();
 `,
   },
   {

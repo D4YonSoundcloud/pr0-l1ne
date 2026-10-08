@@ -1,6 +1,8 @@
 # PR0L1NE
 
-PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, each iteration is stacked under the last one with red arrows showing exactly what changed.
+PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, each iteration is stacked under the last one with red arrows showing exactly what changed. Or switch to animated mode and press **Play** to watch values slide into place step by step.
+
+Binary trees are drawn top-down, generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)
 
@@ -12,13 +14,14 @@ It runs entirely in your browser, so there's no server to set up. Python execute
 
 1. [Quick start](#quick-start)
 2. [Using it](#using-it)
-3. [How it works](#how-it-works)
-4. [Project structure](#project-structure)
-5. [Development workflow](#development-workflow)
-6. [Extending it](#extending-it)
-7. [Limitations](#limitations)
-8. [Troubleshooting](#troubleshooting)
-9. [Roadmap ideas](#roadmap-ideas)
+3. [Hints: `viz:` comments](#hints-viz-comments)
+4. [How it works](#how-it-works)
+5. [Project structure](#project-structure)
+6. [Development workflow](#development-workflow)
+7. [Extending it](#extending-it)
+8. [Limitations](#limitations)
+9. [Troubleshooting](#troubleshooting)
+10. [Roadmap ideas](#roadmap-ideas)
 
 ---
 
@@ -34,7 +37,7 @@ It runs entirely in your browser, so there's no server to set up. Python execute
 ### Install and run
 
 ```bash
-cd PR0L1NE
+cd algoviz
 npm install
 npm run dev
 ```
@@ -50,7 +53,7 @@ Open the URL Vite prints (usually http://localhost:5173). Pick **Python**, **Jav
 | `npm run preview` | Serves the built `dist/` folder locally. |
 | `npm run typecheck` | Runs the TypeScript compiler without building. |
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's. |
-| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers, nesting, linked structures and saved programs. |
+| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
@@ -111,19 +114,23 @@ PR0L1NE adds a few commands of its own, borrowing VS Code's debugger keys for st
 | `Ctrl/Cmd + Shift + S` | Save as a new program |
 | `F10` | Next step |
 | `Shift + F10` | Previous step |
-| `F1`, then type "PR0L1NE" | All PR0L1NE commands, including first and last step and swapping the panels |
+| `F1`, then type "AlgoViz" | All of PR0L1NE's commands (their palette names still start with "AlgoViz:"), including first and last step, play/pause, and swapping the panels |
+
+Hint comments that PR0L1NE can't understand get a yellow warning squiggle; hover it to see what was expected (see [Hints](#hints-viz-comments)).
 
 While you step through a run, the editor marks lines with a tint and a bar in the gutter (and a matching mark in the scrollbar):
 
-- **Yellow**: the line that's about to run.
-- **Blue**: the line that just ran.
+- **Yellow**: the line that just ran. This is the line whose effects the canvas is showing.
+- **Blue**: the line that runs next.
+
+If the same line ran and runs next (a loop around a single statement), it's yellow. The editor scrolls to keep the yellow line in view while you step, unless you're typing.
 - **Red**: where an error happened (shown once you reach the last step). The error is also a real diagnostic with a squiggle, so hovering shows the message and `F8` jumps to it.
 
 If you're mid-edit and the code has a syntax error, the canvas keeps showing the last version that ran (dimmed), a banner explains what's wrong, and the line is marked in the editor.
 
 ### Layout
 
-The **⇄** button at the right end of the toolbar swaps the editor and canvas, so the canvas can be on the left if you prefer. It's also in the command palette as "PR0L1NE: Swap Editor and Canvas". Your choice is remembered.
+The **⇄** button at the right end of the toolbar swaps the editor and canvas, so the canvas can be on the left if you prefer. It's also in the command palette as "AlgoViz: Swap Editor and Canvas". Your choice is remembered.
 
 Drag the divider between the panels to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the default size. The editor keeps its width when you swap sides, and the width is remembered too. On narrow screens the panels stack vertically, and swapping puts the canvas on top.
 
@@ -148,7 +155,7 @@ Zooming centers on the pointer, so you can zoom into the part you're looking at.
 
 Drag any box in the memory view, whether a frame or a heap object, to put it somewhere else. Arrows follow it.
 
-A box stays where you put it as you step through the program, and through live re-runs as you edit, so you can arrange a linked list or a tree the way you think about it and then step through the algorithm. Boxes you've placed are drawn on top of the automatically placed ones, and the boxes you haven't touched keep their usual places.
+A box stays where you put it as you step through the program, and through live re-runs as you edit, so you can arrange a linked list or a tree the way you think about it and then step through the algorithm. Boxes you've placed are drawn on top of the automatically placed ones, and the boxes you haven't touched keep their usual places. If a new object appears where you've put a box, it's placed below your box instead of being hidden under it. Dropping a box onto another one moves the other one out of the way.
 
 **Reset layout** (next to the zoom controls, shown once you've moved something) puts every box back. Opening a different program or switching language also starts from a fresh layout.
 
@@ -161,12 +168,21 @@ How a box is recognized from one step, or one run, to the next:
 
 The bar at the bottom moves through the recorded steps. Use the buttons, drag the slider, or use the keyboard: `F10` / `Shift + F10` work everywhere, and `←` / `→` / `Home` / `End` work when the editor doesn't have focus (inside the editor those keys move the cursor). A step is one of:
 
-- **About to run line N**: the state just before that line executes.
+- **Ran line N, next is line M**: the state after line N ran, just before line M runs. It matches the editor, where N is yellow and M is blue. The first step of a function just says **Next is line M**.
 - **Called f()**: a new function call started, so a new frame appears.
 - **f() returns X**: the function is about to return; its frame shows a `returns` row.
+- **f() yields X and pauses**: a generator handed a value back; its frame shows a `yields` row and then [pauses](#generators-and-async-functions).
+- **f() waits at line N and pauses**: an `async` function reached an `await`.
+- **f() resumes at line N**: a paused generator or `async` function picks up where it left off.
 - **Error raised on line N**: an exception is propagating.
 
 When you edit code while sitting on the last step, the view stays on the last step of the new run, so you always see the end result of what you just typed.
+
+#### Playing a program
+
+**Play** steps forward on its own at the speed chosen next to it (½, 1, 2, 4, 8 or 16 steps per second; your choice is remembered). `Space` plays and pauses when the editor doesn't have focus, and "AlgoViz: Play / Pause" is in the command palette for when it does. Playback stops at the last step, and pressing Play there starts again from the first step. Any other way of moving (the buttons, the slider, the keys), editing the code, or running it pauses playback.
+
+Moving one step at a time, whether playing or pressing `F10`, is **animated**: boxes and pointer markers slide to their new places, values that moved within a list slide from their old cell to their new one (so a swap is two values crossing), and new boxes and markers fade in. Arrows don't animate: each one is simply drawn in its new place, so they never flicker. Jumps (dragging the slider, `Home`/`End`) aren't animated, since there's nothing meaningful to tween across many steps. Each animation lasts 260 ms, or less at high speeds so it always finishes before the next step. If your system asks for reduced motion, nothing animates.
 
 ### The memory view
 
@@ -176,17 +192,39 @@ When you edit code while sitting on the last step, the view stays on the last st
 - **Primitives** (numbers, strings, booleans, `None`) are drawn inside the variable's cell.
 - **Everything else** lives in the heap to the right and is connected by a blue arrow. Lists and tuples are rows of cells with indices above. Dicts, objects and functions are tables. Functions show the variables they've captured from an enclosing scope (closures).
 - **Heap objects are arranged in columns by distance from the stack.** Things your variables point at directly sit in the first column, things those point at sit in the second, and so on. That's why a linked list or tree reads left to right.
+- **Boxes never overlap.** A new box is placed below anything already in its spot, including boxes you've dragged there.
 - **Yellow** means "changed since the previous step." A dashed blue outline means "this object was just created."
 - **Index pointers**: small markers under a list show where variables like `i`, `j`, `lo` and `hi` point. See [pointer detection](#pointer-detection) for how these are chosen.
+- **Paused generators and `async` functions** are drawn under the call stack as frames with a dashed outline, titled with where they paused. See [Generators and async functions](#generators-and-async-functions).
 
 ![Recursion: one frame per call](docs/fact-memory.png)
 
+#### Trees
+
+A binary tree is drawn **top-down**, like in a textbook: each node sits at the height of its depth and in its in-order position, so a binary search tree reads sorted from left to right. Arrows leave a node's `left` and `right` cells, drop into the gap below it, and enter each child from the top.
+
+![A binary search tree in the memory view](docs/tree-memory.png)
+
+A tree is recognized the same way as in the [loop history](#linked-lists-and-trees): objects of one class with exactly two links to the same class, where no node has two incoming links. A tree with parent pointers has three links, so add a [`viz: tree` hint](#hints-viz-comments) to draw it as a tree. Trees are laid out like this in Arrows mode. Nested mode draws them as boxes in boxes. A single node isn't treated as a tree, and a node you drag leaves the tree layout and stays where you put it.
+
+#### Following the arrows
+
+Arrows are drawn as straight runs with rounded corners, and they travel through the empty gaps between columns, so they don't cut across boxes:
+
+- An arrow to a box on the right runs along its row, turns once in the gap, and enters the box's left side. If the box is level with it, it's a single straight line.
+- An arrow to a box in the same column (a linked list being reversed, a node pointing at itself) loops out to the right and comes back into the box's right side.
+- An arrow back to an earlier column goes over the top of the boxes in between, or underneath if there's no room above.
+- Arrows from list cells leave downward and turn at staggered heights, like the teeth of a comb, so arrows from neighboring cells never run along each other. The leftmost cell turns highest.
+- Arrows sharing a gap each get their own lane, ordered to keep crossings down, and arrows arriving at the same box get separate arrowheads.
+
+**Hover over a box** to see what it's connected to. Its arrows, in and out, are highlighted, the boxes at their other ends get a dashed outline, and every other arrow is dimmed. The highlight follows the box while you drag it, and stays as you step through the program with `F10`.
+
 ### Arrows or nested boxes
 
-The **Arrows | Nested** switch in the Memory header changes how references are drawn. Your choice is remembered, and `F1` → "PR0L1NE: Toggle Nested Memory View" switches it too.
+The **Arrows | Nested** switch in the Memory header changes how references are drawn. Your choice is remembered, and `F1` → "AlgoViz: Toggle Nested Memory View" switches it too.
 
 - **Arrows** (the default) draws every object as its own box, with an arrow for every reference.
-- **Nested** draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, an object's fields hold their sub-objects, and a list of lists looks like a grid of rows.
+- **Nested** draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, and an object's fields hold their sub-objects. A list of lists becomes a **grid**: rows stacked, column numbers along the top, row numbers down the side. If your code indexes it as `grid[i][j]`, `i` is marked beside its row, `j` under its column, and their cell gets a dashed outline.
 
 ![A binary search tree in nested mode](docs/nested-memory.png)
 
@@ -209,6 +247,23 @@ When the current step is inside a loop, the bottom section stacks the state at t
 
 If there are several active loops (nested loops, or a loop inside a function called from a loop), tabs above the history let you pick which one to show. The innermost loop is selected by default while running, and once a loop finishes its full history stays visible until the program enters another loop.
 
+#### Stacked or animated
+
+The **Stacked | Animated** switch in the Loop history header picks between two views of the same loop. Your choice is remembered.
+
+- **Stacked** (the default) is the history described above: one row per iteration, so you can compare any iteration with any other.
+- **Animated** shows a single row: the loop's state at the current step. As you step or [play](#playing-a-program), cells change in place and values slide between cells, so a sort visibly shuffles its values into order and a linked list's arrows turn around one by one. Cells that changed on that step are yellow. The row keeps the same layout (columns, cell widths, tree shape) as the stacked view, so nothing jumps around between steps.
+
+Stacked is better for seeing the whole story at once, and Animated for following what a single step does.
+
+#### Grids
+
+A list of lists (a matrix, a game board, a dynamic programming table) is drawn as a grid in every row, with the same i/j markers as nested mode: `i` beside its row, `j` under its column, and an outline on the cell where they meet. Cells that changed in an iteration are yellow, so a dynamic programming table visibly fills in, one cell per iteration:
+
+![Counting grid paths: each cell is the sum of the one above and the one to the left](docs/grid-loop.png)
+
+A grid doesn't show markers for one past its last column, since a name like `cols` would otherwise always sit there.
+
 #### Linked lists and trees
 
 Linked nodes don't have indices, so the loop history gives them some. If the loop's variables lead to objects that link to objects of the same class (a `next`, or `left` and `right`), every node gets a fixed column, the same in every row, and each row shows where the links point at that moment:
@@ -219,15 +274,113 @@ Linked nodes don't have indices, so the loop history gives them some. If the loo
 - A link to the next column is a short straight arrow. Other links arc over the row. A second link field, like `right` in a tree, arcs underneath.
 - A link that changed in that iteration is **red** and its slot is highlighted. A changed value is yellow, like a changed list cell.
 - **Variables pointing at nodes** (`head`, `prev`, `curr`) are markers under the node, like `i` and `j` under a list. Inside a method, nodes reached through an object are found too, labeled `self.head` or `this.head`.
-- Columns follow the links from the start of the loop, so the starting list reads left to right. Trees with two links use in-order, so a binary search tree reads sorted:
+- Columns follow the links from the start of the loop, so the starting list reads left to right.
+
+**Binary trees are drawn top-down.** If the class has exactly two links and no node ever has two incoming links, it's a tree. Each node keeps its in-order column (so a binary search tree reads sorted from left to right), and sits at a height set by its depth. Links go from the bottom of each slot down to the child:
 
 ![Inserting into a binary search tree: node walks down from the root](docs/tree-loop.png)
+
+A doubly linked list also has two links (`prev` and `next`), but its nodes have two incoming links each, so it's drawn as a list.
 
 Nodes the code can no longer reach (say, the old head after it's dropped) leave the row. Plain JavaScript objects like `{ val: 1, next: null }` count as nodes too.
 
 **Collapse iterations with no changes** folds runs of iterations that didn't modify any container or linked node into a single "#4 to #6: nothing changed" line. This only applies to loops that modify data somewhere. In a loop that only reads (like binary search), the moving indices are the interesting part, so every row is kept:
 
 ![Binary search: the lo/hi window narrowing](docs/bsearch-loop.png)
+
+### Generators and async functions
+
+A generator or `async` function can stop partway through and carry on later, so it doesn't fit the usual call stack, where a call is pushed, runs to the end and is popped. PR0L1NE gives each one its **own frame that's suspended and resumed** instead:
+
+1. Calling `next()` (or `for ... of`) on a generator, or calling an `async` function, pushes its frame like any call.
+2. At a `yield`, the step reads **fibonacci() yields 2 and pauses**, and the frame shows the value in a `yields` row. At an `await`, the step reads **f() waits at line N and pauses**.
+3. The frame then leaves the call stack and is drawn below it, dashed, titled **fibonacci(), paused at line 4**. Its variables are still there, and still connected by arrows, because they're still alive.
+4. When the generator is asked for its next value, or the awaited promise settles, the same frame moves back onto the stack (**f() resumes at line N**), at the same position and with the same variables, and carries on.
+
+![A generator paused between values](docs/generator-memory.png)
+
+A paused frame stays on the canvas until its generator finishes or is thrown away. A loop inside a generator keeps its iteration count while it's paused, so the loop history keeps working across `yield`s.
+
+**JavaScript's event loop** runs too. After your script ends, pending `await`s continue, and `setTimeout` and `setInterval` callbacks run, in the order their timers would fire. Timers run on a **virtual clock**: a `setTimeout(f, 5000)` runs immediately rather than after five seconds, but always after timers due sooner, so the program behaves as it would for real without making you wait. The **Program finished** step comes after the last callback. A promise rejection that nothing handles stops the run with an error, as it would in Node. `for await` loops work, and so do `async` generators.
+
+**Python** follows the same rules for generators, generator expressions and `asyncio` coroutines (`asyncio.run`, `await`, `asyncio.gather`, `asyncio.sleep`). A generator object in the heap says where it's paused, like `fibonacci() paused at line 4`. Python has no virtual clock, so `asyncio.sleep(2)` really waits two seconds; keep sleeps short.
+
+The examples include "Generator (Fibonacci)" in all three languages, and "Async tasks and timers" for JavaScript and TypeScript.
+
+---
+
+## Hints: `viz:` comments
+
+PR0L1NE chooses what to draw automatically, but sometimes its guesses aren't what you want: a helper variable clutters the loop history, `cur` isn't recognized as a position in a list, or a tree with parent pointers comes out as a list. A **hint** is a comment that tells it what you meant.
+
+```python
+# viz: hide temp
+# viz: pointers nums: first, last
+def rotate(nums):
+    first, last = 0, len(nums) - 1
+    while first < last:
+        temp = nums[first]
+        nums[first] = nums[last]
+        nums[last] = temp
+        first += 1
+        last -= 1
+```
+
+A hint is a comment whose text starts with `viz:`:
+
+| Language | Hint comments |
+| --- | --- |
+| Python | `# viz: ...` |
+| JavaScript and TypeScript | `// viz: ...` or `/* viz: ... */` |
+
+- **It can go anywhere**: on a line of its own, at the end of a line of code, at the top of the file. Hints apply to the **whole program**, not just the code near them, so a common style is to put them at the top. A hint in a string (`"# viz: hide x"`) isn't a comment, so it's ignored.
+- **One hint per comment.** Write several comments for several hints.
+- **Keywords aren't case sensitive**, and spacing is flexible: `# VIZ:  Hide a ,b` works.
+
+### The hints
+
+| Hint | What it does |
+| --- | --- |
+| `viz: hide temp, scratch` | Never draws these variables, in any frame, in the memory view or the loop history. Objects only they point at disappear too. Useful for helper variables, or `self`/`this` when it's noise. |
+| `viz: show total, seen` | Always includes these variables in the loop history, even when PR0L1NE would leave them out because they don't change during the loop. |
+| `viz: pointers nums: lo, hi` | Draws `lo` and `hi` as [pointer markers](#pointer-detection) under `nums` whenever they hold a whole number, for names the code never writes as `nums[lo]`. |
+| `viz: pointers grid[]: col` | The same, for a **grid**'s columns: `col` is marked under a column of `grid`. (Use `pointers grid: row` for its rows.) |
+| `viz: tree Node(left, right)` | Draws objects of class `Node` as a binary tree, using `left` and `right` as the children, in both the memory view and the loop history. Other fields, like `parent`, are drawn as plain fields. |
+| `viz: list Node(next)` | Draws objects of class `Node` as a linked list in the loop history, using `next` as the link. Other fields, like `prev` or `random`, aren't drawn as links. |
+
+Names are the variable or field names as written in your code. Class names in `tree` and `list` are what the canvas shows as the box title (a Python class name, or a JavaScript constructor name). If two `tree`/`list` hints name the same class, the later one wins.
+
+### When a hint is wrong
+
+A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, tree, list.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
+
+A hint that's well-formed but names something that doesn't exist (`hide nmus`) does nothing, since it may refer to a variable that only exists in some runs.
+
+### More examples
+
+```js
+// A binary search tree with parent pointers: three links, but it's a tree.
+// viz: tree TreeNode(left, right)
+class TreeNode {
+  constructor(key, parent = null) {
+    this.key = key;
+    this.parent = parent;
+    this.left = null;
+    this.right = null;
+  }
+}
+```
+
+```python
+# Sliding window: show the running sum, mark the window's edges.
+# viz: show window_sum
+# viz: pointers nums: start, end
+```
+
+```ts
+// A doubly linked list, followed only along next.
+// viz: list DNode(next)
+```
 
 ---
 
@@ -252,10 +405,12 @@ Nodes the code can no longer reach (say, the old head after it's dropped) leave 
 │                                       │        │    └─ then same as JS          │
 │                                       │        └────────────────────────────────┘
 │     │                                 │
+│     ├─ trace/hints.ts        parse and apply viz: comments
 │     ├─ trace/diff.ts         what changed between step N-1 and N
 │     ├─ trace/loopHistory.ts  which steps are which loop iteration
 │     ├─ render/memory.ts      snapshot ─▶ SVG (frames, heap, arrows)
-│     └─ render/loopView.ts    loop rows ─▶ SVG (stacked iterations)
+│     ├─ render/loopView.ts    loop rows ─▶ SVG (stacked or live row)
+│     └─ render/animate.ts     tween old drawing ─▶ new drawing
 └───────────────────────────────────────┘
 ```
 
@@ -314,7 +469,7 @@ Before running anything, `analyze()` parses the code with Python's own `ast` mod
 
 **Where the loops are.** For each `for` and `while`, it records the header line and the body's line range. Each loop gets an id from its header line (`L4`).
 
-**Which names index which containers.** Every `Subscript` node whose target is a plain name is recorded, along with the names used inside the brackets. So `arr[j + 1]` produces `{"arr": ["j"]}`. This drives [pointer detection](#pointer-detection).
+**Which names index which containers.** Every `Subscript` node whose target is a plain name is recorded, along with the names used inside the brackets. So `arr[j + 1]` produces `{"arr": ["j"]}`. One level of nesting is recorded too, under the name plus `[]`: `grid[i][j]` produces `{"grid": ["i"], "grid[]": ["j"]}`, which is how a grid knows `i` picks a row and `j` a column. The JavaScript instrumenter records the same thing from `MemberExpression`s. This drives [pointer detection](#pointer-detection).
 
 ### 4. Detecting loop iterations in Python
 
@@ -328,7 +483,17 @@ Counting header-to-body transitions, rather than header visits, matters because 
 
 **Instances** matter for nested loops. The inner loop of bubble sort is entered once per outer iteration, and each entry is a separate instance with its own iteration count. State is tracked per frame, so recursion (the same loop running in several frames at once) works too.
 
-Every step stores the active loops for all frames on the stack, as `{frame, loop, instance, iteration}`. That means when a loop calls a function, steps inside the function still know which iteration of the caller's loop they belong to.
+Every step stores the active loops for all frames on the stack, as `{frame, loop, instance, iteration}`. That means when a loop calls a function, steps inside the function still know which iteration of the caller's loop they belong to. Loops in suspended frames are included too, so a loop inside a generator keeps its place while the generator is paused.
+
+#### Generators and coroutines in Python
+
+`sys.settrace` doesn't announce "yield" or "resume", but they can be recognized from the events it does send:
+
+- **A yield or await looks like a return.** When a generator yields, the interpreter sends a `return` event for its frame. The difference is visible in the bytecode: after a yield, the frame's next instruction (`co_code[f_lasti]`) is `RESUME`, the instruction a generator restarts at. A real return isn't followed by one. Whether the frame is a generator or a coroutine (`co_flags`) decides whether the step is called `yield` or `await`.
+- **A resume looks like a call.** When a paused frame continues, the interpreter sends a `call` event for that same frame object. The tracer keeps paused frames in a dictionary by frame id, so a `call` for a frame it already knows is a resume.
+- **Exceptions need care.** Closing a generator (`gen.close()`, or the generator being garbage collected) raises `GeneratorExit` at the `yield`, which can also end with `RESUME` next. The tracer remembers frames an exception is passing through (`unwinding`), so their next `return` is a real exit, not a yield. Await's internal `StopIteration` plumbing isn't shown as an exception step.
+
+`record()` then draws paused frames below the stack with `state: "suspended"`. It walks the whole stack and skips library frames rather than stopping at the first one, since under `asyncio` your coroutines are called from the event loop's code. Generator objects get a description of where they're paused, and the tracer doesn't keep generator objects alive the way it keeps other objects (see [stable identity](#2-tracing-python-with-syssettrace)); a `weakref.finalize` forgets a generator's id when it's collected. Otherwise holding on to it would stop a dropped generator from ever being closed.
 
 ### 5. Tracing JavaScript
 
@@ -348,31 +513,29 @@ for (const x of [5, 6]) {
 // What actually runs
 const __av_f = __av.enter("Global", 0, () => [["total", () => total]]);
 try {
-  __av.line(1, () => [["total", () => total]]);
+  __av.line(__av_f, 1, () => [["total", () => total]]);
   let total = 0;
   {
-    __av.loopEnter("L2", 2, () => [["total", () => total]]);
+    __av.loopEnter(__av_f, "L2", 2, () => [["total", () => total]]);
     try {
       for (const x of [5, 6]) {
-        __av.loopIter("L2");
-        __av.line(3, () => [["total", () => total], ["x", () => x]]);
+        __av.loopIter(__av_f, "L2");
+        __av.line(__av_f, 3, () => [["total", () => total], ["x", () => x]]);
         total += x;
-        __av.tail("L2", 2, () => [["total", () => total], ["x", () => x]]);
+        __av.tail(__av_f, "L2", 2, () => [["total", () => total], ["x", () => x]]);
       }
     } finally {
-      __av.loopExit("L2");
+      __av.loopExit(__av_f, "L2");
     }
   }
-  __av.ret(void 0, () => [["total", () => total]]);
+  __av.mainDone(__av_f, () => [["total", () => total]]);
 } catch (__av_e) {
-  __av.raise(__av_e);
+  __av.raise(__av_f, __av_e);
   throw __av_e;
-} finally {
-  __av.exit(__av_f);
 }
 ```
 
-`__av` is the runtime, passed in with `new Function("__av", "console", code)`. Names starting with `__av` are reserved and hidden from the canvas.
+`__av` is the runtime, passed in with `new Function("__av", "console", "setTimeout", ..., code)` along with a `console` and [virtual timers](#generators-and-async-in-javascript). Names starting with `__av` are reserved and hidden from the canvas. Every event names the frame it belongs to (`__av_f`), which is what lets a generator's events find their way back to its frame after it resumes. The `Global` frame isn't popped when the script ends (`mainDone`), because callbacks and `await`s may still run; the tracer pops it after the event loop is empty.
 
 **Reading variables.** Python hands the tracer `frame.f_locals`. JavaScript has nothing like it, so the instrumenter works out which variables are visible at each statement using Babel's scope analysis, and passes a **getter**: a list of `[name, () => value]` pairs. The runtime calls these thunks when it takes a snapshot, so it always reads live values. Each thunk is called inside its own `try`, because reading a `let` or `const` before its declaration throws (the "temporal dead zone"). A variable that throws is simply left out of that snapshot. That's why block-scoped variables appear exactly when they're declared.
 
@@ -400,6 +563,28 @@ Snapshots never run your code. Properties are read through `Object.getOwnPropert
 1. **Normalize.** Single-statement bodies become blocks (`if (x) y()` becomes `if (x) { y() }`), and arrow functions with expression bodies get a block with a `return`. Afterward, every statement lives in a list that calls can be inserted into.
 2. **Analyze.** One Babel traversal, with scope information, records what each statement can see, each function's name, parameters and captured variables, each loop's id and header, the target of every `continue`, and which names index which arrays (for [pointer detection](#pointer-detection)). Nothing is modified in this pass, so the scope information stays accurate.
 3. **Transform.** A plain post-order walk inserts the calls, mutating nodes directly. Because it never asks Babel to re-visit replaced nodes, nothing gets instrumented twice.
+
+#### Generators and async in JavaScript
+
+A shadow stack assumes a call ends before its caller carries on. Generators and `async` functions break that: they stop at a `yield` or `await`, their caller keeps running, and they continue later, from some other place in the program. So the runtime keeps a second collection beside the stack, **suspended frames**, and the instrumenter marks every point where a function can stop:
+
+```js
+// yield x                      becomes
+__av.resumed(__av_f, yield __av.yielding(__av_f, x))
+
+// await p                      becomes
+__av.resumed(__av_f, await __av.awaiting(__av_f, p))
+```
+
+- `yielding` records the **yield** step (with the value) and `awaiting` the **await** step. Both then move the frame from the stack to the suspended set. `yield*` uses `delegating`, which hands over without a value.
+- `resumed` runs when execution comes back. It records the **resume** step and puts the frame back on top of the stack. It passes through whatever the `yield` or `await` produced, so the program's behavior is unchanged.
+- Because every event names its frame, an event from a frame that isn't on top of the stack can't be misattributed. If a suspended frame reports an event (which happens when a generator is resumed by `next()` and its first event is the line after the `yield`), the runtime resumes it first.
+- `for await (x of source)` wraps `source` in `__av.asyncIter()`, so the hidden `await` on each iteration suspends and resumes the frame like a written one.
+- A frame leaves the suspended set when its function returns or throws, the same `exit` that pops ordinary frames.
+
+**The event loop.** `traceProgram()` is async. After the script's top level finishes, it repeatedly yields to the real event loop with a `MessageChannel` message (a macrotask, so every pending promise callback, and thus every `await` continuation, runs first), then runs the next due timer. `setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` passed to the program are the runtime's own: they put callbacks in a list ordered by due time and insertion order, and `nextTimer()` advances a virtual clock to the earliest. A run ends when no timers are left, after 10,000 turns (a `setInterval` that's never cleared), when the step budget runs out, or when an error escapes. Unhandled promise rejections are caught by listening for Node's `unhandledRejection` or the browser's `unhandledrejection` event during the run.
+
+Generator objects are drawn as a box labeled "generator object". JavaScript doesn't expose a generator's state, so unlike Python's, it can't say where it's paused; the suspended frame shows that instead.
 
 ### 6. Tracing TypeScript
 
@@ -451,6 +636,12 @@ A trace looks like this (trimmed):
 
 Each step is a complete snapshot, which keeps the renderer simple: any step can be drawn on its own, so scrubbing backward is free. The cost is memory, which is fine at algorithm-sized programs and the 3,000-step budget. To see the full trace for any program, run `npm run trace -- my_program.py` or `npm run trace:js -- my_program.js`.
 
+A few optional fields cover the newer features:
+
+- `event` can also be `"yield"`, `"await"` or `"resume"`. A yield step carries the yielded value in `returnValue`.
+- `suspended` on a step lists paused frames, in the same shape as `stack` but with `"state": "suspended"`. `liveFrames(step)` in `types.ts` gives the stack plus the suspended frames, which is what anything that looks up a frame by id should use.
+- `hints` on the trace lists the raw hint comments, as `{ "line": 3, "text": "hide temp" }`. The tracers only collect them. `applyHints()` adds the parsed result as `viz` before anything is drawn.
+
 ### 8. Diffing snapshots
 
 [`trace/diff.ts`](src/trace/diff.ts) compares step N-1 with step N. The key idea is that **every object is treated as a set of named slots**: a list's slots are its indices, a dict's slots are its keys, and an object's slots are its field names. Comparing slot by slot (by value for primitives, by id for references) gives:
@@ -477,7 +668,28 @@ The column walk then runs over separate boxes only. A reference from inside a ne
 
 Each frame and object is drawn in its own `<g class="node">` carrying a key (`frame:2:factorial`, `obj:o4`) and its position. `renderMemory()` takes a `MemoryLayout`, a map from key to position for boxes the person has dragged. A dragged box is drawn at its saved position and leaves the automatic flow, so it doesn't push later boxes down. Arrows are routed using wherever boxes actually ended up, so they follow automatically. Each node group starts with an invisible rectangle covering the whole box, so a press anywhere on it, even in the gap between a list's index numbers and its cells, grabs the box rather than panning the canvas.
 
-Arrows are drawn last, on top. A normal arrow is a horizontal S-curve into the target's left edge. A **back edge** (a target that isn't to the right, like a cycle or a half-reversed linked list) swings out to the right and enters the target's right edge, so it doesn't cut through other boxes.
+**Placement never overlaps.** Boxes the person dragged are placed first, at their saved positions. Every automatically placed box then asks `findFreeY()` (in [`route.ts`](src/render/route.ts)) for the first spot at or below where it wants to go that doesn't touch anything already placed, so it moves down past dragged boxes instead of hiding underneath them. A list whose arrows leave downward reserves room under itself for their turns, so the next box down doesn't sit on them.
+
+**Arrow routing** happens after every box is placed, in `routeEdges()`, which is pure geometry with its own tests. Each arrow is classified by where its target is: to the right (*forward*), in the same column (*u-turn*), or in an earlier column (*corridor*). Then:
+
+1. Arrows arriving at the same side of the same box are spread a few pixels apart, ordered by where they come from. An arrow already level with its target stays level and becomes a single straight line.
+2. Each vertical segment gets a **lane** in its gap. Forward arrows use lanes just left of the target's column, counted leftward. U-turns and corridors use lanes just right of a column, with shorter loops nearer the column so loops nest instead of crossing. Forward lanes are ordered with a pairwise crossing count: lane A left of lane B costs a crossing when A's exit passes B's vertical span, or B's entry passes A's.
+3. Corridors run above the boxes in their horizontal range when there's room (the diagram keeps 40 px free at the top for this), otherwise below.
+4. `roundedPath()` turns each list of points into an SVG path with rounded corners.
+
+The automatic layout makes routing reliable: an object's column is its distance from the stack, so a forward arrow always goes to the very next column, and its horizontal runs only cross empty gap. [`layout.test.ts`](src/render/layout.test.ts) checks this for real: it renders every example in every language at every step, in both modes, and fails if any two boxes overlap or any arrow passes through a box it doesn't start or end at.
+
+**Hover focus** is `applyFocus()`: each arrow carries `data-from` and `data-to` node keys, so highlighting a box's connections is a class toggle, re-applied after every render.
+
+**Grids** in nested mode come from `gridRows()`: a list whose items are all lists nested inside it is drawn by `gridShape()` instead of as a row of cells. Its row and column markers use `ctx.pointersFor(id, level)`, where level 1 looks up the `grid[]` index names.
+
+**Trees** are laid out as blocks. `findTreeBlocks()` runs the loop history's tree detection (`findLinkedTrack()` and `treeDepths()`, so hints apply) on the current step, treating every live frame's variables as one row. Each root with at least one child becomes a `TreeBlock`: its nodes in in-order, each with a depth. `measureBlock()` gives every slot the width of the widest node and every level the height of the tallest plus a gap. The rest of the layout then treats the block as one wide box:
+
+- The column walk puts all of a tree's nodes in the column of the first one reached, so the whole block sits in one column (as wide as the block).
+- The first node placed asks `findFreeY()` for a spot for the whole block, so trees never overlap other boxes, and every node goes to `origin + (in-order index × slot width, depth × level height)`.
+- Parent-to-child arrows are routed as kind `"tree"`: down out of the `left`/`right` cell into the gap beneath the parent, across to above the child, then down into its top. Arrows into a tree node from a box to the left of the tree (a variable pointing at the root, or at `curr` partway down) use kind `"top"`: they come down beside the tree and also enter from above, so they don't run through the node's neighbors.
+
+**Suspended frames** are drawn in the stack column below the active frames, with their own node key (`paused:<frame id>`), so dragging one keeps working while it's paused.
 
 ### 10. Panning, zooming and dragging
 
@@ -508,14 +720,42 @@ The dividers in [`main.ts`](src/main.ts) share one helper, `makeDivider()`, whic
 **Linked structures** come from [`trace/linked.ts`](src/trace/linked.ts), which is pure and has its own tests:
 
 - `findLinkedTrack()` walks every row from the loop's variables (and one level through other objects, for `self.head`). It records, per class, which fields point at objects of the same class. The class with links and the most nodes is the track. Its links are those fields, plus conventionally named ones (`next`, `left`...) that are always null or a node. Its value field is the first field that's usually a primitive.
-- Column order follows the links from each row's variables in turn, so the first row's structure reads left to right, and nodes that appear later go on the end. With exactly two links, it's in-order instead.
+- Column order follows the links from each row's variables in turn, so the first row's structure reads left to right, and nodes that appear later go on the end. For a tree, it's in-order instead.
+- A track is a `"tree"` when it has exactly two links and no node in any row has more than one incoming link. `treeDepths()` then gives each node's depth in a row (roots, which nothing links to, are depth 0), and the loop view draws that row top-down.
 - `linkedRow()` gives one row's view: each reachable node's value and link targets, and which names point at which column. `linkedSignature()` turns that into a string, so a row counts as "changed" for collapsing when any link or value changes.
 
-The loop view adds space above each row for arcs (and below, for a second link field) and draws the track after the containers.
+The loop view adds space above each row for arcs (and below, for a second link field) and draws the track after the containers. Rows are as tall as their tallest content (a grid, a tree, or a single line of cells plus pointer markers), and every row in one loop uses the same height so they stack evenly.
+
+**Grids** in the loop view come from `gridIn()`: a container drawn as a grid in every row where it has items. Its change detection looks one level deep (a list's signature includes the values of lists inside it), so an iteration that only writes `grid[i][j]` still counts as a change.
+
+**Animated mode** passes `live: { prev, current }` to `renderLoopView()`: the loop's state at the current step and the step before, read straight from those steps rather than from iteration ends. It draws just that one row, comparing it with `prev` for highlights, but sizes columns, cells and trees from all of the stacked rows, so the layout is identical from step to step and only the contents change. The animation in the next section does the rest.
+
+### 13. Hints
+
+Hints are split so that each language does as little as possible:
+
+1. **The tracers collect comments.** Python's tracer runs `tokenize` over the source and keeps `COMMENT` tokens matching `# viz: ...` (tokenizing, rather than searching the text, is what keeps `"# viz:"` inside a string from counting). The JavaScript instrumenter reads `ast.comments`, which Babel fills in while parsing, for `//` and `/* */` comments starting with `viz:`. TypeScript keeps the comments through type stripping. Each produces `{ line, text }` pairs in `trace.hints`.
+2. **One parser for every language.** [`trace/hints.ts`](src/trace/hints.ts) turns those into a `VizHints` object: `hide`, `show`, `pointers` (container name to names), `linked` (class, shape and link fields) and `warnings`. Anything that doesn't parse becomes a warning with its line and the expected form, rather than an error.
+3. **Applied before drawing.** `applyHints()` runs once per new trace in `main.ts`. It removes hidden variables from every frame of every step (so diffing, the loop history and the memory view never see them), merges `pointers` into `trace.indexNames` (so they behave exactly like names found by static analysis), and stores the rest on `trace.viz`.
+4. **Used by the renderers.** `findLinkedTrack(rows, hints)` lets a `tree` or `list` hint pick the class and its links, overriding detection, in both the memory view and the loop history. The loop view adds `show` names to what it picks. `main.ts` shows `warnings` in the banner, and `editor.setHintWarnings()` turns them into Monaco markers with severity Warning under their own owner, so they don't interfere with error markers.
+
+This keeps every hint keyword in one TypeScript file with its own tests (`hints.test.ts`), and adding a hint never touches the tracers.
+
+### 14. Animation and playback
+
+Every step still draws a fresh SVG, the same way as before. Animation is layered on top with the [FLIP](https://aerotwist.com/blog/flip-your-animations/) technique (First, Last, Invert, Play) in [`render/animate.ts`](src/render/animate.ts):
+
+1. **First.** Before re-rendering, `snapshot()` records where things are in the current drawing: every element with a `data-flip` key (boxes, pointer markers, linked nodes) and every `data-cell` (a list cell's container and slot, with the value it holds).
+2. **Last.** The new step is rendered normally.
+3. **Invert and play.** `transition()` looks up each new element's key in the snapshot and animates it from the old position to its new one with a `transform: translate(...)` that runs back to zero. A cell whose value was in a *different* slot of the same container a moment ago (a swap, a shift) slides from that slot. New elements fade in. Arrows are deliberately left alone and appear at their final route immediately: fading every arrow on every step was more clutter than help, and a re-routed arrow can't be morphed meaningfully anyway.
+
+**Why it's fast.** Positions come from `data-x`/`data-y` attributes the renderers write in diagram units, never from `getBoundingClientRect()`, so a step never forces the browser to compute layout before painting. Only `transform` and `opacity` are animated, with the Web Animations API (`element.animate`), so the browser can run them on the compositor without repainting the diagram. The viewport also caches its own size with a `ResizeObserver` instead of measuring, and its "keep the current iteration in view" scrolling works in diagram units. Together, rendering and starting the animations takes about 2 ms per step (10 ms at worst) on the examples, which keeps 16 steps per second at 60 fps.
+
+**Playback** in `main.ts` is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step, for `min(260 ms, 0.75 × interval)`, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
 
 ### Pointer detection
 
-Pointer markers under a list are chosen in two ways. First, any name used as a subscript of that list anywhere in the code (found by the `ast` pass in Python, or the Babel analysis pass in JavaScript and TypeScript) is shown if it currently holds a whole number. So `arr[j]` makes `j` a pointer on `arr`. Second, for lists that the code indexes, a few conventional names are always considered: `lo`, `hi`, `low`, `high`, `left`, `right`, `l`, `r`, `start`, `end`, `mid`, `slow`, `fast`. That's how binary search gets `lo` and `hi` markers even though the code only ever writes `nums[mid]`. A marker for an index equal to the list's length (one past the end) is drawn hollow. The list is in [`render/draw.ts`](src/render/draw.ts) (`CONVENTIONAL_POINTERS`).
+Pointer markers under a list are chosen in two ways. First, any name used as a subscript of that list anywhere in the code (found by the `ast` pass in Python, or the Babel analysis pass in JavaScript and TypeScript) is shown if it currently holds a whole number. So `arr[j]` makes `j` a pointer on `arr`. Second, for lists that the code indexes, a few conventional names are always considered: `lo`, `hi`, `low`, `high`, `left`, `right`, `l`, `r`, `start`, `end`, `mid`, `slow`, `fast`. That's how binary search gets `lo` and `hi` markers even though the code only ever writes `nums[mid]`. Third, a [`viz: pointers` hint](#hints-viz-comments) adds names explicitly, by merging them into the same index analysis. A marker for an index equal to the list's length (one past the end) is drawn hollow. The list is in [`render/draw.ts`](src/render/draw.ts) (`CONVENTIONAL_POINTERS`).
 
 ### 12. The editor
 
@@ -541,11 +781,11 @@ If you upgrade Monaco, the feature import list in `monaco.ts` may need regenerat
 ## Project structure
 
 ```
-PR0L1NE/
+algoviz/
 ├── index.html                  Page layout: toolbar, editor, canvas, timeline
 ├── package.json
 ├── tsconfig.json               TypeScript config for the app
-├── tsconfig.node.json          ...and for the Node-only CLI
+├── tsconfig.node.json          ...and for Node-only code (the CLI, Node-run tests)
 ├── vite.config.ts
 ├── docs/                       Images used in this README
 └── src/
@@ -553,21 +793,28 @@ PR0L1NE/
     ├── languages.ts            Per-language worker, Monaco mode and examples
     ├── programs.ts             Saved programs (localStorage)
     ├── programs.test.ts        Saved program tests
-    ├── monaco.ts               Lean Monaco build: editor features + 2 languages
+    ├── monaco.ts               Lean Monaco build: editor features + 3 languages
     ├── editor.ts               Monaco setup, theme, commands and line markers
-    ├── examples.ts             Starter programs for both languages
+    ├── examples.ts             Starter programs for every language
     ├── styles.css              All styles, including the SVG diagram styles
     ├── trace/
     │   ├── types.ts            The trace format (the tracer/renderer contract)
     │   ├── diff.ts             What changed between two steps
     │   ├── loopHistory.ts      Group steps into loop iterations
-    │   ├── linked.ts           Linked lists and trees in loop history
+    │   ├── hints.ts            Parse and apply viz: comment hints
+    │   ├── hints.test.ts       Hint tests (all three languages)
+    │   ├── linked.ts           Linked lists and trees (loop history and memory)
     │   └── linked.test.ts      Linked structure tests
     ├── render/
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointers
     │   ├── memory.ts           The memory view (arrows or nested, draggable boxes)
     │   ├── memory.test.ts      Tests for choosing what to nest
-    │   ├── loopView.ts         The stacked loop history view
+    │   ├── route.ts            Arrow routing and non-overlapping placement
+    │   ├── route.test.ts       Routing tests
+    │   ├── layout.test.ts      Every example, every step: no overlaps or crossings
+    │   ├── loopView.ts         The loop history view (stacked or animated)
+    │   ├── animate.ts          FLIP tweening between two drawings
+    │   ├── animate.test.ts     Animation tests (jsdom)
     │   └── viewport.ts         Pan, zoom and node dragging for both sections
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel)
@@ -579,6 +826,7 @@ PR0L1NE/
     │   ├── typescript.worker.ts  Entry point for the TypeScript worker
     │   ├── cli.ts              npm run instrument / trace:js
     │   ├── trace.test.ts       JavaScript tracer tests (Vitest)
+    │   ├── async.test.ts       Generators, async, timers and the event loop
     │   └── typescript.test.ts  TypeScript tracer tests (Vitest)
     └── worker/
         ├── protocol.ts         Message types between page and workers
@@ -642,11 +890,15 @@ Say you want sets drawn as bubbles or tuples drawn differently:
 
 ### Add a structure-specific layout
 
-In the memory view, trees and graphs currently use the generic column layout (or nesting), which works but isn't a classic top-down tree drawing. A good extension point is `renderMemory()`: detect a shape (objects of one class with `left`/`right` fields, say) and lay those objects out with a tree algorithm before the generic placement runs. For general graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) can compute positions that you then draw with the existing shape and arrow code.
+Binary trees already have their own layout in the memory view (`findTreeBlocks()` in `memory.ts`). The same pattern works for other shapes: detect the structure, measure it as one block, let the column walk place the block like a single wide box, then put each member at its slot inside it. For general graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) can compute the slots, and the existing shape and arrow code can draw them.
 
-### Let the code give hints
+### Add a hint
 
-The `ast` pass is the natural place for annotations. For example, a comment like `# viz: tree` above an assignment could be parsed in `analyze()` (comments aren't in the AST, but `tokenize` can find them) and passed to the renderer through the trace, the same way `indexNames` is today.
+1. Add the keyword to `KEYWORDS` in [`trace/hints.ts`](src/trace/hints.ts), parse it in `parseHints()` into a new field of `VizHints` (in `trace/types.ts`), and warn with the expected form when it doesn't parse.
+2. Use it: either in `applyHints()`, if it changes the trace itself (like `hide`), or in a renderer through `trace.viz` (like `show`).
+3. Add a case to `hints.test.ts` and document it in the [Hints](#hints-viz-comments) table.
+
+No tracer needs to change, since they pass every `viz:` comment through as text.
 
 ### Add another language
 
@@ -660,9 +912,14 @@ Everything after the worker only depends on the trace format, so any language wo
 
 - **Big programs.** Each step is a full snapshot, so traces grow with steps times data size. The step budget (3,000) and container cap (60 items) keep it manageable. Raise `MAX_STEPS` in `main.ts` if you need longer runs.
 - **Strings** are drawn as single values. A list or array of characters (`list("hello")`, `"hello".split("")`) is drawn as cells.
-- **Nested lists** (matrices) are a list of references to row lists in arrows mode. Nested mode draws each row inside its cell, which reads much more like a grid.
-- **Loop history doesn't nest.** Lists inside lists show a dot in the loop view, in either mode.
+- **Nested lists** (matrices) are a list of references to row lists in arrows mode. Nested mode and the loop history draw them as grids.
+- **Grids are two levels.** A list of lists is a grid. Deeper nesting (a 3D list) shows a grid of dots in the loop history, and nested boxes in nested mode.
 - **One linked class per loop.** If a loop works with two different linked classes, the loop history shows the one with more nodes. Graphs with cycles work, but large ones get crowded with arcs.
+- **Trees with parent pointers** (`left`, `right` and `parent`) have three links, so they're drawn as a list with arcs unless you add a [`viz: tree` hint](#hints-viz-comments).
+- **Only binary trees get the top-down layout** in the memory view. Trees with more children, and general graphs, use the column layout.
+- **Only single steps animate.** Jumping with the slider or `Home`/`End` redraws without tweening. Arrows don't animate at all; they jump to their new route, which can briefly look detached while a box is still sliding into place.
+- **Hints apply to the whole program.** There's no way yet to scope a hint to one function or loop, so `hide x` hides every `x`.
+- **Arrows assume the automatic layout.** Once you drag boxes around, arrows still route through the gaps they'd normally use, so they can cross boxes you've moved. They always reach the right box.
 - **Moving boxes needs a pointer.** Boxes can be dragged with a mouse, pen or finger, but not moved with the keyboard. Zooming works from the keyboard, but panning doesn't, since the arrow keys step through the program.
 - **Loop history rows can't be rearranged.** Rows are aligned so changes line up vertically, so the loop view pans and zooms but has no draggable boxes.
 
@@ -671,12 +928,15 @@ Everything after the worker only depends on the trace format, so any language wo
 - **No `input()`.** Hard-code your test data.
 - **Imported packages.** The standard library works. Third-party packages would need loading through Pyodide's `micropip` first, which isn't wired up.
 - **One-line loops** like `for x in xs: total += x` put the header and body on the same line, so iterations can't be told apart. Put the body on its own line.
+- **`asyncio` is only tested outside the browser.** Generator and coroutine tracing is tested with CPython 3.12, the same version Pyodide runs. But Pyodide's `asyncio` event loop is built on the browser's, which can't block, so `asyncio.run()` may not work there the way it does on your machine. Plain generators don't depend on the event loop and work the same everywhere. `asyncio.sleep()` also takes real time.
 - **Code that hangs inside a single C call** is stopped by the 10-second watchdog, which restarts the worker. The next run then waits a few seconds while Pyodide reloads (from the browser cache). A faster alternative is Pyodide's interrupt buffer, which needs a `SharedArrayBuffer` and therefore cross-origin isolation headers (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`) on the server. It's a worthwhile upgrade, but it makes hosting and CDN loading fussier, so it's left out of this version.
 
 **JavaScript**
 
-- **Generators and `async` functions run untraced.** They can pause in the middle and resume later, which a shadow stack can't follow. They still run correctly, and their results show up in the calling code. Everything inside them is invisible.
-- **Scripts, not modules.** `import` and `export` aren't supported, and there's no top-level `await`.
+- **Scripts, not modules.** `import` and `export` aren't supported, and there's no top-level `await` (wrap it in an `async` function).
+- **Timers are virtual.** `setTimeout` callbacks run in the right order but without the delay, and `Date.now()` doesn't move with the virtual clock. Code that measures elapsed time sees almost none.
+- **Generator objects don't say where they're paused.** JavaScript keeps that hidden. The paused frame below the stack shows it instead.
+- **An event loop that never empties** (a `setInterval` that's never cleared) stops after 10,000 turns or the step budget, whichever comes first.
 - **Method closures aren't shown.** Variables captured by object and class *methods* don't appear on the function in the heap view, since methods can't be wrapped. Captures by ordinary functions and arrow functions do.
 - **`fn.name` can change.** A function expression or arrow that captures variables is wrapped in a call, so JavaScript can no longer infer its name from the variable it's assigned to (`const inc = () => ++count` gives `inc.name === ""`). The canvas still shows the right name. This only matters if your code reads `.name`.
 - **Names starting with `__av` are reserved** for the instrumentation and hidden from the canvas.
@@ -716,21 +976,24 @@ Everything listed for JavaScript applies, plus:
 
 **The loop history shows a different loop than I expected.** Click the loop you want in the tabs above it. Your choice sticks while that loop is active.
 
+**Nothing animates.** Animation only happens when moving one step at a time, and it's turned off when your operating system's "reduce motion" setting is on (on macOS: System Settings → Accessibility → Display; on Windows: Settings → Accessibility → Visual effects → Animation effects).
+
+**`Space` doesn't play.** It types a space when the editor has focus. Click the canvas or the timeline first, use the **Play** button, or bind "AlgoViz: Play / Pause" from the command palette.
+
+**My hint does nothing.** If it's underlined in yellow, hover it to see why. If not, check that the names match exactly what the canvas shows (case matters for names), and that it's a comment rather than text in a string.
+
 ---
 
 ## Roadmap ideas
 
-- Grid drawing for matrices (lists whose items are all lists).
-- A tree layout for node-like objects, and ELK.js for general graphs.
-- An animated mode alongside the stacked view, tweening cells between steps.
-- `# viz:` comment hints read by the `ast` pass (and `// viz:` for JavaScript).
+- ELK.js layouts for general graphs, and top-down layouts for trees with more than two children.
+- Hints scoped to a function or a loop, and more hint kinds (`viz: graph`, `viz: matrix`).
+- Morphing arrows between steps, by matching routes point by point.
+- Exporting a played run as a GIF or video.
 - Type checking for TypeScript, by running the TypeScript compiler in a worker (it's large, so probably loaded on demand).
-- Tracing into generators and `async` functions, by giving each one its own frame that's suspended and resumed rather than pushed and popped.
 - Cross-origin isolation plus Pyodide's interrupt buffer for instant stops.
 - Delta-encoded steps (store only what changed) for much longer traces.
 - Exporting and importing saved programs as files, to move them between browsers or share them.
 - Saving the memory layout with a saved program, so a carefully arranged tree comes back when you reopen it.
-- Nested lists (matrices) in the loop history, drawn as grids.
-- A top-down tree layout for the loop history's linked track, for trees deeper than a few levels.
 - Moving boxes with the keyboard.
-- The TypeScript tracer.
+- Routing arrows around boxes you've dragged, not just the automatic layout.

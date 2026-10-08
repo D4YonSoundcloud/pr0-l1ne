@@ -5,7 +5,7 @@
  * on every pass of the outer loop). Its rows are the state at the end of each
  * iteration, plus a "before" row for the state when the loop was entered.
  */
-import type { Frame, HeapObject, LoopContext, LoopInfo, Step, Trace } from "./types";
+import { liveFrames, type Frame, type HeapObject, type LoopContext, type LoopInfo, type Step, type Trace } from "./types";
 
 export interface LoopRow {
   /** 0 is the "before" row. */
@@ -78,7 +78,7 @@ export function buildLoopHistory(
   const rows: LoopRow[] = [];
   for (const [iteration, index] of [...lastStepOfIteration].sort((a, b) => a[0] - b[0])) {
     const step = trace.steps[index];
-    const frame = step.stack.find((f) => f.id === picked.frame);
+    const frame = liveFrames(step).find((f) => f.id === picked.frame);
     if (frame) rows.push({ iteration, stepIndex: index, frame, heap: step.heap });
   }
 

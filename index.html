@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PR0GRAM WORLDL1NE</title>
+    <title>PR0L1NE</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -67,6 +67,10 @@
             <section class="canvas-section" id="loop-section" aria-labelledby="loop-title">
               <div class="section-head">
                 <h2 class="section-title" id="loop-title">Loop history</h2>
+                <div class="segmented" role="group" aria-label="How iterations are shown">
+                  <button type="button" id="loop-stacked" class="segment" aria-pressed="true" title="One row per iteration, stacked">Stacked</button>
+                  <button type="button" id="loop-animated" class="segment" aria-pressed="false" title="One live row that changes as you step">Animated</button>
+                </div>
                 <div id="loop-tabs" class="loop-tabs" role="tablist" aria-label="Choose a loop"></div>
                 <label class="toggle small">
                   <input id="hide-quiet" type="checkbox" checked /> Collapse iterations with no changes
@@ -80,9 +84,14 @@
 
       <footer class="timeline" aria-label="Step through execution">
         <button id="first" class="button icon" type="button" aria-label="First step" title="First step (Home)">⏮</button>
-        <button id="prev" class="button icon" type="button" aria-label="Previous step" title="Previous step (←)">◀</button>
-        <button id="next" class="button icon" type="button" aria-label="Next step" title="Next step (→)">▶</button>
+        <button id="prev" class="button icon step" type="button" aria-label="Previous step" title="Previous step (←, Shift + F10)">‹</button>
+        <button id="play" class="button play" type="button" aria-pressed="false" title="Play through the steps (Space)">Play</button>
+        <button id="next" class="button icon step" type="button" aria-label="Next step" title="Next step (→, F10)">›</button>
         <button id="last" class="button icon" type="button" aria-label="Last step" title="Last step (End)">⏭</button>
+        <label class="speed">
+          <span class="visually-hidden">Playback speed</span>
+          <select id="speed" aria-label="Playback speed"></select>
+        </label>
         <input id="scrubber" class="scrubber" type="range" min="0" max="0" value="0" aria-label="Step" />
         <span id="step-label" class="step-label"></span>
       </footer>

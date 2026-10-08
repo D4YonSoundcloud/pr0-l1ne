@@ -10,16 +10,33 @@ also run it directly with `python3 tracer.py some_file.py` to inspect a trace.
 """
 
 import ast
+import dis
+import re
+import tokenize
+import inspect
 import io
 import json
 import sys
 import types
+import weakref
 from collections import deque
 
 USER_FILENAME = "<user>"
 MAX_ITEMS = 60          # items shown per container before truncating
 MAX_REPR = 48           # characters shown for a primitive before truncating
 MAX_OBJECTS = 400       # heap objects serialized per step
+
+
+# Code flags for functions that can pause: generators, coroutines (async def)
+# and async generators.
+CO_GENERATOR = inspect.CO_GENERATOR
+CO_COROUTINE = inspect.CO_COROUTINE
+CO_ASYNC_GENERATOR = inspect.CO_ASYNC_GENERATOR
+CO_PAUSABLE = CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
+RESUME = dis.opmap["RESUME"]
+# Instructions where `await` raises StopIteration internally to deliver its
+# result. Those exceptions are plumbing, not part of the user's program.
+AWAIT_PLUMBING = {dis.opmap[name] for name in ("SEND", "END_SEND", "CLEANUP_THROW") if name in dis.opmap}
 
 
 class StepLimitExceeded(BaseException):
@@ -34,11 +51,29 @@ class StepLimitExceeded(BaseException):
 # Static analysis: things we learn from the AST before running anything
 # ---------------------------------------------------------------------------
 
+HINT = re.compile(r"^#\s*viz\s*:(.*)$")
+
+
+def collect_hints(source):
+    """Every `# viz: ...` comment, with its line. Parsed by the canvas."""
+    hints = []
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.COMMENT:
+                match = HINT.match(tok.string)
+                if match:
+                    hints.append({"line": tok.start[0], "text": match.group(1).strip()})
+    except (tokenize.TokenError, SyntaxError):
+        pass  # a syntax error is reported by compile()
+    return hints
+
+
 def analyze(source):
     """Find loops, and which names index which containers.
 
     `arr[j + 1]` records {"arr": ["j"]}, so the renderer knows to draw a `j`
-    pointer under `arr` (and not under every other list).
+    pointer under `arr` (and not under every other list). `grid[i][j]`
+    records {"grid": ["i"], "grid[]": ["j"]}: i picks a row, j a column.
     """
     tree = ast.parse(source, USER_FILENAME)
     lines = source.splitlines()
@@ -58,8 +93,16 @@ def analyze(source):
                 "bodyEnd": body_end,
                 "header": header.rstrip(":"),
             })
-        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
-            names = index_names.setdefault(node.value.id, set())
+        if isinstance(node, ast.Subscript):
+            # grid[i] records "i" under "grid". grid[i][j] also records "j"
+            # under "grid[]": a name that indexes the rows of grid.
+            if isinstance(node.value, ast.Name):
+                key = node.value.id
+            elif isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name):
+                key = node.value.value.id + "[]"
+            else:
+                continue
+            names = index_names.setdefault(key, set())
             for sub in ast.walk(node.slice):
                 if isinstance(sub, ast.Name):
                     names.add(sub.id)
@@ -86,6 +129,27 @@ def short_repr(value):
     return text
 
 
+PAUSABLE_OBJECTS = (types.GeneratorType, types.CoroutineType, types.AsyncGeneratorType)
+
+
+def pausable_state(v):
+    """A generator or coroutine's state, as a short description."""
+    if isinstance(v, types.GeneratorType):
+        frame, running = v.gi_frame, v.gi_running
+    elif isinstance(v, types.CoroutineType):
+        frame, running = v.cr_frame, v.cr_running
+    else:
+        frame, running = v.ag_frame, v.ag_running
+    name = getattr(v, "__name__", "?")
+    if frame is None:
+        return "%s() finished" % name
+    if running:
+        return "%s() running" % name
+    if frame.f_lasti <= 0 or (isinstance(v, types.GeneratorType) and inspect.getgeneratorstate(v) == "GEN_CREATED"):
+        return "%s() not started" % name
+    return "%s() paused at line %d" % (name, frame.f_lineno)
+
+
 def is_hidden_name(name, value):
     if name.startswith("__") and name.endswith("__"):
         return True
@@ -97,10 +161,11 @@ def is_hidden_name(name, value):
 class Serializer:
     """Serializes one snapshot. A fresh instance is used per step."""
 
-    def __init__(self, keepalive, ids):
+    def __init__(self, keepalive, ids, on_generator=None):
         self.heap = {}
         self.keepalive = keepalive
         self.ids = ids
+        self.on_generator = on_generator
 
     def value(self, v):
         if isinstance(v, PRIMITIVE_TYPES):
@@ -114,11 +179,23 @@ class Serializer:
         # where you dragged a box by its id, across live re-runs.)
         oid = self.ids.get(id(v))
         if oid is None:
-            oid = "o%d" % (len(self.ids) + 1)
-            self.ids[id(v)] = oid
-            # Keep every object we have ever seen alive for the duration of
-            # the run, so CPython can't recycle its id() for another object.
-            self.keepalive["obj%d" % id(v)] = v
+            oid = "o%d" % (len(self.ids) + 1 + self.ids.get("__retired__", 0))
+            key = id(v)
+            self.ids[key] = oid
+            if isinstance(v, PAUSABLE_OBJECTS):
+                # Don't keep generators alive: a dropped generator must be
+                # able to close and finish, like it would without the tracer.
+                # Forget its id when it's collected, so the id can't be
+                # confused with a new object.
+                def forget(ids=self.ids, key=key):
+                    ids.pop(key, None)
+                    ids["__retired__"] = ids.get("__retired__", 0) + 1
+                weakref.finalize(v, forget)
+            else:
+                # Keep every other object we have ever seen alive for the
+                # duration of the run, so CPython can't recycle its id() for
+                # another object.
+                self.keepalive["obj%d" % id(v)] = v
         if oid in self.heap:
             return oid
         if len(self.heap) >= MAX_OBJECTS:
@@ -157,6 +234,9 @@ class Serializer:
                 entries.append([self.value(key), self.value(val)])
             return {"kind": "dict", "id": oid, "typeName": type_name,
                     "entries": entries, "length": len(v)}
+
+        if isinstance(v, PAUSABLE_OBJECTS):
+            return {"kind": "opaque", "id": oid, "typeName": type_name, "repr": pausable_state(v)}
 
         if isinstance(v, types.FunctionType):
             code = v.__code__
@@ -219,6 +299,12 @@ class Tracer:
         self.last_line = {}
         self.active_loops = {}
         self.loop_instances = {}
+        # Generators and coroutines that are paused at a yield or await:
+        # frame id -> frame. Shown as suspended frames until they resume.
+        self.suspended = {}
+        # Frames with an exception propagating through them. A "return" that
+        # follows is the frame exiting by exception, not pausing.
+        self.unwinding = set()
 
     # -- identity ----------------------------------------------------------
 
@@ -277,16 +363,19 @@ class Tracer:
         if len(self.steps) >= self.max_steps:
             raise StepLimitExceeded()
 
+        # The user's frames on the call stack, skipping library frames in
+        # between (asyncio's event loop sits between Global and a coroutine).
         frames = []
         f = frame
-        while f is not None and f.f_code.co_filename == USER_FILENAME:
-            frames.append(f)
+        while f is not None:
+            if f.f_code.co_filename == USER_FILENAME:
+                frames.append(f)
             f = f.f_back
         frames.reverse()
 
         serializer = Serializer(self.keepalive, self.object_ids)
-        stack = []
-        for fr in frames:
+
+        def describe(fr):
             is_module = fr.f_code.co_name == "<module>"
             variables = []
             for name, val in list(fr.f_locals.items()):
@@ -295,12 +384,17 @@ class Tracer:
                 if is_module and name == "input":
                     continue
                 variables.append([name, serializer.value(val)])
-            stack.append({
+            return {
                 "id": self.frame_id(fr),
                 "func": "Global" if is_module else fr.f_code.co_name,
                 "line": fr.f_lineno,
                 "locals": variables,
-            })
+            }
+
+        stack = [describe(fr) for fr in frames]
+        on_stack = {s["id"] for s in stack}
+        suspended = [dict(describe(fr), state="suspended")
+                     for fid, fr in self.suspended.items() if fid not in on_stack]
 
         step = {
             "event": event,
@@ -308,9 +402,11 @@ class Tracer:
             "stack": stack,
             "heap": serializer.heap,
             "stdoutLength": len(self.stdout.getvalue()),
-            "loops": self.loop_context([s["id"] for s in stack]),
+            "loops": self.loop_context([s["id"] for s in stack] + [s["id"] for s in suspended]),
         }
-        if event == "return":
+        if suspended:
+            step["suspended"] = suspended
+        if event in ("return", "yield"):
             step["returnValue"] = serializer.value(arg)
         if event == "exception":
             exc_type, exc_value, _ = arg
@@ -318,12 +414,40 @@ class Tracer:
         self.steps.append(step)
 
     def trace(self, frame, event, arg):
-        if frame.f_code.co_filename != USER_FILENAME:
+        code = frame.f_code
+        if code.co_filename != USER_FILENAME:
             return None  # don't trace library code
         fid = self.frame_id(frame)
+        pausable = code.co_flags & CO_PAUSABLE
         if event == "line":
+            self.unwinding.discard(fid)  # the exception was caught
             self.update_loops(fid, frame.f_lineno)
-        if event in ("call", "line", "return", "exception"):
+        elif event == "call" and fid in self.suspended:
+            # A paused generator or coroutine picking up where it left off.
+            del self.suspended[fid]
+            event = "resume"
+        elif event == "return" and fid in self.unwinding:
+            self.unwinding.discard(fid)
+            self.suspended.pop(fid, None)
+        elif event == "return" and pausable and frame.f_lasti >= 0 and code.co_code[frame.f_lasti] == RESUME:
+            # Pausing at a yield or await looks like a return, except that the
+            # frame is parked on the RESUME instruction it will continue from.
+            self.suspended[fid] = frame
+            if code.co_flags & CO_COROUTINE:
+                event = "await"
+            elif code.co_flags & CO_ASYNC_GENERATOR and (arg is None or hasattr(arg, "_asyncio_future_blocking")):
+                event = "await"
+            else:
+                event = "yield"
+        elif event == "return":
+            self.suspended.pop(fid, None)
+        elif event == "exception":
+            exc_type = arg[0]
+            if pausable and issubclass(exc_type, (StopIteration, StopAsyncIteration)) and frame.f_lasti >= 0 \
+                    and code.co_code[frame.f_lasti] in AWAIT_PLUMBING:
+                return self.trace
+            self.unwinding.add(fid)
+        if event in ("call", "line", "return", "exception", "resume", "yield", "await"):
             self.record(frame, event, arg)
         return self.trace
 
@@ -335,6 +459,9 @@ class Tracer:
         try:
             self.loops, result["indexNames"] = analyze(self.source)
             result["loops"] = self.loops
+            hints = collect_hints(self.source)
+            if hints:
+                result["hints"] = hints
             code = compile(self.source, USER_FILENAME, "exec")
         except SyntaxError as exc:
             result["error"] = {"type": "SyntaxError", "message": exc.msg or str(exc),

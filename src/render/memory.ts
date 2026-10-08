@@ -24,13 +24,25 @@
  *             still need arrows, so they stay separate. See chooseNested.
  */
 import { localKey, slotsOf, valueKey, type StepDiff } from "../trace/diff";
-import type { Frame, HeapObject, SequenceObject, Step, Trace, Value } from "../trace/types";
+import { liveFrames, type Frame, type HeapObject, type SequenceObject, type Step, type Trace, type Value } from "../trace/types";
 import {
   CELL_H, CELL_MIN_W, FONT, HEADER_H, INDEX_H, LABEL_H, POINTER_H, ROW_H, SMALL,
-  arrowMarkers, cellWidth, pointerMarkers, pointersFor, refArrow, s, textWidth, uiTextWidth, valueCell,
+  arrowMarkers, cellWidth, pointerMarkers, pointersFor, rowPointerMarkers, rowPointersWidth, s, textWidth,
+  uiTextWidth, valueCell,
 } from "./draw";
+import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
+import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
 
-interface OutRef { from: Point; target: string; changed: boolean }
+interface OutRef {
+  from: Point;
+  target: string;
+  changed: boolean;
+  /** Key of the top-level box the arrow starts in (set by drawNode). */
+  source?: string;
+  /** From a list cell: leave downward, then turn at exitDownY (set by drawNode). */
+  down?: boolean;
+  exitDownY?: number;
+}
 type Pointers = { name: string; index: number; changed: boolean }[];
 
 interface Shape {
@@ -61,12 +73,23 @@ export interface MemoryLayout {
  */
 export const nodeKey = {
   frame: (index: number, func: string) => `frame:${index}:${func}`,
+  /** A paused frame keeps its identity (its id) wherever it resumes. */
+  paused: (id: string) => `paused:${id}`,
   object: (id: string) => `obj:${id}`,
 };
 
 const COLUMN_GAP = 90;
 const STACK_GAP = 22;
 const MARGIN = 24;
+/** Room above the boxes for arrows that route over the top (see route.ts). */
+const TOP = 40;
+/** Arrows leaving a list downward turn this far below it, then a lane apart. */
+const EXIT_DROP = 9;
+const EXIT_LANE = 7;
+/** Binary trees in the memory view: gap between in-order slots, and levels. */
+const TREE_GAP = 34;
+const LEVEL_GAP = 44;
+
 /** Nesting deeper than this switches back to arrows, so boxes stay readable. */
 export const MAX_NEST_DEPTH = 6;
 const NEST_PAD = 4;
@@ -103,7 +126,7 @@ export function chooseNested(step: Step): Set<string> {
   const count = (value: Value | undefined) => {
     if (value?.kind === "ref") incoming.set(value.id, (incoming.get(value.id) ?? 0) + 1);
   };
-  for (const frame of step.stack) for (const [, value] of frame.locals) count(value);
+  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) count(value);
   count(step.returnValue);
   for (const obj of Object.values(step.heap)) for (const value of valuesOf(obj)) count(value);
 
@@ -118,7 +141,7 @@ export function chooseNested(step: Step): Set<string> {
   };
   // Start from the variables, then from every object that stayed separate,
   // so things inside a shared object can still nest inside it.
-  for (const frame of step.stack) for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
+  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
   if (step.returnValue?.kind === "ref") tryNest(step.returnValue.id, 1);
   for (const [id, obj] of Object.entries(step.heap)) {
     if (nested.has(id)) continue;
@@ -138,7 +161,8 @@ interface Ctx {
   diff: StepDiff;
   nested: ReadonlySet<string>;
   functionKeyword: string;
-  pointersFor(id: string): Pointers;
+  /** Index pointers for a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
+  pointersFor(id: string, level?: 0 | 1): Pointers;
 }
 
 /**
@@ -149,7 +173,17 @@ interface View {
   w: number;
   h: number;
   nested: boolean;
-  draw(x: number, y: number, w: number, h: number, layer: SVGGElement, refs: OutRef[], changed: boolean): void;
+  /** Returns the cell element, for plain values (used for animation). */
+  draw(x: number, y: number, w: number, h: number, layer: SVGGElement, refs: OutRef[], changed: boolean): SVGGElement | void;
+}
+
+/** Mark a list or grid cell, so a value moving between slots can slide (animate.ts). */
+function markCell(el: SVGGElement | void, container: string, slot: string, value: Value, cx: number, cy: number): void {
+  if (!el) return;
+  el.setAttribute("data-cell", `${container}|${slot}`);
+  el.setAttribute("data-value", valueKey(value));
+  el.setAttribute("data-cx", String(Math.round(cx)));
+  el.setAttribute("data-cy", String(Math.round(cy)));
 }
 
 function viewOf(value: Value, ctx: Ctx, cellH: number): View {
@@ -168,6 +202,7 @@ function viewOf(value: Value, ctx: Ctx, cellH: number): View {
       const { el, dot } = valueCell(value, { x, y, w, h, changed });
       layer.append(el);
       if (dot && value.kind === "ref") refs.push({ from: dot, target: value.id, changed });
+      return el;
     },
   };
 }
@@ -246,11 +281,103 @@ function tableShape(
   };
 }
 
+const isRow = (obj: HeapObject | undefined): obj is SequenceObject =>
+  obj?.kind === "list" || obj?.kind === "tuple";
+
+/**
+ * In nested mode, a list whose items are all lists nested inside it is drawn
+ * as a grid: rows stacked, column numbers on top, row numbers down the side.
+ */
+function gridRows(obj: SequenceObject, ctx: Ctx): SequenceObject[] | null {
+  if (obj.kind === "set" || !obj.items.length) return null;
+  const rows: SequenceObject[] = [];
+  for (const item of obj.items) {
+    const row = item.kind === "ref" && ctx.nested.has(item.id) ? ctx.step.heap[item.id] : undefined;
+    if (!isRow(row)) return null;
+    rows.push(row);
+  }
+  return rows;
+}
+
+function gridShape(
+  obj: SequenceObject,
+  rows: SequenceObject[],
+  ctx: Ctx,
+  opts: { changed: Set<string>; isNew: boolean; pointers: Pointers; nested: boolean },
+): Shape {
+  const views = rows.map((row) => row.items.map((item) => viewOf(item, ctx, CELL_H)));
+  const pad = views.flat().some((v) => v.nested) ? NEST_PAD : 0;
+  const cols = Math.max(1, ...rows.map((row) => row.items.length));
+  const cellW = Math.max(CELL_MIN_W, ...views.flat().map((v) => v.w + 2 * pad));
+  const rowHs = views.map((row) => Math.max(CELL_H, ...row.map((v) => (v.nested ? v.h + 2 * pad : CELL_H))));
+  const rowTops = rowHs.map((_, r) => rowHs.slice(0, r).reduce((a, b) => a + b, 0));
+  // A grid's column markers only cover real columns: one past the end is
+  // nearly always a bound like `cols`, not a position.
+  const cols0 = Math.max(1, ...rows.map((row) => row.items.length));
+  const columnPointers = ctx.pointersFor(obj.id, 1).filter((p) => p.index < cols0);
+  const rowIndexW = textWidth(String(rows.length - 1), 10.5) + 10;
+  const pointersW = rowPointersWidth(opts.pointers);
+  const truncated = obj.length > obj.items.length;
+  const showLabel = !opts.nested || truncated;
+  const label = `${obj.typeName}, ${obj.length} × ${cols}${truncated ? ` (first ${obj.items.length} rows)` : ""}`;
+  const labelH = showLabel ? LABEL_H : 2;
+  const cellsY = labelH + INDEX_H;
+  const gridH = rowHs.reduce((a, b) => a + b, 0);
+  const w = Math.max(rowIndexW + cols * cellW + pointersW, showLabel ? uiTextWidth(label) + 8 : 0);
+  const h = cellsY + gridH + (columnPointers.length ? POINTER_H : 4);
+
+  return {
+    w, h, inY: cellsY + CELL_H / 2,
+    draw(x, y, layer, refs) {
+      const g = s("g", { class: ["seq", "grid", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
+      if (showLabel) g.append(s("text", { class: "seq-label", x, y: y + 11 }, label));
+      const x0 = x + rowIndexW;
+      const top = y + cellsY;
+      for (let c = 0; c < cols; c++) {
+        g.append(s("text", { class: "index", x: x0 + c * cellW + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, String(c)));
+      }
+      rows.forEach((row, r) => {
+        const ry = top + rowTops[r];
+        g.append(s("text", { class: "index", x: x0 - 6, y: ry + CELL_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, String(r)));
+        const rowChanged = ctx.diff.changedSlots.get(row.id) ?? new Set<string>();
+        const replaced = opts.changed.has(String(r));
+        if (!row.items.length) {
+          g.append(s("g", { class: "cell is-empty" }, s("rect", { x: x0, y: ry, width: cellW, height: CELL_H, rx: 3 })));
+        }
+        views[r].forEach((view, c) => {
+          const cx = x0 + c * cellW;
+          const changed = replaced || rowChanged.has(String(c));
+          if (view.nested) {
+            g.append(s("g", { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
+              s("rect", { x: cx, y: ry, width: cellW, height: rowHs[r], rx: 3 })));
+            view.draw(cx + pad, ry + pad, view.w, view.h, g, refs, changed);
+          } else {
+            markCell(view.draw(cx, ry, cellW, CELL_H, g, refs, changed), row.id, String(c), row.items[c], c * cellW, 0);
+          }
+        });
+      });
+      // grid[i][j]: i marks a row, j a column, and their cell gets an outline.
+      const rowMid = (r: number) => top + rowTops[r] + CELL_H / 2;
+      const flip = { key: `ptr:${obj.id}`, originX: x, originY: y };
+      if (opts.pointers.length) g.append(rowPointerMarkers(opts.pointers, rowMid, x0 + cols * cellW, rows.length, flip));
+      if (columnPointers.length) g.append(pointerMarkers(columnPointers, (c) => x0 + c * cellW, cellW, top + gridH, cols, flip));
+      const r = opts.pointers.find((p) => p.index >= 0 && p.index < rows.length);
+      const c = columnPointers.find((p) => p.index >= 0 && p.index < (rows[r?.index ?? 0]?.items.length ?? 0));
+      if (r && c) {
+        g.append(s("rect", { class: "grid-focus", x: x0 + c.index * cellW - 2, y: top + rowTops[r.index] - 2, width: cellW + 4, height: rowHs[r.index] + 4, rx: 4 }));
+      }
+      layer.append(g);
+    },
+  };
+}
+
 function sequenceShape(
   obj: SequenceObject,
   ctx: Ctx,
   opts: { changed: Set<string>; isNew: boolean; pointers: Pointers; nested: boolean },
 ): Shape {
+  const rows = gridRows(obj, ctx);
+  if (rows) return gridShape(obj, rows, ctx, opts);
   const hasIndices = obj.kind !== "set";
   const truncated = obj.length > obj.items.length;
   const views = obj.items.map((item) => viewOf(item, ctx, CELL_H));
@@ -285,13 +412,16 @@ function sequenceShape(
           g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, String(i)));
         }
         const view = views[i];
+        const before = refs.length;
         if (view.nested) {
           // A cell frame with the nested object inside it.
           g.append(s("g", { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
             s("rect", { x: cx, y: y + cellsY, width: cellW, height: cellH, rx: 3 })));
           view.draw(cx + pad, y + cellsY + pad, view.w, view.h, g, refs, changed);
         } else {
-          view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed);
+          markCell(view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed), obj.id, String(i), obj.items[i], cx - x, 0);
+          // A list cell's arrow leaves downward, not through its neighbors.
+          for (let k = before; k < refs.length; k++) refs[k].down = true;
         }
       });
       if (truncated) {
@@ -299,7 +429,8 @@ function sequenceShape(
         g.append(s("text", { class: "value v-none", x: cx + cellW / 2, y: y + cellsY + cellH / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "…"));
       }
       if (hasPointers) {
-        g.append(pointerMarkers(opts.pointers, (i) => x + i * cellW, cellW, y + cellsY + cellH, obj.items.length));
+        g.append(pointerMarkers(opts.pointers, (i) => x + i * cellW, cellW, y + cellsY + cellH, obj.items.length,
+          { key: `ptr:${obj.id}`, originX: x, originY: y }));
       }
       layer.append(g);
     },
@@ -341,9 +472,14 @@ function frameShape(frame: Frame, ctx: Ctx, isActive: boolean): Shape {
   if (isActive && step.event === "return" && step.returnValue && frame.func !== "Global") {
     rows.push({ label: "returns", value: step.returnValue, changed: true, variant: "return-row" });
   }
-  const title = frame.func === "Global" ? "Global" : `${frame.func}()`;
+  if (isActive && step.event === "yield" && step.returnValue) {
+    rows.push({ label: "yields", value: step.returnValue, changed: true, variant: "return-row" });
+  }
+  // A paused generator or async function: off the stack, variables kept.
+  const paused = frame.state === "suspended";
+  const title = frame.func === "Global" ? "Global" : `${frame.func}()${paused ? `, paused at line ${frame.line}` : ""}`;
   return tableShape(title, rows, ctx, {
-    variant: ["frame", isActive && "is-active"].filter(Boolean).join(" "),
+    variant: ["frame", isActive && "is-active", paused && "is-suspended"].filter(Boolean).join(" "),
     isNew: diff.newFrames.has(frame.id),
     emptyText: "no variables yet",
   });
@@ -370,19 +506,24 @@ export function renderMemory(
 
   // Index pointers (i, j, lo, hi...) belong to the variable that holds a list.
   const pointerOwner = new Map<string, { name: string; frame: Frame }>();
+  for (const frame of liveFrames(step)) {
+    for (const [name, value] of frame.locals) if (value.kind === "ref" && !pointerOwner.has(value.id)) pointerOwner.set(value.id, { name, frame });
+  }
+  // The running frame's names win over paused frames and callers.
   for (const frame of step.stack) {
-    for (const [name, value] of frame.locals) if (value.kind === "ref") pointerOwner.set(value.id, { name, frame }); // innermost frame wins
+    for (const [name, value] of frame.locals) if (value.kind === "ref") pointerOwner.set(value.id, { name, frame });
   }
   const ctx: Ctx = {
     step,
     diff,
     nested,
     functionKeyword: trace.language === "python" ? "def" : "function",
-    pointersFor(id) {
+    pointersFor(id, level = 0) {
       const owner = pointerOwner.get(id);
       if (!owner) return [];
       const changedNames = new Set(owner.frame.locals.map(([n]) => n).filter((n) => diff.changedLocals.has(localKey(owner.frame.id, n))));
-      return pointersFor(owner.name, trace.indexNames, new Map(owner.frame.locals), changedNames);
+      const name = level === 1 ? `${owner.name}[]` : owner.name;
+      return pointersFor(name, trace.indexNames, new Map(owner.frame.locals), changedNames);
     },
   };
 
@@ -396,6 +537,13 @@ export function renderMemory(
     return out;
   };
 
+  // Binary trees (arrows mode) are laid out top-down as one block: each node
+  // in its in-order slot, at the height of its depth. Found the same way as
+  // in the loop history, so `viz: tree` hints apply here too.
+  const blocks = findTreeBlocks(trace, step, layout.mode === "nested");
+  const blockOf = new Map<string, TreeBlock>();
+  for (const block of blocks) for (const id of block.nodes.keys()) blockOf.set(id, block);
+
   // 1. Breadth-first walk from the stack assigns each separate box a column.
   //    Nested objects aren't boxes of their own: their outgoing arrows count
   //    as coming from the box they're drawn in.
@@ -404,11 +552,15 @@ export function renderMemory(
   const queue: string[] = [];
   const enqueue = (id: string, d: number) => {
     if (depth.has(id)) return;
-    depth.set(id, d);
-    order.push(id);
-    queue.push(id);
+    // A tree's nodes all go in the column of the first one reached.
+    for (const member of blockOf.get(id)?.inOrder ?? [id]) {
+      if (depth.has(member)) continue;
+      depth.set(member, d);
+      order.push(member);
+      queue.push(member);
+    }
   };
-  const roots = step.stack.flatMap((frame) => frame.locals.map(([, value]) => value));
+  const roots = liveFrames(step).flatMap((frame) => frame.locals.map(([, value]) => value));
   if (step.returnValue) roots.push(step.returnValue);
   for (const id of exits(roots)) enqueue(id, 0);
   while (queue.length) {
@@ -420,12 +572,15 @@ export function renderMemory(
   const shapes = new Map<string, Shape>();
   for (const id of order) shapes.set(id, objectShape(step.heap[id], ctx));
 
-  const frameShapes = step.stack.map((frame, i) => frameShape(frame, ctx, i === step.stack.length - 1));
+  // The call stack, then paused frames under it.
+  const frames = liveFrames(step);
+  const frameShapes = frames.map((frame, i) => frameShape(frame, ctx, i === step.stack.length - 1));
   const framesW = Math.max(160, ...frameShapes.map((f) => f.w));
+  for (const block of blocks) measureBlock(block, shapes);
   const columnW: number[] = [];
   for (const id of order) {
     const d = depth.get(id)!;
-    columnW[d] = Math.max(columnW[d] ?? 0, shapes.get(id)!.w);
+    columnW[d] = Math.max(columnW[d] ?? 0, blockOf.get(id)?.w ?? shapes.get(id)!.w);
   }
   const columnX: number[] = [];
   let cursorX = MARGIN + framesW + COLUMN_GAP;
@@ -437,81 +592,227 @@ export function renderMemory(
   // 3. Place and draw. Frames first, then objects in BFS order so a parent
   //    is always placed before its children and can pull them level with it.
   const refs: OutRef[] = [];
-  const placed = new Map<string, Point & { w: number; inY: number }>();
   const preferredY = new Map<string, number>();
-  const notePreferences = (from: number) => {
-    for (let i = from; i < refs.length; i++) {
-      if (!preferredY.has(refs[i].target)) preferredY.set(refs[i].target, refs[i].from.y);
-    }
-  };
+
+  // Boxes the person dragged stay exactly where they were put. Everything
+  // else is placed automatically, moving down past anything already there,
+  // so a new box is never hidden under another one.
+  const frameKeys = frames.map((frame, index) =>
+    frame.state === "suspended" ? nodeKey.paused(frame.id) : nodeKey.frame(index, frame.func));
+  const obstacles: Rect[] = [];
+  frameShapes.forEach((shape, index) => {
+    const moved = layout.positions.get(frameKeys[index]);
+    if (moved) obstacles.push({ ...moved, w: shape.w, h: shape.h });
+  });
+  for (const id of order) {
+    const moved = layout.positions.get(nodeKey.object(id));
+    if (moved) obstacles.push({ ...moved, w: shapes.get(id)!.w, h: shapes.get(id)!.h });
+  }
 
   // Each box goes in its own group, so the viewport can find and drag it.
-  let maxX = 0;
-  let maxY = 0;
+  const rects = new Map<string, Rect & { inY: number }>();
   let raised: SVGGElement | null = null;
   const drawNode = (key: string, shape: Shape, x: number, y: number) => {
-    const pos = { x, y };
-    const g = s("g", { class: "node", "data-node-key": key, "data-x": pos.x, "data-y": pos.y });
-    if (layout.positions.has(key)) g.classList.add("is-moved");
+    const g = s("g", { class: "node", "data-node-key": key, "data-flip": key, "data-x": x, "data-y": y });
+    const isMoved = layout.positions.has(key);
+    if (isMoved) g.classList.add("is-moved");
     // An invisible backing, so a press anywhere on the box (even between its
     // index numbers and cells) grabs the box instead of panning the canvas.
-    g.append(s("rect", { class: "node-hit", x: pos.x - 2, y: pos.y - 2, width: shape.w + 4, height: shape.h + 4, fill: "transparent" }));
+    g.append(s("rect", { class: "node-hit", x: x - 2, y: y - 2, width: shape.w + 4, height: shape.h + 4, fill: "transparent" }));
     const before = refs.length;
-    shape.draw(pos.x, pos.y, g, refs);
-    notePreferences(before);
+    shape.draw(x, y, g, refs);
+    for (let i = before; i < refs.length; i++) refs[i].source = key;
+    // Arrows leaving list cells downward turn under the box like the teeth
+    // of a comb: the leftmost cell turns highest, so they stay in order.
+    const down = refs.slice(before).filter((r) => r.down).sort((a, b) => a.from.x - b.from.x);
+    down.forEach((ref, rank) => { ref.exitDownY = y + shape.h + EXIT_DROP + rank * EXIT_LANE; });
+    // Line each target up with where its arrow arrives.
+    for (let i = before; i < refs.length; i++) {
+      const ref = refs[i];
+      if (!preferredY.has(ref.target)) preferredY.set(ref.target, ref.exitDownY ?? ref.from.y);
+    }
     boxLayer.append(g);
     if (key === layout.raise) raised = g;
-    maxX = Math.max(maxX, pos.x + shape.w);
-    maxY = Math.max(maxY, pos.y + shape.h);
+    const rect = { x, y, w: shape.w, h: shape.h, inY: shape.inY };
+    rects.set(key, rect);
+    // Keep the turns under a list clear of the next box down.
+    const below = down.length ? EXIT_DROP + (down.length - 1) * EXIT_LANE + 6 : 0;
+    if (!isMoved) obstacles.push({ ...rect, h: rect.h + below });
+    return below;
   };
 
-  // A moved box is out of the automatic flow: it doesn't push the boxes
-  // after it down, so they keep their usual places.
-  let frameY = MARGIN;
+  let frameY = TOP;
   frameShapes.forEach((shape, index) => {
-    const key = nodeKey.frame(index, step.stack[index].func);
+    const key = frameKeys[index];
     const moved = layout.positions.get(key);
-    drawNode(key, shape, moved?.x ?? MARGIN, moved?.y ?? frameY);
-    if (!moved) frameY += shape.h + STACK_GAP;
+    if (moved) {
+      drawNode(key, shape, moved.x, moved.y);
+      return;
+    }
+    const y = findFreeY(MARGIN, shape.w, shape.h, frameY, obstacles, STACK_GAP);
+    const below = drawNode(key, shape, MARGIN, y);
+    frameY = y + shape.h + below + STACK_GAP;
   });
 
-  const columnCursor: number[] = columnW.map(() => MARGIN);
+  const columnCursor: number[] = columnW.map(() => TOP);
   for (const id of order) {
     const d = depth.get(id)!;
     const shape = shapes.get(id)!;
     const key = nodeKey.object(id);
     const moved = layout.positions.get(key);
-    let x: number;
-    let y: number;
     if (moved) {
-      ({ x, y } = moved);
-    } else {
-      const want = preferredY.has(id) ? preferredY.get(id)! - shape.inY : MARGIN;
-      x = columnX[d];
-      y = Math.max(columnCursor[d], want);
-      columnCursor[d] = y + shape.h + STACK_GAP;
+      drawNode(key, shape, moved.x, moved.y);
+      continue;
     }
-    drawNode(key, shape, x, y);
-    placed.set(id, { x, y, w: shape.w, inY: shape.inY });
+    const block = blockOf.get(id);
+    if (block) {
+      // The first node reached places the whole tree; every node then goes
+      // to its slot in the block.
+      if (!block.origin) {
+        const want = preferredY.has(block.root) ? preferredY.get(block.root)! - shapes.get(block.root)!.inY : TOP;
+        const y = findFreeY(columnX[d], block.w, block.h, Math.max(columnCursor[d], want), obstacles, STACK_GAP);
+        block.origin = { x: columnX[d], y };
+        columnCursor[d] = y + block.h + STACK_GAP;
+      }
+      const slot = block.nodes.get(id)!;
+      drawNode(key, shape,
+        block.origin.x + slot.index * (block.slotW + TREE_GAP) + Math.round((block.slotW - shape.w) / 2),
+        block.origin.y + slot.depth * block.levelH);
+      continue;
+    }
+    const want = preferredY.has(id) ? preferredY.get(id)! - shape.inY : TOP;
+    const y = findFreeY(columnX[d], shape.w, shape.h, Math.max(columnCursor[d], want), obstacles, STACK_GAP);
+    const below = drawNode(key, shape, columnX[d], y);
+    columnCursor[d] = y + shape.h + below + STACK_GAP;
   }
   // Boxes the person placed sit on top of automatically placed ones, and the
   // box being dragged right now is on top of everything.
   for (const g of [...boxLayer.querySelectorAll(".node.is-moved")]) boxLayer.append(g);
   if (raised) boxLayer.append(raised);
 
-  for (const ref of refs) {
-    const target = placed.get(ref.target);
-    if (!target) continue;
-    arrowLayer.append(refArrow(ref.from, target, ref.changed));
+  // 4. Route the arrows through the gaps between boxes (see route.ts).
+  const edges = refs
+    .map((ref) => ({ ref, source: rects.get(ref.source ?? ""), target: rects.get(nodeKey.object(ref.target)) }))
+    .filter((e): e is { ref: OutRef; source: Rect & { inY: number }; target: Rect & { inY: number } } => !!e.source && !!e.target);
+  const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
+  const routes = routeEdges(
+    edges.map(({ ref, source, target }) => {
+      const block = blockOf.get(ref.target);
+      const sourceId = idOf(ref.source);
+      const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY: target.y + target.inY };
+      if (!block?.origin) return base;
+      // Parent to child inside a tree: drop from the parent to the child's top.
+      const parent = block.nodes.get(sourceId);
+      if (parent && blockOf.get(sourceId) === block && parent.children.includes(ref.target)) {
+        return { ...base, tree: block.nodes.get(ref.target)!.index < parent.index ? "left" as const : "right" as const };
+      }
+      // From outside, to the left of the tree: come down beside the tree and
+      // in from above, so the arrow doesn't run through the node's neighbors.
+      if (source.x + source.w + 20 <= block.origin.x) return { ...base, enterTopFrom: block.origin.x };
+      return base;
+    }),
+    [...rects.values()],
+  );
+  let maxX = 0;
+  let maxY = 0;
+  for (const rect of rects.values()) {
+    maxX = Math.max(maxX, rect.x + rect.w);
+    maxY = Math.max(maxY, rect.y + rect.h);
   }
+  routes.forEach((points, i) => {
+    const { ref } = edges[i];
+    for (const p of points) {
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    arrowLayer.append(s("path", {
+      d: roundedPath(points),
+      class: ref.changed ? "ref-arrow is-changed" : "ref-arrow",
+      "marker-end": "url(#arrow-ref)",
+      "data-from": ref.source,
+      "data-to": nodeKey.object(ref.target),
+    }));
+  });
 
-  // Leave room on the right for back-edge arrows that swing around a column.
-  const width = Math.max(cursorX - COLUMN_GAP + MARGIN + 30, MARGIN * 2 + framesW, maxX + MARGIN + 30);
-  const height = Math.max(frameY, ...columnCursor, maxY + STACK_GAP) + MARGIN - STACK_GAP;
+  const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - COLUMN_GAP + MARGIN);
+  const height = maxY + MARGIN;
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.style.setProperty("--font-size", `${FONT}px`);
   svg.style.setProperty("--small-size", `${SMALL}px`);
   return svg;
+}
+
+/**
+ * Highlight one box's connections: its arrows (in and out) and the boxes at
+ * their other ends. Everything else dims. Pass null to clear.
+ */
+export function applyFocus(svg: SVGSVGElement | null, key: string | null): void {
+  if (!svg) return;
+  for (const el of svg.querySelectorAll(".is-focus, .is-related")) el.classList.remove("is-focus", "is-related");
+  const node = key ? svg.querySelector(`.node[data-node-key="${CSS.escape(key)}"]`) : null;
+  svg.classList.toggle("has-focus", !!node);
+  if (!node || !key) return;
+  node.classList.add("is-focus");
+  for (const arrow of svg.querySelectorAll<SVGPathElement>(".ref-arrow")) {
+    const { from, to } = arrow.dataset;
+    if (from !== key && to !== key) continue;
+    arrow.classList.add("is-focus");
+    const other = from === key ? to : from;
+    svg.querySelector(`.node[data-node-key="${CSS.escape(other ?? "")}"]`)?.classList.add("is-related");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Trees
+// ---------------------------------------------------------------------------
+
+interface TreeBlock {
+  root: string;
+  /** Node id -> in-order index, depth, and its child node ids. */
+  nodes: Map<string, { index: number; depth: number; children: string[] }>;
+  inOrder: string[];
+  slotW: number;
+  levelH: number;
+  w: number;
+  h: number;
+  origin?: { x: number; y: number };
+}
+
+/** Binary trees in this step with at least two nodes, each one block. */
+function findTreeBlocks(trace: Trace, step: Step, nestedMode: boolean): TreeBlock[] {
+  if (nestedMode) return []; // nested mode draws trees as boxes in boxes
+  const row = { locals: liveFrames(step).flatMap((frame) => frame.locals), heap: step.heap };
+  const track = findLinkedTrack([row], trace.viz?.linked);
+  if (track?.shape !== "tree") return [];
+  const state = linkedRow(track, row);
+  const depths = treeDepths(state);
+  const blocks: TreeBlock[] = [];
+  const placed = new Set<string>();
+  for (const [id] of state.nodes) {
+    if (depths.get(id) !== 0 || placed.has(id)) continue;
+    const block: TreeBlock = { root: id, nodes: new Map(), inOrder: [], slotW: 0, levelH: 0, w: 0, h: 0 };
+    const visit = (nodeId: string | null, depth: number) => {
+      if (!nodeId || placed.has(nodeId) || !state.nodes.has(nodeId)) return;
+      placed.add(nodeId);
+      const [left, right] = state.nodes.get(nodeId)!.links;
+      visit(left, depth + 1);
+      block.nodes.set(nodeId, { index: block.inOrder.length, depth, children: [left, right].filter((c): c is string => !!c) });
+      block.inOrder.push(nodeId);
+      visit(right, depth + 1);
+    };
+    visit(id, 0);
+    if (block.inOrder.length >= 2) blocks.push(block);
+  }
+  return blocks;
+}
+
+function measureBlock(block: TreeBlock, shapes: Map<string, Shape>): void {
+  const sizes = block.inOrder.map((id) => shapes.get(id)!);
+  block.slotW = Math.max(...sizes.map((shape) => shape.w));
+  block.levelH = Math.max(...sizes.map((shape) => shape.h)) + LEVEL_GAP;
+  const levels = Math.max(...[...block.nodes.values()].map((n) => n.depth)) + 1;
+  block.w = block.inOrder.length * (block.slotW + TREE_GAP) - TREE_GAP;
+  block.h = levels * block.levelH - LEVEL_GAP;
 }

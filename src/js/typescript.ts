@@ -66,6 +66,8 @@ export function stripTypes(ast: t.File, source: string): t.File {
     const loc = t.isIdentifier(id) ? declared.get(id.name)?.shift() : undefined;
     if (loc) node.loc = loc;
   });
+  // Keep the comments, so `// viz:` hints still work.
+  if (!result.ast.comments?.length) result.ast.comments = ast.comments;
   return result.ast;
 }
 
@@ -73,6 +75,6 @@ export function instrumentTypeScript(source: string): Instrumented {
   return instrumentAst(stripTypes(parseProgram(source, ["typescript"]), source), source);
 }
 
-export function traceTypeScript(source: string, maxSteps = 2000): Trace {
+export function traceTypeScript(source: string, maxSteps = 2000): Promise<Trace> {
   return traceProgram(source, maxSteps, "typescript", instrumentTypeScript);
 }

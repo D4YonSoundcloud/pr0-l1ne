@@ -14,14 +14,14 @@ const globalLines = (trace: Trace) =>
   trace.steps.filter((s) => s.stack.length === 1 && s.event === "line").map((s) => s.line);
 
 describe("TypeScript", () => {
-  it("traces exactly like the equivalent JavaScript once types are removed", () => {
-    const ts = traceTypeScript(`
+  it("traces exactly like the equivalent JavaScript once types are removed", async () => {
+    const ts = await traceTypeScript(`
       const arr: number[] = [3, 1, 2];
       for (let i: number = 0; i < arr.length; i++) {
         arr[i] = (arr[i] as number) * 2;
       }
     `);
-    const js = traceJavaScript(`
+    const js = await traceJavaScript(`
       const arr = [3, 1, 2];
       for (let i = 0; i < arr.length; i++) {
         arr[i] = (arr[i]) * 2;
@@ -33,13 +33,13 @@ describe("TypeScript", () => {
     expect(ts.indexNames).toEqual({ arr: ["i"] });
   });
 
-  it("keeps line numbers when type-only declarations are removed", () => {
-    const t = traceTypeScript(`interface P {\n  x: number;\n}\ntype Id = string;\nconst a: P = { x: 1 };\nconst b: Id = "z";`);
+  it("keeps line numbers when type-only declarations are removed", async () => {
+    const t = await traceTypeScript(`interface P {\n  x: number;\n}\ntype Id = string;\nconst a: P = { x: 1 };\nconst b: Id = "z";`);
     expect(globalLines(t)).toEqual([5, 6]);
   });
 
-  it("removes overload signatures, generics, `!` and `satisfies`", () => {
-    const t = traceTypeScript(`
+  it("removes overload signatures, generics, `!` and `satisfies`", async () => {
+    const t = await traceTypeScript(`
       function pick(x: string): string;
       function pick(x: number): number;
       function pick<T>(x: T): T { return x; }
@@ -50,8 +50,8 @@ describe("TypeScript", () => {
     expect(localsOf(last(t)).get("v")).toMatchObject({ repr: "4" });
   });
 
-  it("turns parameter properties into fields without extra steps", () => {
-    const t = traceTypeScript(`
+  it("turns parameter properties into fields without extra steps", async () => {
+    const t = await traceTypeScript(`
       class Pt {
         constructor(public x: number, private y: number) {}
       }
@@ -67,23 +67,23 @@ describe("TypeScript", () => {
     expect(inCtor.map((s) => s.event)).toEqual(["call", "return"]);
   });
 
-  it("gives enums a step on their own line and hides the generated helper", () => {
-    const t = traceTypeScript(`enum Color {\n  Red,\n  Green,\n}\nconst c = Color.Green;`);
+  it("gives enums a step on their own line and hides the generated helper", async () => {
+    const t = await traceTypeScript(`enum Color {\n  Red,\n  Green,\n}\nconst c = Color.Green;`);
     expect(t.error).toBeNull();
     expect(globalLines(t)).toEqual([1, 5]);
     expect(frameNames(t)).toEqual(new Set(["Global"]));
     expect(localsOf(last(t)).get("c")).toMatchObject({ repr: "1" });
   });
 
-  it("runs namespaces untraced but makes their exports available", () => {
-    const t = traceTypeScript(`namespace Geo {\n  export const unit = 2;\n}\nconst r = Geo.unit * 3;`);
+  it("runs namespaces untraced but makes their exports available", async () => {
+    const t = await traceTypeScript(`namespace Geo {\n  export const unit = 2;\n}\nconst r = Geo.unit * 3;`);
     expect(t.error).toBeNull();
     expect(localsOf(last(t)).get("r")).toMatchObject({ repr: "6" });
     expect(globalLines(t)).toEqual([1, 4]);
   });
 
-  it("drops abstract and declare members and keeps real fields", () => {
-    const t = traceTypeScript(`
+  it("drops abstract and declare members and keeps real fields", async () => {
+    const t = await traceTypeScript(`
       abstract class Shape {
         abstract area(): number;
         declare tag: string;
@@ -100,28 +100,28 @@ describe("TypeScript", () => {
     expect(frameNames(t)).toEqual(new Set(["Global", "Square.constructor", "Square.area"]));
   });
 
-  it("reports TypeScript syntax errors with a line", () => {
-    const t = traceTypeScript(`const ok = 1;\nlet x: = 5;`);
+  it("reports TypeScript syntax errors with a line", async () => {
+    const t = await traceTypeScript(`const ok = 1;\nlet x: = 5;`);
     expect(t.steps).toEqual([]);
     expect(t.error).toMatchObject({ type: "SyntaxError", line: 2 });
   });
 
-  it("runs code with type errors, like a compiler with type checking off", () => {
-    const t = traceTypeScript(`const n: number = "not a number" as any;\nconst m: string = n;`);
+  it("runs code with type errors, like a compiler with type checking off", async () => {
+    const t = await traceTypeScript(`const n: number = "not a number" as any;\nconst m: string = n;`);
     expect(t.error).toBeNull();
     expect(localsOf(last(t)).get("m")).toMatchObject({ repr: '"not a number"' });
   });
 
-  it("explains unsupported JSX and decorators", () => {
-    expect(traceTypeScript(`const a = 1;\nconst el = <div>hi</div>;`).error).toMatchObject({ line: 2, message: expect.stringContaining("JSX isn't supported") });
-    expect(traceTypeScript(`function log(t: any) {}\n@log\nclass A {}`).error).toMatchObject({ line: 2, message: "Decorators aren't supported." });
-    expect(traceJavaScript(`const el = <p/>;`).error?.message).toContain("JSX isn't supported");
+  it("explains unsupported JSX and decorators", async () => {
+    expect((await traceTypeScript(`const a = 1;\nconst el = <div>hi</div>;`)).error).toMatchObject({ line: 2, message: expect.stringContaining("JSX isn't supported") });
+    expect((await traceTypeScript(`function log(t: any) {}\n@log\nclass A {}`)).error).toMatchObject({ line: 2, message: "Decorators aren't supported." });
+    expect((await traceJavaScript(`const el = <p/>;`)).error?.message).toContain("JSX isn't supported");
   });
 
-  it("rejects imports and exports with a clear message", () => {
-    const t = traceTypeScript(`import { x } from "y";\nconst a = 1;`);
+  it("rejects imports and exports with a clear message", async () => {
+    const t = await traceTypeScript(`import { x } from "y";\nconst a = 1;`);
     expect(t.error).toMatchObject({ type: "SyntaxError", line: 1 });
     expect(t.error?.message).toContain("import and export");
-    expect(traceJavaScript(`export const a = 1;`).error?.message).toContain("import and export");
+    expect((await traceJavaScript(`export const a = 1;`)).error?.message).toContain("import and export");
   });
 });

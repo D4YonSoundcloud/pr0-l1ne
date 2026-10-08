@@ -8,7 +8,7 @@
  * turning around while the nodes stay put.
  */
 import { valueKey } from "./diff";
-import type { HeapObject, Value } from "./types";
+import type { HeapObject, LinkedHint, Value } from "./types";
 
 /** The parts of a loop row this module needs. */
 export interface RowSnapshot {
@@ -25,6 +25,12 @@ export interface LinkedTrack {
   valueField: string | null;
   /** Node ids in column order. */
   order: string[];
+  /**
+   * "tree" when there are exactly two links and no node ever has more than
+   * one incoming link (a binary tree), so it can be drawn top-down.
+   * Everything else, including doubly linked lists, is a "list".
+   */
+  shape: "list" | "tree";
 }
 
 export interface NodeState {
@@ -80,7 +86,19 @@ function roots(row: RowSnapshot, nodeType: string | null): { name: string; id: s
 }
 
 /** Find the linked class in a loop's rows, if there is one. */
-export function findLinkedTrack(rows: RowSnapshot[]): LinkedTrack | null {
+export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): LinkedTrack | null {
+  // A `viz: tree` / `viz: list` hint for a class in these rows wins over
+  // detection: it says exactly which fields are the links.
+  for (const hint of hints) {
+    if (!rows.some((row) => Object.values(row.heap).some((obj) => typeOf(obj) === hint.typeName))) continue;
+    const fields = [...new Set(rows.flatMap((row) => nodesOfType(row, hint.typeName).flatMap(([, f]) => f.map(([n]) => n))))];
+    const others = fields.filter((f) => !hint.links.includes(f));
+    const valueField = others.find((f) => isMostlyPrimitive(rows, hint.typeName, f)) ?? null;
+    const track: LinkedTrack = { typeName: hint.typeName, links: hint.links, valueField, order: [], shape: hint.shape };
+    track.order = columnOrder(rows, track);
+    if (track.order.length) return track;
+  }
+
   // Count, per class, the fields that point at the same class.
   const linkFields = new Map<string, string[]>();
   const fieldOrder = new Map<string, string[]>();
@@ -118,9 +136,22 @@ export function findLinkedTrack(rows: RowSnapshot[]): LinkedTrack | null {
   const fields = fieldOrder.get(best)!;
   const links = fields.filter((f) => linkFields.get(best!)!.includes(f) || (LINK_NAMES.has(f) && linkFields.get(best!)!.length > 0 && isAlwaysNullOrNode(rows, best!, f)));
   const valueField = fields.find((f) => !links.includes(f) && isMostlyPrimitive(rows, best!, f)) ?? null;
-  const track: LinkedTrack = { typeName: best, links, valueField, order: [] };
+  const track: LinkedTrack = { typeName: best, links, valueField, order: [], shape: "list" };
+  if (links.length === 2 && rows.every((row) => maxIndegree(row, best!, links) <= 1)) track.shape = "tree";
   track.order = columnOrder(rows, track);
   return track.order.length ? track : null;
+}
+
+/** The most links pointing at any single node of this class in a row. */
+function maxIndegree(row: RowSnapshot, type: string, links: string[]): number {
+  const counts = new Map<string, number>();
+  for (const [, fields] of nodesOfType(row, type)) {
+    for (const link of links) {
+      const target = linkTarget(fields, link);
+      if (target && typeOf(row.heap[target]) === type) counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+  }
+  return Math.max(0, ...counts.values());
 }
 
 function nodesOfType(row: RowSnapshot, type: string): [string, [string, Value][]][] {
@@ -158,12 +189,12 @@ const linkTarget = (fields: [string, Value][], field: string): string | null => 
 /**
  * Fixed column order: follow links from the first row's variables, so the
  * starting structure reads left to right; nodes that appear later go on the
- * end. Binary trees (exactly two links, like left/right) use in-order, so a
- * search tree reads sorted.
+ * end. Binary trees use in-order, so a search tree reads sorted, and
+ * drawn top-down (in-order x, depth y) it's the classic tree picture.
  */
 function columnOrder(rows: RowSnapshot[], track: LinkedTrack): string[] {
   const order: string[] = [];
-  const inOrder = track.links.length === 2;
+  const inOrder = track.shape === "tree";
   for (const row of rows) {
     const seen = new Set<string>();
     const visit = (id: string | null) => {
@@ -220,4 +251,19 @@ export function linkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
 export function linkedSignature(state: LinkedRow): string {
   return [...state.nodes].map(([id, node]) =>
     `${id}=${node.value ? valueKey(node.value) : ""}>${node.links.join(",")}`).join("|");
+}
+
+/** Depth of each node in one row of a tree: roots (nothing links to them) are 0. */
+export function treeDepths(state: LinkedRow): Map<string, number> {
+  const targets = new Set<string>();
+  for (const node of state.nodes.values()) for (const t of node.links) if (t) targets.add(t);
+  const depth = new Map<string, number>();
+  const walk = (id: string, d: number) => {
+    if (depth.has(id) || !state.nodes.has(id)) return;
+    depth.set(id, d);
+    for (const child of state.nodes.get(id)!.links) if (child) walk(child, d + 1);
+  };
+  for (const id of state.nodes.keys()) if (!targets.has(id)) walk(id, 0);
+  for (const id of state.nodes.keys()) walk(id, 0); // a cycle with no root
+  return depth;
 }

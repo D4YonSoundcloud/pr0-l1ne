@@ -123,30 +123,6 @@ export function arrowMarkers(): SVGDefsElement {
   return s("defs", {}, marker("arrow-ref", "arrowhead-ref"), marker("arrow-change", "arrowhead-change"));
 }
 
-/**
- * A reference arrow. Normally it flows left to right into the target's left
- * edge. When the target is not to the right (a back edge, as in a cycle or a
- * linked list being reversed), it swings out right and enters the target's
- * right edge instead, so it never cuts through the boxes in between.
- */
-export function refArrow(
-  from: { x: number; y: number },
-  target: { x: number; y: number; w: number; inY: number },
-  changed = false,
-): SVGPathElement {
-  const toLeft = { x: target.x - 2, y: target.y + target.inY };
-  let d: string;
-  if (toLeft.x - from.x > 24) {
-    const bend = Math.max(30, (toLeft.x - from.x) * 0.45);
-    d = `M${from.x},${from.y} C${from.x + bend},${from.y} ${toLeft.x - bend},${toLeft.y} ${toLeft.x},${toLeft.y}`;
-  } else {
-    const to = { x: target.x + target.w + 2, y: target.y + target.inY };
-    const out = Math.max(from.x, to.x) + 44;
-    d = `M${from.x},${from.y} C${out},${from.y} ${out},${to.y} ${to.x},${to.y}`;
-  }
-  return s("path", { d, class: changed ? "ref-arrow is-changed" : "ref-arrow", "marker-end": "url(#arrow-ref)" });
-}
-
 /** A "this changed" arrow between two stacked rows of the loop view. */
 export function changeArrow(from: { x: number; y: number }, to: { x: number; y: number }): SVGPathElement {
   const dy = to.y - from.y;
@@ -157,12 +133,19 @@ export function changeArrow(from: { x: number; y: number }, to: { x: number; y: 
 }
 
 /** Little upward markers under list cells for index variables like i and j. */
+/** For animation (render/animate.ts): a key prefix, and the origin positions are relative to. */
+export interface FlipInfo { key: string; originX: number; originY: number }
+
+const flipAttrs = (flip: FlipInfo | undefined, name: string, x: number, y: number) =>
+  flip ? { "data-flip": `${flip.key}:${name}`, "data-x": Math.round(x - flip.originX), "data-y": Math.round(y - flip.originY) } : {};
+
 export function pointerMarkers(
   pointers: { name: string; index: number; changed: boolean }[],
   cellX: (index: number) => number,
   cellW: number,
   y: number,
   length: number,
+  flip?: FlipInfo,
 ): SVGGElement {
   const g = s("g", { class: "pointers" });
   const byIndex = new Map<number, { name: string; changed: boolean }[]>();
@@ -175,7 +158,8 @@ export function pointerMarkers(
     const outOfRange = index === length;
     const changed = names.some((n) => n.changed);
     const cls = ["pointer", outOfRange && "is-out", changed && "is-changed"].filter(Boolean).join(" ");
-    g.append(s("g", { class: cls },
+    const label = names.map((n) => n.name).join(", ");
+    g.append(s("g", { class: cls, ...flipAttrs(flip, label, cx, y) },
       s("path", { d: `M${cx - 5},${y + 9} L${cx},${y + 3} L${cx + 5},${y + 9} z` }),
       s("text", { x: cx, y: y + 20, "text-anchor": "middle" }, names.map((n) => n.name).join(", "))));
   }
@@ -208,4 +192,40 @@ export function pointersFor(
     if (isIndex) out.push({ name, index: Number(value.repr), changed: changedNames.has(name) });
   }
   return out;
+}
+
+/**
+ * Row pointers for a grid: a small left-pointing marker and the names, just
+ * right of the row they point at (grid[i][j] puts i here, j under a column).
+ */
+export function rowPointerMarkers(
+  pointers: { name: string; index: number; changed: boolean }[],
+  rowMid: (index: number) => number,
+  x: number,
+  rows: number,
+  flip?: FlipInfo,
+): SVGGElement {
+  const g = s("g", { class: "pointers row-pointers" });
+  const byIndex = new Map<number, { name: string; changed: boolean }[]>();
+  for (const p of pointers) {
+    if (p.index < 0 || p.index >= rows) continue;
+    byIndex.set(p.index, [...(byIndex.get(p.index) ?? []), p]);
+  }
+  for (const [index, names] of byIndex) {
+    const y = rowMid(index);
+    const cls = ["pointer", names.some((n) => n.changed) && "is-changed"].filter(Boolean).join(" ");
+    const label = names.map((n) => n.name).join(", ");
+    g.append(s("g", { class: cls, ...flipAttrs(flip, `row:${label}`, x, y) },
+      s("path", { d: `M${x + 3},${y} L${x + 9},${y - 5} L${x + 9},${y + 5} z` }),
+      s("text", { x: x + 12, y, "dominant-baseline": "central" }, names.map((n) => n.name).join(", "))));
+  }
+  return g;
+}
+
+/** Width needed by rowPointerMarkers for these pointers. */
+export function rowPointersWidth(pointers: { name: string; index: number }[]): number {
+  if (!pointers.length) return 0;
+  const byIndex = new Map<number, string[]>();
+  for (const p of pointers) byIndex.set(p.index, [...(byIndex.get(p.index) ?? []), p.name]);
+  return 16 + Math.max(...[...byIndex.values()].map((names) => textWidth(names.join(", "), SMALL)));
 }

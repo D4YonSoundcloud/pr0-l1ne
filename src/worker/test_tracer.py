@@ -70,6 +70,70 @@ class TracerTests(unittest.TestCase):
         """)
         self.assertEqual(t["indexNames"], {"arr": ["i"]})
 
+    def test_nested_index_names_are_recorded_per_level(self):
+        t = trace("""
+            grid = [[1, 2], [3, 4]]
+            i, j = 1, 0
+            grid[i][j] = grid[j][i + 1]
+        """)
+        self.assertEqual(t["indexNames"], {"grid": ["i", "j"], "grid[]": ["i", "j"]})
+        t = trace("g = [[0]]\nr = 0\nc = 0\ng[r][c] += 1\n")
+        self.assertEqual(t["indexNames"], {"g": ["r"], "g[]": ["c"]})
+
+    def test_generator_yields_pause_and_resume(self):
+        t = trace("""
+            def countdown(n):
+                while n > 0:
+                    yield n
+                    n -= 1
+            g = countdown(2)
+            a = next(g)
+            b = next(g)
+        """)
+        events = [s["event"] for s in t["steps"]]
+        self.assertIn("yield", events)
+        self.assertIn("resume", events)
+        yields = [s["returnValue"]["repr"] for s in t["steps"] if s["event"] == "yield"]
+        self.assertEqual(yields, ["2", "1"])
+        between = next(s for s in t["steps"] if s["event"] == "line" and s["line"] == 8)
+        self.assertEqual([f["func"] for f in between["stack"]], ["Global"])
+        self.assertEqual([f["func"] for f in between["suspended"]], ["countdown"])
+        self.assertEqual(between["suspended"][0]["state"], "suspended")
+
+    def test_dropped_generator_is_closed_not_left_suspended(self):
+        t = trace("""
+            def gen():
+                yield 1
+                yield 2
+            g = gen()
+            next(g)
+            g = None
+            done = True
+        """)
+        self.assertIsNone(t["error"])
+        self.assertEqual(t["steps"][-1].get("suspended", []), [])
+
+    def test_asyncio_coroutines_await_and_resume(self):
+        t = trace("""
+            import asyncio
+            async def double(x):
+                await asyncio.sleep(0)
+                return x * 2
+            async def main():
+                return await double(21)
+            result = asyncio.run(main())
+        """)
+        self.assertIsNone(t["error"])
+        events = [s["event"] for s in t["steps"]]
+        self.assertIn("await", events)
+        self.assertIn("resume", events)
+        # await plumbing (internal StopIteration) isn't shown as an exception
+        self.assertNotIn("exception", events)
+        resumed = next(s for s in t["steps"] if s["event"] == "resume")
+        self.assertEqual(resumed["stack"][0]["func"], "Global")
+        last_locals = dict(t["steps"][-1]["stack"][0]["locals"])
+        self.assertEqual(last_locals["result"]["repr"], "42")
+
     def test_recursion_shows_one_frame_per_call(self):
         t = trace("""
             def f(n):

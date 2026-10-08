@@ -25,6 +25,7 @@ export interface EditorCommands {
   lastStep(): void;
   swapPanels(): void;
   toggleNested(): void;
+  togglePlay(): void;
 }
 
 export interface EditorHandle {
@@ -32,12 +33,15 @@ export interface EditorHandle {
   getCode(): string;
   /** Replace the whole document as one undoable edit. */
   setCode(code: string): void;
+  /** Warn about `viz:` hints that couldn't be understood (squiggles). */
+  setHintWarnings(warnings: { line: number; message: string }[]): void;
   /** Switch to the model for a language, creating it with `code` the first time. */
   setLanguage(monacoId: string, code: string): void;
   setMarks(marks: LineMarks): void;
 }
 
 const MARKER_OWNER = "algoviz";
+const HINT_OWNER = "algoviz-hints";
 
 monaco.editor.defineTheme("algoviz", {
   base: "vs-dark",
@@ -127,6 +131,7 @@ export function createEditor(
     ["algoviz.lastStep", "AlgoViz: Last Step", [], callbacks.commands.lastStep],
     ["algoviz.swapPanels", "AlgoViz: Swap Editor and Canvas", [], callbacks.commands.swapPanels],
     ["algoviz.toggleNested", "AlgoViz: Toggle Nested Memory View", [], callbacks.commands.toggleNested],
+    ["algoviz.togglePlay", "AlgoViz: Play / Pause", [], callbacks.commands.togglePlay],
   ];
   for (const [id, label, keybindings, run] of actions) {
     editor.addAction({ id, label, keybindings, run: () => run() });
@@ -161,8 +166,25 @@ export function createEditor(
       const previous = editor.getModel();
       const next = modelFor(monacoId, code);
       if (previous === next) return;
-      if (previous) monaco.editor.setModelMarkers(previous, MARKER_OWNER, []);
+      if (previous) {
+        monaco.editor.setModelMarkers(previous, MARKER_OWNER, []);
+        monaco.editor.setModelMarkers(previous, HINT_OWNER, []);
+      }
       editor.setModel(next); // also clears the execution decorations
+    },
+    setHintWarnings(warnings) {
+      const model = editor.getModel();
+      if (!model) return;
+      monaco.editor.setModelMarkers(model, HINT_OWNER, warnings
+        .filter((w) => w.line >= 1 && w.line <= model.getLineCount())
+        .map((w) => ({
+          severity: monaco.MarkerSeverity.Warning,
+          message: w.message,
+          startLineNumber: w.line,
+          startColumn: model.getLineFirstNonWhitespaceColumn(w.line) || 1,
+          endLineNumber: w.line,
+          endColumn: model.getLineMaxColumn(w.line),
+        })));
     },
     setMarks({ next, prev, error }) {
       const model = editor.getModel();
@@ -171,8 +193,11 @@ export function createEditor(
       const valid = (line: number | null): line is number => line !== null && line >= 1 && line <= lines;
 
       const list: monaco.editor.IModelDeltaDecoration[] = [];
-      if (valid(prev) && prev !== next) list.push(lineDecoration(prev, "prev", "#6f8fc9"));
-      if (valid(next)) list.push(lineDecoration(next, "next", "#f6d743"));
+      // Yellow: the line that just ran (what the canvas is showing).
+      // Blue: the line that runs next. When they're the same line (a loop
+      // around a single statement), yellow wins.
+      if (valid(next) && next !== prev) list.push(lineDecoration(next, "next", "#6f8fc9"));
+      if (valid(prev)) list.push(lineDecoration(prev, "prev", "#f6d743"));
       if (error && valid(error.line)) list.push(lineDecoration(error.line, "error", "#ff6b61"));
       decorations.set(list);
 
@@ -188,7 +213,8 @@ export function createEditor(
       }] : []);
 
       // Follow execution, but don't move the view while someone is typing.
-      if (valid(next) && !editor.hasTextFocus()) editor.revealLineInCenterIfOutsideViewport(next);
+      const follow = valid(prev) ? prev : next;
+      if (valid(follow) && !editor.hasTextFocus()) editor.revealLineInCenterIfOutsideViewport(follow);
     },
   };
 }

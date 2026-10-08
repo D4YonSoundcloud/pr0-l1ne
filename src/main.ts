@@ -1,13 +1,15 @@
 import "./styles.css";
 import { createEditor } from "./editor";
 import { LANGUAGES, isLanguageId, type LanguageId } from "./languages";
+import { applyHints } from "./trace/hints";
 import { ProgramStore, type Program } from "./programs";
 import { renderLoopHistory } from "./render/loopView";
-import { renderMemory, type MemoryMode, type Point } from "./render/memory";
+import { prefersReducedMotion } from "./render/animate";
+import { applyFocus, renderMemory, type MemoryMode, type Point } from "./render/memory";
 import { Viewport } from "./render/viewport";
 import { diffSteps } from "./trace/diff";
-import { availableLoops, buildLoopHistory } from "./trace/loopHistory";
-import type { Step, Trace } from "./trace/types";
+import { availableLoops, buildLoopHistory, type LoopHistory, type LoopRow } from "./trace/loopHistory";
+import { liveFrames, type Step, type Trace } from "./trace/types";
 import { Runner, type RunOutcome, type RunnerStatus } from "./worker/runner";
 
 const MAX_STEPS = 3000;
@@ -99,6 +101,10 @@ const els = {
   divider: byId<HTMLDivElement>("divider"),
   canvasDivider: byId<HTMLDivElement>("canvas-divider"),
   modeArrows: byId<HTMLButtonElement>("mode-arrows"),
+  loopStacked: byId<HTMLButtonElement>("loop-stacked"),
+  loopAnimated: byId<HTMLButtonElement>("loop-animated"),
+  play: byId<HTMLButtonElement>("play"),
+  speed: byId<HTMLSelectElement>("speed"),
   modeNested: byId<HTMLButtonElement>("mode-nested"),
   editorPane: byId<HTMLElement>("editor-pane"),
   canvasPane: byId<HTMLElement>("canvas-pane"),
@@ -187,7 +193,9 @@ function applyOutcome(outcome: RunOutcome): void {
 
   // Stay on the last step if we were there, so live edits show the result.
   const wasAtEnd = !trace || stepIndex >= trace.steps.length - 1;
-  trace = next;
+  trace = applyHints(next);
+  const warnings = trace.viz?.warnings ?? [];
+  editor.setHintWarnings(warnings);
   stale = false;
   stepIndex = wasAtEnd ? trace.steps.length - 1 : Math.min(stepIndex, trace.steps.length - 1);
 
@@ -196,6 +204,9 @@ function applyOutcome(outcome: RunOutcome): void {
   } else if (trace.error) {
     const where = trace.error.line ? ` on line ${trace.error.line}` : "";
     setBanner(`<strong>${escapeHtml(trace.error.type)}</strong>${where}: ${escapeHtml(trace.error.message)}`);
+  } else if (warnings.length) {
+    const more = warnings.length > 1 ? ` (and ${warnings.length - 1} more, underlined in the editor)` : "";
+    setBanner(`<strong>Hint on line ${warnings[0].line}</strong>: ${escapeHtml(warnings[0].message)}${more}`);
   } else {
     setBanner(null);
   }
@@ -204,14 +215,17 @@ function applyOutcome(outcome: RunOutcome): void {
 
 // ---------------------------------------------------------------- rendering
 
-function describe(step: Step): string {
+function describe(step: Step, prev: Step | undefined): string {
   const frame = step.stack[step.stack.length - 1];
   const func = frame?.func ?? "Global";
   switch (step.event) {
     case "call":
       return func === "Global" ? "Program starts" : `Called ${func}()`;
     case "line":
-      return `About to run line ${step.line}`;
+      // Matches the editor: yellow is the line that ran, blue is next.
+      return prev && prev.line >= 1 && prev.event === "line"
+        ? `Ran line ${prev.line}, next is line ${step.line}`
+        : `Next is line ${step.line}`;
     case "return": {
       if (func === "Global") return "Program finished";
       const value = step.returnValue;
@@ -220,6 +234,15 @@ function describe(step: Step): string {
     }
     case "exception":
       return `${step.exception?.type ?? "Error"} raised on line ${step.line}`;
+    case "yield": {
+      const value = step.returnValue;
+      if (!value) return `${func}() hands over to another generator`;
+      return `${func}() yields ${value.kind === "prim" ? value.repr : "an object"} and pauses`;
+    }
+    case "await":
+      return `${func}() waits at line ${step.line} and pauses`;
+    case "resume":
+      return `${func}() resumes at line ${step.line}`;
   }
 }
 
@@ -272,8 +295,26 @@ updateResetLayout();
 function renderMemoryView(): void {
   if (!trace || !trace.steps.length) return;
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
-  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode }));
+  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode }), "", pendingTransition);
+  refreshFocus();
 }
+
+// Hovering a box (or dragging it) highlights its arrows and the boxes they
+// connect to. The SVG is redrawn on every step, so the focus is re-applied.
+let hoveredNode: string | null = null;
+function refreshFocus(): void {
+  applyFocus(els.memory.querySelector<SVGSVGElement>(".memory-svg"), draggingNode ?? hoveredNode);
+}
+els.memory.addEventListener("pointerover", (event) => {
+  const key = (event.target as Element).closest<SVGGElement>(".node")?.dataset.nodeKey ?? null;
+  if (key === hoveredNode) return;
+  hoveredNode = key;
+  refreshFocus();
+});
+els.memory.addEventListener("pointerleave", () => {
+  hoveredNode = null;
+  refreshFocus();
+});
 
 els.modeArrows.addEventListener("click", () => setMemoryMode("arrows"));
 els.modeNested.addEventListener("click", () => setMemoryMode("nested"));
@@ -286,6 +327,7 @@ function render(updateMarks = true): void {
   els.scrubber.max = String(Math.max(0, total - 1));
   els.scrubber.value = String(stepIndex);
   els.scrubber.disabled = total <= 1;
+  els.play.disabled = total <= 1;
   els.first.disabled = els.prev.disabled = stepIndex <= 0;
   els.next.disabled = els.last.disabled = stepIndex >= total - 1;
 
@@ -301,7 +343,7 @@ function render(updateMarks = true): void {
 
   const step = trace.steps[stepIndex];
   const prev = trace.steps[stepIndex - 1];
-  els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step)}`;
+  els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step, prev)}`;
 
   renderMemoryView();
 
@@ -320,10 +362,11 @@ function render(updateMarks = true): void {
     return button;
   }));
   if (history && history.rows.length) {
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet }));
+    const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
+    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live }), "", live ? pendingTransition : 0);
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
-    if (current) loopView.reveal(current);
+    if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   } else {
     loopView.setContent(null, "When your code enters a loop, each iteration is stacked here so you can compare them.");
   }
@@ -348,17 +391,111 @@ function render(updateMarks = true): void {
   }
 }
 
-function goTo(index: number): void {
+/**
+ * Move to a step. A single step forward or back animates (from the previous
+ * drawing to the new one); jumps don't. Any navigation that isn't playback
+ * pauses playback.
+ */
+function goTo(index: number, how: { playing?: boolean } = {}): void {
   if (!trace) return;
-  stepIndex = Math.max(0, Math.min(trace.steps.length - 1, index));
-  render();
+  if (!how.playing) setPlaying(false);
+  const next = Math.max(0, Math.min(trace.steps.length - 1, index));
+  const single = Math.abs(next - stepIndex) === 1;
+  pendingTransition = single && !prefersReducedMotion()
+    ? Math.round(how.playing ? Math.min(ANIMATION_MS, (0.75 * 1000) / speed) : ANIMATION_MS)
+    : 0;
+  stepIndex = next;
+  try {
+    render();
+  } finally {
+    pendingTransition = 0;
+  }
 }
+
+// ---------------------------------------------------------------- animation
+
+const ANIMATION_MS = 260;
+/** How long the next render should animate for (set by goTo). */
+let pendingTransition = 0;
+
+// Loop history: a row per iteration, or one live row that animates.
+const LOOP_MODE_KEY = "algoviz:loop-mode";
+let loopMode: "stacked" | "animated" = stored(LOOP_MODE_KEY) === "animated" ? "animated" : "stacked";
+
+function setLoopMode(mode: "stacked" | "animated"): void {
+  loopMode = mode;
+  store(LOOP_MODE_KEY, mode);
+  els.loopStacked.setAttribute("aria-pressed", String(mode === "stacked"));
+  els.loopAnimated.setAttribute("aria-pressed", String(mode === "animated"));
+  render(false);
+}
+
+/** The loop's live state at a step, and at the step before, for animated mode. */
+function liveRows(t: Trace, index: number, history: LoopHistory): { prev: LoopRow; current: LoopRow } {
+  const { frame: frameId, loop, instance } = history.context;
+  const at = (i: number): LoopRow | null => {
+    const step = t.steps[i];
+    const context = step?.loops.find((c) => c.frame === frameId && c.loop === loop && c.instance === instance);
+    const frame = step && liveFrames(step).find((f) => f.id === frameId);
+    return context && frame ? { iteration: context.iteration, stepIndex: i, frame, heap: step.heap } : null;
+  };
+  const current = at(index) ?? history.rows[history.rows.length - 1];
+  return { prev: at(index - 1) ?? current, current };
+}
+
+// Playback: step forward on a timer.
+const SPEEDS = [0.5, 1, 2, 4, 8, 16];
+const SPEED_KEY = "algoviz:speed";
+let speed = SPEEDS.includes(Number(stored(SPEED_KEY))) ? Number(stored(SPEED_KEY)) : 2;
+let playing = false;
+let playTimer = 0;
+
+function setPlaying(on: boolean): void {
+  window.clearTimeout(playTimer);
+  if (on === playing) {
+    if (on) scheduleTick();
+    return;
+  }
+  playing = on;
+  els.play.textContent = on ? "Pause" : "Play";
+  els.play.setAttribute("aria-pressed", String(on));
+  if (!on || !trace) return;
+  if (stepIndex >= trace.steps.length - 1) goTo(0, { playing: true }); // play again from the start
+  scheduleTick();
+}
+
+function scheduleTick(): void {
+  playTimer = window.setTimeout(() => {
+    if (!playing) return;
+    if (!trace || stepIndex >= trace.steps.length - 1) {
+      setPlaying(false);
+      return;
+    }
+    goTo(stepIndex + 1, { playing: true });
+    scheduleTick();
+  }, 1000 / speed);
+}
+
+for (const value of SPEEDS) {
+  els.speed.append(new Option(`${value} ${value === 1 ? "step" : "steps"}/s`, String(value), false, value === speed));
+}
+els.speed.addEventListener("change", () => {
+  speed = Number(els.speed.value);
+  store(SPEED_KEY, String(speed));
+  if (playing) setPlaying(true); // restart the timer at the new speed
+});
+els.play.addEventListener("click", () => setPlaying(!playing));
+els.loopStacked.addEventListener("click", () => setLoopMode("stacked"));
+els.loopAnimated.addEventListener("click", () => setLoopMode("animated"));
+els.loopStacked.setAttribute("aria-pressed", String(loopMode === "stacked"));
+els.loopAnimated.setAttribute("aria-pressed", String(loopMode === "animated"));
 
 // ---------------------------------------------------------------- editor
 
 let liveTimer = 0;
 const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId, code: savedCode(language) }, {
   onChange(code) {
+    setPlaying(false);
     store(codeKey(language), code);
     updateProgramUI();
     window.clearTimeout(liveTimer);
@@ -374,11 +511,13 @@ const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId
     firstStep: () => goTo(0),
     lastStep: () => goTo(Infinity),
     swapPanels: () => setSwapped(!swapped),
+    togglePlay: () => setPlaying(!playing),
     toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
   },
 });
 
 function runNow(): void {
+  setPlaying(false);
   window.clearTimeout(liveTimer); // don't run the same code twice
   run(editor.getCode());
 }
@@ -581,6 +720,12 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) return;
+  // Space plays and pauses, except where it already means something.
+  if (event.key === " " && !(target instanceof HTMLButtonElement) && !(target instanceof HTMLTextAreaElement)) {
+    event.preventDefault();
+    setPlaying(!playing);
+    return;
+  }
   const moves: Record<string, () => void> = {
     ArrowLeft: () => goTo(stepIndex - 1),
     ArrowRight: () => goTo(stepIndex + 1),

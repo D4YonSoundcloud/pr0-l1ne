@@ -20,7 +20,7 @@ if (!file) {
 const source = readFileSync(file, "utf8");
 const isTypeScript = /\.(ts|mts|cts)$/.test(file);
 if (wantTrace) {
-  console.log(JSON.stringify((isTypeScript ? traceTypeScript : traceJavaScript)(source), null, 2));
+  console.log(JSON.stringify(await (isTypeScript ? traceTypeScript : traceJavaScript)(source), null, 2));
 } else {
   console.log((isTypeScript ? instrumentTypeScript : instrument)(source).code);
 }

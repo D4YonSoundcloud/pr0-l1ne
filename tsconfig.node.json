@@ -6,11 +6,14 @@
     ],
     "lib": [
       "ES2022",
-      "DOM"
+      "DOM",
+      "DOM.Iterable"
     ]
   },
   "include": [
-    "src/js/cli.ts"
+    "src/js/cli.ts",
+    "src/render/layout.test.ts",
+    "src/trace/hints.test.ts"
   ],
   "exclude": []
 }

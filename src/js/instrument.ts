@@ -33,7 +33,7 @@ import { generate } from "@babel/generator";
 import { parse } from "@babel/parser";
 import traverse, { type NodePath, type Scope } from "@babel/traverse";
 import * as t from "@babel/types";
-import type { LoopInfo } from "../trace/types";
+import type { LoopInfo, RawHint } from "../trace/types";
 
 /** The name the runtime is passed in as. Variables with this prefix are hidden. */
 export const RUNTIME = "__av";
@@ -44,6 +44,21 @@ export interface Instrumented {
   code: string;
   loops: LoopInfo[];
   indexNames: Record<string, string[]>;
+  /** `// viz: ...` comments, unparsed (see trace/hints.ts). */
+  hints: RawHint[];
+}
+
+/** Matches a hint comment's text: "viz: hide i". */
+const HINT = /^\s*viz\s*:(.*)$/;
+
+/** Every `// viz:` or `/* viz: *\/` comment, with its line. */
+function collectHints(ast: t.File): RawHint[] {
+  const hints: RawHint[] = [];
+  for (const comment of ast.comments ?? []) {
+    const match = HINT.exec(comment.value);
+    if (match) hints.push({ line: comment.loc?.start.line ?? 0, text: match[1].trim() });
+  }
+  return hints;
 }
 
 /** A parse error, with the line it happened on. */
@@ -121,6 +136,7 @@ export function instrument(source: string): Instrumented {
  * `this.x = x` for parameter properties): they run, but aren't traced.
  */
 export function instrumentAst(ast: t.File, source: string): Instrumented {
+  const hints = collectHints(ast);
   normalize(ast);
   const analysis = analyze(ast, source);
   transform(ast, analysis);
@@ -128,7 +144,7 @@ export function instrumentAst(ast: t.File, source: string): Instrumented {
   const loops = [...analysis.loops.values()].map((d) => d.info).sort((a, b) => a.line - b.line);
   const indexNames: Record<string, string[]> = {};
   for (const [name, subs] of analysis.indexNames) if (subs.size) indexNames[name] = [...subs].sort();
-  return { code: generate(ast).code, loops, indexNames };
+  return { code: generate(ast).code, loops, indexNames, hints };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,10 +293,9 @@ function analyze(ast: t.File, source: string): Analysis {
     },
 
     Function(path) {
-      // Generators and async functions can suspend mid-body, which the
-      // runtime's shadow call stack can't follow. They run untraced, and so
-      // do generated helpers, which have no source location.
-      if (path.node.async || path.node.generator || !path.node.loc) {
+      // Generated helpers (TypeScript enums and namespaces) have no source
+      // location: they run, but untraced.
+      if (!path.node.loc) {
         path.skip();
         return;
       }
@@ -343,9 +358,15 @@ function analyze(ast: t.File, source: string): Analysis {
 
     MemberExpression(path) {
       const node = path.node;
-      if (!node.computed || !t.isIdentifier(node.object)) return;
-      const names = analysis.indexNames.get(node.object.name) ?? new Set<string>();
-      analysis.indexNames.set(node.object.name, names);
+      if (!node.computed) return;
+      // grid[i] records "i" under "grid". grid[i][j] also records "j" under
+      // "grid[]": a name that indexes the rows of grid.
+      let key: string;
+      if (t.isIdentifier(node.object)) key = node.object.name;
+      else if (t.isMemberExpression(node.object) && node.object.computed && t.isIdentifier(node.object.object)) key = `${node.object.object.name}[]`;
+      else return;
+      const names = analysis.indexNames.get(key) ?? new Set<string>();
+      analysis.indexNames.set(key, names);
       const property = path.get("property");
       if (property.isIdentifier()) names.add(property.node.name);
       property.traverse({
@@ -367,6 +388,14 @@ const runtimeCall = (method: string, args: t.Expression[]) =>
   t.callExpression(t.memberExpression(t.identifier(RUNTIME), t.identifier(method)), args);
 
 const statement = (method: string, args: t.Expression[]) => t.expressionStatement(runtimeCall(method, args));
+
+/**
+ * Calls that belong to a frame pass it first. If the frame isn't on top of
+ * the runtime's call stack, it's a generator or async function resuming, and
+ * the runtime puts it back (see Runtime.ensure).
+ */
+const frameCall = (method: string, args: t.Expression[]) => runtimeCall(method, [t.identifier(FRAME), ...args]);
+const frameStatement = (method: string, args: t.Expression[]) => t.expressionStatement(frameCall(method, args));
 
 const VOID = () => t.unaryExpression("void", t.numericLiteral(0));
 
@@ -394,19 +423,19 @@ function transform(ast: t.File, a: Analysis): void {
         // Wrap the loop (with its label, if any, so `continue label` still works).
         const { id, line } = loop.info;
         out.push(t.blockStatement([
-          statement("loopEnter", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.outerVars)]),
-          t.tryStatement(t.blockStatement([node]), null, t.blockStatement([statement("loopExit", [t.stringLiteral(id)])])),
+          frameStatement("loopEnter", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.outerVars)]),
+          t.tryStatement(t.blockStatement([node]), null, t.blockStatement([frameStatement("loopExit", [t.stringLiteral(id)])])),
         ]));
         continue;
       }
       const info = a.lines.get(node);
-      if (info) out.push(statement("line", [t.numericLiteral(info.line), getter(info.vars)]));
+      if (info) out.push(frameStatement("line", [t.numericLiteral(info.line), getter(info.vars)]));
       const cont = a.continues.get(node);
       const contLoop = cont && a.loops.get(cont.loop);
       if (cont && contLoop) {
         // `continue` ends the iteration early, so record the end-of-iteration
         // snapshot here too.
-        out.push(statement("tail", [t.stringLiteral(contLoop.info.id), t.numericLiteral(contLoop.info.line), getter(cont.vars)]));
+        out.push(frameStatement("tail", [t.stringLiteral(contLoop.info.id), t.numericLiteral(contLoop.info.line), getter(cont.vars)]));
       }
       out.push(node);
       const fn = t.isFunctionDeclaration(node) ? a.functions.get(node) : undefined;
@@ -427,17 +456,66 @@ function transform(ast: t.File, a: Analysis): void {
         t.variableDeclarator(frame, runtimeCall("enter", [t.stringLiteral(name), t.numericLiteral(line), getter(vars, withThis)])),
       ]),
       t.tryStatement(
-        t.blockStatement([...body.body, statement("ret", [VOID(), getter(vars, withThis)])]),
-        t.catchClause(error, t.blockStatement([statement("raise", [error]), t.throwStatement(error)])),
+        t.blockStatement([...body.body, frameStatement("ret", [VOID(), getter(vars, withThis)])]),
+        t.catchClause(error, t.blockStatement([frameStatement("raise", [error]), t.throwStatement(error)])),
         t.blockStatement([statement("exit", [frame])]),
       ),
     ], body.directives);
   }
 
+  /**
+   * The program's own frame. It isn't popped when the script reaches its end,
+   * because async functions and timers may still run: the runtime records
+   * "Program finished" once they're all done (Runtime.finish).
+   */
+  function wrapProgram(body: t.Statement[], vars: string[]): t.Statement[] {
+    const frame = t.identifier(FRAME);
+    const error = t.identifier(ERROR);
+    return [
+      t.variableDeclaration("const", [
+        t.variableDeclarator(frame, runtimeCall("enter", [t.stringLiteral("Global"), t.numericLiteral(0), getter(vars)])),
+      ]),
+      t.tryStatement(
+        t.blockStatement([...body, frameStatement("mainDone", [getter(vars)])]),
+        t.catchClause(error, t.blockStatement([frameStatement("raise", [error]), t.throwStatement(error)])),
+      ),
+    ];
+  }
+
+  /** Put a replacement node where `ancestors` says the current node is. */
+  function replaceInParent(ancestors: t.TraversalAncestors, replacement: t.Node): void {
+    const parent = ancestors[ancestors.length - 1];
+    const slot = (parent.node as unknown as Record<string, unknown>)[parent.key];
+    if (Array.isArray(slot)) slot[parent.index!] = replacement;
+    else (parent.node as unknown as Record<string, unknown>)[parent.key] = replacement;
+  }
+
+  // Nodes this pass creates, so they aren't wrapped twice.
+  const created = new WeakSet<t.Node>();
+
   t.traverse(ast, {
     exit(node, ancestors) {
       if (t.isProgram(node)) {
-        node.body = [...wrapBody(t.blockStatement(processList(node.body)), "Global", 0, a.programVars, false).body];
+        node.body = wrapProgram(processList(node.body), a.programVars);
+        return;
+      }
+
+      // Pausing: `yield x` becomes
+      //   __av.resumed(f, yield __av.yielding(f, x))
+      // so the runtime knows the frame is leaving the stack, and when it's back.
+      if (t.isYieldExpression(node) && !created.has(node)) {
+        const inner = t.yieldExpression(
+          frameCall(node.delegate ? "delegating" : "yielding", [node.argument ?? VOID()]),
+          node.delegate,
+        );
+        created.add(inner);
+        replaceInParent(ancestors, frameCall("resumed", [inner]));
+        return;
+      }
+      if (t.isAwaitExpression(node) && !created.has(node)) {
+        const inner = t.awaitExpression(frameCall("awaiting", [node.argument]));
+        created.add(inner);
+        replaceInParent(ancestors, frameCall("resumed", [inner]));
         return;
       }
       if (t.isBlockStatement(node) || t.isStaticBlock(node)) {
@@ -452,13 +530,16 @@ function transform(ast: t.File, a: Analysis): void {
       const loop = a.loops.get(node);
       if (loop && t.isLoop(node) && t.isBlockStatement(node.body)) {
         const { id, line } = loop.info;
-        node.body.body.unshift(statement("loopIter", [t.stringLiteral(id)]));
-        node.body.body.push(statement("tail", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.bodyVars)]));
+        node.body.body.unshift(frameStatement("loopIter", [t.stringLiteral(id)]));
+        node.body.body.push(frameStatement("tail", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.bodyVars)]));
+        // `for await` pauses before every item without an await of its own,
+        // so the runtime wraps the iterable to see those pauses.
+        if (t.isForOfStatement(node) && node.await) node.right = frameCall("asyncIter", [node.right]);
         return;
       }
 
       if (t.isReturnStatement(node) && a.returns.has(node)) {
-        node.argument = runtimeCall("ret", [node.argument ?? VOID()]);
+        node.argument = frameCall("ret", [node.argument ?? VOID()]);
         return;
       }
 
@@ -468,11 +549,7 @@ function transform(ast: t.File, a: Analysis): void {
         // Closures: register captured variables so the heap view can show
         // them. Function declarations are registered in processList instead.
         if (fn.captured.length && (t.isFunctionExpression(node) || t.isArrowFunctionExpression(node))) {
-          const wrapped = runtimeCall("fn", [node, t.stringLiteral(fn.name), getter(fn.captured)]);
-          const parent = ancestors[ancestors.length - 1];
-          const slot = (parent.node as unknown as Record<string, unknown>)[parent.key];
-          if (Array.isArray(slot)) slot[parent.index!] = wrapped;
-          else (parent.node as unknown as Record<string, unknown>)[parent.key] = wrapped;
+          replaceInParent(ancestors, runtimeCall("fn", [node, t.stringLiteral(fn.name), getter(fn.captured)]));
         }
       }
     },
