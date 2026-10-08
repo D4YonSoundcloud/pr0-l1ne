@@ -4,6 +4,8 @@ PR0L1NE is a split-screen tool for seeing your code's data while you write it. P
 
 Binary trees are drawn top-down. Graphs (adjacency lists, matrices, tries, graphs of objects) are drawn as nodes and edges, with your algorithm's own state on them: the visited set filled in, the queue numbered, distances labeled, the search tree in green. Generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
 
+It also estimates your code's **time and space complexity** (O(n²), O(n log n), O(V + E)) from the shape of the code, checks the estimate against the run, and labels every loop and function in the editor with what it costs.
+
 ![Dijkstra's algorithm on a small road map: done places filled in, the heap numbered in the order it pops, distances beside each place](docs/graph-dijkstra.png)
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)
@@ -54,9 +56,10 @@ Open the URL Vite prints (usually http://localhost:5173). Pick **Python**, **Jav
 | `npm run build` | Type-checks, then builds a static site into `dist/`. |
 | `npm run preview` | Serves the built `dist/` folder locally. |
 | `npm run typecheck` | Runs the TypeScript compiler without building. |
-| `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's. |
-| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
+| `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
+| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
+| `npm run test:pyodide` | Runs the same tests inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
 | `npm run instrument -- file.js` | Prints the instrumented version of a JavaScript or TypeScript file. |
@@ -112,7 +115,7 @@ The **Open…** menu has 37 to 39 examples per language, grouped by topic. Each 
 | Linked lists and trees | Reversing a linked list, finding a cycle with fast and slow pointers, binary search tree insert, in-order traversal, a trie |
 | Graphs | Breadth-first search with the shortest path, recursive depth-first search, Dijkstra's algorithm, topological sort, a graph of objects |
 | Grids and dynamic programming | Grid paths, longest common subsequence, coin change, flood fill (number of islands), Fibonacci with a memo (Python and JavaScript) |
-| Functions, classes and generators / async | Recursion, closures, a class with methods, generators; async tasks and timers and array callbacks in JavaScript and TypeScript; a generic class and an enum in TypeScript |
+| Functions, classes and generators / async | Recursion, closures, a class with methods, generators; async tasks (`asyncio` in Python; with timers in JavaScript and TypeScript); array callbacks in JavaScript and TypeScript; a generic class and an enum in TypeScript |
 | Hints, step by step | Ten examples that teach [hints](#hints-viz-comments), from a single `hide` to every kind of hint at once |
 
 The same topics exist in every language, written the way that language would write them: a `deque` and `heapq` in Python, a `Map` and `Set` in JavaScript, typed `Record`s and generics in TypeScript.
@@ -288,6 +291,68 @@ Nesting stops 6 levels deep. A deeper chain continues in a new box joined by an 
 
 Boxes still drag the same way in nested mode. Nested objects move with the box they're in.
 
+### Memory sizes
+
+**Sizes** in the memory window's header shows how much memory everything takes, the way the index row shows positions. It's for building intuition: why a list of 1,000 ints is bigger than 1,000 × 8 bytes in Python, how much room a list keeps for growth, what a hash map costs per entry compared to an array.
+
+![Memory sizes on a Python list](docs/sizes-python.png)
+
+Sizes are drawn in their own color (teal by default; **Memory sizes** under Colors in the [Style panel](#styling-the-canvas)), so they never read as values:
+
+- **The label line** of each list, dict, set or object gets the object's own size and its total: `list · 120 B (room for 8) · total 288 B`. A box with a title (dicts, objects, graphs) shows it at the right of the title bar.
+- **Each cell** of a list, tuple or array gets its size, in a row above the index numbers, so you can see a Python int take 36 B (the 8-byte pointer plus the 28-byte int it points at).
+- **Each frame** says how much its variables hold (`holds 697 B`).
+- **The header** shows the whole program's total, everything reachable from every frame: **Program: 697 B**.
+- **The loop history** shows the total of each container, linked structure or graph on every row, so you can watch it grow iteration by iteration. A Python list that's appended to jumps in steps (172 B → 200 B → 260 B …) as it reallocates.
+
+**Own and total.** An object's own size is the object itself: its header and its slots. Its total adds everything it holds, all the way down. Anything reachable twice (two references to one node, a shared list) is counted once, so totals never double-count.
+
+**Room for N** (Python lists only) is the list's capacity: how many items fit before it has to grow. Python over-allocates so `append` is cheap on average, and this is where you see it.
+
+The menu next to the switch picks how sizes are counted. Each language remembers its own choice:
+
+| Model | For | How it counts |
+| --- | --- | --- |
+| **Python (64-bit)** | Python (default) | What CPython really uses on a 64-bit machine, from `sys.getsizeof`. Every value is an object: an int is 28 bytes, a float 24, an ASCII string 41 + its length, and a list slot is an 8-byte pointer to the object. |
+| **Textbook** | Python and JavaScript (default) | The model algorithm courses use: an 8-byte slot per element, numbers stored in the slot, one byte per character, 16 bytes (key and value) per hash map entry, 8 bytes per object field. An array of n numbers is 8n bytes. Language-neutral and easy to do in your head. Functions and classes aren't sized. |
+| **Estimated (V8)** | JavaScript | An estimate of what V8 (Chrome, Node) uses on 64-bit with pointer compression: 4-byte slots, small integers stored in the slot, other numbers as 12-byte heap numbers, 12-byte object headers, `Map` and `Set` as hash tables. JavaScript can't measure objects, so these are marked `≈`. |
+
+**Python sizes in the browser.** Pyodide is 32-bit WebAssembly, where pointers are 4 bytes, so `sys.getsizeof` there gives smaller numbers than your laptop would. The tracer converts every size to what 64-bit CPython reports, using rules measured on both (pointer-based objects double, ints gain 12 bytes, ASCII strings 20, dicts are worked out from their hash table). Lists, tuples, sets, dicts, strings and big ints come out exactly; instances and classes within a few percent.
+
+Turning sizes on costs almost nothing: they're computed once per step and cached, and stepping is no slower in practice (about 3 ms a step either way).
+
+### Time and space complexity
+
+The **Time · Space** button in the toolbar shows how the program's running time and extra memory grow with its input, like **Time O(n²) · Space O(1)** for bubble sort, or **Time O(V + E) · Space O(V)** for breadth-first search. The editor labels each loop with how many times it runs, and each function with what it costs:
+
+![Breadth-first search labeled in the editor: the while loop runs V times, the neighbor loop E times in total, the function is O(V + E) time and O(V) space](docs/complexity-editor.png)
+
+- **`× n`** after a loop: it runs n times each time it's reached. Nested loops multiply.
+- **`E in total`**: an inner loop that adds up to a total over the whole outer loop instead of multiplying it, like a BFS visiting each edge once, or a sliding window whose left edge only moves forward.
+- **`O(n log n) time · O(n) space`** after a function definition.
+
+Hover a label for the reasoning. Click the button for the whole explanation:
+
+![The complexity panel: the totals, what n means, and each function and loop with how it was sized](docs/complexity-panel.png)
+
+- **The sizes.** What n, m, V and E stand for in this program (`n = len(nums)`, `V = len(graph)`, `E = edges in graph`), with their values in this run. Sizes come from your own variable names: a loop over `range(len(nums))` is n, nested loops over a grid's rows and columns are n·m, a dict of neighbor lists gives V and E, and a linked structure of objects is counted in nodes.
+- **Each function**: its time and space, and how they were worked out (*calls itself twice on half of n, with n work per call: n log n in all*; *remembers its answers (a memo), so it does the work once per value of n*), with the run's own counts (*25 calls in all, 6 deep at most*).
+- **Each loop**: its label, whether it was sized from the code or from the run, and what the run did (*ran up to 5 times per run, expected about 5*). Click any row to jump to that line.
+- **Worth knowing**: costly operations hiding inside loops, like `queue.shift()` in JavaScript (it moves every item, so a BFS that uses it is O(V²) rather than O(V + E)), `x in some_list` in Python, or copying a slice.
+
+**How it's worked out.** First from the code's shape: nested loops multiply, code in sequence adds, `range(n)` is n, a loop that halves its range (`mid = (lo + hi) // 2`) is log n, and built-ins have their known costs (`sorted` is n log n, `in` on a list is n, on a set is 1). Recursion is solved by its pattern: one call on `n - 1` is n deep; two calls on halves with linear work is n log n; two calls on `n - 1` is 2ⁿ, unless the function keeps a memo.
+
+**Then it's checked against the run**, which fixes what reading the code alone gets wrong:
+
+- A loop the code doesn't bound (`while queue:`) is sized by how many times it ran, matched to the program's inputs: *ran 6 times, about len(graph) (6)*. These loops get a small **run** badge in the panel.
+- An inner loop that ran about as many times in total as its outer loop is **amortized**: it adds rather than multiplies. That's how a sliding window comes out O(n) and a BFS O(V + E), not O(n²) and O(V·E).
+- Recursion the code can't classify, like a flood fill or a DFS guarded by a visited set, is sized by how many calls the run made. Exponential recursion that made far fewer calls than 2ⁿ is pruned by something (a check, a cache), and is counted that way.
+- Collections your code builds (a queue, a `seen` set, a result list) are sized by how big they got, in terms of the inputs.
+
+**Space** is the extra memory beyond the input: collections the code creates and fills, copies (slices, `sorted()`, `[...arr]`), and the call stack's depth for recursion. The inputs themselves aren't counted.
+
+It's the **worst case for the code's shape**, not the average case. An early `break` or a lucky input doesn't make a loop count for less. Turn the editor labels off with the checkbox in the panel (it's remembered).
+
 ### Loop history
 
 ![Reversing a string with two pointers](docs/rev-loop.png)
@@ -399,9 +464,9 @@ A paused frame stays on the canvas until its generator finishes or is thrown awa
 
 **JavaScript's event loop** runs too. After your script ends, pending `await`s continue, and `setTimeout` and `setInterval` callbacks run, in the order their timers would fire. Timers run on a **virtual clock**: a `setTimeout(f, 5000)` runs immediately rather than after five seconds, but always after timers due sooner, so the program behaves as it would for real without making you wait. The **Program finished** step comes after the last callback. A promise rejection that nothing handles stops the run with an error, as it would in Node. `for await` loops work, and so do `async` generators.
 
-**Python** follows the same rules for generators, generator expressions and `asyncio` coroutines (`asyncio.run`, `await`, `asyncio.gather`, `asyncio.sleep`). A generator object in the heap says where it's paused, like `fibonacci() paused at line 4`. Python has no virtual clock, so `asyncio.sleep(2)` really waits two seconds; keep sleeps short.
+**Python** follows the same rules for generators, generator expressions and `asyncio` coroutines (`asyncio.run`, `await`, `asyncio.gather`, `asyncio.sleep`). A generator object in the heap says where it's paused, like `fibonacci() paused at line 4`. `asyncio` gets a **virtual clock** too: `asyncio.sleep(2)` costs no real time, but tasks still wake in the order their sleeps end. That works the same in the browser and on your machine (see [how](#asyncio-on-a-virtual-clock)).
 
-The examples include "Generator (Fibonacci)" in all three languages, and "Async tasks and timers" for JavaScript and TypeScript.
+The examples include "Generator (Fibonacci)" in all three languages, "Async tasks (asyncio)" for Python, and "Async tasks and timers" for JavaScript and TypeScript.
 
 ---
 
@@ -599,7 +664,7 @@ Every step stores the active loops for all frames on the stack, as `{frame, loop
 
 `sys.settrace` doesn't announce "yield" or "resume", but they can be recognized from the events it does send:
 
-- **A yield or await looks like a return.** When a generator yields, the interpreter sends a `return` event for its frame. The difference is visible in the bytecode: after a yield, the frame's next instruction (`co_code[f_lasti]`) is `RESUME`, the instruction a generator restarts at. A real return isn't followed by one. Whether the frame is a generator or a coroutine (`co_flags`) decides whether the step is called `yield` or `await`.
+- **A yield or await looks like a return.** When a generator yields, the interpreter sends a `return` event for its frame. The difference is visible in the bytecode: after a yield, the frame is parked on the yield itself (`YIELD_VALUE` in Python 3.12, which the browser runs) or on the `RESUME` after it (3.13), so `co_code[f_lasti]` is one of those. A real return isn't. Whether the frame is a generator or a coroutine (`co_flags`) decides whether the step is called `yield` or `await`.
 - **A resume looks like a call.** When a paused frame continues, the interpreter sends a `call` event for that same frame object. The tracer keeps paused frames in a dictionary by frame id, so a `call` for a frame it already knows is a resume.
 - **Exceptions need care.** Closing a generator (`gen.close()`, or the generator being garbage collected) raises `GeneratorExit` at the `yield`, which can also end with `RESUME` next. The tracer remembers frames an exception is passing through (`unwinding`), so their next `return` is a real exit, not a yield. Await's internal `StopIteration` plumbing isn't shown as an exception step.
 
@@ -923,6 +988,48 @@ Two pieces of build configuration make this work, both in [`vite.config.ts`](vit
 
 If you upgrade Monaco, the feature import list in `monaco.ts` may need regenerating. The command to do that is in the comment at the top of the file.
 
+### 17. Memory sizes
+
+Sizes are worked out in two places.
+
+**Python's come from the tracer.** [`tracer.py`](src/worker/tracer.py) records `size` on every container, instance, function and class, on strings and bytes (whose length the shortened repr can't tell), and on ints too big for 30 bits. Lists also get `capacity`, from `(getsizeof(list) - getsizeof([])) // pointer size`. Fixed sizes (a small int is always 28 bytes) aren't recorded, to keep traces small.
+
+In the browser, `struct.calcsize("P")` is 4, so `size64()` converts each size to its 64-bit equivalent: objects made of pointers double; ints and bools add 12 bytes (the header grows by 12, and the 30-bit digits stay 4 bytes); floats and complex add 8; strings add 20 (ASCII) or 28; bytes add 16; `None` is 16. Dicts don't scale evenly, because their index table's width depends on the table size, so `dict_size64()` solves for the number of slots and usable entries from the 32-bit size and rebuilds the 64-bit layout. An instance's size includes its attribute dict, as you'd count it by hand. These rules were checked against 64-bit CPython by running the tracer's tests in Pyodide (`npm run test:pyodide`).
+
+**Everything else is [`trace/memory.ts`](src/trace/memory.ts).** `stepSizes(step, model)` returns, for one step, each object's own size and total, each cell's size, each frame's total and the program total. Python's model reads the recorded sizes (and the fixed ones: int 28, float 24, `None` 16, and so on). The textbook and V8 models are formulas over the trace's own structure, so they need nothing from the tracer: a JavaScript string's real length comes along when its repr is shortened. Totals walk references with a `seen` set, so shared objects count once. A cell's size is its slot plus what it holds: 8 bytes for a textbook number; 8 + 28 for a Python int, since the slot points at a separate object.
+
+Results are cached in a `WeakMap` keyed by step, so drawing both views, or stepping back and forth, computes each step once. The renderers only add text: a `<tspan class="mem-size">` in label lines, a `cell-size` row above the index row, a `box-size` in title bars and a `loop-size` under each row's name in the loop history. Cells widen to fit their size where needed, and [`layout.test.ts`](src/render/layout.test.ts) renders every example with each model to check that sizes never make boxes overlap or arrows cross them.
+
+### asyncio on a virtual clock
+
+Pyodide's event loop is the browser's, and the browser's can't block. So Pyodide replaces `asyncio.run` with a version that hands the coroutine to that loop, which only works when WebAssembly stack switching is set up, and even then runs your coroutines from browser callbacks, outside `sys.settrace`. Instead, while a program that mentions `asyncio` is traced, the tracer installs the standard `asyncio.run`, clears Pyodide's running loop, and sets an event loop policy whose loops are the standard pure-Python `BaseEventLoop` with one change: where it would wait for I/O, it moves its clock forward to the next timer instead. Sleeps cost no time, and tasks still wake in the right order. If every task is waiting and no timer is due, which would hang forever, it stops with an error instead. Everything is put back after the run. The same loop is used outside the browser, so traces match.
+
+### 18. Complexity estimates
+
+Three parts: each tracer describes the code's shape, [`trace/bigO.ts`](src/trace/bigO.ts) does the arithmetic, and [`trace/complexity.ts`](src/trace/complexity.ts) puts the two together with the run.
+
+**The shape** (`Trace.cost`, a `CostInfo`) is a tree per function, written by `cost_analysis()` in [`tracer.py`](src/worker/tracer.py) from Python's `ast`, and by [`js/cost.ts`](src/js/cost.ts) from the Babel AST before instrumentation, in the same language-neutral format:
+
+- **loop** nodes, with the `LoopInfo` id when there is one, and a bound: `size` (a list of `SizeRef`s that add), `log`, `const`, or `unknown`. Comprehensions and array callbacks (`arr.map(x => ...)`) are loops too, with their body inside.
+- **call** nodes for the program's own functions, with each argument as a `SizeRef` the callee's sizes can be renamed to, and for recursive calls, how the argument shrinks: `minus` (`n - 1`, `i + 1`, `items[1:]`), `half` (`n // 2`, `items[:mid]` where `mid` was assigned a halving), `child` (`node.left`), or `unknown`. A parameter that moves both ways across calls (`r + 1` and `r - 1`) is a search, so it's `unknown`. A call that's the whole of a `return` is marked `alt`: of `return f(a)` in one branch and `return f(b)` in another, only one runs.
+- **op** nodes for built-ins that aren't O(1), with their size and, for `in` and friends, the container's name, so the run can say whether it was a list or a set.
+- **alloc** nodes for memory: a sized creation (`[0] * n`, a comprehension, a slice) or one item `into` a collection that grows.
+
+A `SizeRef` names a size the way the program does: `{ name: "nums", len: true }` is `len(nums)`; `{ name: "n" }` is the value of n; `inner` is one item's length (a node's neighbor list, a grid's row). Names are resolved through simple assignments (`n = len(nums)`, `hi = len(nums) - 1`, `left = merge_sort(items[:mid])` is as big as `items`) and loop variables (`range(i)` inside `for i in range(n)` is n). The analysis never stops a run: if it throws, the trace just has no `cost`.
+
+**The algebra** in `bigO.ts` represents an expression as a sum of terms, each a product over sizes of a power, a log power, an exponential and a factorial. Adding drops terms another term dominates (n² + n is n²) but keeps terms in different sizes (V + E). A per-item size like "neighbors of one node" can be 0, so V·d doesn't swallow V. `format()` writes the textbook forms: superscripts, `n log n`, `n·m`, `2ⁿ`.
+
+**Putting it together**, `estimateComplexity(trace)` (cached per trace, about 10 to 25 ms for a 3,000-step run, done after the step is drawn):
+
+1. Turns each `SizeRef` into a symbol, by looking the name up in the run: a list's length, a number's value, an object's count of same-class objects reachable from it (a linked list's nodes). A dict whose values are lists is a graph, so its length is V and the sum of its lists is E.
+2. Works out each function bottom-up. A loop's cost is its bound times its body. Calls substitute the callee's cost, renamed from its parameters to the caller's arguments. Recursion is solved from the number of self-calls `a`, how they shrink, and the work per call `f`: `half` uses the master theorem (with `a = 2` and linear `f`, n log n), `minus` gives n·f for one call and aⁿ for more, `child` gives (nodes)·f, and a memo gives (values)·f.
+3. Checks against the run. `RunFacts` counts each loop's passes per run (from the steps' `LoopContext`s) and, for a nested loop, its total passes over each run of the loop around it; and each function's calls and deepest recursion. `match()` turns a count into a size by comparing it with the values of the inputs that existed when that code ran: close to a size, about log₂ of one (only for sizes of 16 or more, since small logs are indistinguishable from "a few"), about a square, or "at most" the next size up.
+4. Names the sizes: graph sizes V, E and d; one-letter variables keep their names; everything else gets n, m, k... A grid's rows times columns is written n·m.
+
+Explanations are written with placeholders for any Big-O they mention, filled in once the sizes have their letters. The editor labels are an `::after` per label with its text in a generated stylesheet, since the trimmed-down Monaco build doesn't draw injected text. [`complexityPanel.ts`](src/complexityPanel.ts) draws the chip, the panel and the labels' hover text.
+
+[`complexity.test.ts`](src/trace/complexity.test.ts) pins the textbook answer for every algorithm example in all three languages (bubble sort O(n²), merge sort O(n log n), BFS O(V + E), Kruskal's O(E log E), and so on), plus amortization, recursion patterns and the notes.
+
 ---
 
 ## Project structure
@@ -935,6 +1042,8 @@ algoviz/
 ├── tsconfig.node.json          ...and for Node-only code (the CLI, Node-run tests)
 ├── vite.config.ts
 ├── docs/                       Images used in this README
+├── scripts/
+│   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
 └── src/
     ├── main.ts                 App state, run scheduling, rendering, controls
     ├── languages.ts            Per-language worker, Monaco mode and examples
@@ -945,6 +1054,7 @@ algoviz/
     ├── appearance.ts           Canvas style settings, presets, applying them
     ├── appearance.test.ts      Style settings tests
     ├── stylePanel.ts           The Style panel in the toolbar
+    ├── complexityPanel.ts      The complexity chip, its panel and the editor labels
     ├── examples/
     │   ├── index.ts            The Example type (group, name, code)
     │   ├── python.ts           Python examples, grouped by topic
@@ -960,7 +1070,13 @@ algoviz/
     │   ├── linked.ts           Linked lists and trees (loop history and memory)
     │   ├── linked.test.ts      Linked structure tests
     │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
-    │   └── graph.test.ts       Graph tests
+    │   ├── graph.test.ts       Graph tests
+    │   ├── memory.ts           Memory sizes: the Python, textbook and V8 models
+    │   ├── memory.test.ts      Memory size tests
+    │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
+    │   ├── bigO.test.ts        Big-O tests
+    │   ├── complexity.ts       Time and space estimates: the code's shape plus the run
+    │   └── complexity.test.ts  Every example's complexity, in all three languages
     ├── render/
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointers
     │   ├── memory.ts           The memory view (arrows or nested, draggable boxes)
@@ -975,6 +1091,7 @@ algoviz/
     │   └── viewport.ts         Pan, zoom and node dragging for both sections
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel)
+    │   ├── cost.ts             The code's shape, for complexity estimates
     │   ├── typescript.ts       Strips TypeScript types, then instruments as JS
     │   ├── runtime.ts          Records steps: shadow stack, loops, serialization
     │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
@@ -1005,11 +1122,12 @@ The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every
 # See the trace for a program
 npm run trace -- path/to/program.py | python3 -m json.tool | less
 
-# Run the tests
+# Run the tests under your Python, then under Pyodide (the browser's Python)
 npm run test:tracer
+npm run test:pyodide
 ```
 
-Use Python 3.12 locally to match Pyodide 0.27's interpreter. Line-event behavior (which lines fire, and when) can differ slightly between Python versions, and loop detection depends on it. Vite reloads the worker when `tracer.py` changes, so the browser picks up edits automatically.
+Use Python 3.12 locally to match Pyodide 0.27's interpreter, and run `npm run test:pyodide` before you're done: it runs the same tests in the real browser runtime, which is 32-bit and differs in small ways (that's how a Python 3.12 difference in where generators pause was caught). Line-event behavior (which lines fire, and when) can differ slightly between Python versions, and loop detection depends on it. Vite reloads the worker when `tracer.py` changes, so the browser picks up edits automatically.
 
 **Changing the JavaScript or TypeScript tracer.** Everything in `src/js/` except the worker entry points runs in Node, so you can work on it without a browser. The CLI picks TypeScript for `.ts` files:
 
@@ -1096,8 +1214,23 @@ Everything after the worker only depends on the trace format, so any language wo
 - **No `input()`.** Hard-code your test data.
 - **Imported packages.** The standard library works. Third-party packages would need loading through Pyodide's `micropip` first, which isn't wired up.
 - **One-line loops** like `for x in xs: total += x` put the header and body on the same line, so iterations can't be told apart. Put the body on its own line.
-- **`asyncio` is only tested outside the browser.** Generator and coroutine tracing is tested with CPython 3.12, the same version Pyodide runs. But Pyodide's `asyncio` event loop is built on the browser's, which can't block, so `asyncio.run()` may not work there the way it does on your machine. Plain generators don't depend on the event loop and work the same everywhere. `asyncio.sleep()` also takes real time.
+- **`asyncio` runs on a virtual clock.** Sleeps cost no time, so code that measures elapsed time with `time.time()` sees almost none. There's no real I/O: sockets, subprocesses and `run_in_executor` aren't available in the browser.
 - **Code that hangs inside a single C call** is stopped by the 10-second watchdog, which restarts the worker. The next run then waits a few seconds while Pyodide reloads (from the browser cache). A faster alternative is Pyodide's interrupt buffer, which needs a `SharedArrayBuffer` and therefore cross-origin isolation headers (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`) on the server. It's a worthwhile upgrade, but it makes hosting and CDN loading fussier, so it's left out of this version.
+
+**Complexity estimates**
+
+- **They're estimates.** Complexity in general can't be computed from code (it's undecidable), so this reads common patterns and checks them against one run. Unusual code can fool it, and a loop sized from the run is only as good as the run: with tiny inputs, n and log n, or V and E, can be hard to tell apart. The panel says which parts came from the run.
+- **One run, one input.** Loops the code doesn't bound are sized from this run's counts. Best and worst cases (an already-sorted list, a lucky search) aren't separated: the code's shape gives the worst case, and the run gives what happened.
+- **Worst case, not average.** An early `break` doesn't make a loop count for less, and a hash lookup is O(1) (its average), not O(n).
+- **Your own data structures** count as their operations' cost in your code: a heap you wrote yourself is as fast as its loops say. Library internals are the standard costs (`heapq` is log n, `deque.popleft` is 1, `list.pop(0)` and `array.shift()` are n).
+- **Mutual recursion** (f calls g calls f) is counted at the first function's call site, not solved.
+- **Space** counts the extra memory the code builds, not the input. Structures that grow and shrink (a stack that's pushed and popped) count at their largest.
+
+**Memory sizes**
+
+- **Small ints and short strings are counted every time they're used.** CPython shares one object for each int from -5 to 256 (and some strings), so a list of zeros really holds eight-byte pointers to a single `0`. Sizes count the int in every cell anyway, and so do totals, since that's the cost of numbers in general and sharing is an optimization you can't rely on. Shared lists, dicts and objects are counted once.
+- **V8 sizes are estimates.** JavaScript has no `getsizeof`, and V8's real layout depends on how objects were built (hidden classes, in-object versus out-of-object properties, array element kinds), so they're marked `≈`. Python's are exact for containers and strings, and within a few percent for instances.
+- **Library internals aren't counted.** A class's methods, the interpreter's own bookkeeping and memory the allocator keeps spare are left out, as is anything the trace doesn't show (containers beyond the 60-item cap are sized from their length).
 
 **JavaScript**
 
@@ -1172,3 +1305,5 @@ Everything listed for JavaScript applies, plus:
 - Moving boxes with the keyboard.
 - Exporting and importing styles, to share a theme.
 - Routing arrows around boxes you've dragged, not just the automatic layout.
+- Best and worst cases for complexity: run the code on inputs of several sizes and shapes (sorted, reversed, random) and fit each growth curve, alongside the estimate from the code.
+- A `viz: complexity n = len(nums)` hint to name the input size when the estimate picks the wrong one.

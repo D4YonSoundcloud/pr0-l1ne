@@ -612,6 +612,29 @@ for _ in range(6):
 print(first)
 `,
   },
+  {
+    group: FUNCTIONS,
+    name: "Async tasks (asyncio)",
+    code: `import asyncio
+
+# asyncio.sleep runs on a virtual clock here: no real waiting, but tasks
+# still wake up in the order their timers would fire.
+async def download(name, seconds):
+    print("start", name)
+    await asyncio.sleep(seconds)
+    print("done", name)
+    return len(name)
+
+async def main():
+    sizes = await asyncio.gather(
+        download("photo.png", 3),
+        download("notes.txt", 1),
+    )
+    print("sizes", sizes)
+
+asyncio.run(main())
+`,
+  },
   // ------------------------------------------------------------- hints
   {
     group: HINTS,

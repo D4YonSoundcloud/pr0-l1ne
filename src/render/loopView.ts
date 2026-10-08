@@ -14,6 +14,16 @@ import { findLinkedTrack, linkedRow, linkedSignature, treeDepths, type LinkedRow
 import type { LoopHistory, LoopRow } from "../trace/loopHistory";
 import { findGraphs, graphOverlay, graphSignature, layoutFor, legendOverlaysFor, type GraphData, type GraphOverlay, type Scope } from "../trace/graph";
 import { graphPicture, type GraphPicture } from "./graphView";
+import { formatBytes, stepSizes, type SizeModel } from "../trace/memory";
+
+/**
+ * A name to the left of a row's content, with its size under it when sizes
+ * are shown (in their own color), so storage growth reads down the rows.
+ */
+function nameLabel(g: SVGGElement, x: number, midY: number, name: string, size: string | null): void {
+  g.append(s("text", { class: "container-name", x, y: size ? midY - 7 : midY, "text-anchor": "end", "dominant-baseline": "central" }, name));
+  if (size) g.append(s("text", { class: "loop-size", x, y: midY + 8, "text-anchor": "end", "dominant-baseline": "central" }, size));
+}
 import type { HeapObject, SequenceObject, Trace, Value } from "../trace/types";
 import {
   CELL_H, CELL_MIN_W, INDEX_H, POINTER_H, arrowMarkers, cellWidth, changeArrow, pointerMarkers, pointersFor,
@@ -171,12 +181,13 @@ function drawTrack(
   state: LinkedRow,
   prev: LinkedRow | null,
   cellsY: number,
+  size: string | null,
 ): void {
   const { track, valueW, nodeW } = layout;
   const columnX = (index: number) => layout.x + index * (nodeW + NODE_GAP);
   const midY = cellsY + CELL_H / 2;
   const trackG = s("g", { class: "linked-track" });
-  g.append(s("text", { class: "container-name", x: layout.x - 8, y: midY, "text-anchor": "end", "dominant-baseline": "central" }, track.typeName));
+  nameLabel(g, layout.x - 8, midY, track.typeName, size);
 
   track.order.forEach((id, column) => {
     const node = state.nodes.get(id);
@@ -305,6 +316,7 @@ function drawTree(
   state: LinkedRow,
   prev: LinkedRow | null,
   cellsY: number,
+  size: string | null,
 ): void {
   const { track, valueW, nodeW } = layout;
   const depths = treeDepths(state);
@@ -314,7 +326,7 @@ function drawTree(
   // Edges go behind the nodes and labels, so labels stay readable.
   const edgesG = s("g", { class: "tree-edges" });
   g.append(edgesG);
-  g.append(s("text", { class: "container-name", x: layout.x - 8, y: cellsY + CELL_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, track.typeName));
+  nameLabel(g, layout.x - 8, cellsY + CELL_H / 2, track.typeName, size);
 
   track.order.forEach((id, column) => {
     const node = state.nodes.get(id);
@@ -370,6 +382,8 @@ function drawTree(
 
 export interface LoopViewOptions {
   hideQuiet: boolean;
+  /** Show each container's total memory size under its name. */
+  sizes?: SizeModel | null;
   /**
    * Animated mode: draw just the live state (`current`), compared with the
    * previous step (`prev`), instead of a row per iteration. What to show and
@@ -613,10 +627,17 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       return !!prevRow && (!a || !b || valueKey(a) !== valueKey(b));
     }));
 
+    // This row's sizes come from its own step.
+    const sizes = options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null;
+    const totalOf = (id: string) => {
+      const total = sizes?.total(id);
+      return sizes && total !== null && total !== undefined ? formatBytes(total, sizes.approximate) : null;
+    };
+
     for (const column of columns) {
       const obj = containerIn(row, column.name);
       const nameX = column.x - 8 - (column.grid?.rowIndexW ?? 0);
-      g.append(s("text", { class: "container-name", x: nameX, y: midY, "text-anchor": "end", "dominant-baseline": "central" }, column.name));
+      nameLabel(g, nameX, midY, column.name, obj ? totalOf(obj.id) : null);
       if (!obj) continue;
       if (column.grid) {
         drawGrid(g, column, row, prevDrawn?.row ?? null, cellsY, labelsY, trace, changedNames);
@@ -681,13 +702,22 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     if (trackLayout) {
       // Highlights compare with the row drawn just above, like the containers.
       const prevState = prevDrawn ? trackRows[prevDrawn.index] : null;
-      if (isTree) drawTree(g, trackLayout, trackRows[index]!, prevState, cellsY);
-      else drawTrack(g, arrowLayer, trackLayout, trackRows[index]!, prevState, cellsY);
+      // The linked structure's size: every node in this row, once.
+      const nodes = [...trackRows[index]!.nodes.keys()].map((id) => ({ kind: "ref" as const, id }));
+      const trackSize = sizes ? formatBytes(sizes.of(nodes), sizes.approximate) : null;
+      if (isTree) drawTree(g, trackLayout, trackRows[index]!, prevState, cellsY, trackSize);
+      else drawTrack(g, arrowLayer, trackLayout, trackRows[index]!, prevState, cellsY, trackSize);
     }
 
     const graphRow = graphRows[index];
     if (graphLayout && firstGraph) {
-      g.append(s("text", { class: "container-name", x: graphLayout.x - 8, y: midY, "text-anchor": "end", "dominant-baseline": "central" }, firstGraph.name));
+      let graphSize: string | null = null;
+      if (sizes && graphRow) {
+        graphSize = graphRow.graph.objectNodes
+          ? formatBytes(sizes.of([...graphRow.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id }))), sizes.approximate)
+          : totalOf(graphRow.graph.hostId);
+      }
+      nameLabel(g, graphLayout.x - 8, midY, firstGraph.name, graphSize);
       if (graphRow) {
         const prevGraph = prevDrawn ? graphRows[prevDrawn.index] : null;
         graphPicture(graphRow.graph, graphLayout.layout, graphRow.overlay, {

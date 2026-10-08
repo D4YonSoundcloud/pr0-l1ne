@@ -13,6 +13,7 @@ import { diffSteps } from "../trace/diff";
 import { applyHints } from "../trace/hints";
 import type { Trace } from "../trace/types";
 import { renderMemory, type MemoryMode, type Point } from "./memory";
+import { SIZE_MODELS, type SizeModel } from "../trace/memory";
 import { crosses, overlaps, type Rect } from "./route";
 
 function tracePython(source: string): Trace | null {
@@ -63,14 +64,21 @@ const programs: [string, Example, Tracer][] = [
   ...TYPESCRIPT_EXAMPLES.map((e) => ["typescript", e, (c: string) => traceTypeScript(c, 3000)] as [string, Example, Tracer]),
 ];
 
-describe.each(programs)("%s: %s", (_language, example, trace) => {
-  it.each<MemoryMode>(["arrows", "nested"])("%s mode: no overlapping boxes, no arrows through boxes", async (mode) => {
+describe.each(programs)("%s: %s", (language, example, trace) => {
+  // Without sizes in both modes, then each size model once (sizes make labels
+  // and cells wider, so they get the same checks).
+  const [first, second] = SIZE_MODELS[language === "python" ? "python" : "javascript"].map((m) => m.value);
+  const cases: [string, MemoryMode, SizeModel | null][] = [
+    ["arrows", "arrows", null], ["nested", "nested", null],
+    [`arrows, ${first} sizes`, "arrows", first], [`nested, ${second} sizes`, "nested", second],
+  ];
+  it.each(cases)("%s: no overlapping boxes, no arrows through boxes", async (_name, mode, sizes) => {
     const raw = await trace(example.code);
     if (!raw) return;
     const t = applyHints(raw);
     expect(t.error).toBeNull();
     for (let i = 0; i < t.steps.length; i++) {
-      const { boxes, arrows } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode }));
+      const { boxes, arrows } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode, sizes }));
       const list = [...boxes];
       for (let a = 0; a < list.length; a++) {
         for (let b = a + 1; b < list.length; b++) {

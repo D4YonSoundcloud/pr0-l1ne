@@ -34,6 +34,7 @@ import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
 import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
 import { graphOverlay, graphsAt, layoutFor, legendOverlaysFor, stepScopes, type GraphData, type GraphOverlay } from "../trace/graph";
 import { graphPicture, type GraphPicture } from "./graphView";
+import { formatBytes, stepSizes, type SizeModel, type StepSizes } from "../trace/memory";
 
 interface OutRef {
   from: Point;
@@ -65,6 +66,8 @@ export interface MemoryLayout {
   /** The node being dragged right now, drawn on top of the others. */
   raise?: string | null;
   mode?: MemoryMode;
+  /** Show memory sizes under this model (see trace/memory.ts). */
+  sizes?: SizeModel | null;
 }
 
 /**
@@ -165,7 +168,37 @@ interface Ctx {
   functionKeyword: string;
   /** Index pointers for a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
   pointersFor(id: string, level?: 0 | 1): Pointers;
+  /** Memory sizes, when they're shown. */
+  sizes: StepSizes | null;
 }
+
+/** Height of the row of sizes above a list's cells (when sizes are shown). */
+const SIZE_H = 12;
+
+/**
+ * An object's size for its label: "184 B (room for 16) · total 436 B".
+ * Null when sizes are off or the model has no answer for this object.
+ */
+function sizeLabel(ctx: Ctx, id: string): string | null {
+  const sizes = ctx.sizes;
+  if (!sizes) return null;
+  const own = sizes.own(id);
+  if (own === null) return null;
+  const obj = ctx.step.heap[id];
+  const capacity = sizes.capacity(id);
+  const room = capacity !== null && obj?.kind === "list" && capacity > obj.length ? ` (room for ${capacity})` : "";
+  const total = sizes.total(id);
+  const more = total !== null && total > own ? ` · total ${formatBytes(total, sizes.approximate)}` : "";
+  return `${formatBytes(own, sizes.approximate)}${room}${more}`;
+}
+
+/** A label line with a size after it, the size in its own color. */
+function labelWithSize(x: number, y: number, label: string, size: string | null): SVGTextElement {
+  return s("text", { class: "seq-label", x, y }, label, size && s("tspan", { class: "mem-size" }, `${label ? " · " : ""}${size}`));
+}
+
+const sizedLabelWidth = (label: string, size: string | null) =>
+  uiTextWidth(label) + (size ? uiTextWidth(` · ${size}`) * 1.08 : 0);
 
 /**
  * What goes in a value slot: a primitive or a reference dot ("cell"), or in
@@ -225,7 +258,7 @@ function tableShape(
   title: string,
   rows: TableRow[],
   ctx: Ctx,
-  opts: { variant: string; isNew?: boolean; emptyText?: string; nested?: boolean },
+  opts: { variant: string; isNew?: boolean; emptyText?: string; nested?: boolean; sizeText?: string | null },
 ): Shape {
   const views = rows.map((row) => viewOf(row.value, ctx, ROW_H - 8));
   const leftW = rows.length ? Math.max(...rows.map((r) => labelWidth(r.label))) : 0;
@@ -236,7 +269,8 @@ function tableShape(
   const emptyW = opts.emptyText ? uiTextWidth(opts.emptyText, 12) + 24 : 0;
   // Function and class titles are set in the code font (see styles.css).
   const codeTitle = /\b(function|class)\b/.test(opts.variant);
-  const titleW = codeTitle ? textWidth(title, 12.5) + 22 : uiTextWidth(title, 12) + 28;
+  const sizeW = opts.sizeText ? uiTextWidth(opts.sizeText, 11.5) * 1.08 + 14 : 0;
+  const titleW = (codeTitle ? textWidth(title, 12.5) + 22 : uiTextWidth(title, 12) + 28) + sizeW;
   const w = Math.max(titleW, leftW + rightW + 34, emptyW, opts.nested ? 0 : 120);
   const rowHeights = views.map((v) => Math.max(ROW_H, v.h + 2 * NEST_PAD));
   const bodyH = rows.length ? rowHeights.reduce((a, b) => a + b, 0) + 6 : opts.emptyText ? ROW_H : 0;
@@ -252,6 +286,9 @@ function tableShape(
         s("path", { class: "box-header", d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z` }),
         s("text", { class: "box-title", x: x + 10, y: y + HEADER_H / 2, "dominant-baseline": "central" }, title),
       );
+      if (opts.sizeText) {
+        g.append(s("text", { class: "box-size", x: x + w - 9, y: y + HEADER_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, opts.sizeText));
+      }
       if (!rows.length && opts.emptyText) {
         g.append(s("text", { class: "box-empty", x: x + 10, y: y + HEADER_H + ROW_H / 2, "dominant-baseline": "central" }, opts.emptyText));
       }
@@ -320,19 +357,20 @@ function gridShape(
   const rowIndexW = textWidth(String(rows.length - 1), 10.5) + 10;
   const pointersW = rowPointersWidth(opts.pointers);
   const truncated = obj.length > obj.items.length;
-  const showLabel = !opts.nested || truncated;
+  const size = sizeLabel(ctx, obj.id);
+  const showLabel = !opts.nested || truncated || !!size;
   const label = `${obj.typeName}, ${obj.length} × ${cols}${truncated ? ` (first ${obj.items.length} rows)` : ""}`;
   const labelH = showLabel ? LABEL_H : 2;
   const cellsY = labelH + INDEX_H;
   const gridH = rowHs.reduce((a, b) => a + b, 0);
-  const w = Math.max(rowIndexW + cols * cellW + pointersW, showLabel ? uiTextWidth(label) + 8 : 0);
+  const w = Math.max(rowIndexW + cols * cellW + pointersW, showLabel ? sizedLabelWidth(label, size) + 8 : 0);
   const h = cellsY + gridH + (columnPointers.length ? POINTER_H : 4);
 
   return {
     w, h, inY: cellsY + CELL_H / 2,
     draw(x, y, layer, refs) {
       const g = s("g", { class: ["seq", "grid", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
-      if (showLabel) g.append(s("text", { class: "seq-label", x, y: y + 11 }, label));
+      if (showLabel) g.append(labelWithSize(x, y + 11, label, size));
       const x0 = x + rowIndexW;
       const top = y + cellsY;
       for (let c = 0; c < cols; c++) {
@@ -385,23 +423,30 @@ function sequenceShape(
   const views = obj.items.map((item) => viewOf(item, ctx, CELL_H));
   const anyNested = views.some((v) => v.nested);
   const pad = anyNested ? NEST_PAD : 0;
-  const cellW = Math.max(CELL_MIN_W, ...views.map((v) => v.w + 2 * pad));
+  // With sizes on, each cell says what its item costs, above its index.
+  const cellSizes = ctx.sizes && obj.items.length
+    ? obj.items.map((item) => { const n = ctx.sizes!.cell(item, obj); return n === null ? "" : formatBytes(n); })
+    : null;
+  const sizeH = cellSizes ? SIZE_H : 0;
+  const cellW = Math.max(CELL_MIN_W, ...views.map((v) => v.w + 2 * pad), ...(cellSizes ?? []).map((t) => uiTextWidth(t, 9.5) + 8));
   const cellH = Math.max(CELL_H, ...views.map((v) => (v.nested ? v.h + 2 * pad : CELL_H)));
   const count = Math.max(obj.items.length, 1) + (truncated ? 1 : 0);
-  // Inside another box, the type label is left out to save room.
-  const showLabel = !opts.nested || truncated;
+  const size = sizeLabel(ctx, obj.id);
+  // Inside another box, the type label is left out to save room (unless
+  // it carries a size).
+  const showLabel = !opts.nested || truncated || !!size;
   const label = truncated ? `${obj.typeName}, first ${obj.items.length} of ${obj.length}` : obj.typeName;
   const labelH = showLabel ? LABEL_H : 2;
   const hasPointers = opts.pointers.length > 0;
-  const w = Math.max(count * cellW, showLabel ? uiTextWidth(label) + 8 : 0);
-  const cellsY = labelH + (hasIndices ? INDEX_H : 0);
+  const w = Math.max(count * cellW, showLabel ? sizedLabelWidth(label, size) + 8 : 0);
+  const cellsY = labelH + sizeH + (hasIndices ? INDEX_H : 0);
   const h = cellsY + cellH + (hasPointers ? POINTER_H : 0);
 
   return {
     w, h, inY: cellsY + Math.min(cellH, CELL_H) / 2,
     draw(x, y, layer, refs) {
       const g = s("g", { class: ["seq", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
-      if (showLabel) g.append(s("text", { class: "seq-label", x, y: y + 11 }, label));
+      if (showLabel) g.append(labelWithSize(x, y + 11, label, size));
       if (!obj.items.length) {
         g.append(s("g", { class: "cell is-empty" },
           s("rect", { x, y: y + cellsY, width: cellW, height: CELL_H, rx: 3 }),
@@ -410,8 +455,11 @@ function sequenceShape(
       obj.items.forEach((_item, i) => {
         const cx = x + i * cellW;
         const changed = opts.changed.has(String(i));
+        if (cellSizes?.[i]) {
+          g.append(s("text", { class: "cell-size", x: cx + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, cellSizes[i]));
+        }
         if (hasIndices) {
-          g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, String(i)));
+          g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + sizeH + 9, "text-anchor": "middle" }, String(i)));
         }
         const view = views[i];
         const before = refs.length;
@@ -449,20 +497,20 @@ function objectShape(obj: HeapObject, ctx: Ctx, nested = false): Shape {
       return sequenceShape(obj, ctx, { changed, isNew, pointers: ctx.pointersFor(obj.id), nested });
     case "dict":
       return tableShape(obj.typeName, obj.entries.map(([key, value]) => ({ label: key, value, changed: changed.has(valueKey(key)) })),
-        ctx, { variant: "dict", isNew, emptyText: "empty", nested });
+        ctx, { variant: "dict", isNew, emptyText: "empty", nested, sizeText: sizeLabel(ctx, obj.id) });
     case "object":
       return tableShape(obj.typeName, obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
-        ctx, { variant: "instance", isNew, emptyText: "no fields", nested });
+        ctx, { variant: "instance", isNew, emptyText: "no fields", nested, sizeText: sizeLabel(ctx, obj.id) });
     case "function": {
       const title = obj.builtin ? `builtin ${obj.name}` : `${ctx.functionKeyword} ${obj.name}(${obj.params.join(", ")})`;
       return tableShape(title, obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
-        ctx, { variant: "function", isNew, nested });
+        ctx, { variant: "function", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
     }
     case "class":
-      return tableShape(`class ${obj.name}`, [], ctx, { variant: "class", isNew, nested });
+      return tableShape(`class ${obj.name}`, [], ctx, { variant: "class", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
     case "opaque":
       return tableShape(obj.typeName, [{ label: "", value: { kind: "prim", type: "repr", repr: obj.repr }, changed: changed.has("*") }],
-        ctx, { variant: "opaque", isNew, nested });
+        ctx, { variant: "opaque", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
   }
 }
 
@@ -480,10 +528,13 @@ function frameShape(frame: Frame, ctx: Ctx, isActive: boolean): Shape {
   // A paused generator or async function: off the stack, variables kept.
   const paused = frame.state === "suspended";
   const title = frame.func === "Global" ? "Global" : `${frame.func}()${paused ? `, paused at line ${frame.line}` : ""}`;
+  // A frame's size: what its variables keep alive.
+  const holds = ctx.sizes ? ctx.sizes.frame(frame) : 0;
   return tableShape(title, rows, ctx, {
     variant: ["frame", isActive && "is-active", paused && "is-suspended"].filter(Boolean).join(" "),
     isNew: diff.newFrames.has(frame.id),
     emptyText: "no variables yet",
+    sizeText: ctx.sizes && holds > 0 ? `holds ${formatBytes(holds, ctx.sizes.approximate)}` : null,
   });
 }
 
@@ -533,6 +584,7 @@ export function renderMemory(
   const ctx: Ctx = {
     step,
     diff,
+    sizes: layout.sizes ? stepSizes(step, layout.sizes) : null,
     nested,
     functionKeyword: trace.language === "python" ? "def" : "function",
     pointersFor(id, level = 0) {
@@ -589,7 +641,7 @@ export function renderMemory(
   const shapes = new Map<string, Shape>();
   for (const id of order) {
     const box = graphs.get(id);
-    shapes.set(id, box ? graphShape(box, step.heap[id], diff.newObjects.has(id)) : objectShape(step.heap[id], ctx));
+    shapes.set(id, box ? graphShape(box, step.heap[id], diff.newObjects.has(id), graphSize(box, ctx)) : objectShape(step.heap[id], ctx));
   }
 
   // The call stack, then paused frames under it.
@@ -820,11 +872,20 @@ function graphBoxes(trace: Trace, stepIndex: number): Map<string, GraphBox> {
   return boxes;
 }
 
-function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean): Shape {
+/** A graph's size: its container (and everything in it), or all its node objects. */
+function graphSize(box: GraphBox, ctx: Ctx): string | null {
+  if (!ctx.sizes) return null;
+  if (!box.graph.objectNodes) return sizeLabel(ctx, box.graph.hostId);
+  const nodes = [...box.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id }));
+  return `total ${formatBytes(ctx.sizes.of(nodes), ctx.sizes.approximate)}`;
+}
+
+function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean, size: string | null): Shape {
   const { graph, picture } = box;
   const kind = `${graph.directed ? "directed" : "undirected"} graph, ${graph.nodes.size} node${graph.nodes.size === 1 ? "" : "s"}`;
   const title = graph.objectNodes ? `${graph.name} objects: ${kind}` : `${obj.typeName}: ${kind}`;
-  const w = Math.max(picture.w + 16, uiTextWidth(title, 12) + 28);
+  const sizeW = size ? uiTextWidth(size, 11.5) * 1.08 + 14 : 0;
+  const w = Math.max(picture.w + 16, uiTextWidth(title, 12) + 28 + sizeW);
   const h = GRAPH_BODY_Y + picture.h + 4;
   return {
     w, h, inY: HEADER_H / 2,
@@ -835,6 +896,7 @@ function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean): Shape {
         s("path", { class: "box-header", d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z` }),
         s("text", { class: "box-title", x: x + 10, y: y + HEADER_H / 2, "dominant-baseline": "central" }, title),
       );
+      if (size) g.append(s("text", { class: "box-size", x: x + w - 9, y: y + HEADER_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, size));
       picture.draw(x + Math.round((w - picture.w) / 2), y + GRAPH_BODY_Y, g);
       layer.append(g);
     },

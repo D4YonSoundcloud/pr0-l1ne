@@ -14,7 +14,10 @@
     "src/js/cli.ts",
     "src/render/layout.test.ts",
     "src/trace/hints.test.ts",
-    "src/trace/graph.test.ts"
+    "src/trace/graph.test.ts",
+    "src/trace/memory.test.ts",
+    "src/trace/complexity.test.ts",
+    "src/trace/bigO.test.ts"
   ],
   "exclude": []
 }

@@ -15,6 +15,14 @@ export interface PrimValue {
    */
   type: string;
   repr: string;
+  /**
+   * Python only: bytes this value takes on a 64-bit CPython, for values whose
+   * size the repr can't tell (strings and bytes, which may be shortened,
+   * and big ints). Other sizes are fixed (see trace/memory.ts).
+   */
+  size?: number;
+  /** A shortened string's real length (JavaScript). */
+  length?: number;
 }
 
 /** A pointer to a heap object, by stable id. */
@@ -33,6 +41,10 @@ export interface SequenceObject {
   items: Value[];
   /** Real length; `items` may be truncated. */
   length: number;
+  /** Python only: bytes on a 64-bit CPython (sys.getsizeof). */
+  size?: number;
+  /** Python lists only: how many items it has room for before growing. */
+  capacity?: number;
 }
 
 export interface DictObject {
@@ -41,6 +53,8 @@ export interface DictObject {
   typeName: string;
   entries: [Value, Value][];
   length: number;
+  /** Python only: bytes on a 64-bit CPython. */
+  size?: number;
 }
 
 /** An instance of a user class (fields from __dict__ or __slots__). */
@@ -49,6 +63,8 @@ export interface InstanceObject {
   id: string;
   typeName: string;
   fields: [string, Value][];
+  /** Python only: the instance plus its attribute dict, on a 64-bit CPython. */
+  size?: number;
 }
 
 /** A function. `fields` holds closed-over variables. */
@@ -60,6 +76,8 @@ export interface FunctionObject {
   params: string[];
   fields: [string, Value][];
   builtin: boolean;
+  /** Python only: bytes on a 64-bit CPython. */
+  size?: number;
 }
 
 export interface ClassObject {
@@ -67,6 +85,8 @@ export interface ClassObject {
   id: string;
   typeName: string;
   name: string;
+  /** Python only: bytes on a 64-bit CPython. */
+  size?: number;
 }
 
 /** Anything we don't have a dedicated drawing for. */
@@ -75,6 +95,8 @@ export interface OpaqueObject {
   id: string;
   typeName: string;
   repr: string;
+  /** Python only: bytes on a 64-bit CPython. */
+  size?: number;
 }
 
 export type HeapObject =
@@ -197,6 +219,76 @@ export interface VizHints {
   warnings: { line: number; message: string }[];
 }
 
+// ---------------------------------------------------------------------------
+// The shape of the code, for estimating time and space complexity
+// (trace/complexity.ts). Written by each tracer's static analysis.
+// ---------------------------------------------------------------------------
+
+/**
+ * Something the running time can depend on, named as the program names it.
+ * `{ name: "nums", len: true }` is len(nums) / nums.length;
+ * `{ name: "n" }` is the value of n; `inner` is the length of one of its
+ * items (a row of a grid, a node's neighbor list). For an object, `len` is
+ * the number of objects of its kind reachable from it (a linked list's
+ * nodes). `name` can be dotted: "self.items".
+ */
+export interface SizeRef {
+  name: string;
+  len?: boolean;
+  inner?: boolean;
+}
+
+/** How many times a loop runs, each time it's reached. */
+export type CostBound =
+  /** Up to a size, or the sum of several (merging two lists). */
+  | { kind: "size"; sizes: SizeRef[]; why: string }
+  /** Halving or doubling toward a size. */
+  | { kind: "log"; size: SizeRef; why: string }
+  /** A fixed number of times (a literal range, a literal list). */
+  | { kind: "const"; why: string }
+  /** Depends on the data (`while queue:`); sized from the run. */
+  | { kind: "unknown"; why: string };
+
+/**
+ * How a recursive call's arguments compare with the parameters:
+ * `minus` (n - 1, i + 1, items[1:]), `half` (n // 2, items[:mid]),
+ * `child` (node.left: one step down a structure), `same`, or `unknown`
+ * (anything else, like a neighbor in a search).
+ */
+export type Shrink = "minus" | "half" | "child" | "same" | "unknown";
+
+export type CostNode =
+  /** A loop, or anything that loops: a comprehension, arr.map(...). `loop` is its LoopInfo id, when it has one. */
+  | { kind: "loop"; loop?: string; line: number; bound: CostBound; body: CostNode[] }
+  /** A call to one of the program's own functions. */
+  | {
+    kind: "call"; line: number; callee: string; args: (SizeRef | null)[]; shrink: Shrink;
+    /** `return f(...)`: one of several alternatives, only one of which runs per call. */
+    alt?: boolean;
+  }
+  /** A built-in that isn't O(1): `x in list`, sorted(), arr.indexOf(), heappush. */
+  | { kind: "op"; line: number; what: string; cost: "linear" | "nlogn" | "log"; size: SizeRef | null; container?: string }
+  /**
+   * Memory: `sizes` multiplied together each time it runs ([] is one item).
+   * `name`: assigned to a variable, replacing what it held (not kept per
+   * pass). `into`: the collection that grows (`seen.add(x)`).
+   */
+  | { kind: "alloc"; line: number; what: string; sizes: SizeRef[]; name?: string; into?: string };
+
+export interface CostFunction {
+  /** "Global" for the top level. */
+  name: string;
+  line: number;
+  params: string[];
+  /** Caches results in a dict or Map keyed by its arguments (memoization). */
+  memo: boolean;
+  body: CostNode[];
+}
+
+export interface CostInfo {
+  functions: CostFunction[];
+}
+
 export interface TraceError {
   type: string;
   message: string;
@@ -222,6 +314,8 @@ export interface Trace {
   truncated: boolean;
   /** `# viz:` / `// viz:` comments in the program (see README, "Hints"). */
   hints?: RawHint[];
+  /** The shape of the code, for complexity estimates. */
+  cost?: CostInfo;
   /** The hints, parsed and applied (added by applyHints, not by tracers). */
   viz?: VizHints;
 }

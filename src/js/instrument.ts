@@ -33,7 +33,8 @@ import { generate } from "@babel/generator";
 import { parse } from "@babel/parser";
 import traverse, { type NodePath, type Scope } from "@babel/traverse";
 import * as t from "@babel/types";
-import type { LoopInfo, RawHint } from "../trace/types";
+import type { CostInfo, LoopInfo, RawHint } from "../trace/types";
+import { costAnalysis } from "./cost";
 
 /** The name the runtime is passed in as. Variables with this prefix are hidden. */
 export const RUNTIME = "__av";
@@ -46,6 +47,8 @@ export interface Instrumented {
   indexNames: Record<string, string[]>;
   /** `// viz: ...` comments, unparsed (see trace/hints.ts). */
   hints: RawHint[];
+  /** The code's shape, for complexity estimates (see js/cost.ts). */
+  cost?: CostInfo;
 }
 
 /** Matches a hint comment's text: "viz: hide i". */
@@ -139,12 +142,20 @@ export function instrumentAst(ast: t.File, source: string): Instrumented {
   const hints = collectHints(ast);
   normalize(ast);
   const analysis = analyze(ast, source);
+  let cost: CostInfo | undefined;
+  try {
+    const names = new Map<t.Node, string>([...analysis.functions].map(([node, data]) => [node, data.name]));
+    const loopIds = new Map<t.Node, string>([...analysis.loops].map(([node, data]) => [node, data.info.id]));
+    cost = costAnalysis(ast, source, names, loopIds);
+  } catch {
+    // A guess about the code's shape must never stop a run.
+  }
   transform(ast, analysis);
 
   const loops = [...analysis.loops.values()].map((d) => d.info).sort((a, b) => a.line - b.line);
   const indexNames: Record<string, string[]> = {};
   for (const [name, subs] of analysis.indexNames) if (subs.size) indexNames[name] = [...subs].sort();
-  return { code: generate(ast).code, loops, indexNames, hints };
+  return { code: generate(ast).code, loops, indexNames, hints, ...(cost ? { cost } : {}) };
 }
 
 // ---------------------------------------------------------------------------

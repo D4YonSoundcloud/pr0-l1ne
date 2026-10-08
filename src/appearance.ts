@@ -67,6 +67,7 @@ export const COLOR_FIELDS: ColorField[] = [
   { key: "highlight", cssVar: "--highlight", label: "Changed (highlighter)", group: "Marks" },
   { key: "redpen", cssVar: "--redpen", label: "Change arrows (red pen)", group: "Marks" },
   { key: "ballpoint", cssVar: "--ballpoint", label: "References and pointers", group: "Marks" },
+  { key: "mem", cssVar: "--mem", label: "Memory sizes", group: "Marks" },
   { key: "visited", cssVar: "--visited", label: "Visited nodes", group: "Graphs" },
   { key: "frontier", cssVar: "--frontier", label: "Waiting nodes (queue)", group: "Graphs" },
   { key: "tree", cssVar: "--tree", label: "Search tree edges", group: "Graphs" },
@@ -106,7 +107,7 @@ const GRAPH_PAPER: Appearance = {
   colors: {
     ink: "#1d2b45", inkSoft: "#5b6b85", inkFaint: "#93a1b5", cell: "#ffffff", cellAlt: "#f3f6f9",
     header: "#d6e0ea", headerCode: "#e2e7f5", num: "#1d2b45", str: "#8b3a9e", const: "#2e7a57",
-    highlight: "#f6d743", redpen: "#c2362f", ballpoint: "#2f6fb0",
+    highlight: "#f6d743", redpen: "#c2362f", ballpoint: "#2f6fb0", mem: "#0a7d86",
     visited: "#cde7d8", frontier: "#d9822b", tree: "#2e7a57", path: "#7a4fb5",
     paperInk: "#1d2b45", paperInkSoft: "#5b6b85", paperInkFaint: "#93a1b5",
   },
@@ -143,7 +144,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#ffffff", inkSoft: "#cfe0f5", inkFaint: "#8fb0dc", cell: "#24599c", cellAlt: "#1f5193",
       header: "#2e68b0", headerCode: "#3a62a8", num: "#ffffff", str: "#ffc9ef", const: "#b5f2d0",
-      highlight: "#b8860b", redpen: "#ffb199", ballpoint: "#ffffff",
+      highlight: "#b8860b", redpen: "#ffb199", ballpoint: "#ffffff", mem: "#8ff0f7",
       visited: "#2f7a5a", frontier: "#ffb347", tree: "#9ff0c4", path: "#e3c4ff",
       paperInk: "#ffffff", paperInkSoft: "#cfe0f5", paperInkFaint: "#9fbde3",
     },
@@ -157,7 +158,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#dfe5f1", inkSoft: "#a3aec4", inkFaint: "#69758f", cell: "#232b40", cellAlt: "#1d2436",
       header: "#2f3953", headerCode: "#333c5c", num: "#e8edf6", str: "#e6a3d9", const: "#7fd1b2",
-      highlight: "#8a6d12", redpen: "#ff7a70", ballpoint: "#7fb0ff",
+      highlight: "#8a6d12", redpen: "#ff7a70", ballpoint: "#7fb0ff", mem: "#5fd7df",
       visited: "#24543d", frontier: "#f0a050", tree: "#6fd39e", path: "#b48cf0",
       paperInk: "#e6ebf5", paperInkSoft: "#a3aec4", paperInkFaint: "#69758f",
     },
@@ -170,7 +171,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#000000", inkSoft: "#222222", inkFaint: "#555555", cell: "#ffffff", cellAlt: "#eeeeee",
       header: "#d9d9d9", headerCode: "#d9dcf0", num: "#000000", str: "#7a0080", const: "#005c2e",
-      highlight: "#ffe600", redpen: "#d00000", ballpoint: "#0038d6",
+      highlight: "#ffe600", redpen: "#d00000", ballpoint: "#0038d6", mem: "#005f69",
       visited: "#a8e6bf", frontier: "#c45a00", tree: "#00703a", path: "#6a1fc2",
       paperInk: "#000000", paperInkSoft: "#222222", paperInkFaint: "#555555",
     },

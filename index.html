@@ -35,6 +35,7 @@
           <input id="live" type="checkbox" checked /> Live
         </label>
         <span id="status" class="status" role="status" aria-live="polite">Loading Python…</span>
+        <button id="complexity" class="button cx-chip" type="button" aria-expanded="false" aria-controls="complexity-panel">Complexity</button>
         <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
       </header>
@@ -60,6 +61,11 @@
                   <button type="button" id="mode-arrows" class="segment" aria-pressed="true" title="Every object is its own box, connected by arrows">Arrows</button>
                   <button type="button" id="mode-nested" class="segment" aria-pressed="false" title="Objects only one thing refers to are drawn inside it">Nested</button>
                 </div>
+                <div class="segmented" role="group" aria-label="Memory sizes">
+                  <button type="button" id="sizes" class="segment" aria-pressed="false" title="Show how much memory each thing takes">Sizes</button>
+                </div>
+                <select id="size-model" class="size-model" aria-label="How memory sizes are counted" hidden></select>
+                <span id="memory-total" class="memory-total" hidden></span>
                 <span class="section-hint">Drag boxes to rearrange them</span>
               </div>
               <div id="memory"></div>

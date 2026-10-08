@@ -441,7 +441,12 @@ class Serializer {
   value(v: unknown): Value {
     switch (typeof v) {
       case "number": return prim("number", Object.is(v, -0) ? "-0" : String(v));
-      case "string": return prim("string", JSON.stringify(v));
+      case "string": {
+        // A shortened string still knows its real length, for memory sizes.
+        const value = prim("string", JSON.stringify(v));
+        if (value.repr.endsWith("…")) value.length = v.length;
+        return value;
+      }
       case "boolean": return prim("boolean", String(v));
       case "undefined": return prim("undefined", "undefined");
       case "bigint": return prim("bigint", `${v}n`);

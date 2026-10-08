@@ -39,6 +39,10 @@ export interface EditorHandle {
   /** Switch to the model for a language, creating it with `code` the first time. */
   setLanguage(monacoId: string, code: string): void;
   setMarks(marks: LineMarks): void;
+  /** Complexity labels after loop headers and function definitions (empty to clear). */
+  setCostLabels(labels: { line: number; text: string; hover: string; kind: "loop" | "function" }[]): void;
+  /** Move the cursor to a line and show it. */
+  revealLine(line: number): void;
 }
 
 const MARKER_OWNER = "algoviz";
@@ -82,6 +86,9 @@ monaco.editor.defineTheme("algoviz", {
     "focusBorder": "#f6d74380",
   },
 });
+
+/** A string as a CSS string literal. */
+const cssString = (text: string) => `"${text.replace(/["\\]/g, "\\$&").replace(/\n/g, " ")}"`;
 
 const FONT_FAMILY = `"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace`;
 
@@ -146,6 +153,9 @@ export function createEditor(
   editor.onDidChangeModelContent(() => callbacks.onChange(editor.getValue()));
 
   const decorations = editor.createDecorationsCollection();
+  const costDecorations = editor.createDecorationsCollection();
+  const costStyle = document.createElement("style");
+  document.head.append(costStyle);
 
   const lineDecoration = (line: number, kind: "next" | "prev" | "error", rulerColor: string) => ({
     range: new monaco.Range(line, 1, line, 1),
@@ -191,6 +201,32 @@ export function createEditor(
           endLineNumber: w.line,
           endColumn: model.getLineMaxColumn(w.line),
         })));
+    },
+    setCostLabels(labels) {
+      const model = editor.getModel();
+      if (!model) return;
+      const lines = model.getLineCount();
+      // Each label is an ::after with its own class, its text set in a
+      // stylesheet. (Monaco's injected text would be simpler, but this
+      // trimmed-down build doesn't draw it.)
+      const shown = labels.filter((l) => l.line >= 1 && l.line <= lines);
+      costStyle.textContent = shown.map((l, i) => `.monaco-editor .cost-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`).join("\n");
+      costDecorations.set(shown.map((l, i) => {
+        const end = model.getLineMaxColumn(l.line);
+        return {
+          range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
+          options: {
+            afterContentClassName: `cost-label cost-label-${l.kind} cost-label-${i}`,
+            hoverMessage: { value: l.hover },
+            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+          },
+        };
+      }));
+    },
+    revealLine(line) {
+      editor.revealLineInCenter(line);
+      editor.setPosition({ lineNumber: line, column: editor.getModel()?.getLineFirstNonWhitespaceColumn(line) || 1 });
+      editor.focus();
     },
     setMarks({ next, prev, error }) {
       const model = editor.getModel();

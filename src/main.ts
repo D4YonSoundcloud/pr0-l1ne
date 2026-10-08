@@ -7,8 +7,11 @@ import { renderLoopHistory } from "./render/loopView";
 import { prefersReducedMotion } from "./render/animate";
 import { applyFocus, renderMemory, type MemoryMode, type Point } from "./render/memory";
 import { Viewport, type AutoFit } from "./render/viewport";
+import { SIZE_MODELS, formatBytes, stepSizes, type SizeModel } from "./trace/memory";
 import { APPEARANCE_KEY, applyAppearance, parseAppearance, type Appearance } from "./appearance";
 import { StylePanel } from "./stylePanel";
+import { ComplexityPanel, costLabels } from "./complexityPanel";
+import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
 import { availableLoops, buildLoopHistory, type LoopHistory, type LoopRow } from "./trace/loopHistory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
@@ -108,10 +111,14 @@ const els = {
   play: byId<HTMLButtonElement>("play"),
   speed: byId<HTMLSelectElement>("speed"),
   modeNested: byId<HTMLButtonElement>("mode-nested"),
+  sizes: byId<HTMLButtonElement>("sizes"),
+  sizeModel: byId<HTMLSelectElement>("size-model"),
+  memoryTotal: byId<HTMLSpanElement>("memory-total"),
   editorPane: byId<HTMLElement>("editor-pane"),
   canvasPane: byId<HTMLElement>("canvas-pane"),
   swap: byId<HTMLButtonElement>("swap"),
   style: byId<HTMLButtonElement>("style"),
+  complexity: byId<HTMLButtonElement>("complexity"),
   memorySection: byId<HTMLElement>("memory-section"),
   loopSection: byId<HTMLElement>("loop-section"),
 };
@@ -175,12 +182,14 @@ function applyOutcome(outcome: RunOutcome): void {
     stale = true;
     setBanner(`Your code ran for more than ${outcome.seconds} seconds and was stopped. Check for a loop that never ends.`);
     render();
+    updateComplexity();
     return;
   }
   if (outcome.kind === "crash") {
     stale = true;
     setBanner(`The tracer failed: <code>${escapeHtml(outcome.message)}</code>`);
     render();
+    updateComplexity();
     return;
   }
 
@@ -193,6 +202,7 @@ function applyOutcome(outcome: RunOutcome): void {
     setBanner(`<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`);
     editor.setMarks({ next: null, prev: null, error: { line: next.error.line, message: `${next.error.type}: ${next.error.message}` } });
     render(false);
+    updateComplexity();
     return;
   }
 
@@ -216,6 +226,7 @@ function applyOutcome(outcome: RunOutcome): void {
     setBanner(null);
   }
   render();
+  updateComplexity();
 }
 
 // ---------------------------------------------------------------- rendering
@@ -269,6 +280,49 @@ function setMemoryMode(mode: MemoryMode): void {
 }
 let draggingNode: string | null = null;
 
+// Memory sizes: on or off, and which model, per language family (Python
+// has its own real sizes; JavaScript and TypeScript share theirs).
+const SIZES_KEY = "algoviz:sizes";
+const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript");
+const sizeModelKey = (id: LanguageId) => `algoviz:size-model:${sizeFamily(id)}`;
+let sizesOn = stored(SIZES_KEY) === "on";
+
+function sizeModel(): SizeModel {
+  const choices = SIZE_MODELS[sizeFamily(language)];
+  const saved = stored(sizeModelKey(language));
+  return choices.find((c) => c.value === saved)?.value ?? choices[0].value;
+}
+/** The model to draw sizes with, or null when sizes are off. */
+const shownSizes = (): SizeModel | null => (sizesOn ? sizeModel() : null);
+
+function fillSizeModels(): void {
+  els.sizeModel.replaceChildren(...SIZE_MODELS[sizeFamily(language)].map((c) => {
+    const option = new Option(c.label, c.value);
+    option.title = c.title;
+    return option;
+  }));
+  els.sizeModel.value = sizeModel();
+}
+
+function setSizes(on: boolean): void {
+  sizesOn = on;
+  store(SIZES_KEY, on ? "on" : "off");
+  els.sizes.setAttribute("aria-pressed", String(on));
+  els.sizeModel.hidden = !on;
+  render(false);
+}
+
+/** "Program: 1.4 KB" in the memory header, for the step on screen. */
+function updateMemoryTotal(): void {
+  const model = shownSizes();
+  const step = trace?.steps[stepIndex];
+  els.memoryTotal.hidden = !model || !step;
+  if (!model || !step) return;
+  const sizes = stepSizes(step, model);
+  els.memoryTotal.textContent = `Program: ${formatBytes(sizes.program, sizes.approximate)}`;
+  els.memoryTotal.title = "Everything the program holds at this step, each object counted once";
+}
+
 /** Auto-fit (see Viewport) is remembered per window. */
 const autoFitKey = (pane: "memory" | "loop") => `algoviz:auto-fit:${pane}`;
 function storedAutoFit(pane: "memory" | "loop"): AutoFit {
@@ -313,13 +367,51 @@ function setAppearance(next: Appearance): void {
   saveAppearanceTimer = window.setTimeout(() => store(APPEARANCE_KEY, JSON.stringify(appearance)), 250);
 }
 setAppearance(appearance);
-new StylePanel({
+const stylePanel = new StylePanel({
   host: els.editorPane,
   button: els.style,
   get: () => appearance,
   set: setAppearance,
   replay: () => replayStep(),
+  onOpen: () => complexityPanel.toggle(false),
 });
+
+// ---------------------------------------------------------------- complexity
+
+const COST_LABELS_KEY = "algoviz:complexity-labels";
+let costLabelsOn = stored(COST_LABELS_KEY) !== "off";
+const complexityPanel = new ComplexityPanel({
+  host: els.editorPane,
+  button: els.complexity,
+  reveal: (line) => editor.revealLine(line),
+  labelsShown: () => costLabelsOn,
+  setLabelsShown(on) {
+    costLabelsOn = on;
+    store(COST_LABELS_KEY, on ? "on" : "off");
+    updateComplexity();
+  },
+  onOpen: () => stylePanel.toggle(false),
+});
+
+/**
+ * The estimate is worked out once per run (it's cached on the trace), after
+ * the step is drawn so it never delays the canvas.
+ */
+let complexityTimer = 0;
+function updateComplexity(): void {
+  window.clearTimeout(complexityTimer);
+  complexityTimer = window.setTimeout(() => {
+    let estimate = null;
+    try {
+      estimate = trace ? estimateComplexity(trace) : null;
+    } catch (error) {
+      console.warn("Complexity estimate failed", error);
+    }
+    complexityPanel.show(estimate, stale);
+    // Labels sit on lines; once the code has changed under an error, they'd be on the wrong ones.
+    editor.setCostLabels(costLabelsOn && !stale ? costLabels(estimate) : []);
+  }, 0);
+}
 
 /** Draw the step before this one, then animate into this one (previews easing). */
 function replayStep(): void {
@@ -353,7 +445,8 @@ function renderMemoryView(): void {
   if (!trace || !trace.steps.length) return;
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
   const animation = animationFor("memory");
-  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode }), "", animation.duration, animation.easing);
+  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode, sizes: shownSizes() }), "", animation.duration, animation.easing);
+  updateMemoryTotal();
   refreshFocus();
 }
 
@@ -377,6 +470,11 @@ els.memory.addEventListener("pointerleave", () => {
 els.modeArrows.addEventListener("click", () => setMemoryMode("arrows"));
 els.modeNested.addEventListener("click", () => setMemoryMode("nested"));
 setMemoryMode(memoryMode);
+els.sizes.addEventListener("click", () => setSizes(!sizesOn));
+els.sizeModel.addEventListener("change", () => {
+  store(sizeModelKey(language), els.sizeModel.value);
+  render(false);
+});
 
 /**
  * The first step worth showing. Every trace starts with "called Global" and
@@ -408,6 +506,7 @@ function render(updateMarks = true): void {
     els.stepLabel.textContent = "";
     els.stepLabel.title = "";
     els.output.textContent = "";
+    updateMemoryTotal();
     if (updateMarks) editor.setMarks({ next: null, prev: null, error: null });
     return;
   }
@@ -438,7 +537,7 @@ function render(updateMarks = true): void {
   if (history && history.rows.length) {
     const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
     const animation = animationFor("loop");
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live }), "", live ? animation.duration : 0, animation.easing);
+    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes() }), "", live ? animation.duration : 0, animation.easing);
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
     if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
@@ -785,9 +884,11 @@ els.language.addEventListener("change", () => {
   currentProgram = openProgramFor(language);
   editor.setLanguage(LANGUAGES[language].monacoId, savedCode(language));
   fillProgramMenu();
+  fillSizeModels();
   updateProgramUI();
   // A trace from the other language has nothing to do with this code.
   trace = null;
+  updateComplexity();
   memoryView.restartAutoFit();
   loopView.restartAutoFit();
   stepIndex = 0;
@@ -800,6 +901,9 @@ els.language.addEventListener("change", () => {
   runNow();
 });
 fillProgramMenu();
+fillSizeModels();
+els.sizes.setAttribute("aria-pressed", String(sizesOn));
+els.sizeModel.hidden = !sizesOn;
 updateProgramUI();
 
 els.run.addEventListener("click", () => runNow());

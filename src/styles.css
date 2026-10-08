@@ -26,6 +26,7 @@
   --visited: #cde7d8;
   --frontier: #d9822b;
   --path: #7a4fb5;
+  --mem: #0a7d86;
   --tree: #2e7a57;
   --header-code: #e2e7f5;
   --paper-ink: #1d2b45;
@@ -471,14 +472,14 @@ select {
 .scrubber { flex: 1 1 0; width: 0; accent-color: var(--highlight); min-width: 80px; }
 .step-label {
   flex: none;
-  width: 46ch;
+  width: 22ch;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: var(--chrome-text);
-  text-align: left;
+  text-align: right;
 }
 
 .loop-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -593,6 +594,20 @@ select {
 .link-arrow { fill: none; stroke: var(--ballpoint); stroke-width: calc(1.5px * var(--arrow-width)); }
 .link-arrow.is-changed { stroke: var(--redpen); stroke-width: calc(1.9px * var(--arrow-width)); }
 .linked-node.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
+/* Memory sizes: their own color everywhere they appear. */
+.mem-size { fill: var(--mem); font-weight: 700; }
+.cell-size { font-family: var(--font-ui); font-size: 9.5px; font-weight: 600; fill: var(--mem); }
+.box-size { font-family: var(--font-ui); font-size: 11.5px; font-weight: 700; fill: var(--mem); }
+.box.frame.is-active > .box-size { fill: color-mix(in srgb, var(--mem) 45%, var(--cell)); }
+.loop-size { font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; fill: var(--mem); }
+.size-model {
+  font: inherit; font-size: 12.5px; padding: 2px 6px; border-radius: 6px;
+  background: var(--cell); color: var(--ink); border: 1px solid var(--paper-edge);
+}
+.size-model[hidden] { display: none; }
+.memory-total { font-size: 12.5px; font-weight: 700; color: var(--mem); font-variant-numeric: tabular-nums; }
+.memory-total[hidden] { display: none; }
+
 /* Graphs: nodes and edges, with the algorithm's state drawn on them. */
 .box.graph-box > .box-body { fill: var(--cell); }
 .graph-edge { fill: none; stroke: var(--ink-soft); stroke-width: calc(1.5px * var(--arrow-width)); }
@@ -711,5 +726,57 @@ select {
   .divider { display: none; }
   .toolbar { flex-wrap: wrap; }
   .status { margin-left: 0; width: 100%; }
-  .step-label { width: 26ch; font-size: 13px; }
+  .step-label { width: 15ch; font-size: 13px; }
 }
+
+/* ---------------------------------------------------------------- complexity */
+
+/* Time and space have their own colors everywhere they appear: the chip,
+   the panel and the editor labels. */
+:root {
+  --cx-time: #c3a6ff;
+  --cx-space: #6fd6c9;
+}
+.cx-chip { display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
+.cx-chip[aria-expanded="true"] { border-color: var(--cx-time); }
+.cx-chip.is-stale { opacity: 0.55; }
+.cx-chip-label { color: var(--chrome-muted); font-size: 12px; }
+.cx-chip-sep { color: var(--chrome-muted); }
+.cx-time { color: var(--cx-time); font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; }
+.cx-space { color: var(--cx-space); font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; }
+
+.cx-panel { left: auto; right: 10px; width: min(420px, calc(100% - 20px)); }
+.cx-body { overflow-y: auto; padding: 4px 14px 12px; }
+.cx-empty, .cx-stale { color: var(--chrome-muted); }
+.cx-stale { margin: 10px 0 0; padding: 6px 10px; border-radius: 6px; background: #3a2f1b; color: #f2c46d; }
+.cx-summary { display: flex; gap: 22px; padding: 12px 0 6px; }
+.cx-big { display: flex; flex-direction: column; gap: 2px; }
+.cx-big-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--chrome-muted); }
+.cx-big .cx-time, .cx-big .cx-space { font-size: 22px; }
+.cx-legend { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 10px; }
+.cx-legend dt { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; color: #fff; }
+.cx-legend dd { margin: 0; }
+.cx-value { color: var(--chrome-muted); }
+.cx-toggle { display: flex; align-items: center; gap: 6px; padding: 6px 0 2px; color: var(--chrome-text); cursor: pointer; }
+.cx-row { border-top: 1px solid #2a3147; padding: 6px 0; }
+.cx-row-head {
+  display: grid; grid-template-columns: 2.4em 1fr auto; align-items: baseline; gap: 8px; width: 100%;
+  padding: 2px 4px; border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.cx-row-head:hover { background: #2b3450; }
+.cx-line { color: var(--chrome-muted); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; text-align: right; }
+.cx-name { min-width: 0; overflow-wrap: anywhere; }
+.cx-name code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; color: #dde3ee; }
+.cx-cost { white-space: nowrap; color: var(--chrome-muted); font-size: 12.5px; }
+.cx-label { white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; color: var(--cx-time); }
+.cx-label.is-run::after { content: "run"; margin-left: 6px; padding: 0 5px; border-radius: 8px; background: #2c3550; color: var(--chrome-muted); font: 600 10px/16px "Atkinson Hyperlegible", sans-serif; vertical-align: 2px; }
+.cx-why, .cx-notes { margin: 4px 0 2px; padding-left: calc(2.4em + 24px); color: var(--chrome-text); font-size: 12.5px; }
+.cx-notes { padding-left: 18px; }
+.cx-why li, .cx-notes li { margin: 2px 0; }
+.cx-run { color: var(--chrome-muted); }
+.cx-footer { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #2a3147; font-size: 12px; color: var(--chrome-muted); }
+
+/* In the editor: after a loop header, after a function definition. */
+.cost-label { font-style: italic; opacity: 0.85; }
+.cost-label-loop { color: var(--cx-time) !important; }
+.cost-label-function { color: #9aa6c4 !important; }

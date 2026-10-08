@@ -90,6 +90,7 @@ export async function traceProgram(
   trace.loops = program.loops;
   trace.indexNames = program.indexNames;
   if (program.hints.length) trace.hints = program.hints;
+  if (program.cost) trace.cost = program.cost;
 
   const runtime = new Runtime(maxSteps);
   let stopped = false;

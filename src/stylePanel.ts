@@ -18,11 +18,13 @@ export interface StylePanelOptions {
   set(next: Appearance): void;
   /** Re-draw the current step with its animation, to preview easing. */
   replay(): void;
+  /** Called when the panel opens, so other floating panels can close. */
+  onOpen?(): void;
 }
 
 type Child = Node | string | null | undefined | false;
 
-function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string | boolean | number> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
+export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string | boolean | number> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [name, value] of Object.entries(attrs)) {
     if (value === false) continue;
@@ -71,7 +73,10 @@ export class StylePanel {
   toggle(open = this.el.hidden): void {
     this.el.hidden = !open;
     this.options.button.setAttribute("aria-expanded", String(open));
-    if (open) this.sync();
+    if (open) {
+      this.options.onOpen?.();
+      this.sync();
+    }
   }
 
   /** Change settings: everything goes through here. */
