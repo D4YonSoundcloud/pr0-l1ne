@@ -120,7 +120,13 @@ export function arrowMarkers(): SVGDefsElement {
   const marker = (id: string, cls: string) =>
     s("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
       s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }));
-  return s("defs", {}, marker("arrow-ref", "arrowhead-ref"), marker("arrow-change", "arrowhead-change"));
+  // Graph edges come in several thicknesses: their arrowheads are sized in
+  // diagram units so a thick edge doesn't get a huge one.
+  const fixed = (id: string, cls: string) =>
+    s("marker", { id, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 11, markerHeight: 11, markerUnits: "userSpaceOnUse", orient: "auto-start-reverse" },
+      s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }));
+  return s("defs", {}, marker("arrow-ref", "arrowhead-ref"), marker("arrow-change", "arrowhead-change"),
+    fixed("arrow-graph", "arrowhead-graph"), fixed("arrow-tree", "arrowhead-tree"), fixed("arrow-path", "arrowhead-path"));
 }
 
 /** A "this changed" arrow between two stacked rows of the loop view. */

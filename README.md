@@ -2,7 +2,9 @@
 
 PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, each iteration is stacked under the last one with red arrows showing exactly what changed. Or switch to animated mode and press **Play** to watch values slide into place step by step.
 
-Binary trees are drawn top-down, generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
+Binary trees are drawn top-down. Graphs (adjacency lists, matrices, tries, graphs of objects) are drawn as nodes and edges, with your algorithm's own state on them: the visited set filled in, the queue numbered, distances labeled, the search tree in green. Generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
+
+![Dijkstra's algorithm on a small road map: done places filled in, the heap numbered in the order it pops, distances beside each place](docs/graph-dijkstra.png)
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)
 
@@ -53,7 +55,7 @@ Open the URL Vite prints (usually http://localhost:5173). Pick **Python**, **Jav
 | `npm run preview` | Serves the built `dist/` folder locally. |
 | `npm run typecheck` | Runs the TypeScript compiler without building. |
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's. |
-| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
+| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
@@ -99,17 +101,33 @@ The program's name sits in the toolbar next to the **Open…** menu. A yellow do
 
 Saved programs are stored in your browser (in `localStorage`), separately for each language. They survive reloads and restarts, but they belong to this browser on this machine, and clearing the site's data removes them. Separately from saving, PR0L1NE always keeps whatever is in the editor, saved or not, so a reload never loses work in progress.
 
+### Examples
+
+The **Open…** menu has 37 to 39 examples per language, grouped by topic. Each one is short enough to step through, and each shows off a different part of the canvas:
+
+| Group | Examples |
+| --- | --- |
+| Sorting | Bubble sort, insertion sort, merge sort (recursion; generic in TypeScript) |
+| Searching and two pointers | Binary search, reversing a string with two pointers, two sum with a hash map, a sliding window, word frequency |
+| Linked lists and trees | Reversing a linked list, finding a cycle with fast and slow pointers, binary search tree insert, in-order traversal, a trie |
+| Graphs | Breadth-first search with the shortest path, recursive depth-first search, Dijkstra's algorithm, topological sort, a graph of objects |
+| Grids and dynamic programming | Grid paths, longest common subsequence, coin change, flood fill (number of islands), Fibonacci with a memo (Python and JavaScript) |
+| Functions, classes and generators / async | Recursion, closures, a class with methods, generators; async tasks and timers and array callbacks in JavaScript and TypeScript; a generic class and an enum in TypeScript |
+| Hints, step by step | Ten examples that teach [hints](#hints-viz-comments), from a single `hide` to every kind of hint at once |
+
+The same topics exist in every language, written the way that language would write them: a `deque` and `heapq` in Python, a `Map` and `Set` in JavaScript, typed `Record`s and generics in TypeScript.
+
 ### The editor
 
 The editor on the left is [Monaco](https://microsoft.github.io/monaco-editor/), the editor component VS Code is built on, so VS Code's editing and navigation keys work as you'd expect: multi-cursor (`Ctrl/Cmd + D`, `Alt + Click`), move and copy lines (`Alt + ↑/↓`, `Shift + Alt + ↑/↓`), toggle comments (`Ctrl/Cmd + /`), go to line (`Ctrl + G`), find and replace, bracket jumping, folding, and the command palette (`F1`).
 
-With **Live** checked, the program re-runs 600 ms after you stop typing. Otherwise, press **Run** or `Ctrl/Cmd + Enter`. Your code is saved in the browser, so it survives a reload. The **Open…** menu has your [saved programs](#saving-programs) and starter examples that each exercise a different part of the canvas. Opening a program or an example is a normal edit, so `Ctrl/Cmd + Z` brings the previous code back.
+With **Live** checked, the program re-runs 600 ms after you stop typing. Otherwise, press **Run**, `Ctrl/Cmd + Enter` or `Ctrl + '`. Your code is saved in the browser, so it survives a reload. The **Open…** menu has your [saved programs](#saving-programs) and starter examples that each exercise a different part of the canvas. Opening a program or an example is a normal edit, so `Ctrl/Cmd + Z` brings the previous code back.
 
 PR0L1NE adds a few commands of its own, borrowing VS Code's debugger keys for stepping:
 
 | Keys | Command |
 | --- | --- |
-| `Ctrl/Cmd + Enter` | Run |
+| `Ctrl/Cmd + Enter` or `Ctrl + '` | Run (`Ctrl + '` works anywhere on the page, not just in the editor, and is `Ctrl` on a Mac too) |
 | `Ctrl/Cmd + S` | Save (asks for a name the first time) |
 | `Ctrl/Cmd + Shift + S` | Save as a new program |
 | `F10` | Next step |
@@ -166,7 +184,11 @@ How a box is recognized from one step, or one run, to the next:
 
 ### The timeline
 
-The bar at the bottom moves through the recorded steps. Use the buttons, drag the slider, or use the keyboard: `F10` / `Shift + F10` work everywhere, and `←` / `→` / `Home` / `End` work when the editor doesn't have focus (inside the editor those keys move the cursor). A step is one of:
+The bar at the bottom moves through the recorded steps. Use the buttons, drag the slider, or use the keyboard: `F10` / `Shift + F10` work everywhere, and `←` / `→` / `Home` / `End` work when the editor doesn't have focus (inside the editor those keys move the cursor). The step description next to the slider has a fixed width, so the slider never changes size as you drag it; hover the description to see all of it when it's cut off.
+
+The timeline starts at **step 3**. Every run begins with "called Global" and "next is line 1", which both show an empty program, so they're skipped: the first step shown is the state after line 1 ran. **First step**, `Home` and replaying from the end all go there.
+
+A step is one of:
 
 - **Ran line N, next is line M**: the state after line N ran, just before line M runs. It matches the editor, where N is yellow and M is blue. The first step of a function just says **Next is line M**.
 - **Called f()**: a new function call started, so a new frame appears.
@@ -288,6 +310,48 @@ Nodes the code can no longer reach (say, the old head after it's dropped) leave 
 
 ![Binary search: the lo/hi window narrowing](docs/bsearch-loop.png)
 
+### Graphs
+
+When your data is a graph, the memory view draws it as one: nodes and edges in a single box, laid out once for the whole run so nodes never move while you step. What's recognized:
+
+| In your code | Recognized |
+| --- | --- |
+| A dict, object or `Map` of neighbor lists or sets: `{"A": ["B", "C"], ...}` | Automatically, when most neighbors are also keys (so `{"fruit": ["apple"]}` isn't mistaken for one) |
+| Weighted: `{"A": {"B": 4}}`, or `{"A": [("B", 4)]}` | Automatically. Weights label the edges |
+| Objects that hold lists, sets or dicts of each other: `city.roads`, `node.children` | Automatically. This covers graphs of objects, trees with any number of children, and tries (a dict's keys label its edges) |
+| Neighbors by number: `adj = [[1, 2], [0], [0]]` | With a hint, `viz: graph adj`, because a grid looks the same |
+| An adjacency matrix: `m = [[0, 1], [1, 0]]` | With a hint, `viz: graph m`. A square list of lists is read as a matrix |
+| An edge list: `edges = [(0, 1), (1, 2, 5)]` | With a hint, `viz: graph edges`. JavaScript arrays need `viz: graph edges edgelist` |
+
+A graph is **undirected** when every edge goes both ways, and **directed** (with arrowheads) otherwise. It's drawn in **layers** when it can be, meaning a directed graph without cycles or a tree, so a dependency graph or a trie reads from top to bottom. Anything else gets a force-directed layout.
+
+![Topological sort: items already placed in the order are filled in, the ready queue is numbered, and each item shows how many things it still waits on](docs/graph-topo.png)
+
+#### Your algorithm's state, drawn on the graph
+
+The variables your algorithm uses are drawn on the graph, the way you'd mark it up on a whiteboard. Nothing has to be declared. What a variable means is read from its type, and where the type isn't enough, from its name:
+
+| A variable that holds... | Is drawn as |
+| --- | --- |
+| A set of nodes (`visited`, `seen`), a dict of node → `True`, or one `True`/`False` per node | Filled-in green nodes |
+| A list named like a result (`order`, `result`, `done`, `topo`...) | Filled in, like a visited set |
+| Any other list, or a `deque`, of nodes | Dashed orange rings, numbered in the order they'll come out. That's the front of a queue, the top of a stack (named `stack` or `todo`), or the smallest of a heap (named `heap`, `pq` or `frontier`, or holding `(priority, node)` pairs) |
+| A dict of node → number or text (`dist`, `indegree`, `color`), or one number per node | A small label beside each node |
+| A dict of node → node named like a parent (`parent`, `prev`, `came_from`), or one parent per node | Green arrows: the search tree. Links that aren't edges of the graph, like a union-find forest, are dashed |
+| A list of nodes named like a path (`path`, `route`, `trip`) | Purple arrows along the path |
+| A list of `(a, b, ...)` edges named like `mst`, `tree` or `chosen` | Those edges in purple |
+| One node (`node`, `u`, `v`, `cur`, `start`, `goal`, `nb`, `next`...), or any variable pointing at a node object | A ▲ marker with its name, under the node |
+
+A legend at the top of the graph names the variables. Whatever changed in the last step gets a yellow halo, like a changed cell, and markers slide from node to node when [animated](#playing-a-program). A name that doesn't fit the conventions can be added with a hint: `viz: graph graph: here, there`.
+
+![A trie: letters label the edges, and nodes that end a word are filled in](docs/graph-trie.png)
+
+**In the loop history**, every row draws the graph with that iteration's state, so you can watch a BFS frontier spread out row by row. In animated mode, one graph changes as you step. The algorithm's other variables (`dist`, `heap`, `visited`) are still shown as rows of cells next to it. The graph's own dict isn't, since the picture already shows it.
+
+![The loop history of Dijkstra's algorithm: each iteration's graph, next to the dist and heap containers](docs/graph-loop.png)
+
+Graphs look the same in Nested mode, since a graph can't be drawn as boxes inside boxes. To see the dict behind a graph instead, add `viz: plain graph`.
+
 ### Generators and async functions
 
 A generator or `async` function can stop partway through and carry on later, so it doesn't fit the usual call stack, where a call is pushed, runs to the end and is popped. PR0L1NE gives each one its **own frame that's suspended and resumed** instead:
@@ -311,7 +375,9 @@ The examples include "Generator (Fibonacci)" in all three languages, and "Async 
 
 ## Hints: `viz:` comments
 
-PR0L1NE chooses what to draw automatically, but sometimes its guesses aren't what you want: a helper variable clutters the loop history, `cur` isn't recognized as a position in a list, or a tree with parent pointers comes out as a list. A **hint** is a comment that tells it what you meant.
+PR0L1NE chooses what to draw automatically, but sometimes its guesses aren't what you want: a helper variable clutters the loop history, `cur` isn't recognized as a position in a list, a tree with parent pointers comes out as a list, or a list of lists is really a graph. A **hint** is a comment that tells it what you meant.
+
+The quickest way to learn them is the **Hints, step by step** group in the Open… menu: [ten examples](#learning-hints-with-the-examples), from one hint to all of them together.
 
 ```python
 # viz: hide temp
@@ -347,40 +413,52 @@ A hint is a comment whose text starts with `viz:`:
 | `viz: pointers grid[]: col` | The same, for a **grid**'s columns: `col` is marked under a column of `grid`. (Use `pointers grid: row` for its rows.) |
 | `viz: tree Node(left, right)` | Draws objects of class `Node` as a binary tree, using `left` and `right` as the children, in both the memory view and the loop history. Other fields, like `parent`, are drawn as plain fields. |
 | `viz: list Node(next)` | Draws objects of class `Node` as a linked list in the loop history, using `next` as the link. Other fields, like `prev` or `random`, aren't drawn as links. |
+| `viz: graph adj` | Draws `adj` as a [graph](#graphs): a dict, a list of neighbor lists, an adjacency matrix or an edge list. `self.adj` or `this.adj` work too, or just the field name. |
+| `viz: graph adj: seen, todo, here` | The same, and also draws these variables on the graph, whatever they're called. Each is drawn by its type: a set fills nodes in, a list numbers them, a dict of numbers labels them, a variable holding a node gets a ▲ marker. |
+| `viz: graph Node(neighbors)` | Draws objects of class `Node` as a graph, with `neighbors` as the edges. It can be a list, a set, a dict (its keys label the edges) or a direct link. List several fields to use them all. |
+| `viz: plain graph` | Never draws `graph` as a graph, even though it looks like one. It's drawn as an ordinary dict or list instead. Takes variable or class names. |
 
-Names are the variable or field names as written in your code. Class names in `tree` and `list` are what the canvas shows as the box title (a Python class name, or a JavaScript constructor name). If two `tree`/`list` hints name the same class, the later one wins.
+Names are the variable or field names as written in your code. Class names in `tree`, `list` and `graph` are what the canvas shows as the box title (a Python class name, or a JavaScript constructor name). If two hints name the same class or variable, the later one wins.
+
+#### Graph options
+
+Words between a graph hint's target and its colon change how the graph is read or drawn. Any number of them can be combined:
+
+| Option | Effect |
+| --- | --- |
+| `directed`, `undirected` | Draw arrowheads, or don't. Without either, a graph is undirected when every edge goes both ways. |
+| `matrix` | Read a list of lists as an adjacency matrix: `m[i][j]` is the edge from `i` to `j`. `0`, `False`, `None`, `-1` and infinity mean no edge. Other numbers are weights, and are shown unless every edge is `1` or `True`. |
+| `edgelist` | Read a list of `(a, b)` or `(a, b, weight)` as edges. Python tuples are read this way without the option. |
+| `layered`, `force`, `circle` | Lay it out in layers from top to bottom, force-directed, or in a ring. Without one, it's layered when that's possible, and force-directed otherwise. |
+
+```python
+# viz: graph flights matrix directed circle: reach, city
+```
 
 ### When a hint is wrong
 
-A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, tree, list.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
+A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, tree, list, graph, plain.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
 
 A hint that's well-formed but names something that doesn't exist (`hide nmus`) does nothing, since it may refer to a variable that only exists in some runs.
 
-### More examples
+### Learning hints with the examples
 
-```js
-// A binary search tree with parent pointers: three links, but it's a tree.
-// viz: tree TreeNode(left, right)
-class TreeNode {
-  constructor(key, parent = null) {
-    this.key = key;
-    this.parent = parent;
-    this.left = null;
-    this.right = null;
-  }
-}
-```
+The **Hints, step by step** group has the same ten examples in every language. Each starts with its hints and a comment explaining what they change. Deleting a hint line and watching the canvas change is a good way to see what it does.
 
-```python
-# Sliding window: show the running sum, mark the window's edges.
-# viz: show window_sum
-# viz: pointers nums: start, end
-```
+| Example | Hints | What it shows |
+| --- | --- | --- |
+| 1 · hide | `hide before, receipt` | A running total, without the helper variables cluttering the loop history |
+| 2 · show | `show target` | A linear search that keeps the value it's looking for in every row, though it never changes |
+| 3 · pointers | `pointers nums: read` | Removing duplicates in place: `read` comes from `enumerate()`, so only the hint can mark it |
+| 4 · grid pointers | `pointers grid: r`, `pointers grid[]: c` | Column sums: marking a grid's row and column when the code walks rows with `for row in grid` |
+| 5 · tree | `tree Node(left, right)` | A binary search tree with parent links, drawn top-down instead of as a list |
+| 6 · list | `list Item(next)` | A list whose items also have `random` links, followed along `next` only |
+| 7 · graph | `graph adj` | A depth-first search over neighbor lists by number, with `seen`, `stack`, `u` and `v` drawn on it |
+| 8 · graph options | `graph flights matrix directed circle: reach, frontier, city, nxt` | An adjacency matrix, read as a directed graph and drawn in a ring |
+| 9 · edge list | `graph edges edgelist undirected: parent, mst, a, b` | Kruskal's algorithm: the union-find forest in green and the chosen edges in purple |
+| 10 · all together | `graph`, `plain`, `hide` and `show` | Dijkstra on a road map with a closed road: costs, the frontier, the tree of best routes and the final route all on the graph |
 
-```ts
-// A doubly linked list, followed only along next.
-// viz: list DNode(next)
-```
+![Kruskal's algorithm: the union-find forest's links dashed in green, the spanning tree's edges in purple](docs/graph-kruskal.png)
 
 ---
 
@@ -730,7 +808,7 @@ The loop view adds space above each row for arcs (and below, for a second link f
 
 **Animated mode** passes `live: { prev, current }` to `renderLoopView()`: the loop's state at the current step and the step before, read straight from those steps rather than from iteration ends. It draws just that one row, comparing it with `prev` for highlights, but sizes columns, cells and trees from all of the stacked rows, so the layout is identical from step to step and only the contents change. The animation in the next section does the rest.
 
-### 13. Hints
+### 12. Hints
 
 Hints are split so that each language does as little as possible:
 
@@ -741,7 +819,7 @@ Hints are split so that each language does as little as possible:
 
 This keeps every hint keyword in one TypeScript file with its own tests (`hints.test.ts`), and adding a hint never touches the tracers.
 
-### 14. Animation and playback
+### 13. Animation and playback
 
 Every step still draws a fresh SVG, the same way as before. Animation is layered on top with the [FLIP](https://aerotwist.com/blog/flip-your-animations/) technique (First, Last, Invert, Play) in [`render/animate.ts`](src/render/animate.ts):
 
@@ -753,11 +831,36 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 **Playback** in `main.ts` is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step, for `min(260 ms, 0.75 × interval)`, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
 
+### 14. Graphs
+
+[`trace/graph.ts`](src/trace/graph.ts) is pure, like `linked.ts`, and has its own tests ([`graph.test.ts`](src/trace/graph.test.ts)). It does four things.
+
+**Finding graphs.** `findGraphs(trace, scopes, heap)` looks at the variables in view, and one level into objects, for `self.adj`. Hinted graphs come first. Then come dicts whose values are all collections of primitives, with 2 to 40 nodes, where at least half the neighbors are also keys. Then come classes whose objects hold a non-empty list, set or dict of objects of the same class (`linkClasses()`). Lists of lists are only read as graphs with a hint, since grids look the same.
+
+**Node keys.** A node named by a dict key and by an item in a neighbor list has to compare equal, but the trace stores the two differently: Python's `'A'` keeps its quotes, a JavaScript object key `A` has none, and the JavaScript key `3` is the string `"3"`. `primNodeKey()` normalizes them all to `s:A` or `n:3`. Object nodes use their heap id.
+
+**Reading the state.** `graphOverlay()` goes through every variable in view and asks two questions: does it hold nodes (directly, or in `(priority, node)` pairs), and what kind of container is it? The rules in [the table above](#your-algorithms-state-drawn-on-the-graph) come from that. Names only break ties, using the short regular-expression lists at the top of the overlay section (`VISITED_NAMES`, `PARENT_NAMES` and so on). For graphs whose nodes are exactly `0..n-1`, a list of length `n` is read as one value per node. Pointers are primitives that name a node, held by a conventional name, a name used as a subscript of the graph (`graph[node]`), or a name in a hint.
+
+**Layout.** `layoutFor(trace, graph)` lays out a graph once per run, using every node and edge it has at any step. That takes one pass over the trace, cached per trace in a `WeakMap`, so nodes never move while the graph is built, and the memory view and loop history agree. `computeLayout()` works like this:
+
+- **Layered** for directed graphs without cycles (longest-path layers) and for forests (breadth-first depth). A few sweeps order each layer by the average position of each node's neighbors. Each node then sits as close to that average as a gap of 1 allows.
+- **Force-directed** for everything else (Fruchterman–Reingold). It starts from a circle, so it gives the same picture every run. It's then rotated so its long side is horizontal and scaled so an edge is about one unit long, and a last pass pushes apart any nodes closer than 0.9.
+
+The same pass records every kind of state the graph is ever drawn with, so its legend, and therefore its size, stays the same from the first step to the last.
+
+**Drawing.** [`render/graphView.ts`](src/render/graphView.ts) turns layout units into pixels: one unit is the widest node plus a gap.
+
+- **Edges** are clipped to node outlines. An undirected pair is drawn once, a directed pair as two bowed curves, and weights as labels with a halo.
+- **Nodes** carry classes for their state, plus badges for queue order and labels.
+- **▲ markers** carry `data-flip` keys, so they slide when animated.
+
+In the memory view, a graph is one box drawn in place of its *host*: the dict or list, or for a graph of objects, its first node object. Every other node object and its neighbor list is an alias of that box, so an arrow from a variable lands on the box's left edge, level with the node it points at. The loop history caches each row's graphs for the run, so stepping through a long loop doesn't search for graphs again.
+
 ### Pointer detection
 
 Pointer markers under a list are chosen in two ways. First, any name used as a subscript of that list anywhere in the code (found by the `ast` pass in Python, or the Babel analysis pass in JavaScript and TypeScript) is shown if it currently holds a whole number. So `arr[j]` makes `j` a pointer on `arr`. Second, for lists that the code indexes, a few conventional names are always considered: `lo`, `hi`, `low`, `high`, `left`, `right`, `l`, `r`, `start`, `end`, `mid`, `slow`, `fast`. That's how binary search gets `lo` and `hi` markers even though the code only ever writes `nums[mid]`. Third, a [`viz: pointers` hint](#hints-viz-comments) adds names explicitly, by merging them into the same index analysis. A marker for an index equal to the list's length (one past the end) is drawn hollow. The list is in [`render/draw.ts`](src/render/draw.ts) (`CONVENTIONAL_POINTERS`).
 
-### 12. The editor
+### 15. The editor
 
 The editor is Monaco, set up across two files.
 
@@ -795,7 +898,11 @@ algoviz/
     ├── programs.test.ts        Saved program tests
     ├── monaco.ts               Lean Monaco build: editor features + 3 languages
     ├── editor.ts               Monaco setup, theme, commands and line markers
-    ├── examples.ts             Starter programs for every language
+    ├── examples/
+    │   ├── index.ts            The Example type (group, name, code)
+    │   ├── python.ts           Python examples, grouped by topic
+    │   ├── javascript.ts       JavaScript examples
+    │   └── typescript.ts       TypeScript examples
     ├── styles.css              All styles, including the SVG diagram styles
     ├── trace/
     │   ├── types.ts            The trace format (the tracer/renderer contract)
@@ -804,7 +911,9 @@ algoviz/
     │   ├── hints.ts            Parse and apply viz: comment hints
     │   ├── hints.test.ts       Hint tests (all three languages)
     │   ├── linked.ts           Linked lists and trees (loop history and memory)
-    │   └── linked.test.ts      Linked structure tests
+    │   ├── linked.test.ts      Linked structure tests
+    │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
+    │   └── graph.test.ts       Graph tests
     ├── render/
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointers
     │   ├── memory.ts           The memory view (arrows or nested, draggable boxes)
@@ -813,6 +922,7 @@ algoviz/
     │   ├── route.test.ts       Routing tests
     │   ├── layout.test.ts      Every example, every step: no overlaps or crossings
     │   ├── loopView.ts         The loop history view (stacked or animated)
+    │   ├── graphView.ts        Drawing a graph, for both views
     │   ├── animate.ts          FLIP tweening between two drawings
     │   ├── animate.test.ts     Animation tests (jsdom)
     │   └── viewport.ts         Pan, zoom and node dragging for both sections
@@ -890,7 +1000,11 @@ Say you want sets drawn as bubbles or tuples drawn differently:
 
 ### Add a structure-specific layout
 
-Binary trees already have their own layout in the memory view (`findTreeBlocks()` in `memory.ts`). The same pattern works for other shapes: detect the structure, measure it as one block, let the column walk place the block like a single wide box, then put each member at its slot inside it. For general graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) can compute the slots, and the existing shape and arrow code can draw them.
+Binary trees (`findTreeBlocks()` in `memory.ts`) and graphs (`graphBoxes()`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. For bigger graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) could replace `computeLayout()` in `graph.ts`. Everything downstream only needs a position per node.
+
+### Teach graphs a new kind of state
+
+`graphOverlay()` in `trace/graph.ts` decides what each variable means for a graph. To draw something new (say, a `color` dict for graph coloring as actual colors), add a field to `GraphOverlay`, fill it in the loop over variables, and draw it in `graphPicture()`. Add a line to `legendItems()` too, and to `nodeSignature()` so changes get highlighted.
 
 ### Add a hint
 
@@ -916,7 +1030,12 @@ Everything after the worker only depends on the trace format, so any language wo
 - **Grids are two levels.** A list of lists is a grid. Deeper nesting (a 3D list) shows a grid of dots in the loop history, and nested boxes in nested mode.
 - **One linked class per loop.** If a loop works with two different linked classes, the loop history shows the one with more nodes. Graphs with cycles work, but large ones get crowded with arcs.
 - **Trees with parent pointers** (`left`, `right` and `parent`) have three links, so they're drawn as a list with arcs unless you add a [`viz: tree` hint](#hints-viz-comments).
-- **Only binary trees get the top-down layout** in the memory view. Trees with more children, and general graphs, use the column layout.
+- **Graph size.** Graphs are found automatically up to 40 nodes, and drawn up to 60 with a hint. Big, dense graphs get busy, since edges are straight lines that can cross.
+- **Graph state is read from types and names.** A variable whose meaning doesn't show in its type or name may be drawn the wrong way, or not at all. For example, a plain list of nodes is numbered as a queue, front first. List names in the graph hint to include them. In a heap of `(priority, node)` pairs where nodes are numbers too, the node is taken to be the last element.
+- **One graph in the loop history.** If a loop works with several graphs, the loop history draws the first one found (hinted ones first). The memory view draws them all.
+- **Arrows into a graph of objects** end at the edge of the graph's box, level with the node, rather than at the node itself. The ▲ marker under the node says which one.
+- **Graph nodes can't be dragged** one at a time. The whole graph box can.
+- **Trees with more than two children** (`children` lists or dicts) are drawn as [graphs](#graphs), in layers from the root down, rather than with the binary tree layout. That's still top-down, but without in-order positions.
 - **Only single steps animate.** Jumping with the slider or `Home`/`End` redraws without tweening. Arrows don't animate at all; they jump to their new route, which can briefly look detached while a box is still sliding into place.
 - **Hints apply to the whole program.** There's no way yet to scope a hint to one function or loop, so `hide x` hides every `x`.
 - **Arrows assume the automatic layout.** Once you drag boxes around, arrows still route through the gaps they'd normally use, so they can cross boxes you've moved. They always reach the right box.
@@ -962,7 +1081,7 @@ Everything listed for JavaScript applies, plus:
 
 **"Couldn't load the language runtime: …" in the status bar (Python).** Usually a failed or partial download. Reload the page. If it persists, try another browser to rule out an extension.
 
-**The page takes a while to load in dev.** That's Monaco being served as individual modules (see [The editor](#12-the-editor)). Later loads are faster because the browser caches them, and production builds don't have this cost.
+**The page takes a while to load in dev.** That's Monaco being served as individual modules (see [The editor](#15-the-editor)). Later loads are faster because the browser caches them, and production builds don't have this cost.
 
 **A keyboard shortcut does something different from VS Code.** Monaco includes VS Code's editor keybindings, but not workbench-level ones (like `Ctrl/Cmd + P` for quick open or `Ctrl/Cmd + B` for the sidebar), since there's no workbench. A few shortcuts can also be taken by the browser before the page sees them, such as `Ctrl/Cmd + W` and `Ctrl/Cmd + T`.
 
@@ -970,9 +1089,13 @@ Everything listed for JavaScript applies, plus:
 
 **"Couldn't save: the browser's storage for this site is full or unavailable."** Browsers allow about 5 MB per site, which is a lot of source code. Delete programs you no longer need. Some privacy modes disable storage entirely. In that case programs still save, but only until the page is closed.
 
-**Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl/Cmd + Enter`. A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
+**Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl/Cmd + Enter` (or `Ctrl + '`). A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
 
 **"Stopped after 3,000 steps."** The program hit the step budget. Usually that's an infinite loop, but a correct program on bigger input can hit it too. Use a smaller input, or raise `MAX_STEPS` in `main.ts`.
+
+**A dict is drawn as a graph, but I want to see the dict.** Add `viz: plain name`, using the variable's name (or the class name, for a graph of objects).
+
+**My graph isn't drawn as a graph.** Lists of lists, matrices and edge lists need a hint: `viz: graph adj`. A dict is only recognized automatically when most of the neighbors are also keys. If your nodes are spelled differently in the keys and the lists (`"1"` and `1` in Python), they're different nodes.
 
 **The loop history shows a different loop than I expected.** Click the loop you want in the tabs above it. Your choice sticks while that loop is active.
 
@@ -986,7 +1109,9 @@ Everything listed for JavaScript applies, plus:
 
 ## Roadmap ideas
 
-- ELK.js layouts for general graphs, and top-down layouts for trees with more than two children.
+- Dragging single nodes of a graph to rearrange it, remembered like dragged boxes.
+- Grids drawn as graphs (a maze search over a 2D grid), with the path through the cells highlighted.
+- ELK.js layouts for large graphs, routing edges around nodes.
 - Hints scoped to a function or a loop, and more hint kinds (`viz: graph`, `viz: matrix`).
 - Morphing arrows between steps, by matching routes point by point.
 - Exporting a played run as a GIF or video.

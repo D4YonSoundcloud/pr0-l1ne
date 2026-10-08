@@ -62,6 +62,25 @@ describe("routeEdges", () => {
     expect(Math.min(...route.map((p) => p.y))).toBeLessThan(40); // over the top
   });
 
+  it("never produces NaN, wherever a dragged box ends up", () => {
+    // With no boxes between an arrow's two columns, corridors used to be
+    // placed at the top of an empty set of boxes: at infinity.
+    const target = box(100, 100, 120, 60);
+    for (let dx = -320; dx <= 320; dx += 7.5) {
+      for (let dy = -140; dy <= 140; dy += 9.5) {
+        const source = box(100 + dx, 100 + dy, 160, 90);
+        const routes = routeEdges([
+          { from: { x: source.x + 140, y: source.y + 40 }, source, target, entryY: 113 },
+          { from: { x: source.x + 140, y: source.y + 70 }, exitDownY: source.y + 99, source, target, entryY: 113 },
+        ], [source, target]);
+        for (const route of routes) {
+          for (const p of route) expect(Number.isFinite(p.x) && Number.isFinite(p.y), `dx ${dx}, dy ${dy}`).toBe(true);
+          expect(roundedPath(route)).not.toContain("NaN");
+        }
+      }
+    }
+  });
+
   it("goes under when there's no room above", () => {
     const left = box(0, 4), middle = box(200, 4, 100, 200), source = box(400, 4);
     const [route] = routeEdges([{ from: { x: 480, y: 30 }, source, target: left, entryY: 17 }], [left, middle, source]);

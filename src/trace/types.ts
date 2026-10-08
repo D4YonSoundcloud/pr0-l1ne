@@ -165,6 +165,24 @@ export interface LinkedHint {
   line: number;
 }
 
+/** Options a `viz: graph` hint can carry. */
+export type GraphOption = "directed" | "undirected" | "circle" | "layered" | "force" | "matrix" | "edgelist";
+export const GRAPH_OPTIONS: readonly GraphOption[] = ["directed", "undirected", "circle", "layered", "force", "matrix", "edgelist"];
+
+/**
+ * `viz: graph adj`, `viz: graph Node(neighbors)`, with options and the
+ * names of variables to draw on it: `viz: graph adj directed: seen, queue`.
+ */
+export interface GraphHint {
+  /** A variable (`adj`, `self.adj`) or, with `fields`, a class. */
+  target: string;
+  /** For a class: the fields that hold its neighbors. */
+  fields?: string[];
+  options: GraphOption[];
+  names: string[];
+  line: number;
+}
+
 /** Parsed hints (trace/hints.ts), kept on the trace for the renderers. */
 export interface VizHints {
   hide: string[];
@@ -172,6 +190,9 @@ export interface VizHints {
   /** Extra index names, keyed like Trace.indexNames ("nums", "grid[]"). */
   pointers: Record<string, string[]>;
   linked: LinkedHint[];
+  graphs: GraphHint[];
+  /** Variables or classes never to draw as a graph. */
+  plain: string[];
   /** Hints that couldn't be understood, to show to the person. */
   warnings: { line: number; message: string }[];
 }

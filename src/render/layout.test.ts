@@ -6,10 +6,11 @@
  */
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES, type Example } from "../examples";
+import { JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES, type Example } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
 import { diffSteps } from "../trace/diff";
+import { applyHints } from "../trace/hints";
 import type { Trace } from "../trace/types";
 import { renderMemory, type MemoryMode, type Point } from "./memory";
 import { crosses, overlaps, type Rect } from "./route";
@@ -64,8 +65,9 @@ const programs: [string, Example, Tracer][] = [
 
 describe.each(programs)("%s: %s", (_language, example, trace) => {
   it.each<MemoryMode>(["arrows", "nested"])("%s mode: no overlapping boxes, no arrows through boxes", async (mode) => {
-    const t = await trace(example.code);
-    if (!t) return;
+    const raw = await trace(example.code);
+    if (!raw) return;
+    const t = applyHints(raw);
     expect(t.error).toBeNull();
     for (let i = 0; i < t.steps.length; i++) {
       const { boxes, arrows } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode }));

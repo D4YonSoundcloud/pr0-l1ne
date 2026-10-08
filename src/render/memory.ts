@@ -32,6 +32,8 @@ import {
 } from "./draw";
 import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
 import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
+import { graphOverlay, graphsAt, layoutFor, legendOverlaysFor, stepScopes, type GraphData, type GraphOverlay } from "../trace/graph";
+import { graphPicture, type GraphPicture } from "./graphView";
 
 interface OutRef {
   from: Point;
@@ -504,6 +506,21 @@ export function renderMemory(
 
   const nested = layout.mode === "nested" ? chooseNested(step) : new Set<string>();
 
+  // Graphs are drawn as one box, in place of the dict or list that holds
+  // them (or, for graphs of objects, in place of all the node objects).
+  const graphs = graphBoxes(trace, stepIndex);
+  const graphAlias = new Map<string, string>();
+  for (const box of graphs.values()) {
+    nested.delete(box.graph.hostId);
+    if (!box.graph.objectNodes) continue;
+    for (const member of box.graph.members) {
+      nested.delete(member);
+      // Arrows to any node (or its neighbor list) go to the graph's box.
+      if (member !== box.graph.hostId) graphAlias.set(member, box.graph.hostId);
+    }
+  }
+  const outgoing = (id: string): Value[] => (graphs.has(id) ? [] : valuesOf(step.heap[id]));
+
   // Index pointers (i, j, lo, hi...) belong to the variable that holds a list.
   const pointerOwner = new Map<string, { name: string; frame: Frame }>();
   for (const frame of liveFrames(step)) {
@@ -531,8 +548,8 @@ export function renderMemory(
   const exits = (values: Value[], out: string[] = []): string[] => {
     for (const value of values) {
       if (value.kind !== "ref" || !step.heap[value.id]) continue;
-      if (nested.has(value.id)) exits(valuesOf(step.heap[value.id]), out);
-      else out.push(value.id);
+      if (nested.has(value.id)) exits(outgoing(value.id), out);
+      else out.push(graphAlias.get(value.id) ?? value.id);
     }
     return out;
   };
@@ -565,12 +582,15 @@ export function renderMemory(
   for (const id of exits(roots)) enqueue(id, 0);
   while (queue.length) {
     const id = queue.shift()!;
-    for (const child of exits(valuesOf(step.heap[id]))) enqueue(child, depth.get(id)! + 1);
+    for (const child of exits(outgoing(id))) enqueue(child, depth.get(id)! + 1);
   }
 
   // 2. Measure everything, then size the columns.
   const shapes = new Map<string, Shape>();
-  for (const id of order) shapes.set(id, objectShape(step.heap[id], ctx));
+  for (const id of order) {
+    const box = graphs.get(id);
+    shapes.set(id, box ? graphShape(box, step.heap[id], diff.newObjects.has(id)) : objectShape(step.heap[id], ctx));
+  }
 
   // The call stack, then paused frames under it.
   const frames = liveFrames(step);
@@ -692,14 +712,18 @@ export function renderMemory(
 
   // 4. Route the arrows through the gaps between boxes (see route.ts).
   const edges = refs
-    .map((ref) => ({ ref, source: rects.get(ref.source ?? ""), target: rects.get(nodeKey.object(ref.target)) }))
+    .map((ref) => ({ ref, source: rects.get(ref.source ?? ""), target: rects.get(nodeKey.object(graphAlias.get(ref.target) ?? ref.target)) }))
     .filter((e): e is { ref: OutRef; source: Rect & { inY: number }; target: Rect & { inY: number } } => !!e.source && !!e.target);
   const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
   const routes = routeEdges(
     edges.map(({ ref, source, target }) => {
       const block = blockOf.get(ref.target);
       const sourceId = idOf(ref.source);
-      const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY: target.y + target.inY };
+      // An arrow to a node of a graph lands level with that node.
+      const host = graphAlias.get(ref.target) ?? ref.target;
+      const center = graphs.get(host)?.picture.centers.get(ref.target);
+      const entryY = center && graphs.get(host)!.graph.objectNodes ? target.y + GRAPH_BODY_Y + center.y : target.y + target.inY;
+      const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY };
       if (!block?.origin) return base;
       // Parent to child inside a tree: drop from the parent to the child's top.
       const parent = block.nodes.get(sourceId);
@@ -730,7 +754,7 @@ export function renderMemory(
       class: ref.changed ? "ref-arrow is-changed" : "ref-arrow",
       "marker-end": "url(#arrow-ref)",
       "data-from": ref.source,
-      "data-to": nodeKey.object(ref.target),
+      "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target),
     }));
   });
 
@@ -762,6 +786,59 @@ export function applyFocus(svg: SVGSVGElement | null, key: string | null): void 
     const other = from === key ? to : from;
     svg.querySelector(`.node[data-node-key="${CSS.escape(other ?? "")}"]`)?.classList.add("is-related");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Graphs
+// ---------------------------------------------------------------------------
+
+interface GraphBox {
+  graph: GraphData;
+  overlay: GraphOverlay;
+  picture: GraphPicture;
+}
+
+/** Where a graph's picture starts inside its box. */
+const GRAPH_BODY_Y = HEADER_H + 4;
+
+/** The graphs at a step, by the heap id each one is drawn in place of. */
+function graphBoxes(trace: Trace, stepIndex: number): Map<string, GraphBox> {
+  const step = trace.steps[stepIndex];
+  const before = trace.steps[stepIndex - 1];
+  const prev = new Map((before ? graphsAt(trace, before) : []).map((graph) => [graph.id, {
+    graph, overlay: graphOverlay(trace, graph, stepScopes(before), before.heap),
+  }]));
+  const boxes = new Map<string, GraphBox>();
+  for (const graph of graphsAt(trace, step)) {
+    const overlay = graphOverlay(trace, graph, stepScopes(step), step.heap);
+    const picture = graphPicture(graph, layoutFor(trace, graph), overlay, {
+      flipKey: `gptr:${graph.id}`, prev: before ? prev.get(graph.id) ?? null : null,
+      legendOverlays: [overlay, ...legendOverlaysFor(trace, graph)],
+    });
+    boxes.set(graph.hostId, { graph, overlay, picture });
+  }
+  return boxes;
+}
+
+function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean): Shape {
+  const { graph, picture } = box;
+  const kind = `${graph.directed ? "directed" : "undirected"} graph, ${graph.nodes.size} node${graph.nodes.size === 1 ? "" : "s"}`;
+  const title = graph.objectNodes ? `${graph.name} objects: ${kind}` : `${obj.typeName}: ${kind}`;
+  const w = Math.max(picture.w + 16, uiTextWidth(title, 12) + 28);
+  const h = GRAPH_BODY_Y + picture.h + 4;
+  return {
+    w, h, inY: HEADER_H / 2,
+    draw(x, y, layer) {
+      const g = s("g", { class: ["box", "graph-box", isNew && "is-new"].filter(Boolean).join(" ") });
+      g.append(
+        s("rect", { class: "box-body", x, y, width: w, height: h, rx: 5 }),
+        s("path", { class: "box-header", d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z` }),
+        s("text", { class: "box-title", x: x + 10, y: y + HEADER_H / 2, "dominant-baseline": "central" }, title),
+      );
+      picture.draw(x + Math.round((w - picture.w) / 2), y + GRAPH_BODY_Y, g);
+      layer.append(g);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

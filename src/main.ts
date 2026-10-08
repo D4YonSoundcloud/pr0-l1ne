@@ -197,7 +197,7 @@ function applyOutcome(outcome: RunOutcome): void {
   const warnings = trace.viz?.warnings ?? [];
   editor.setHintWarnings(warnings);
   stale = false;
-  stepIndex = wasAtEnd ? trace.steps.length - 1 : Math.min(stepIndex, trace.steps.length - 1);
+  stepIndex = wasAtEnd ? trace.steps.length - 1 : Math.max(firstStep(), Math.min(stepIndex, trace.steps.length - 1));
 
   if (trace.truncated) {
     setBanner(`Stopped after ${MAX_STEPS.toLocaleString()} steps. If that's unexpected, look for a loop that never ends.`);
@@ -320,15 +320,27 @@ els.modeArrows.addEventListener("click", () => setMemoryMode("arrows"));
 els.modeNested.addEventListener("click", () => setMemoryMode("nested"));
 setMemoryMode(memoryMode);
 
+/**
+ * The first step worth showing. Every trace starts with "called Global" and
+ * "next is line 1", which both show an empty program, so the timeline starts
+ * at the third step: the state after line 1 ran.
+ */
+const SKIPPED_STEPS = 2;
+function firstStep(): number {
+  return trace ? Math.max(0, Math.min(SKIPPED_STEPS, trace.steps.length - 1)) : 0;
+}
+
 function render(updateMarks = true): void {
   els.canvas.classList.toggle("is-stale", stale);
   const total = trace?.steps.length ?? 0;
+  const first = firstStep();
 
-  els.scrubber.max = String(Math.max(0, total - 1));
+  els.scrubber.min = String(first);
+  els.scrubber.max = String(Math.max(first, total - 1));
   els.scrubber.value = String(stepIndex);
-  els.scrubber.disabled = total <= 1;
-  els.play.disabled = total <= 1;
-  els.first.disabled = els.prev.disabled = stepIndex <= 0;
+  els.scrubber.disabled = total - first <= 1;
+  els.play.disabled = total - first <= 1;
+  els.first.disabled = els.prev.disabled = stepIndex <= first;
   els.next.disabled = els.last.disabled = stepIndex >= total - 1;
 
   if (!trace || !total) {
@@ -336,6 +348,7 @@ function render(updateMarks = true): void {
     loopView.setContent(null);
     els.loopTabs.replaceChildren();
     els.stepLabel.textContent = "";
+    els.stepLabel.title = "";
     els.output.textContent = "";
     if (updateMarks) editor.setMarks({ next: null, prev: null, error: null });
     return;
@@ -343,7 +356,10 @@ function render(updateMarks = true): void {
 
   const step = trace.steps[stepIndex];
   const prev = trace.steps[stepIndex - 1];
+  // The label has a fixed width (so the scrubber never resizes); the full
+  // text is in its tooltip when it doesn't fit.
   els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step, prev)}`;
+  els.stepLabel.title = els.stepLabel.textContent;
 
   renderMemoryView();
 
@@ -399,7 +415,7 @@ function render(updateMarks = true): void {
 function goTo(index: number, how: { playing?: boolean } = {}): void {
   if (!trace) return;
   if (!how.playing) setPlaying(false);
-  const next = Math.max(0, Math.min(trace.steps.length - 1, index));
+  const next = Math.max(firstStep(), Math.min(trace.steps.length - 1, index));
   const single = Math.abs(next - stepIndex) === 1;
   pendingTransition = single && !prefersReducedMotion()
     ? Math.round(how.playing ? Math.min(ANIMATION_MS, (0.75 * 1000) / speed) : ANIMATION_MS)
@@ -460,7 +476,7 @@ function setPlaying(on: boolean): void {
   els.play.textContent = on ? "Pause" : "Play";
   els.play.setAttribute("aria-pressed", String(on));
   if (!on || !trace) return;
-  if (stepIndex >= trace.steps.length - 1) goTo(0, { playing: true }); // play again from the start
+  if (stepIndex >= trace.steps.length - 1) goTo(firstStep(), { playing: true }); // play again from the start
   scheduleTick();
 }
 
@@ -508,7 +524,7 @@ const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId
     saveAs: () => saveAs(),
     nextStep: () => goTo(stepIndex + 1),
     prevStep: () => goTo(stepIndex - 1),
-    firstStep: () => goTo(0),
+    firstStep: () => goTo(firstStep()),
     lastStep: () => goTo(Infinity),
     swapPanels: () => setSwapped(!swapped),
     togglePlay: () => setPlaying(!playing),
@@ -556,12 +572,19 @@ function fillProgramMenu(): void {
     for (const program of saved) group.append(new Option(program.name, `saved:${program.id}`));
     els.programs.append(group);
   }
-  const examples = document.createElement("optgroup");
-  examples.label = "Examples";
+  // Examples, one group per topic, in the order the topics first appear.
+  const groups = new Map<string, HTMLOptGroupElement>();
   for (const [index, example] of LANGUAGES[language].examples.entries()) {
-    examples.append(new Option(example.name, `example:${index}`));
+    const topic = example.group ?? "More";
+    let group = groups.get(topic);
+    if (!group) {
+      group = document.createElement("optgroup");
+      group.label = `Examples: ${topic}`;
+      groups.set(topic, group);
+      els.programs.append(group);
+    }
+    group.append(new Option(example.name, `example:${index}`));
   }
-  els.programs.append(examples);
 }
 
 function announce(message: string): void {
@@ -690,7 +713,7 @@ updateProgramUI();
 
 els.run.addEventListener("click", () => runNow());
 els.hideQuiet.addEventListener("change", () => { hideQuiet = els.hideQuiet.checked; render(); });
-els.first.addEventListener("click", () => goTo(0));
+els.first.addEventListener("click", () => goTo(firstStep()));
 els.prev.addEventListener("click", () => goTo(stepIndex - 1));
 els.next.addEventListener("click", () => goTo(stepIndex + 1));
 els.last.addEventListener("click", () => goTo(Infinity));
@@ -700,6 +723,13 @@ document.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement;
   // Inside the editor, Monaco handles its own keys (including F10 / Shift+F10).
   if (target.closest(".monaco-editor")) return;
+
+  // Ctrl + ' runs, like Ctrl/Cmd + Enter, from anywhere on the page.
+  if (event.ctrlKey && (event.code === "Quote" || event.key === "'")) {
+    event.preventDefault();
+    runNow();
+    return;
+  }
 
   // Save works from anywhere, and should never open the browser's "Save page".
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
@@ -729,7 +759,7 @@ document.addEventListener("keydown", (event) => {
   const moves: Record<string, () => void> = {
     ArrowLeft: () => goTo(stepIndex - 1),
     ArrowRight: () => goTo(stepIndex + 1),
-    Home: () => goTo(0),
+    Home: () => goTo(firstStep()),
     End: () => goTo(Infinity),
   };
   const move = moves[event.key];

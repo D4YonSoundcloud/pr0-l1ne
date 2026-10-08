@@ -12,21 +12,30 @@
  *   viz: pointers grid[]: col        ...or as a column in a grid
  *   viz: tree Node(left, right)      draw Node objects as a binary tree
  *   viz: list Node(next)             draw Node objects as a linked list
+ *   viz: graph adj                   draw adj as a graph (adjacency dict,
+ *                                    list of lists, matrix or edge list)
+ *   viz: graph Node(neighbors)       draw Node objects as a graph
+ *   viz: graph adj directed: seen    ...with options, and variables to
+ *                                    draw on it
+ *   viz: plain adj                   never draw adj as a graph
  */
-import type { LinkedHint, RawHint, Trace, VizHints } from "./types";
+import { GRAPH_OPTIONS, type GraphOption, type LinkedHint, type RawHint, type Trace, type VizHints } from "./types";
 
 const NAME = /^[A-Za-z_$][\w$]*$/;
 const CONTAINER = /^([A-Za-z_$][\w$]*)(\[\])?$/;
 const CLASS_LINKS = /^([A-Za-z_$][\w$.]*)\s*\(([^)]*)\)$/;
 
-const KEYWORDS = ["hide", "show", "pointers", "tree", "list"] as const;
+const KEYWORDS = ["hide", "show", "pointers", "tree", "list", "graph", "plain"] as const;
+const DOTTED = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+/** graph <target>[(fields)] [options] [: names] */
+const GRAPH = /^([A-Za-z_$][\w$.]*)\s*(?:\(([^)]*)\))?\s*([A-Za-z\s]*?)\s*(?::\s*(.*))?$/;
 
 function names(text: string): string[] {
   return text.split(",").map((n) => n.trim()).filter(Boolean);
 }
 
 export function emptyHints(): VizHints {
-  return { hide: [], show: [], pointers: {}, linked: [], warnings: [] };
+  return { hide: [], show: [], pointers: {}, linked: [], graphs: [], plain: [], warnings: [] };
 }
 
 /** Parse hint comments. Anything that doesn't make sense becomes a warning. */
@@ -64,6 +73,36 @@ export function parseHints(raw: RawHint[]): VizHints {
       }
       const key = container[1] + (container[2] ?? "");
       hints.pointers[key] = [...new Set([...(hints.pointers[key] ?? []), ...pointerNames])];
+      continue;
+    }
+
+    if (keyword === "plain") {
+      const list = names(rest);
+      if (!list.length || list.some((n) => !DOTTED.test(n))) {
+        warn(line, `"plain" needs variable or class names, like: viz: plain graph`);
+        continue;
+      }
+      hints.plain.push(...list);
+      continue;
+    }
+
+    if (keyword === "graph") {
+      const match = GRAPH.exec(rest);
+      const fields = match?.[2] !== undefined ? names(match[2]) : undefined;
+      const options = (match?.[3] ?? "").split(/\s+/).filter(Boolean).map((o) => o.toLowerCase());
+      const drawn = names(match?.[4] ?? "");
+      if (!match || !DOTTED.test(match[1]) || (fields && (!fields.length || fields.some((n) => !NAME.test(n)))) || drawn.some((n) => !DOTTED.test(n))) {
+        warn(line, `"graph" looks like: viz: graph adj  (a variable), or viz: graph Node(neighbors)  (a class and its neighbor field), optionally followed by options and ": names to draw on it"`);
+        continue;
+      }
+      const unknown = options.filter((o) => !(GRAPH_OPTIONS as readonly string[]).includes(o));
+      if (unknown.length) {
+        warn(line, `Unknown graph option "${unknown[0]}". Options are: ${GRAPH_OPTIONS.join(", ")}.`);
+        continue;
+      }
+      hints.graphs = [...hints.graphs.filter((g) => g.target !== match[1]), {
+        target: match[1], ...(fields ? { fields } : {}), options: options as GraphOption[], names: drawn, line,
+      }];
       continue;
     }
 

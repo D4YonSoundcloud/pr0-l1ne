@@ -23,6 +23,9 @@
   --v-str: #8b3a9e;
   --v-num: #1d2b45;
   --v-const: #2e7a57;
+  --visited: #cde7d8;
+  --frontier: #d9822b;
+  --path: #7a4fb5;
 
   --chrome: #161b29;
   --chrome-text: #c9d2e3;
@@ -414,8 +417,20 @@ select {
 .button.play { min-width: 64px; font-weight: 700; }
 .button.play[aria-pressed="true"] { background: var(--highlight); border-color: var(--highlight); color: var(--ink); }
 .speed select { font-size: 13px; padding: 4px 6px; }
-.scrubber { flex: 1; accent-color: var(--highlight); min-width: 80px; }
-.step-label { min-width: 22ch; font-size: 14px; color: var(--chrome-text); text-align: right; }
+/* Fixed widths: the label's text changes every step, and it must never
+   push the scrubber around while you drag it. */
+.scrubber { flex: 1 1 0; width: 0; accent-color: var(--highlight); min-width: 80px; }
+.step-label {
+  flex: none;
+  width: 46ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--chrome-text);
+  text-align: left;
+}
 
 .loop-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .loop-tab {
@@ -527,6 +542,41 @@ select {
 .link-arrow { fill: none; stroke: var(--ballpoint); stroke-width: 1.5; }
 .link-arrow.is-changed { stroke: var(--redpen); stroke-width: 1.9; }
 .linked-node.is-new .cell rect { stroke: var(--ballpoint); stroke-width: 1.75; stroke-dasharray: 4 2; }
+/* Graphs: nodes and edges, with the algorithm's state drawn on them. */
+.box.graph-box > .box-body { fill: #fbfcfd; }
+.graph-edge { fill: none; stroke: var(--ink-soft); stroke-width: 1.5; }
+.graph-edge.is-new { stroke: var(--redpen); stroke-width: 2; }
+.graph-edge.is-tree { stroke: var(--v-const); stroke-width: 3; }
+.graph-edge.is-path { stroke: var(--path); stroke-width: 3.25; }
+.graph-edge.is-extra { stroke-dasharray: 6 4; stroke-width: 2.25; }
+.arrowhead-graph { fill: var(--ink-soft); }
+.arrowhead-tree { fill: var(--v-const); }
+.arrowhead-path { fill: var(--path); }
+.edge-label { font-size: 11px; font-weight: 600; fill: var(--ink-soft); paint-order: stroke; stroke: var(--cell); stroke-width: 4px; stroke-linejoin: round; }
+.edge-label.is-new { fill: var(--redpen); }
+.graph-node .node-body { fill: var(--cell); stroke: var(--ink); stroke-width: 1.5; }
+.graph-node .node-text { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.graph-node.is-visited .node-body { fill: var(--visited); stroke: var(--v-const); stroke-width: 2; }
+.graph-node.is-frontier .node-body { stroke: var(--frontier); stroke-width: 2.5; stroke-dasharray: 5 3; }
+.graph-node.is-path .node-body { stroke: var(--path); stroke-width: 2.5; }
+.graph-node.is-new .node-body { stroke: var(--ballpoint); stroke-dasharray: 4 2; }
+.graph-node .node-halo { fill: var(--highlight); opacity: 0.75; }
+.frontier-badge { fill: var(--frontier); }
+.frontier-badge-text { font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; fill: #fff; }
+.node-label-bg { fill: var(--paper); stroke: var(--ink-faint); stroke-width: 0.75; }
+.node-label { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+.graph-pointers .pointer text { paint-order: stroke; stroke: var(--cell); stroke-width: 4px; stroke-linejoin: round; }
+.loop-svg .graph-pointers .pointer text { stroke: var(--paper); }
+.loop-row.is-current .graph-pointers .pointer text { stroke: #ece6c4; }
+.loop-svg .edge-label { stroke: var(--paper); }
+.graph-legend text { font-family: var(--font-ui); font-size: 11.5px; fill: var(--ink-soft); }
+.graph-legend .swatch { fill: var(--cell); stroke: var(--ink); stroke-width: 1.25; }
+.graph-legend .swatch.is-visited { fill: var(--visited); stroke: var(--v-const); stroke-width: 1.75; }
+.graph-legend .swatch.is-frontier { stroke: var(--frontier); stroke-width: 2; stroke-dasharray: 3 2; }
+.graph-legend .swatch.is-label { fill: var(--paper); stroke: var(--ink-faint); }
+.graph-legend line.swatch.is-tree { stroke: var(--v-const); stroke-width: 3; }
+.graph-legend line.swatch.is-path { stroke: var(--path); stroke-width: 3; }
+
 .quiet-band rect { fill: var(--paper); }
 .quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
 .loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--ink-soft); }
@@ -544,5 +594,5 @@ select {
   .divider { display: none; }
   .toolbar { flex-wrap: wrap; }
   .status { margin-left: 0; width: 100%; }
-  .step-label { min-width: 0; font-size: 13px; }
+  .step-label { width: 26ch; font-size: 13px; }
 }

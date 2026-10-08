@@ -121,8 +121,11 @@ export function createEditor(
   document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
 
   const { KeyMod, KeyCode } = monaco;
+  const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   const actions: [string, string, number[], () => void][] = [
-    ["algoviz.run", "AlgoViz: Run", [KeyMod.CtrlCmd | KeyCode.Enter], callbacks.commands.run],
+    // Ctrl + ' means the Control key everywhere. In Monaco, CtrlCmd is Cmd on
+    // a Mac and WinCtrl is Control there (but the Windows key elsewhere).
+    ["algoviz.run", "AlgoViz: Run", [KeyMod.CtrlCmd | KeyCode.Enter, (IS_MAC ? KeyMod.WinCtrl : KeyMod.CtrlCmd) | KeyCode.Quote], callbacks.commands.run],
     ["algoviz.save", "AlgoViz: Save Program", [KeyMod.CtrlCmd | KeyCode.KeyS], callbacks.commands.save],
     ["algoviz.saveAs", "AlgoViz: Save Program As…", [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS], callbacks.commands.saveAs],
     ["algoviz.nextStep", "AlgoViz: Next Step", [KeyCode.F10], callbacks.commands.nextStep],

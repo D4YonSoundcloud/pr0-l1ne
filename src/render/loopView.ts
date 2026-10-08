@@ -12,6 +12,8 @@
 import { valueKey } from "../trace/diff";
 import { findLinkedTrack, linkedRow, linkedSignature, treeDepths, type LinkedRow, type LinkedTrack } from "../trace/linked";
 import type { LoopHistory, LoopRow } from "../trace/loopHistory";
+import { findGraphs, graphOverlay, graphSignature, layoutFor, legendOverlaysFor, type GraphData, type GraphOverlay, type Scope } from "../trace/graph";
+import { graphPicture, type GraphPicture } from "./graphView";
 import type { HeapObject, SequenceObject, Trace, Value } from "../trace/types";
 import {
   CELL_H, CELL_MIN_W, INDEX_H, POINTER_H, arrowMarkers, cellWidth, changeArrow, pointerMarkers, pointersFor,
@@ -92,13 +94,13 @@ function scalarIn(row: LoopRow, name: string): Value | undefined {
 }
 
 /** Decide which containers and scalars are worth showing for this loop. */
-function pickVariables(trace: Trace, rows: LoopRow[], hasTrack: boolean): { containers: string[]; scalars: string[] } {
+function pickVariables(trace: Trace, rows: LoopRow[], hasTrack: boolean, exclude: Set<string>): { containers: string[]; scalars: string[] } {
   const containerNames: string[] = [];
   const scalarNames: string[] = [];
   for (const row of rows) {
     for (const [name, value] of row.frame.locals) {
       if (value.kind === "ref" && isContainer(row.heap[value.id])) {
-        if (!containerNames.includes(name)) containerNames.push(name);
+        if (!containerNames.includes(name) && !exclude.has(name)) containerNames.push(name);
       } else if (value.kind === "prim" && !scalarNames.includes(name)) {
         scalarNames.push(name);
       }
@@ -385,19 +387,59 @@ function markCell(el: SVGGElement, container: string, slot: string, value: Value
   el.setAttribute("data-cy", "0");
 }
 
+/** Graphs found in each loop row, by step and frame: the same for the whole run. */
+const graphCache = new WeakMap<Trace, Map<string, GraphData[]>>();
+
 export function renderLoopHistory(trace: Trace, history: LoopHistory, options: LoopViewOptions): SVGSVGElement {
   const { rows } = history;
   const live = options.live;
   // Every row that will be measured; in animated mode, plus the live ones.
   const all = live ? [...rows, live.prev, live.current] : rows;
-  const track = findLinkedTrack(all.map((row) => ({ locals: row.frame.locals, heap: row.heap })), trace.viz?.linked);
+  // A graph in view (the loop's variables, or globals): drawn in every row
+  // with that row's state on it. The first one found wins; hinted ones
+  // are found first.
+  const scopesOf = (row: LoopRow): Scope[] => {
+    const global = trace.steps[row.stepIndex]?.stack[0];
+    return global && global.id !== row.frame.id ? [global.locals, row.frame.locals] : [row.frame.locals];
+  };
+  let cache = graphCache.get(trace);
+  if (!cache) graphCache.set(trace, (cache = new Map()));
+  const found = all.map((row) => {
+    const key = `${row.stepIndex}:${row.frame.id}`;
+    let graphs = cache!.get(key);
+    if (!graphs) cache!.set(key, (graphs = findGraphs(trace, scopesOf(row), row.heap)));
+    return graphs;
+  });
+  const graphId = found.flat()[0]?.id;
+  const graphRows: ({ graph: GraphData; overlay: GraphOverlay } | null)[] = all.map((row, i) => {
+    const graph = graphId ? found[i].find((g) => g.id === graphId) : undefined;
+    return graph ? { graph, overlay: graphOverlay(trace, graph, scopesOf(row), row.heap) } : null;
+  });
+  const firstGraph = graphRows.find(Boolean)?.graph;
+  // The graph's own container isn't repeated as a row of cells.
+  const graphHosts = new Set(graphRows.flatMap((r) => (r ? [r.graph.hostId] : [])));
+  const exclude = new Set(all.flatMap((row) => row.frame.locals
+    .filter(([, v]) => v.kind === "ref" && graphHosts.has(v.id) && !firstGraph?.objectNodes).map(([name]) => name)));
+
+  let track = findLinkedTrack(all.map((row) => ({ locals: row.frame.locals, heap: row.heap })), trace.viz?.linked);
+  if (track && firstGraph?.objectNodes && track.typeName === firstGraph.name) track = null;
   const trackRows: (LinkedRow | null)[] = all.map((row) =>
     track ? linkedRow(track, { locals: row.frame.locals, heap: row.heap }) : null);
-  const { containers, scalars } = pickVariables(trace, rows, !!track);
+  const { containers, scalars } = pickVariables(trace, rows, !!track || !!firstGraph, exclude);
 
   // Column layout is shared by every row, so cells line up vertically.
   const columns: ContainerColumn[] = [];
   let x = MARGIN + GUTTER_W;
+  // The graph goes first, one picture per row, all the same size.
+  let graphLayout: { x: number; layout: ReturnType<typeof layoutFor>; overlays: GraphOverlay[]; h: number } | null = null;
+  if (firstGraph) {
+    const layout = layoutFor(trace, firstGraph);
+    const overlays = [...graphRows.flatMap((r) => (r ? [r.overlay] : [])), ...legendOverlaysFor(trace, firstGraph)];
+    const sample: GraphPicture = graphPicture(firstGraph, layout, overlays[0], { flipKey: "g", legendOverlays: overlays });
+    const labelW = textWidth(firstGraph.name) + 12;
+    graphLayout = { x: x + labelW, layout, overlays, h: sample.h };
+    x += labelW + sample.w + CONTAINER_GAP;
+  }
   for (const name of containers) {
     const labelW = textWidth(name) + 12;
     // A list of lists in every row where it has items: draw it as a grid.
@@ -455,7 +497,7 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     trackLayout = { track, x: x + labelW, valueW, nodeW };
     x += labelW + track.order.length * (nodeW + NODE_GAP) - NODE_GAP + CONTAINER_GAP;
   }
-  const hasContent = columns.length > 0 || !!track;
+  const hasContent = columns.length > 0 || !!track || !!firstGraph;
 
   const scalarsX = hasContent ? x - CONTAINER_GAP + SCALARS_GAP : MARGIN + GUTTER_W;
   const scalarsW = Math.max(0, ...all.map((row) => scalarText(row, scalars).length)) * 12.5 * 0.6;
@@ -472,14 +514,15 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
   } else if (track) {
     trackBodyH = CELL_H + (trackPointers ? POINTER_H : 6) + (track.links.length > 1 ? ARC_BOTTOM : 0);
   }
-  const rowH = rowTop + Math.max(CELL_H + 6, trackBodyH, ...columns.map((c) => c.bodyH));
+  const rowH = Math.max(rowTop + Math.max(CELL_H + 6, trackBodyH, ...columns.map((c) => c.bodyH)), graphLayout?.h ?? 0);
 
   // Which rows changed something compared with the row before?
   const trackSignature = (i: number) => (trackRows[i] ? linkedSignature(trackRows[i]!) : "");
   const changed = rows.map((row, i) =>
     i === 0 ||
     containers.some((name) => signature(row, name) !== signature(rows[i - 1], name)) ||
-    trackSignature(i) !== trackSignature(i - 1));
+    trackSignature(i) !== trackSignature(i - 1) ||
+    graphSignature(graphRows[i]?.graph, graphRows[i]?.overlay) !== graphSignature(graphRows[i - 1]?.graph, graphRows[i - 1]?.overlay));
 
   // Collapse runs of quiet iterations into a single band, but only for loops
   // that mutate data. In a read-only loop (a search, a scan) the moving
@@ -640,6 +683,17 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       const prevState = prevDrawn ? trackRows[prevDrawn.index] : null;
       if (isTree) drawTree(g, trackLayout, trackRows[index]!, prevState, cellsY);
       else drawTrack(g, arrowLayer, trackLayout, trackRows[index]!, prevState, cellsY);
+    }
+
+    const graphRow = graphRows[index];
+    if (graphLayout && firstGraph) {
+      g.append(s("text", { class: "container-name", x: graphLayout.x - 8, y: midY, "text-anchor": "end", "dominant-baseline": "central" }, firstGraph.name));
+      if (graphRow) {
+        const prevGraph = prevDrawn ? graphRows[prevDrawn.index] : null;
+        graphPicture(graphRow.graph, graphLayout.layout, graphRow.overlay, {
+          flipKey: "gptr", prev: prevGraph ?? null, legendOverlays: graphLayout.overlays,
+        }).draw(graphLayout.x, y, g);
+      }
     }
 
     rowLayer.append(g);

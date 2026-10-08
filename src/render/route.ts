@@ -242,8 +242,11 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
   for (const p of corridorPlans) {
     const [x1, x2] = corridorRange(p, boxes);
     const between = boxes.filter((b) => b.x < x2 && right(b) > x1);
-    const minTop = Math.min(...between.map((b) => b.y));
-    const maxBottom = Math.max(...between.map(bottom));
+    // With nothing in between (possible once boxes are dragged), run the
+    // corridor just past the arrow's own ends instead of at infinity.
+    const ends = [p.edge.from.y, p.entryY];
+    const minTop = between.length ? Math.min(...between.map((b) => b.y)) : Math.min(...ends);
+    const maxBottom = between.length ? Math.max(...between.map(bottom)) : Math.max(...ends);
     const topY = minTop - CORRIDOR_PAD - tops.top * LANE;
     const viaTop = Math.abs(p.edge.from.y - minTop) + Math.abs(p.entryY - minTop);
     const viaBottom = Math.abs(p.edge.from.y - maxBottom) + Math.abs(p.entryY - maxBottom);
