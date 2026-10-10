@@ -106,6 +106,7 @@ export class StylePanel {
       this.section("loop", "Loop history window", this.paneControls("loop")),
       this.section("colors", "Colors", this.colorControls()),
       this.section("lines", "Lines and text", this.lineControls()),
+      this.section("output", "Printed output", this.outputControls()),
       this.footer(),
     );
     this.sync();
@@ -206,6 +207,10 @@ export class StylePanel {
       this.easingControls(pane),
       this.range("Duration", 0, 1000, 10, " ms", () => p().duration, (v) => set((s) => { s.duration = v; }),
         (v) => (v === 0 ? "off" : `${v} ms`)),
+      this.checkbox("Fade in", () => p().enterFade, (v) => set((s) => { s.enterFade = v; }),
+        "Boxes and values that weren't there a step ago fade in"),
+      this.checkbox("Slide in", () => p().enterSlide, (v) => set((s) => { s.enterSlide = v; }),
+        "Boxes and values that weren't there a step ago slide in from the left, with this window's easing and duration"),
     );
     if (pane === "loop") {
       const copy = h("button", { type: "button", class: "button quiet small" }, "Same as the memory window");
@@ -218,7 +223,7 @@ export class StylePanel {
     return box;
   }
 
-  /** Easing: a preset or your own cubic-bezier, with a live preview. */
+  /** Easing: a preset or your own cubic-bezier, with a preview you play by clicking. */
   private easingControls(pane: "memory" | "loop"): HTMLElement {
     const read = () => this.options.get()[pane];
     const id = nextId("easing");
@@ -228,7 +233,23 @@ export class StylePanel {
     const custom = h("input", { type: "text", class: "style-text", spellcheck: false, "aria-label": "Custom easing", placeholder: "cubic-bezier(0.2, 0.7, 0.2, 1)" });
     const curve = svg("svg", { class: "easing-curve", viewBox: "-0.1 -0.45 1.2 1.9", width: 58, height: 92, "aria-hidden": "true" });
     const ball = h("span", { class: "easing-ball" });
-    const track = h("div", { class: "easing-track", title: "This dot moves with the easing and duration you've chosen" }, ball);
+    const hint = h("span", { class: "easing-hint" }, "▶ Click to preview");
+    const track = h("button", { type: "button", class: "easing-track", title: "Play: the dot moves once with the easing and duration you've chosen" }, hint, ball);
+    // One run across the track, with this window's easing and duration, then back to the start.
+    let playing: Animation | null = null;
+    track.addEventListener("click", () => {
+      const { easing, duration } = read();
+      playing?.cancel();
+      track.classList.add("is-playing");
+      const run = ball.animate([{ left: "4px" }, { left: "calc(100% - 20px)" }], { duration: Math.max(duration, 1), easing, fill: "forwards" });
+      playing = run;
+      run.finished.then(() => new Promise((r) => setTimeout(r, 450))).then(() => {
+        if (playing !== run) return;
+        run.cancel();
+        playing = null;
+        track.classList.remove("is-playing");
+      }).catch(() => { /* cancelled by a newer click */ });
+    });
 
     const draw = () => {
       const { easing, duration } = read();
@@ -242,11 +263,7 @@ export class StylePanel {
         svg("path", { class: "easing-axes", d: "M0,1 H1 M0,1 V0" }),
         svg("path", { class: "easing-path", d: `M0,1 C${pts[0]},${1 - pts[1]} ${pts[2]},${1 - pts[3]} 1,0` }),
       );
-      // Restart the preview animation with the new settings.
-      ball.style.animation = "none";
-      void ball.offsetWidth;
-      ball.style.animation = duration > 0 ? `easing-preview ${Math.max(duration, 120) * 2 + 500}ms ${easing} infinite` : "none";
-      ball.style.setProperty("--easing", easing);
+      track.setAttribute("aria-label", `Preview the easing: ${duration} ms`);
     };
     select.addEventListener("change", () => {
       if (select.value === "custom") {
@@ -303,6 +320,29 @@ export class StylePanel {
       this.range("Cell corners", 0, 12, 1, " px", () => get().cellRadius, (v) => this.update((a) => { a.cellRadius = v; })),
       h("div", { class: "style-row" }, h("label", { for: id }, "Code font"), font),
       h("div", { class: "style-row" }, h("label", { for: flashId }, "Flash changed cells"), flash),
+    );
+  }
+
+  /** A labeled checkbox row. */
+  private checkbox(label: string, read: () => boolean, write: (value: boolean) => void, title = ""): HTMLElement {
+    const id = nextId("check");
+    const box = h("input", { id, type: "checkbox" });
+    box.addEventListener("change", () => write(box.checked));
+    this.syncs.push(() => { box.checked = read(); });
+    return h("div", { class: "style-row", title }, h("label", { for: id }, label), box);
+  }
+
+  /** How the printed-output card arrives, and the dimming around it. */
+  private outputControls(): HTMLElement {
+    const get = () => this.options.get().output;
+    const toggle = (label: string, key: "fade" | "slide" | "dimFade", title: string) =>
+      this.checkbox(label, () => get()[key], (v) => this.update((a) => { a.output[key] = v; }), title);
+    return h("div", { class: "style-group" },
+      toggle("Fade in", "fade", "The card fades in on a step that prints"),
+      toggle("Slide in", "slide", "The card slides in from the left"),
+      toggle("Fade the dimming", "dimFade", "With Dim others on, the rest fades down and back up, instead of switching at once"),
+      this.range("Duration", 0, 1000, 20, " ms", () => get().duration, (v) => this.update((a) => { a.output.duration = v; }), (v) => `${v} ms`),
+      h("p", { class: "style-note style-hint" }, "Turn both Fade in and Slide in off for a card that just appears."),
     );
   }
 

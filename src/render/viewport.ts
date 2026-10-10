@@ -13,7 +13,7 @@
  * the content, so the paper and the drawing feel like one sheet.
  */
 
-import { snapshot, transition as transition_ } from "./animate";
+import { snapshot, transition as transition_, type Enter } from "./animate";
 
 export interface Point { x: number; y: number }
 
@@ -166,7 +166,7 @@ export class Viewport {
    * `transition` (ms), things that moved since the last diagram slide from
    * where they were (see animate.ts).
    */
-  setContent(content: SVGSVGElement | null, emptyText = "", transition = 0, easing?: string): void {
+  setContent(content: SVGSVGElement | null, emptyText = "", transition = 0, easing?: string, enter?: Enter): void {
     const before = transition > 0 && content ? snapshot(this.layer) : null;
     if (content) {
       this.contentW = Number(content.getAttribute("width")) || 0;
@@ -179,7 +179,7 @@ export class Viewport {
     this.empty.textContent = emptyText;
     this.empty.hidden = !!content || !emptyText;
     this.controls.hidden = !content;
-    if (before) transition_(before, this.layer, transition, easing);
+    if (before) transition_(before, this.layer, transition, easing, enter);
     if (this.autoFit.on && content) {
       this.refit(!this.snugNext, this.snugNext);
       this.snugNext = false;

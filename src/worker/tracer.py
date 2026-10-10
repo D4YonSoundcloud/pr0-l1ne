@@ -10,6 +10,7 @@ also run it directly with `python3 tracer.py some_file.py` to inspect a trace.
 """
 
 import ast
+import builtins
 import dis
 import re
 import tokenize
@@ -1184,6 +1185,8 @@ class Tracer:
         self.keepalive = {}
         self.object_ids = {}
         self.frame_ids = {}
+        # What print() was given since the last step: {"line", "objects"}.
+        self.pending_print = None
         self.frame_counter = 0
         self.loops = []
         # Loop bookkeeping, keyed by frame id
@@ -1272,7 +1275,7 @@ class Tracer:
             for name, val in list(fr.f_locals.items()):
                 if is_hidden_name(name, val):
                     continue
-                if is_module and name == "input":
+                if is_module and name in ("input", "print"):
                     continue
                 variables.append([name, serializer.value(val)])
             return {
@@ -1297,6 +1300,15 @@ class Tracer:
         }
         if suspended:
             step["suspended"] = suspended
+        if self.pending_print is not None:
+            # Printed objects that are drawn at this step, by their ids.
+            refs = []
+            for obj in self.pending_print["objects"]:
+                oid = self.object_ids.get(id(obj))
+                if oid in serializer.heap and oid not in refs:
+                    refs.append(oid)
+            step["output"] = {"line": self.pending_print["line"], "refs": refs}
+            self.pending_print = None
         if event in ("return", "yield"):
             step["returnValue"] = serializer.value(arg)
         if event == "exception":
@@ -1344,6 +1356,21 @@ class Tracer:
 
     # -- running -----------------------------------------------------------
 
+    def make_print(self):
+        """print() for the program: prints as usual, and remembers what it was
+        given, so the canvas can point at printed objects on the next step."""
+        tracer = self
+
+        def print(*args, **kwargs):  # noqa: A001 - it is print
+            caller = sys._getframe(1)
+            if caller.f_code.co_filename == USER_FILENAME and kwargs.get("file") in (None, sys.stdout):
+                pending = tracer.pending_print or {"line": caller.f_lineno, "objects": []}
+                pending["objects"].extend(a for a in args if not isinstance(a, PRIMITIVE_TYPES))
+                tracer.pending_print = pending
+            return builtins.print(*args, **kwargs)
+
+        return print
+
     def run(self):
         result = {"version": 1, "language": "python", "steps": self.steps, "loops": [], "indexNames": {},
                   "stdout": "", "error": None, "truncated": False}
@@ -1366,7 +1393,7 @@ class Tracer:
         def no_input(*_args):
             raise RuntimeError("input() isn't supported. Hard-code your test data instead.")
 
-        user_globals = {"__name__": "__main__", "input": no_input}
+        user_globals = {"__name__": "__main__", "input": no_input, "print": self.make_print()}
         # Only programs that mention asyncio pay for importing it.
         uses_asyncio = "asyncio" in self.source
         if uses_asyncio:

@@ -66,6 +66,41 @@ describe("transition", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("follows the window's choice of how new things arrive", () => {
+    const before = snapshot(svg(`<g data-flip="a" data-x="0" data-y="0"></g>`));
+    const after = () => svg(`<g data-flip="a" data-x="0" data-y="0"></g><g data-flip="b" data-x="5" data-y="5"></g>`);
+    const kinds = () => calls.map((c) => ("opacity" in c.keyframes[0] ? "fade" : "slide"));
+
+    transition(before, after(), 200, "linear", { fade: false, slide: true });
+    expect(kinds()).toEqual(["slide"]);
+    expect(calls[0].keyframes[0].transform).toBe("translate(-10px, 0px)");
+
+    calls = [];
+    transition(before, after(), 200, "linear", { fade: true, slide: true });
+    expect(kinds()).toEqual(["fade", "slide"]);
+
+    calls = [];
+    transition(before, after(), 200, "linear", { fade: false, slide: false });
+    expect(calls).toHaveLength(0); // it just appears
+  });
+
+  it("brings in a list's new slots the same way", () => {
+    const cell = (slot: number, value: string) => `<g data-cell="o1|${slot}" data-value="${value}" data-cx="${slot * 34}" data-cy="0"></g>`;
+    const before = snapshot(svg(cell(0, "p:int:1")));
+    transition(before, svg(cell(0, "p:int:1") + cell(1, "p:int:2")), 200, "linear", { fade: true, slide: true });
+    expect(calls.map((c) => c.target.getAttribute("data-cell"))).toEqual(["o1|1", "o1|1"]);
+    calls = [];
+    // a changed value in a slot that was already there doesn't "arrive"
+    transition(before, svg(cell(0, "p:int:7")), 200, "linear", { fade: true, slide: true });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("leaves things that animate themselves alone (the output card)", () => {
+    const before = snapshot(svg(`<g data-flip="a" data-x="0" data-y="0"></g>`));
+    transition(before, svg(`<g data-flip="output" data-no-fade="" data-x="5" data-y="5"></g>`), 200, "linear", { fade: true, slide: true });
+    expect(calls).toHaveLength(0);
+  });
+
   it("does nothing without a previous drawing or a duration", () => {
     transition(null, svg(`<g data-flip="a" data-x="1" data-y="1"></g>`), 200);
     transition(snapshot(svg(`<g data-flip="a" data-x="0" data-y="0"></g>`)), svg(`<g data-flip="a" data-x="9" data-y="9"></g>`), 0);

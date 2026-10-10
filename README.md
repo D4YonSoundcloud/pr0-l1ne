@@ -167,11 +167,12 @@ Inside the canvas, **Memory** and **Loop history** are separate sections with a 
 | Section | What you can change |
 | --- | --- |
 | **Theme** | A starting point: **Graph paper** (the default), **Whiteboard** (white, no grid), **Dot grid**, **Blueprint** (white lines on blue), **Night** (dark) and **High contrast**. Changing anything after that makes it **Custom**. **Reset all** goes back to Graph paper. |
-| **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. And its **duration**, from 0 (no animation) to 1000 ms. **Same as the memory window** copies all of it to the loop history. |
-| **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
+| **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. Its **duration**, from 0 (no animation) to 1000 ms. And how new things arrive: **Fade in** (on by default) and **Slide in** (from the left, with the window's easing; off by default), together, one or the other, or neither so they just appear. **Same as the memory window** copies all of it to the loop history. |
+| **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, memory sizes, the printed-output card and its text, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
+| **Printed output** | How the [printed-output card](#printed-output) arrives: **Fade in** and **Slide in** (turn both off and it just appears), **Fade the dimming** (with Dim others on, the rest fades down and back up rather than switching at once), and the **duration**, 0 to 1000 ms. |
 | **Lines and text** | **Arrow thickness** (0.5× to 3×), **box outlines**, **cell corners** (square to round), the **code font** used in the diagrams, and whether changed cells **flash** when they turn yellow. |
 
-**Previewing animation.** Next to the easing menu, a curve shows its shape, and a dot slides back and forth with your easing and duration. **▶ Replay this step** at the bottom redraws the previous step and animates into the current one, so you can watch the real thing. Bubble sort is a good example to try it on, since its swaps slide.
+**Previewing animation.** Next to the easing menu, a curve shows its shape. Click the track beside it and a dot slides across once, with your easing and duration (it stays still until you click). **▶ Replay this step** at the bottom redraws the previous step and animates into the current one, so you can watch the real thing. Bubble sort is a good example to try it on, since its swaps slide.
 
 The window headers (the strips with "Memory" and the Arrows | Nested switch) take their colors from each window's background, so a dark theme is dark all the way up.
 
@@ -239,7 +240,7 @@ When you edit code while sitting on the last step, the view stays on the last st
 
 **Play** steps forward on its own at the speed chosen next to it (½, 1, 2, 4, 8 or 16 steps per second; your choice is remembered). `Space` plays and pauses when the editor doesn't have focus, and "AlgoViz: Play / Pause" is in the command palette for when it does. Playback stops at the last step, and pressing Play there starts again from the first step. **`Ctrl/Cmd + Enter`** plays from the step you're on, from anywhere, including the editor. Press it again while it's playing to stop and jump back to the step it started from, so you can watch the same stretch again. Any other way of moving (the buttons, the slider, the keys), editing the code, or running it pauses playback.
 
-Moving one step at a time, whether playing or pressing `F10`, is **animated**: boxes and pointer markers slide to their new places, values that moved within a list slide from their old cell to their new one (so a swap is two values crossing), and new boxes and markers fade in. Arrows don't animate: each one is simply drawn in its new place, so they never flicker. Jumps (dragging the slider, `Home`/`End`) aren't animated, since there's nothing meaningful to tween across many steps. Each animation lasts 260 ms with a smooth ease-out by default (both can be changed per window in the [Style panel](#styling-the-canvas)), or less at high speeds so it always finishes before the next step. If your system asks for reduced motion, nothing animates.
+Moving one step at a time, whether playing or pressing `F10`, is **animated**: boxes and pointer markers slide to their new places, values that moved within a list slide from their old cell to their new one (so a swap is two values crossing), and new boxes, markers and list cells fade in (or slide in, or both, or neither: set per window in the Style panel). Arrows don't animate: each one is simply drawn in its new place, so they never flicker. Jumps (dragging the slider, `Home`/`End`) aren't animated, since there's nothing meaningful to tween across many steps. Each animation lasts 260 ms with a smooth ease-out by default (both can be changed per window in the [Style panel](#styling-the-canvas)), or less at high speeds so it always finishes before the next step. If your system asks for reduced motion, nothing animates.
 
 ### The memory view
 
@@ -255,6 +256,16 @@ Moving one step at a time, whether playing or pressing `F10`, is **animated**: b
 - **Paused generators and `async` functions** are drawn under the call stack as frames with a dashed outline, titled with where they paused. See [Generators and async functions](#generators-and-async-functions).
 
 ![Recursion: one frame per call](docs/fact-memory.png)
+
+#### Printed output
+
+On the step right after a `print()` or `console.log()` runs, what it printed appears on the canvas as a dark console card under the call stack, titled with the line that printed it. Turn on **Dim others** (next to **Output** in the memory window's header) and everything else steps back too (it dims to about a quarter), so the output stands out. That's most useful exactly where the console pane is easiest to miss: a `print` on the last line, or a log from an `async` function or timer callback that runs after the script's top level is done.
+
+![print("sorted:", result) on the last line, with Dim others on: the output card, and the sorted list it printed, stay bright while the rest dims](docs/output-memory.png)
+
+If what's printed is an object on the canvas (`print(nums)`, `console.log(node)`), it's outlined, with a dashed arrow from the card to it, and with Dim others on it stays bright too. So you can tell which of two similar lists was the one printed. A temporary that's printed and then thrown away (`print([1, 2])`) shows in the card's text only, since it isn't on the canvas.
+
+The card is as wide as the call stack's column, which widens for a program that prints (to fit its longest printed line, up to about 45 characters, the same on every step). Longer lines wrap at spaces and commas, and output longer than a dozen lines ends with "… N more lines". The card can be dragged like any box. **Output** turns the card off, which helps when a loop prints on every pass. **Dim others** is off by default; both are remembered. Its colors are under **Colors** in the Style panel, and how it animates in (fade, slide, duration) under **Printed output**.
 
 #### Trees
 
@@ -815,6 +826,7 @@ A few optional fields cover the newer features:
 
 - `event` can also be `"yield"`, `"await"` or `"resume"`. A yield step carries the yielded value in `returnValue`.
 - `suspended` on a step lists paused frames, in the same shape as `stack` but with `"state": "suspended"`. `liveFrames(step)` in `types.ts` gives the stack plus the suspended frames, which is what anything that looks up a frame by id should use.
+- `output` on a step says that a `print()` / `console.log()` ran since the previous step: `{ "line": 14, "refs": ["o18"] }`, the line that printed and the ids of printed objects drawn at this step. The text itself is `stdout` from the previous step's `stdoutLength` to this one's; `printedAt()` in [`trace/output.ts`](src/trace/output.ts) puts the two together. Python gets this by giving the program its own `print`, which prints as usual and remembers what it was given; JavaScript's `console` already belongs to the runtime. Each tracer turns the remembered objects into ids when it records the next step, listing only objects that are in that step's heap.
 - `hints` on the trace lists the raw hint comments, as `{ "line": 3, "text": "hide temp" }`. The tracers only collect them. `applyHints()` adds the parsed result as `viz` before anything is drawn.
 
 ### 8. Diffing snapshots
@@ -840,6 +852,8 @@ The renderers turn these into yellow cells, bold labels, and dashed outlines.
 Which objects nest is decided first, by `chooseNested()`, a pure function with its own tests. It counts every reference to each object in the snapshot (from variables, fields, items and the return value), then walks out from the variables, nesting an object only if its count is exactly 1, it hasn't been placed yet, and it's no more than 6 levels deep. It then walks out from every object that stayed separate, so things inside a shared object can still nest inside it. Dict keys never nest, since they're labels.
 
 The column walk then runs over separate boxes only. A reference from inside a nested object counts as coming from the box it's drawn in, so arrows still lead out of nested boxes to the right column.
+
+**Printed output** is placed last, after every object, at the bottom of the stack column (moving down past anything in the way), so it never pushes a box to a new spot on the steps that print. It's exactly as wide as that column: the gap to the right of the column is where the router runs arrows, and a card reaching into it would sit across them. The column's width includes the widest printed line of the whole run (`outputWidth()`, cached per trace), so the layout doesn't shift between printing and non-printing steps. The card's arrows to printed objects are ordinary routed arrows with a `print-arrow` class. Dimming (with **Dim others** on, `dimForOutput` in the `MemoryLayout`) is CSS only: the SVG gets `has-output`, the card `is-output` and printed objects `is-printed`, and everything else drops to 28% opacity. The first printing step also gets `output-in`, and the step after the last gets `output-out`, which run a short fade, since each step is a fresh SVG and a CSS transition alone would have nothing to transition from. The card's own entrance is a CSS animation whose starting opacity, starting offset and duration are variables (`--output-from-opacity`, `--output-from-x`, `--output-duration`, and `--output-dim-duration` for the dimming) that `applyAppearance()` sets from the Style panel. The card carries `data-no-fade`, so the step transition in `animate.ts` doesn't fade it in on top of that. [`layout.test.ts`](src/render/layout.test.ts) draws the card on every printing step of every example and checks it like any box: no overlaps, and no arrows through it.
 
 Each frame and object is drawn in its own `<g class="node">` carrying a key (`frame:2:factorial`, `obj:o4`) and its position. `renderMemory()` takes a `MemoryLayout`, a map from key to position for boxes the person has dragged. A dragged box is drawn at its saved position and leaves the automatic flow, so it doesn't push later boxes down. Arrows are routed using wherever boxes actually ended up, so they follow automatically. Each node group starts with an invisible rectangle covering the whole box, so a press anywhere on it, even in the gap between a list's index numbers and its cells, grabs the box rather than panning the canvas.
 
@@ -924,7 +938,7 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 1. **First.** Before re-rendering, `snapshot()` records where things are in the current drawing: every element with a `data-flip` key (boxes, pointer markers, linked nodes) and every `data-cell` (a list cell's container and slot, with the value it holds).
 2. **Last.** The new step is rendered normally.
-3. **Invert and play.** `transition()` looks up each new element's key in the snapshot and animates it from the old position to its new one with a `transform: translate(...)` that runs back to zero. A cell whose value was in a *different* slot of the same container a moment ago (a swap, a shift) slides from that slot. New elements fade in. Arrows are deliberately left alone and appear at their final route immediately: fading every arrow on every step was more clutter than help, and a re-routed arrow can't be morphed meaningfully anyway.
+3. **Invert and play.** `transition()` looks up each new element's key in the snapshot and animates it from the old position to its new one with a `transform: translate(...)` that runs back to zero. A cell whose value was in a *different* slot of the same container a moment ago (a swap, a shift) slides from that slot. New elements, and cells in slots a list didn't have a moment ago, arrive as the window's `enterFade` and `enterSlide` settings say (passed in as `enter`): a fade over 60% of the duration, a 10px slide from the left with the window's easing, both or neither. Elements marked `data-no-fade` (the printed-output card) are skipped, since they animate in on their own. Arrows are deliberately left alone and appear at their final route immediately: fading every arrow on every step was more clutter than help, and a re-routed arrow can't be morphed meaningfully anyway.
 
 **Why it's fast.** Positions come from `data-x`/`data-y` attributes the renderers write in diagram units, never from `getBoundingClientRect()`, so a step never forces the browser to compute layout before painting. Only `transform` and `opacity` are animated, with the Web Animations API (`element.animate`), so the browser can run them on the compositor without repainting the diagram. The viewport also caches its own size with a `ResizeObserver` instead of measuring, and its "keep the current iteration in view" scrolling works in diagram units. Together, rendering and starting the animations takes about 2 ms per step (10 ms at worst) on the examples, which keeps 16 steps per second at 60 fps.
 
@@ -1071,6 +1085,7 @@ algoviz/
     │   ├── linked.test.ts      Linked structure tests
     │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
     │   ├── graph.test.ts       Graph tests
+    │   ├── output.ts           What a step printed (text, line, printed objects)
     │   ├── memory.ts           Memory sizes: the Python, textbook and V8 models
     │   ├── memory.test.ts      Memory size tests
     │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
@@ -1188,6 +1203,8 @@ Everything after the worker only depends on the trace format, so any language wo
 ## Limitations
 
 **Both languages**
+
+- **Printed output is shown in the memory window only.** The loop history isn't dimmed or labeled with what each iteration printed. Output written another way (`sys.stdout.write`, `print(..., file=sys.stderr)`) shows in the card when it reaches the output pane, but without arrows to objects; output to stderr doesn't appear at all.
 
 - **Big programs.** Each step is a full snapshot, so traces grow with steps times data size. The step budget (3,000) and container cap (60 items) keep it manageable. Raise `MAX_STEPS` in `main.ts` if you need longer runs.
 - **Strings** are drawn as single values. A list or array of characters (`list("hello")`, `"hello".split("")`) is drawn as cells.

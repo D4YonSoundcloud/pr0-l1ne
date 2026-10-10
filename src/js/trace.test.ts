@@ -260,3 +260,22 @@ describe("helpers", () => {
     expect(inspect(o)).toBe("{ a: 1, self: [Circular] }");
   });
 });
+
+describe("printed output", () => {
+  it("tags the step after console.log with its line and the printed objects", async () => {
+    const trace = await traceJavaScript(`const nums = [3, 1, 2];
+console.log("start");
+nums.sort();
+console.log("sorted:", nums, [9]);
+setTimeout(() => console.log("later"), 5);
+`);
+    const outs = trace.steps.filter((s) => s.output).map((s) => s.output!);
+    expect(outs.map((o) => o.line)).toEqual([2, 4, 5]);
+    const numsId = (last(trace).stack[0].locals.find(([n]) => n === "nums")![1] as { id: string }).id;
+    expect(outs[1].refs).toEqual([numsId]); // the temporary [9] isn't drawn, so it isn't listed
+    const { printedAt } = await import("../trace/output");
+    const i = trace.steps.findIndex((s) => s.output?.line === 4);
+    expect(printedAt(trace, i)).toEqual({ text: "sorted: [ 1, 2, 3 ] [ 9 ]", line: 4, refs: [numsId] });
+    expect(printedAt(trace, i - 1)).toBeNull();
+  });
+});

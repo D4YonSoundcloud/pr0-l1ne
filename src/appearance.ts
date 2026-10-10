@@ -24,6 +24,10 @@ export interface PaneStyle {
   easing: string;
   /** Milliseconds; 0 turns animation off for this window. */
   duration: number;
+  /** Boxes and values that appear fade in. */
+  enterFade: boolean;
+  /** Boxes and values that appear slide in from the left. */
+  enterSlide: boolean;
 }
 
 export interface Appearance {
@@ -43,7 +47,22 @@ export interface Appearance {
   font: string;
   /** Changed cells flash briefly when they turn yellow. */
   flash: boolean;
+  /** How the printed-output card arrives, and how the dimming changes. */
+  output: OutputMotion;
 }
+
+export interface OutputMotion {
+  /** The card fades in. */
+  fade: boolean;
+  /** The card slides in from the left. */
+  slide: boolean;
+  /** With Dim others on, the rest fades down and back up (instead of switching). */
+  dimFade: boolean;
+  /** Milliseconds, for all of the above. */
+  duration: number;
+}
+
+export const DEFAULT_OUTPUT_MOTION: OutputMotion = { fade: true, slide: true, dimFade: true, duration: 240 };
 
 export interface ColorField {
   key: string;
@@ -68,6 +87,8 @@ export const COLOR_FIELDS: ColorField[] = [
   { key: "redpen", cssVar: "--redpen", label: "Change arrows (red pen)", group: "Marks" },
   { key: "ballpoint", cssVar: "--ballpoint", label: "References and pointers", group: "Marks" },
   { key: "mem", cssVar: "--mem", label: "Memory sizes", group: "Marks" },
+  { key: "output", cssVar: "--output", label: "Printed output (card)", group: "Marks" },
+  { key: "outputInk", cssVar: "--output-ink", label: "Printed output (text)", group: "Marks" },
   { key: "visited", cssVar: "--visited", label: "Visited nodes", group: "Graphs" },
   { key: "frontier", cssVar: "--frontier", label: "Waiting nodes (queue)", group: "Graphs" },
   { key: "tree", cssVar: "--tree", label: "Search tree edges", group: "Graphs" },
@@ -97,7 +118,7 @@ export const FONTS: { label: string; value: string }[] = [
 const DEFAULT_EASE = EASINGS[0].value;
 
 const pane = (background: string, gridColor: string, grid: GridStyle = "lines"): PaneStyle => ({
-  background, grid, gridColor, gridSize: 24, easing: DEFAULT_EASE, duration: 260,
+  background, grid, gridColor, gridSize: 24, easing: DEFAULT_EASE, duration: 260, enterFade: true, enterSlide: false,
 });
 
 const GRAPH_PAPER: Appearance = {
@@ -107,7 +128,7 @@ const GRAPH_PAPER: Appearance = {
   colors: {
     ink: "#1d2b45", inkSoft: "#5b6b85", inkFaint: "#93a1b5", cell: "#ffffff", cellAlt: "#f3f6f9",
     header: "#d6e0ea", headerCode: "#e2e7f5", num: "#1d2b45", str: "#8b3a9e", const: "#2e7a57",
-    highlight: "#f6d743", redpen: "#c2362f", ballpoint: "#2f6fb0", mem: "#0a7d86",
+    highlight: "#f6d743", redpen: "#c2362f", ballpoint: "#2f6fb0", mem: "#0a7d86", output: "#232a3d", outputInk: "#f2f5fb",
     visited: "#cde7d8", frontier: "#d9822b", tree: "#2e7a57", path: "#7a4fb5",
     paperInk: "#1d2b45", paperInkSoft: "#5b6b85", paperInkFaint: "#93a1b5",
   },
@@ -116,6 +137,7 @@ const GRAPH_PAPER: Appearance = {
   cellRadius: 3,
   font: FONTS[0].value,
   flash: true,
+  output: { ...DEFAULT_OUTPUT_MOTION },
 };
 
 /** Starting points. Everything can be changed afterwards. */
@@ -144,7 +166,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#ffffff", inkSoft: "#cfe0f5", inkFaint: "#8fb0dc", cell: "#24599c", cellAlt: "#1f5193",
       header: "#2e68b0", headerCode: "#3a62a8", num: "#ffffff", str: "#ffc9ef", const: "#b5f2d0",
-      highlight: "#b8860b", redpen: "#ffb199", ballpoint: "#ffffff", mem: "#8ff0f7",
+      highlight: "#b8860b", redpen: "#ffb199", ballpoint: "#ffffff", mem: "#8ff0f7", output: "#062a4d", outputInk: "#ffffff",
       visited: "#2f7a5a", frontier: "#ffb347", tree: "#9ff0c4", path: "#e3c4ff",
       paperInk: "#ffffff", paperInkSoft: "#cfe0f5", paperInkFaint: "#9fbde3",
     },
@@ -158,7 +180,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#dfe5f1", inkSoft: "#a3aec4", inkFaint: "#69758f", cell: "#232b40", cellAlt: "#1d2436",
       header: "#2f3953", headerCode: "#333c5c", num: "#e8edf6", str: "#e6a3d9", const: "#7fd1b2",
-      highlight: "#8a6d12", redpen: "#ff7a70", ballpoint: "#7fb0ff", mem: "#5fd7df",
+      highlight: "#8a6d12", redpen: "#ff7a70", ballpoint: "#7fb0ff", mem: "#5fd7df", output: "#05070c", outputInk: "#e8edf7",
       visited: "#24543d", frontier: "#f0a050", tree: "#6fd39e", path: "#b48cf0",
       paperInk: "#e6ebf5", paperInkSoft: "#a3aec4", paperInkFaint: "#69758f",
     },
@@ -171,7 +193,7 @@ export const PRESETS: Appearance[] = [
     colors: {
       ink: "#000000", inkSoft: "#222222", inkFaint: "#555555", cell: "#ffffff", cellAlt: "#eeeeee",
       header: "#d9d9d9", headerCode: "#d9dcf0", num: "#000000", str: "#7a0080", const: "#005c2e",
-      highlight: "#ffe600", redpen: "#d00000", ballpoint: "#0038d6", mem: "#005f69",
+      highlight: "#ffe600", redpen: "#d00000", ballpoint: "#0038d6", mem: "#005f69", output: "#000000", outputInk: "#ffffff",
       visited: "#a8e6bf", frontier: "#c45a00", tree: "#00703a", path: "#6a1fc2",
       paperInk: "#000000", paperInkSoft: "#222222", paperInkFaint: "#555555",
     },
@@ -183,7 +205,7 @@ export const PRESETS: Appearance[] = [
 export const DEFAULT_APPEARANCE: Appearance = GRAPH_PAPER;
 
 export function clone(a: Appearance): Appearance {
-  return { ...a, memory: { ...a.memory }, loop: { ...a.loop }, colors: { ...a.colors } };
+  return { ...a, memory: { ...a.memory }, loop: { ...a.loop }, colors: { ...a.colors }, output: { ...a.output } };
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -208,6 +230,8 @@ function readPane(raw: unknown, fallback: PaneStyle): PaneStyle {
     gridSize: Math.round(clamp(p.gridSize, 8, 64, fallback.gridSize)),
     easing: typeof p.easing === "string" && isEasing(p.easing) ? p.easing : fallback.easing,
     duration: Math.round(clamp(p.duration, 0, 1500, fallback.duration)),
+    enterFade: typeof p.enterFade === "boolean" ? p.enterFade : fallback.enterFade,
+    enterSlide: typeof p.enterSlide === "boolean" ? p.enterSlide : fallback.enterSlide,
   };
 }
 
@@ -239,6 +263,18 @@ export function parseAppearance(json: string | null): Appearance {
     cellRadius: clamp(raw.cellRadius, 0, 15, base.cellRadius),
     font: FONTS.some((f) => f.value === raw.font) ? raw.font! : base.font,
     flash: typeof raw.flash === "boolean" ? raw.flash : base.flash,
+    output: readOutputMotion(raw.output, base.output),
+  };
+}
+
+function readOutputMotion(raw: unknown, base: OutputMotion): OutputMotion {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Partial<Record<keyof OutputMotion, unknown>>;
+  const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
+  return {
+    fade: bool(r.fade, base.fade),
+    slide: bool(r.slide, base.slide),
+    dimFade: bool(r.dimFade, base.dimFade),
+    duration: clamp(r.duration, 0, 1000, base.duration),
   };
 }
 
@@ -273,6 +309,12 @@ export function applyAppearance(
   canvas.style.setProperty("--cell-radius", `${a.cellRadius}px`);
   canvas.style.setProperty("--diagram-font", a.font);
   canvas.style.setProperty("--flash", a.flash ? "mark 450ms ease-out" : "none");
+  // The output card's entrance: what it starts from, and for how long.
+  const o = a.output;
+  canvas.style.setProperty("--output-from-opacity", o.fade ? "0" : "1");
+  canvas.style.setProperty("--output-from-x", o.slide ? "-8px" : "0px");
+  canvas.style.setProperty("--output-duration", `${o.fade || o.slide ? o.duration : 0}ms`);
+  canvas.style.setProperty("--output-dim-duration", `${o.dimFade ? Math.round(o.duration * 1.1) : 0}ms`);
   for (const name of ["memory", "loop"] as const) {
     const el = targets[name];
     const p = a[name];

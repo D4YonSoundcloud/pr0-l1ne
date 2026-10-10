@@ -289,10 +289,16 @@ export class Runtime {
     return this.lastErrorLine;
   }
 
+  /** What console.log() was given since the last step, so the canvas can point at printed objects. */
+  private pendingOutput: { line: number; objects: object[] } | null = null;
+
   /** A console that prints into the trace's stdout. */
   readonly console = (() => {
     const print = (...args: unknown[]) => {
       this.stdout += args.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" ") + "\n";
+      const pending = this.pendingOutput ?? { line: this.frames[this.frames.length - 1]?.line ?? 0, objects: [] };
+      for (const arg of args) if ((typeof arg === "object" && arg !== null) || typeof arg === "function") pending.objects.push(arg as object);
+      this.pendingOutput = pending;
     };
     return { log: print, info: print, warn: print, error: print, debug: print, table: print };
   })();
@@ -331,6 +337,15 @@ export class Runtime {
         loops,
       };
       if (paused.length) step.suspended = paused.map((frame) => ({ ...describe(frame), state: "suspended" as const }));
+      if (this.pendingOutput) {
+        const refs: string[] = [];
+        for (const obj of this.pendingOutput.objects) {
+          const id = this.objectIds.get(obj);
+          if (id && serializer.heap[id] && !refs.includes(id)) refs.push(id);
+        }
+        step.output = { line: this.pendingOutput.line, refs };
+        this.pendingOutput = null;
+      }
       if ("returnValue" in extra) step.returnValue = serializer.value(extra.returnValue);
       if (extra.exception) step.exception = extra.exception;
       this.steps.push(step);

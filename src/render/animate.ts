@@ -15,9 +15,10 @@
  *     data-value, data-cx / data-cy            between slots of the same
  *                                              container (a swap), it slides
  *                                              from its old slot
- * New elements fade in. Arrows are left alone: they're drawn where they
- * end up, with no fade, because fading every arrow on every step is more
- * distracting than helpful.
+ * New elements, and new slots in a list that grew, arrive as the window's
+ * settings say: fading in, sliding in from the left, both, or neither.
+ * Arrows are left alone: they're drawn where they end up, with no fade,
+ * because fading every arrow on every step is more distracting than helpful.
  */
 
 interface Spot { x: number; y: number }
@@ -57,7 +58,16 @@ function splitCell(key: string): [string, string] {
 export const DEFAULT_EASING = "cubic-bezier(0.2, 0.7, 0.2, 1)";
 
 /** Animate `root`'s elements from their places in `before` to where they are now. */
-export function transition(before: Snapshot | null, root: ParentNode | null, duration: number, easing = DEFAULT_EASING): void {
+/** How things that weren't in the previous drawing arrive. */
+export interface Enter {
+  fade: boolean;
+  slide: boolean;
+}
+
+/** How far new things slide in from, in pixels. */
+const ENTER_SLIDE = 10;
+
+export function transition(before: Snapshot | null, root: ParentNode | null, duration: number, easing = DEFAULT_EASING, enter: Enter = { fade: true, slide: false }): void {
   if (!before || !root || duration <= 0) return;
   const slide = (el: Element, dx: number, dy: number) => {
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
@@ -66,14 +76,17 @@ export function transition(before: Snapshot | null, root: ParentNode | null, dur
       { duration, easing },
     );
   };
-  const fadeIn = (el: Element) => {
-    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration * 0.6, easing: "ease-out", fill: "backwards" });
+  const arrive = (el: Element) => {
+    if (enter.fade) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration * 0.6, easing: "ease-out", fill: "backwards" });
+    if (enter.slide) {
+      el.animate([{ transform: `translate(${-ENTER_SLIDE}px, 0px)` }, { transform: "translate(0px, 0px)" }], { duration, easing, fill: "backwards" });
+    }
   };
 
   for (const el of root.querySelectorAll("[data-flip]")) {
     const was = before.flips.get(el.getAttribute("data-flip")!);
     if (!was) {
-      fadeIn(el);
+      if (!el.hasAttribute("data-no-fade")) arrive(el);
       continue;
     }
     slide(el, was.x - num(el, "data-x"), was.y - num(el, "data-y"));
@@ -87,13 +100,17 @@ export function transition(before: Snapshot | null, root: ParentNode | null, dur
     const value = el.getAttribute("data-value") ?? "";
     const old = before.cells.get(container);
     if (!old || old.get(slot)?.value === value) continue;
+    let moved = false;
     for (const [oldSlot, cell] of old) {
       const id = `${container}|${oldSlot}`;
       if (oldSlot === slot || used.has(id) || cell.value !== value) continue;
       used.add(id);
       slide(el, cell.spot.x - num(el, "data-cx"), cell.spot.y - num(el, "data-cy"));
+      moved = true;
       break;
     }
+    // A slot the list didn't have a step ago (it grew): arrive like a new box.
+    if (!moved && !old.has(slot)) arrive(el);
   }
 
 }

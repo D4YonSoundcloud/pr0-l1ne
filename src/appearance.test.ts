@@ -84,3 +84,17 @@ describe("applyAppearance", () => {
     expect(gridImage("none")).toBe("none");
   });
 });
+
+describe("printed output motion", () => {
+  it("defaults to fading and sliding in, and reads saved choices", () => {
+    expect(parseAppearance(null).output).toEqual({ fade: true, slide: true, dimFade: true, duration: 240 });
+    const saved = parseAppearance(JSON.stringify({ output: { fade: false, slide: false, dimFade: "yes", duration: 5000 } }));
+    expect(saved.output).toEqual({ fade: false, slide: false, dimFade: true, duration: 1000 });
+  });
+
+  it("copies are independent of the preset they came from", () => {
+    const copy = clone(PRESETS[0]);
+    copy.output.fade = false;
+    expect(PRESETS[0].output.fade).toBe(true);
+  });
+});

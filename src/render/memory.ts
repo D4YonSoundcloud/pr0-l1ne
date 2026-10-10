@@ -35,11 +35,14 @@ import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
 import { graphOverlay, graphsAt, layoutFor, legendOverlaysFor, stepScopes, type GraphData, type GraphOverlay } from "../trace/graph";
 import { graphPicture, type GraphPicture } from "./graphView";
 import { formatBytes, stepSizes, type SizeModel, type StepSizes } from "../trace/memory";
+import { printedAt, type Printed } from "../trace/output";
 
 interface OutRef {
   from: Point;
   target: string;
   changed: boolean;
+  /** From the printed-output node to an object it printed. */
+  printed?: boolean;
   /** Key of the top-level box the arrow starts in (set by drawNode). */
   source?: string;
   /** From a list cell: leave downward, then turn at exitDownY (set by drawNode). */
@@ -68,6 +71,10 @@ export interface MemoryLayout {
   mode?: MemoryMode;
   /** Show memory sizes under this model (see trace/memory.ts). */
   sizes?: SizeModel | null;
+  /** On a step that prints, show what it printed (default true). */
+  output?: boolean;
+  /** ...and dim everything else (default false). */
+  dimForOutput?: boolean;
 }
 
 /**
@@ -81,6 +88,8 @@ export const nodeKey = {
   /** A paused frame keeps its identity (its id) wherever it resumes. */
   paused: (id: string) => `paused:${id}`,
   object: (id: string) => `obj:${id}`,
+  /** What a step printed. */
+  output: "output",
 };
 
 const COLUMN_GAP = 90;
@@ -647,7 +656,9 @@ export function renderMemory(
   // The call stack, then paused frames under it.
   const frames = liveFrames(step);
   const frameShapes = frames.map((frame, i) => frameShape(frame, ctx, i === step.stack.length - 1));
-  const framesW = Math.max(160, ...frameShapes.map((f) => f.w));
+  // A program that prints gets a stack column wide enough for its output
+  // card (worked out from the whole run, so it doesn't change between steps).
+  const framesW = Math.max(160, ...frameShapes.map((f) => f.w), layout.output === false ? 0 : outputWidth(trace));
   for (const block of blocks) measureBlock(block, shapes);
   const columnW: number[] = [];
   for (const id of order) {
@@ -757,6 +768,29 @@ export function renderMemory(
     const below = drawNode(key, shape, columnX[d], y);
     columnCursor[d] = y + shape.h + below + STACK_GAP;
   }
+  // What this step printed: a node under the call stack (moving down past
+  // anything in the way), with arrows to the objects it printed. Everything
+  // else dims, so the output and what it's about stand out.
+  const printed = layout.output === false ? null : printedAt(trace, stepIndex);
+  if (printed) {
+    const targets = printed.refs.map((id) => graphAlias.get(id) ?? id).filter((id, i, all) => rects.has(nodeKey.object(id)) && all.indexOf(id) === i);
+    const shape = outputShape(printed, targets, framesW);
+    const key = nodeKey.output;
+    const moved = layout.positions.get(key);
+    if (moved) drawNode(key, shape, moved.x, moved.y);
+    else drawNode(key, shape, MARGIN, findFreeY(MARGIN, shape.w, shape.h, frameY, obstacles, STACK_GAP));
+    if (layout.dimForOutput) svg.classList.add("has-output");
+    for (const id of targets) boxLayer.querySelector(`.node[data-node-key="${CSS.escape(nodeKey.object(id))}"]`)?.classList.add("is-printed");
+    const card = boxLayer.querySelector(`.node[data-node-key="${key}"]`);
+    card?.classList.add("is-output");
+    // Its entrance is its own (CSS, set in the Style panel), not the step's fade.
+    card?.setAttribute("data-no-fade", "");
+  }
+  // Dim in when printing starts, and back up the step after.
+  const printedBefore = layout.output !== false && layout.dimForOutput === true && stepIndex > 0 && !!printedAt(trace, stepIndex - 1);
+  if (printed && layout.dimForOutput && !printedBefore) svg.classList.add("output-in");
+  if (!printed && printedBefore) svg.classList.add("output-out");
+
   // Boxes the person placed sit on top of automatically placed ones, and the
   // box being dragged right now is on top of everything.
   for (const g of [...boxLayer.querySelectorAll(".node.is-moved")]) boxLayer.append(g);
@@ -803,7 +837,7 @@ export function renderMemory(
     }
     arrowLayer.append(s("path", {
       d: roundedPath(points),
-      class: ref.changed ? "ref-arrow is-changed" : "ref-arrow",
+      class: ref.printed ? "ref-arrow print-arrow" : ref.changed ? "ref-arrow is-changed" : "ref-arrow",
       "marker-end": "url(#arrow-ref)",
       "data-from": ref.source,
       "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target),
@@ -818,6 +852,74 @@ export function renderMemory(
   svg.style.setProperty("--font-size", `${FONT}px`);
   svg.style.setProperty("--small-size", `${SMALL}px`);
   return svg;
+}
+
+// ---------------------------------------------------------------------------
+// Printed output
+// ---------------------------------------------------------------------------
+
+const OUTPUT_LINE_H = 18;
+const OUTPUT_MAX_LINES = 12;
+
+const OUTPUT_MAX_W = 360;
+const outputWidths = new WeakMap<Trace, number>();
+
+/** How wide the output card needs to be for this run's longest printed line (0 if it prints nothing). */
+function outputWidth(trace: Trace): number {
+  let w = outputWidths.get(trace);
+  if (w === undefined) {
+    const longest = Math.max(0, ...trace.stdout.split("\n").map((l) => l.length));
+    w = trace.stdout ? Math.min(OUTPUT_MAX_W, Math.max(160, Math.ceil(longest * FONT * 0.6) + 24)) : 0;
+    outputWidths.set(trace, w);
+  }
+  return w;
+}
+
+/**
+ * The printed-output node: a console card titled with the line that printed.
+ * It's as wide as the call stack's column, so it never reaches into the gap
+ * where arrows run; long lines wrap.
+ */
+function outputShape(printed: Printed, targets: string[], width: number): Shape {
+  const title = `Printed on line ${printed.line}`;
+  const charW = FONT * 0.6;
+  const maxChars = Math.max(8, Math.floor((width - 24) / charW));
+  // Wrap long lines (after a space or comma when there is one); show at
+  // most a dozen, then say how many more.
+  const lines: string[] = [];
+  for (const raw of printed.text.split("\n")) {
+    let rest = raw;
+    while (rest.length > maxChars) {
+      const cut = Math.max(rest.lastIndexOf(" ", maxChars), rest.lastIndexOf(",", maxChars - 1) + 1);
+      const at = cut > maxChars / 3 ? cut : maxChars;
+      lines.push(rest.slice(0, at).trimEnd());
+      rest = rest.slice(at).trimStart();
+    }
+    lines.push(rest);
+  }
+  const shown = lines.length > OUTPUT_MAX_LINES ? [...lines.slice(0, OUTPUT_MAX_LINES - 1), `… ${lines.length - OUTPUT_MAX_LINES + 1} more lines`] : lines;
+  const w = width;
+  const h = HEADER_H + 8 + shown.length * OUTPUT_LINE_H + 6;
+  return {
+    w, h, inY: HEADER_H / 2,
+    draw(x, y, layer, refs) {
+      const g = s("g", { class: "box output-box" });
+      g.append(
+        s("rect", { class: "output-body", x, y, width: w, height: h, rx: 6 }),
+        s("text", { class: "output-title", x: x + 10, y: y + HEADER_H / 2 + 1, "dominant-baseline": "central" }, title),
+        s("line", { class: "output-rule", x1: x + 8, x2: x + w - 8, y1: y + HEADER_H, y2: y + HEADER_H }),
+      );
+      shown.forEach((line, i) => {
+        const more = i === OUTPUT_MAX_LINES - 1 && lines.length > OUTPUT_MAX_LINES;
+        g.append(s("text", { class: more ? "output-text is-more" : "output-text", x: x + 12, y: y + HEADER_H + 8 + i * OUTPUT_LINE_H + OUTPUT_LINE_H / 2, "dominant-baseline": "central" }, line));
+      });
+      layer.append(g);
+      // An arrow to each printed object, leaving from the right edge.
+      targets.forEach((target, i) => {
+        refs.push({ from: { x: x + w, y: y + HEADER_H / 2 + Math.min(i, 3) * 6 }, target, changed: false, printed: true });
+      });
+    },
+  };
 }
 
 /**

@@ -200,6 +200,23 @@ class TracerTests(unittest.TestCase):
         self.assertEqual(t["error"]["type"], "RuntimeError")
         self.assertIn("nothing is scheduled", t["error"]["message"])
 
+    def test_print_is_recorded_on_the_next_step_with_printed_objects(self):
+        t = trace("""
+            nums = [3, 1, 2]
+            print("start")
+            nums.sort()
+            print("sorted:", nums, [9])
+        """)
+        outs = [(i, s["output"]) for i, s in enumerate(t["steps"]) if "output" in s]
+        self.assertEqual([o["line"] for _, o in outs], [3, 5])  # the source starts with a blank line
+        first, second = outs
+        self.assertEqual(first[1]["refs"], [])
+        nums_id = dict(t["steps"][-1]["stack"][0]["locals"])["nums"]["id"]
+        self.assertEqual(second[1]["refs"], [nums_id])  # the temporary [9] isn't drawn, so it isn't listed
+        before = t["steps"][second[0] - 1]["stdoutLength"]
+        self.assertEqual(t["stdout"][before:t["steps"][second[0]]["stdoutLength"]], "sorted: [1, 2, 3] [9]\n")
+        self.assertNotIn("print", dict(t["steps"][-1]["stack"][0]["locals"]))
+
     def test_recursion_shows_one_frame_per_call(self):
         t = trace("""
             def f(n):

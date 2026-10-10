@@ -27,6 +27,8 @@
   --frontier: #d9822b;
   --path: #7a4fb5;
   --mem: #0a7d86;
+  --output: #232a3d;
+  --output-ink: #f2f5fb;
   --tree: #2e7a57;
   --header-code: #e2e7f5;
   --paper-ink: #1d2b45;
@@ -317,6 +319,7 @@ body {
 }
 .segment:hover { color: var(--paper-ink); }
 .segment[aria-pressed="true"] { background: var(--ink); color: var(--cell); }
+.segment:disabled { opacity: 0.45; cursor: default; }
 
 /* Nested ("container in container") boxes: lighter, so the outer box reads
    as the container. */
@@ -331,6 +334,33 @@ body {
 .memory-svg.has-focus .ref-arrow.is-focus { opacity: 1; stroke-width: calc(2.25px * var(--arrow-width)); }
 .memory-svg .node.is-focus > .node-hit { stroke: var(--ballpoint); stroke-width: 2; }
 .memory-svg .node.is-related > .node-hit { stroke: var(--ballpoint); stroke-width: 1.5; stroke-dasharray: 5 3; }
+
+/* Printed output: on the step after a print() or console.log(), a console
+   card shows what was printed, with arrows to the objects it printed. The
+   rest of the drawing steps back so the output stands out. */
+.output-body { fill: var(--output); stroke: color-mix(in srgb, var(--output) 70%, var(--ink)); stroke-width: var(--border-width); filter: drop-shadow(0 3px 6px rgba(20, 30, 50, 0.22)); }
+.output-title { font-family: var(--font-ui); font-size: 12px; font-weight: 700; fill: color-mix(in srgb, var(--output-ink) 70%, var(--output)); letter-spacing: 0.01em; }
+.output-rule { stroke: color-mix(in srgb, var(--output-ink) 18%, var(--output)); stroke-width: 1; }
+.output-text { font-family: var(--diagram-font); font-size: var(--font-size); fill: var(--output-ink); white-space: pre; }
+.output-text.is-more { font-style: italic; fill: color-mix(in srgb, var(--output-ink) 60%, var(--output)); }
+.ref-arrow.print-arrow { stroke: var(--output); stroke-dasharray: 6 4; }
+.node.is-output { animation: output-pop var(--output-duration, 240ms) cubic-bezier(0.2, 0.7, 0.2, 1); transform-box: fill-box; transform-origin: left center; }
+.memory-svg.has-output .boxes > .node:not(.is-output):not(.is-printed),
+.memory-svg.has-output .arrows > .ref-arrow:not(.print-arrow),
+.memory-svg.has-output .arrows > :not(.ref-arrow) { opacity: 0.28; }
+.memory-svg.has-output .boxes > .node.is-printed > .node-hit { stroke: var(--output); stroke-width: 2; }
+.memory-svg.output-in .boxes > .node:not(.is-output):not(.is-printed),
+.memory-svg.output-in .arrows > :not(.print-arrow) { animation: output-dim var(--output-dim-duration, 260ms) ease both; }
+.memory-svg.output-out .boxes > .node,
+.memory-svg.output-out .arrows > * { animation: output-undim var(--output-dim-duration, 260ms) ease both; }
+@keyframes output-dim { from { opacity: 1; } }
+@keyframes output-undim { from { opacity: 0.28; } }
+/* The card starts from these (Style panel: Printed output). */
+@keyframes output-pop { from { opacity: var(--output-from-opacity, 0); transform: translateX(var(--output-from-x, -8px)); } }
+@media (prefers-reduced-motion: reduce) {
+  .node.is-output, .memory-svg.output-in .boxes > .node, .memory-svg.output-in .arrows > *,
+  .memory-svg.output-out .boxes > .node, .memory-svg.output-out .arrows > * { animation: none; }
+}
 
 /* Grids (lists of lists): the cell that grid[i][j] points at. */
 .grid-focus { fill: none; stroke: var(--ballpoint); stroke-width: 2; stroke-dasharray: 4 2; }
@@ -472,7 +502,7 @@ select {
 .scrubber { flex: 1 1 0; width: 0; accent-color: var(--highlight); min-width: 80px; }
 .step-label {
   flex: none;
-  width: 22ch;
+  width: 23ch;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -676,6 +706,7 @@ select {
 .style-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px 8px; border-bottom: 1px solid #2c344b; }
 .style-title { margin: 0; font-size: 15px; color: #fff; }
 .style-note { font-size: 12px; color: var(--chrome-muted); }
+.style-hint { margin: 6px 0 4px; }
 .style-close {
   margin-left: auto; align-self: center; border: 0; background: transparent; color: var(--chrome-muted);
   font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; border-radius: 4px;
@@ -705,15 +736,20 @@ select {
 .easing-curve { background: #161b29; border-radius: 6px; }
 .easing-axes { fill: none; stroke: #3a4460; stroke-width: 0.02; }
 .easing-path { fill: none; stroke: var(--highlight); stroke-width: 0.045; }
-.easing-track { position: relative; height: 24px; border-radius: 12px; background: #161b29; }
+.easing-track {
+  position: relative; display: block; width: 100%; height: 24px; padding: 0; border: 1px solid transparent; border-radius: 12px;
+  background: #161b29; cursor: pointer; font: inherit;
+}
+.easing-track:hover { border-color: #3a4460; }
+.easing-track:focus-visible { outline: 2px solid var(--highlight); outline-offset: 2px; }
+.easing-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; color: var(--chrome-muted); pointer-events: none; transition: opacity 150ms;
+}
+.easing-track.is-playing .easing-hint { opacity: 0; }
 .easing-ball {
   position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%;
   background: var(--highlight);
-}
-@keyframes easing-preview {
-  0%, 15% { left: 4px; }
-  50%, 65% { left: calc(100% - 20px); }
-  100% { left: 4px; }
 }
 .style-foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px 12px; border-top: 1px solid #2c344b; }
 

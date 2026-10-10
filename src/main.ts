@@ -112,6 +112,8 @@ const els = {
   speed: byId<HTMLSelectElement>("speed"),
   modeNested: byId<HTMLButtonElement>("mode-nested"),
   sizes: byId<HTMLButtonElement>("sizes"),
+  showOutput: byId<HTMLButtonElement>("show-output"),
+  dimOutput: byId<HTMLButtonElement>("dim-output"),
   sizeModel: byId<HTMLSelectElement>("size-model"),
   memoryTotal: byId<HTMLSpanElement>("memory-total"),
   editorPane: byId<HTMLElement>("editor-pane"),
@@ -282,6 +284,13 @@ let draggingNode: string | null = null;
 
 // Memory sizes: on or off, and which model, per language family (Python
 // has its own real sizes; JavaScript and TypeScript share theirs).
+const OUTPUT_KEY = "algoviz:show-output";
+/** On a step that prints, show the output on the canvas and dim the rest. */
+let outputOn = stored(OUTPUT_KEY) !== "off";
+const OUTPUT_DIM_KEY = "algoviz:dim-output";
+/** ...and dim everything else while it's shown (off unless turned on). */
+let dimForOutput = stored(OUTPUT_DIM_KEY) === "on";
+
 const SIZES_KEY = "algoviz:sizes";
 const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript");
 const sizeModelKey = (id: LanguageId) => `algoviz:size-model:${sizeFamily(id)}`;
@@ -445,7 +454,7 @@ function renderMemoryView(): void {
   if (!trace || !trace.steps.length) return;
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
   const animation = animationFor("memory");
-  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode, sizes: shownSizes() }), "", animation.duration, animation.easing);
+  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode, sizes: shownSizes(), output: outputOn, dimForOutput }), "", animation.duration, animation.easing, animation.enter);
   updateMemoryTotal();
   refreshFocus();
 }
@@ -471,6 +480,19 @@ els.modeArrows.addEventListener("click", () => setMemoryMode("arrows"));
 els.modeNested.addEventListener("click", () => setMemoryMode("nested"));
 setMemoryMode(memoryMode);
 els.sizes.addEventListener("click", () => setSizes(!sizesOn));
+els.showOutput.addEventListener("click", () => {
+  outputOn = !outputOn;
+  store(OUTPUT_KEY, outputOn ? "on" : "off");
+  els.showOutput.setAttribute("aria-pressed", String(outputOn));
+  els.dimOutput.disabled = !outputOn;
+  render(false);
+});
+els.dimOutput.addEventListener("click", () => {
+  dimForOutput = !dimForOutput;
+  store(OUTPUT_DIM_KEY, dimForOutput ? "on" : "off");
+  els.dimOutput.setAttribute("aria-pressed", String(dimForOutput));
+  render(false);
+});
 els.sizeModel.addEventListener("change", () => {
   store(sizeModelKey(language), els.sizeModel.value);
   render(false);
@@ -537,7 +559,7 @@ function render(updateMarks = true): void {
   if (history && history.rows.length) {
     const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
     const animation = animationFor("loop");
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes() }), "", live ? animation.duration : 0, animation.easing);
+    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes() }), "", live ? animation.duration : 0, animation.easing, animation.enter);
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
     if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
@@ -594,11 +616,12 @@ let pendingAnimation: { playing: boolean } | null = null;
  * (from the Style panel), shortened while playing so an animation always
  * ends before the next step starts. Duration 0 means no animation.
  */
-function animationFor(pane: "memory" | "loop"): { duration: number; easing: string } {
-  const { duration, easing } = appearance[pane];
-  if (!pendingAnimation) return { duration: 0, easing };
+function animationFor(pane: "memory" | "loop"): { duration: number; easing: string; enter: { fade: boolean; slide: boolean } } {
+  const { duration, easing, enterFade, enterSlide } = appearance[pane];
+  const enter = { fade: enterFade, slide: enterSlide };
+  if (!pendingAnimation) return { duration: 0, easing, enter };
   const cap = pendingAnimation.playing ? (0.75 * 1000) / speed : Infinity;
-  return { duration: Math.round(Math.min(duration, cap)), easing };
+  return { duration: Math.round(Math.min(duration, cap)), easing, enter };
 }
 
 // Loop history: a row per iteration, or one live row that animates.
@@ -903,6 +926,9 @@ els.language.addEventListener("change", () => {
 fillProgramMenu();
 fillSizeModels();
 els.sizes.setAttribute("aria-pressed", String(sizesOn));
+els.showOutput.setAttribute("aria-pressed", String(outputOn));
+els.dimOutput.setAttribute("aria-pressed", String(dimForOutput));
+els.dimOutput.disabled = !outputOn;
 els.sizeModel.hidden = !sizesOn;
 updateProgramUI();
 

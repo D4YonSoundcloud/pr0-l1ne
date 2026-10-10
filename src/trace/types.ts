@@ -152,6 +152,13 @@ export interface Step {
   /** How much of `Trace.stdout` had been printed by this step. */
   stdoutLength: number;
   loops: LoopContext[];
+  /**
+   * Set on the step right after a print() / console.log() ran: the line
+   * that printed, and the printed objects that are drawn at this step. The
+   * text itself is Trace.stdout, from the previous step's stdoutLength to
+   * this one's.
+   */
+  output?: { line: number; refs: string[] };
   /** The returned value (return) or the yielded value (yield). */
   returnValue?: Value;
   exception?: { type: string; message: string };
