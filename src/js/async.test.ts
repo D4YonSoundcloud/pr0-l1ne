@@ -245,7 +245,7 @@ main();
   });
 
   it("stops an endless async loop at the step limit", async () => {
-    const t = await traceJavaScript(`async function spin() {\n  while (true) {\n    await null;\n  }\n}\nspin();`, 300);
+    const t = await traceJavaScript(`async function spin() {\n  while (true) {\n    await null;\n  }\n}\nspin();`, 300, 0.3);
     expect(t.truncated).toBe(true);
     expect(t.error).toBeNull();
   });

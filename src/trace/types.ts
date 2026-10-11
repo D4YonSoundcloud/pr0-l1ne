@@ -41,6 +41,17 @@ export interface SequenceObject {
   items: Value[];
   /** Real length; `items` may be truncated. */
   length: number;
+  /**
+   * A long list's `items` are a window of it, following its index
+   * variables: the index of items[0]. Absent means 0.
+   */
+  offset?: number;
+  /**
+   * A long list of numbers, all of it: evenly spaced samples
+   * (values[i] is item floor(i × length / values.length)), with the
+   * samples' smallest and largest values, for a color strip.
+   */
+  strip?: { values: number[]; min: number; max: number };
   /** Python only: bytes on a 64-bit CPython (sys.getsizeof). */
   size?: number;
   /** Python lists only: how many items it has room for before growing. */
@@ -159,6 +170,18 @@ export interface Step {
    * this one's.
    */
   output?: { line: number; refs: string[] };
+  /**
+   * Events that ran but weren't recorded just before this step: passes in
+   * the middle of a long loop (see Trace.sampled).
+   */
+  skipped?: number;
+  /** On the last step: events that ran after it without being recorded. */
+  skippedAfter?: number;
+  /**
+   * With Trace.heapDelta: every object id in `heap`, in order. `heap` then
+   * holds only objects that differ from the previous step's.
+   */
+  heapIds?: string[];
   /** The returned value (return) or the yielded value (yield). */
   returnValue?: Value;
   exception?: { type: string; message: string };
@@ -222,6 +245,8 @@ export interface VizHints {
   graphs: GraphHint[];
   /** Variables or classes never to draw as a graph. */
   plain: string[];
+  /** `viz: size n = 40000, k`: input sizes, for Measure's growth runs. */
+  sizes: { name: string; value?: number; line: number }[];
   /** Hints that couldn't be understood, to show to the person. */
   warnings: { line: number; message: string }[];
 }
@@ -317,8 +342,24 @@ export interface Trace {
   indexNames: Record<string, string[]>;
   stdout: string;
   error: TraceError | null;
-  /** True when the step budget ran out before the program finished. */
+  /**
+   * Steps' heaps hold only what changed since the step before (see
+   * Step.heapIds). trace/delta.ts's expandHeaps rebuilds them, sharing
+   * unchanged objects between steps. Never set on a trace the page uses.
+   */
+  heapDelta?: boolean;
+  /** True when the step budget (or the time budget) ran out before the program finished. */
   truncated: boolean;
+  /** What stopped a truncated trace. */
+  stoppedBy?: "steps" | "time";
+  /**
+   * Some long loops were sampled: their first passes, passes at round
+   * numbers (10, 20 ... 100, 200 ...) and last passes were recorded; the
+   * rest ran and were counted but not recorded (steps carry `skipped`).
+   */
+  sampled?: boolean;
+  /** Counted over the whole run, recorded or not. */
+  counts?: { steps: number; calls: Record<string, number>; depth: Record<string, number> };
   /** `# viz:` / `// viz:` comments in the program (see README, "Hints"). */
   hints?: RawHint[];
   /** The shape of the code, for complexity estimates. */

@@ -485,6 +485,11 @@ select {
   border-radius: 0 6px 6px 0;
 }
 .banner code { font-family: var(--font-code); font-size: 13px; }
+.banner-link {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-weight: 600;
+}
+.banner-link:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; border-radius: 2px; }
 
 .timeline {
   display: flex;
@@ -502,14 +507,14 @@ select {
 .scrubber { flex: 1 1 0; width: 0; accent-color: var(--highlight); min-width: 80px; }
 .step-label {
   flex: none;
-  width: 23ch;
+  width: 46ch;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: var(--chrome-text);
-  text-align: right;
+  text-align: left;
 }
 
 .loop-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -603,6 +608,10 @@ select {
 .pointer text { font-size: 11px; font-weight: 600; fill: var(--ballpoint); }
 .pointer.is-changed path { fill: var(--redpen); }
 .pointer.is-changed text { fill: var(--redpen); }
+/* A long list of numbers, all of it, as a band of color (render/draw.ts stripBar). */
+.strip-frame { fill: none; stroke: var(--paper-ink-faint); stroke-width: 1; }
+.strip-window { fill: none; stroke: var(--paper-ink); stroke-width: 1.5; }
+.strip-pointer { fill: var(--ballpoint); }
 .pointer.is-out path { fill: none; stroke: var(--paper-ink-faint); }
 .pointer.is-out text { fill: var(--paper-ink-faint); }
 
@@ -676,6 +685,8 @@ select {
 
 .quiet-band rect { fill: var(--paper); }
 .quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
+.sampled-band line { stroke: var(--paper-ink-soft); stroke-dasharray: 1 3; stroke-width: 3; stroke-linecap: round; }
+.sampled-band text { font-style: normal; }
 .loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -762,7 +773,7 @@ select {
   .divider { display: none; }
   .toolbar { flex-wrap: wrap; }
   .status { margin-left: 0; width: 100%; }
-  .step-label { width: 15ch; font-size: 13px; }
+  .step-label { width: 26ch; font-size: 13px; }
 }
 
 /* ---------------------------------------------------------------- complexity */
@@ -816,3 +827,70 @@ select {
 .cost-label { font-style: italic; opacity: 0.85; }
 .cost-label-loop { color: var(--cx-time) !important; }
 .cost-label-function { color: #9aa6c4 !important; }
+
+/* ---------------------------------------------------------------- measure */
+
+.measure-group { display: inline-flex; gap: 2px; }
+.measure-button.is-measuring { border-color: #ff8f86; color: #ffb4ad; }
+.measure-results { padding: 4px 7px; }
+.measure-results[aria-expanded="true"] { border-color: var(--highlight); }
+
+.ms-panel { width: min(460px, calc(100% - 20px)); }
+.ms-summary { padding: 12px 0 4px; }
+.ms-time { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; font-size: 22px; color: #ffb37a; }
+.ms-time.is-limit { color: #f2c46d; }
+.ms-time.is-error { color: #ff8f86; }
+/* How it grows (growthView.ts) */
+.gr { margin-top: 6px; }
+.gr-intro code, .gr code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
+.gr-controls { flex-wrap: wrap; gap: 8px; }
+.gr-progress { color: #f2c46d; }
+.gr-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 10px 0 4px; }
+.gr-verdict .cx-big-label { flex-basis: 100%; }
+.gr-model { font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; font-size: 20px; color: #7cc4ff; }
+.gr-compare { margin: 6px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; line-height: 1.45; }
+.gr-compare.is-agree { background: #1d2f24; color: #b9ecc4; }
+.gr-compare.is-close { background: #2a2a1e; color: #f2e2b0; }
+.gr-compare.is-lower, .gr-compare.is-higher { background: #3a2a1b; color: #ffd3a8; border-left: 3px solid #ffb37a; }
+.gr-figure { margin: 12px 0 0; }
+.gr-figure figcaption { font-size: 12px; color: var(--chrome-muted); margin-bottom: 2px; }
+.gr-figure figcaption strong { color: var(--chrome-text, #e8ecf3); font-weight: 600; }
+.gr-chart { display: block; width: 100%; height: auto; overflow: visible; }
+.gr-grid { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+.gr-tick, .gr-axis { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10px; fill: var(--chrome-muted); }
+.gr-fit-line { fill: none; stroke-width: 2; opacity: 0.85; }
+.gr-expected { fill: none; stroke: #9aa4b2; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.gr-dot { stroke: #1b2233; stroke-width: 1.5; }
+.gr-legend { list-style: none; margin: 10px 0 6px; padding: 0; display: grid; gap: 6px; }
+.gr-legend li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.gr-chip { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.gr-chip.is-expected { background: repeating-linear-gradient(90deg, #9aa4b2 0 4px, transparent 4px 7px); height: 3px; border-radius: 0; }
+.gr-name { min-width: 0; }
+.gr-rename { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 1px 4px; width: 9em; }
+.gr-rename:hover, .gr-rename:focus { border-color: var(--chrome-muted); outline: none; }
+.gr-fit { margin-left: auto; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; color: var(--chrome-muted); }
+.gr-remove { background: none; border: 0; color: var(--chrome-muted); font-size: 16px; cursor: pointer; padding: 0 4px; }
+.gr-remove:hover { color: #ff8f86; }
+.gr-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
+.gr-table th { text-align: right; font-weight: 600; color: var(--chrome-muted); padding: 3px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.gr-table td { text-align: right; padding: 3px 6px; }
+.gr-table th:first-child, .gr-table td:first-child { text-align: left; }
+.ms-note { margin: 4px 0 0; font-size: 12.5px; color: var(--chrome-muted); }
+.ms-projection { margin: 8px 0 0; padding: 8px 10px; border-radius: 6px; background: #2a2a1e; color: #f2e2b0; font-size: 13px; }
+.ms-projection strong { color: #fff; }
+.ms-stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 10px 0 8px; }
+.ms-stats dt { color: var(--chrome-muted); }
+.ms-stats dd { margin: 0; font-family: "IBM Plex Mono", ui-monospace, monospace; color: #fff; font-variant-numeric: tabular-nums; }
+.ms-row { grid-template-columns: 2.4em 1fr auto; }
+.ms-count { white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; font-weight: 600; color: #ffb37a; font-size: 12.5px; }
+.ms-bar { display: block; height: 3px; margin: 2px 4px 0 calc(2.4em + 12px); border-radius: 2px; background: linear-gradient(90deg, #ff9a4d var(--share), transparent var(--share)); opacity: 0.8; }
+.ms-output { margin: 4px 0 0; padding: 8px 10px; max-height: 180px; overflow: auto; border-radius: 6px; background: #161b29; color: #dde3ee; font: 12.5px/1.45 "IBM Plex Mono", ui-monospace, monospace; white-space: pre-wrap; }
+.ms-controls { margin-top: 12px; padding-top: 8px; border-top: 1px solid #2a3147; }
+
+/* In the editor: how hot each line ran, and its count. */
+.monaco-editor .heat-line.heat-1 { background: rgba(255, 140, 60, 0.05); }
+.monaco-editor .heat-line.heat-2 { background: rgba(255, 140, 60, 0.09); }
+.monaco-editor .heat-line.heat-3 { background: rgba(255, 140, 60, 0.14); }
+.monaco-editor .heat-line.heat-4 { background: rgba(255, 130, 50, 0.2); }
+.monaco-editor .heat-line.heat-5 { background: rgba(255, 110, 40, 0.28); }
+.measure-label { font-style: normal; font-weight: 600; color: #ffb37a !important; opacity: 0.95; }

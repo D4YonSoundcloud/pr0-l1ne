@@ -26,7 +26,7 @@
 import { localKey, slotsOf, valueKey, type StepDiff } from "../trace/diff";
 import { liveFrames, type Frame, type HeapObject, type SequenceObject, type Step, type Trace, type Value } from "../trace/types";
 import {
-  CELL_H, CELL_MIN_W, FONT, HEADER_H, INDEX_H, LABEL_H, POINTER_H, ROW_H, SMALL,
+  CELL_H, CELL_MIN_W, FONT, HEADER_H, INDEX_H, LABEL_H, POINTER_H, ROW_H, SMALL, STRIP_H, stripBar,
   arrowMarkers, cellWidth, pointerMarkers, pointersFor, rowPointerMarkers, rowPointersWidth, s, textWidth,
   uiTextWidth, valueCell,
 } from "./draw";
@@ -428,7 +428,13 @@ function sequenceShape(
   const rows = gridRows(obj, ctx);
   if (rows) return gridShape(obj, rows, ctx, opts);
   const hasIndices = obj.kind !== "set";
-  const truncated = obj.length > obj.items.length;
+  // A long list shows a window of its items (following its index
+  // variables), with a strip of the whole list above when it holds numbers.
+  const offset = obj.offset ?? 0;
+  const before = offset > 0;
+  const truncated = obj.length > offset + obj.items.length;
+  const strip = obj.strip && obj.length > obj.items.length ? obj.strip : null;
+  const stripH = strip ? STRIP_H : 0;
   const views = obj.items.map((item) => viewOf(item, ctx, CELL_H));
   const anyNested = views.some((v) => v.nested);
   const pad = anyNested ? NEST_PAD : 0;
@@ -439,16 +445,19 @@ function sequenceShape(
   const sizeH = cellSizes ? SIZE_H : 0;
   const cellW = Math.max(CELL_MIN_W, ...views.map((v) => v.w + 2 * pad), ...(cellSizes ?? []).map((t) => uiTextWidth(t, 9.5) + 8));
   const cellH = Math.max(CELL_H, ...views.map((v) => (v.nested ? v.h + 2 * pad : CELL_H)));
-  const count = Math.max(obj.items.length, 1) + (truncated ? 1 : 0);
+  const count = Math.max(obj.items.length, 1) + (truncated ? 1 : 0) + (before ? 1 : 0);
+  const firstX = before ? cellW : 0;
   const size = sizeLabel(ctx, obj.id);
   // Inside another box, the type label is left out to save room (unless
   // it carries a size).
-  const showLabel = !opts.nested || truncated || !!size;
-  const label = truncated ? `${obj.typeName}, first ${obj.items.length} of ${obj.length}` : obj.typeName;
+  const showLabel = !opts.nested || truncated || before || !!size;
+  const label = before
+    ? `${obj.typeName}, items ${offset}–${offset + obj.items.length - 1} of ${obj.length}`
+    : truncated ? `${obj.typeName}, first ${obj.items.length} of ${obj.length}` : obj.typeName;
   const labelH = showLabel ? LABEL_H : 2;
   const hasPointers = opts.pointers.length > 0;
   const w = Math.max(count * cellW, showLabel ? sizedLabelWidth(label, size) + 8 : 0);
-  const cellsY = labelH + sizeH + (hasIndices ? INDEX_H : 0);
+  const cellsY = labelH + stripH + sizeH + (hasIndices ? INDEX_H : 0);
   const h = cellsY + cellH + (hasPointers ? POINTER_H : 0);
 
   return {
@@ -456,19 +465,29 @@ function sequenceShape(
     draw(x, y, layer, refs) {
       const g = s("g", { class: ["seq", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
       if (showLabel) g.append(labelWithSize(x, y + 11, label, size));
+      if (strip) {
+        g.append(stripBar({
+          ...strip, length: obj.length, window: { start: offset, count: obj.items.length },
+          pointers: opts.pointers,
+        }, x, y + labelH, count * cellW, `strip:${obj.id}`));
+      }
+      if (before) {
+        g.append(s("text", { class: "value v-none", x: x + cellW / 2, y: y + cellsY + cellH / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "…"));
+      }
       if (!obj.items.length) {
         g.append(s("g", { class: "cell is-empty" },
           s("rect", { x, y: y + cellsY, width: cellW, height: CELL_H, rx: 3 }),
           s("text", { class: "value v-none", x: x + cellW / 2, y: y + cellsY + CELL_H / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "∅")));
       }
       obj.items.forEach((_item, i) => {
-        const cx = x + i * cellW;
-        const changed = opts.changed.has(String(i));
+        const cx = x + firstX + i * cellW;
+        const slot = String(offset + i);
+        const changed = opts.changed.has(slot);
         if (cellSizes?.[i]) {
-          g.append(s("text", { class: "cell-size", x: cx + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, cellSizes[i]));
+          g.append(s("text", { class: "cell-size", x: cx + cellW / 2, y: y + labelH + stripH + 9, "text-anchor": "middle" }, cellSizes[i]));
         }
         if (hasIndices) {
-          g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + sizeH + 9, "text-anchor": "middle" }, String(i)));
+          g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + stripH + sizeH + 9, "text-anchor": "middle" }, slot));
         }
         const view = views[i];
         const before = refs.length;
@@ -478,17 +497,18 @@ function sequenceShape(
             s("rect", { x: cx, y: y + cellsY, width: cellW, height: cellH, rx: 3 })));
           view.draw(cx + pad, y + cellsY + pad, view.w, view.h, g, refs, changed);
         } else {
-          markCell(view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed), obj.id, String(i), obj.items[i], cx - x, 0);
+          markCell(view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed), obj.id, slot, obj.items[i], cx - x, 0);
           // A list cell's arrow leaves downward, not through its neighbors.
           for (let k = before; k < refs.length; k++) refs[k].down = true;
         }
       });
       if (truncated) {
-        const cx = x + obj.items.length * cellW;
+        const cx = x + firstX + obj.items.length * cellW;
         g.append(s("text", { class: "value v-none", x: cx + cellW / 2, y: y + cellsY + cellH / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "…"));
       }
       if (hasPointers) {
-        g.append(pointerMarkers(opts.pointers, (i) => x + i * cellW, cellW, y + cellsY + cellH, obj.items.length,
+        const shown = opts.pointers.map((p) => ({ ...p, index: p.index - offset }));
+        g.append(pointerMarkers(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY + cellH, obj.items.length,
           { key: `ptr:${obj.id}`, originX: x, originY: y }));
       }
       layer.append(g);

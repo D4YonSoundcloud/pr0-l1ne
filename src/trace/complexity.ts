@@ -37,6 +37,7 @@ import {
   liveFrames, type CostFunction, type CostNode, type Frame, type HeapObject, type SizeRef, type Step, type Trace,
   type Value,
 } from "./types";
+import type { Measurement } from "./measurement";
 
 // ---------------------------------------------------------------------------
 // Results
@@ -88,8 +89,10 @@ export interface Estimate {
   notes: string[];
   /** The run's own numbers: steps, peak recursion. */
   run: string[];
-  /** Raw expressions, for tests. */
+  /** Raw expressions (for tests, and growth runs: trace/growth.ts). */
   raw: { time: BigO; space: BigO };
+  /** The sizes in `raw`, by key: their letter, the program's name for them, and their value in this run. */
+  symbols: { key: string; letter: string; name: string; meaning: string; value: number }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +129,12 @@ interface LoopStat {
   maxPasses: number;
   /** Total passes over one run of the outer loop, for the outer loop's busiest run. */
   innerTotal?: { outerPasses: number; total: number };
+  /** Finished at least one run (or was counted in full by Measure). */
   ran: boolean;
+  /** The trace stopped while it was running: that run's counts were left out. */
+  cutShort?: boolean;
+  /** Sized from Measure's full counts. */
+  measured?: boolean;
 }
 
 interface CallStat {
@@ -134,6 +142,9 @@ interface CallStat {
   /** Most calls in one call from outside (all the recursion one call caused). */
   perOutsideCall: number;
   depth: number;
+  /** The trace stopped inside a call from outside: its calls were left out. */
+  cutShort?: boolean;
+  measured?: boolean;
 }
 
 class RunFacts {
@@ -146,8 +157,15 @@ class RunFacts {
   readonly firstLoopStep = new Map<string, number>();
   readonly firstCallStep = new Map<string, number>();
 
-  constructor(readonly trace: Trace) {
+  /** The trace stopped before the program finished: unfinished loops and calls aren't counted. */
+  readonly partial: boolean;
+  /** Full counts from Measure, for a trace that stopped early. */
+  readonly measured: Measurement | null;
+
+  constructor(readonly trace: Trace, measurement: Measurement | null = null) {
     this.steps = trace.steps;
+    this.partial = trace.truncated;
+    this.measured = this.partial && measurement && measurement.status === "done" ? measurement : null;
     const stride = Math.max(1, Math.floor(this.steps.length / 600));
     for (let i = 0; i < this.steps.length; i += stride) {
       const step = this.steps[i];
@@ -166,44 +184,95 @@ class RunFacts {
   }
 
   private countLoops(): void {
-    // passes per loop run, and which run of the enclosing loop (same frame) it was in
-    const runs = new Map<string, { loop: string; passes: number; parent?: string }>();
+    // passes per loop run, and which run (and pass) of the enclosing loop (same frame) it was in
+    const runs = new Map<string, { loop: string; passes: number; parent?: string; parentPass?: number }>();
     this.steps.forEach((step, index) => {
-      const lastInFrame = new Map<string, string>();
+      const lastInFrame = new Map<string, { key: string; pass: number }>();
       for (const ctx of step.loops) {
         if (!this.firstLoopStep.has(ctx.loop)) this.firstLoopStep.set(ctx.loop, index);
         const key = `${ctx.frame}|${ctx.loop}|${ctx.instance}`;
-        const run = runs.get(key) ?? { loop: ctx.loop, passes: 0, parent: lastInFrame.get(ctx.frame) };
+        const outer = lastInFrame.get(ctx.frame);
+        const run = runs.get(key) ?? { loop: ctx.loop, passes: 0, parent: outer?.key, parentPass: outer?.pass };
         run.passes = Math.max(run.passes, ctx.iteration);
         runs.set(key, run);
-        lastInFrame.set(ctx.frame, key);
+        lastInFrame.set(ctx.frame, { key, pass: ctx.iteration });
       }
     });
-    const totals = new Map<string, Map<string, number>>(); // loop -> parent run -> total passes
-    for (const run of runs.values()) {
-      const stat = this.loops.get(run.loop) ?? { maxPasses: 0, ran: true };
-      stat.maxPasses = Math.max(stat.maxPasses, run.passes);
+    // Runs still going when a cut-short trace stopped: their counts are partial.
+    const unfinished = new Set<string>();
+    const lastStep = this.steps[this.steps.length - 1];
+    if (this.partial && lastStep) for (const ctx of lastStep.loops) unfinished.add(`${ctx.frame}|${ctx.loop}|${ctx.instance}`);
+
+    // loop -> parent run -> total passes, and the parent's passes it was seen in
+    const totals = new Map<string, Map<string, { total: number; seen: Set<number> }>>();
+    for (const [key, run] of runs) {
+      const stat = this.loops.get(run.loop) ?? { maxPasses: 0, ran: false };
       this.loops.set(run.loop, stat);
-      if (run.parent) {
-        const byParent = totals.get(run.loop) ?? new Map<string, number>();
-        byParent.set(run.parent, (byParent.get(run.parent) ?? 0) + run.passes);
+      if (unfinished.has(key)) {
+        stat.cutShort = true;
+        continue;
+      }
+      stat.ran = true;
+      stat.maxPasses = Math.max(stat.maxPasses, run.passes);
+      if (run.parent && !unfinished.has(run.parent)) {
+        const byParent = totals.get(run.loop) ?? new Map<string, { total: number; seen: Set<number> }>();
+        const entry = byParent.get(run.parent) ?? { total: 0, seen: new Set<number>() };
+        entry.total += run.passes;
+        if (run.parentPass !== undefined) entry.seen.add(run.parentPass);
+        byParent.set(run.parent, entry);
         totals.set(run.loop, byParent);
       }
     }
     for (const [loop, byParent] of totals) {
       let best: { outerPasses: number; total: number } | undefined;
-      for (const [parent, total] of byParent) {
+      for (const [parent, entry] of byParent) {
         const outerPasses = runs.get(parent)?.passes ?? 0;
+        let total = entry.total;
+        // A sampled outer loop recorded only some of its passes: scale up
+        // by the passes the inner loop was seen in.
+        const seen = entry.seen.size;
+        if (this.trace.sampled && seen > 0 && seen < outerPasses) total = Math.round((total * outerPasses) / seen);
         if (!best || outerPasses > best.outerPasses || (outerPasses === best.outerPasses && total > best.total)) {
           best = { outerPasses, total };
         }
       }
       this.loops.get(loop)!.innerTotal = best;
     }
+    if (this.measured) this.fillLoopsFromMeasure(this.measured);
+  }
+
+  /**
+   * Loops the trace didn't finish, sized from Measure's counts for the same
+   * code: passes per entry, and for a nested loop, its passes per run of
+   * the loop around it.
+   */
+  private fillLoopsFromMeasure(m: Measurement): void {
+    const count = (r: Record<string, number>, line: number) => r[String(line)] ?? 0;
+    for (const info of this.trace.loops) {
+      const stat = this.loops.get(info.id) ?? { maxPasses: 0, ran: false };
+      if (stat.ran && !stat.cutShort) continue;
+      const entries = count(m.lines, info.line);
+      if (!entries) continue;
+      const passes = count(m.passes, info.line);
+      stat.maxPasses = Math.max(stat.maxPasses, Math.ceil(passes / entries));
+      stat.ran = true;
+      stat.measured = true;
+      // The innermost loop around it in the code.
+      const parent = this.trace.loops
+        .filter((p) => p.id !== info.id && p.bodyStart <= info.line && info.line <= p.bodyEnd)
+        .sort((a, b) => b.line - a.line)[0];
+      const outerRuns = parent ? count(m.lines, parent.line) : 0;
+      if (parent && outerRuns) {
+        stat.innerTotal = { outerPasses: Math.round(count(m.passes, parent.line) / outerRuns), total: Math.round(passes / outerRuns) };
+      }
+      this.loops.set(info.id, stat);
+    }
   }
 
   private countCalls(): void {
     const current = new Map<string, number>(); // func -> calls in the current outside call
+    const finished = new Map<string, number>(); // func -> most calls in a finished outside call
+    const outsideCalls = new Map<string, number>();
     this.steps.forEach((step, index) => {
       const depth = new Map<string, number>();
       for (const frame of step.stack) depth.set(frame.func, (depth.get(frame.func) ?? 0) + 1);
@@ -220,11 +289,43 @@ class RunFacts {
       const stat = this.calls.get(top.func) ?? { calls: 0, perOutsideCall: 0, depth: 1 };
       stat.calls++;
       const fromOutside = !caller || caller.func !== top.func && !step.stack.slice(0, -1).some((f) => f.func === top.func);
-      if (fromOutside) current.set(top.func, 0);
+      if (fromOutside) {
+        if (current.has(top.func)) finished.set(top.func, Math.max(finished.get(top.func) ?? 0, current.get(top.func)!));
+        current.set(top.func, 0);
+        outsideCalls.set(top.func, (outsideCalls.get(top.func) ?? 0) + 1);
+      }
       current.set(top.func, (current.get(top.func) ?? 0) + 1);
-      stat.perOutsideCall = Math.max(stat.perOutsideCall, current.get(top.func)!);
       this.calls.set(top.func, stat);
     });
+    // The last call from outside counts too, unless the trace stopped inside it.
+    const lastStack = new Set((this.steps[this.steps.length - 1]?.stack ?? []).map((f) => f.func));
+    for (const [func, stat] of this.calls) {
+      const cut = this.partial && lastStack.has(func) && func !== "Global";
+      if (cut) stat.cutShort = true;
+      else if (current.has(func)) finished.set(func, Math.max(finished.get(func) ?? 0, current.get(func)!));
+      stat.perOutsideCall = finished.get(func) ?? 0;
+    }
+    // Sampled runs skip calls in the middle of long loops; the tracer counted them all.
+    const counts = this.trace.counts;
+    if (counts && this.trace.sampled && !this.partial) {
+      for (const [func, stat] of this.calls) {
+        const name = func === "Global" ? null : func;
+        if (name && counts.calls[name] !== undefined) stat.calls = Math.max(stat.calls, counts.calls[name]);
+        if (name && counts.depth[name] !== undefined) stat.depth = Math.max(stat.depth, counts.depth[name]);
+      }
+    }
+    // A cut-short call: Measure's count, when the program called it from outside just once.
+    const m = this.measured;
+    if (m) {
+      for (const fn of this.trace.cost?.functions ?? []) {
+        const stat = this.calls.get(fn.name);
+        const measuredCalls = m.calls?.[String(fn.line)];
+        if (!stat?.cutShort || !measuredCalls) continue;
+        stat.calls = measuredCalls;
+        if ((outsideCalls.get(fn.name) ?? 0) === 1) stat.perOutsideCall = measuredCalls;
+        stat.measured = true;
+      }
+    }
   }
 
   /** The first step where a global name exists. */
@@ -650,6 +751,9 @@ class Estimator {
         perPass = m.cost;
         est.checked = m.why;
         est.fromRun = true;
+      } else if (stat?.cutShort) {
+        est.checked = "the trace stopped before it finished, so it couldn't be sized";
+        this.notes.push(`The loop on line ${node.line} depends on the data, and the trace stopped before it finished: it's counted as O(1). Measure the program to size it from full counts.`);
       } else {
         est.checked = "didn't run, so it couldn't be sized";
         this.notes.push(`The loop on line ${node.line} depends on the data and didn't run, so it's counted as O(1).`);
@@ -669,6 +773,8 @@ class Estimator {
       }
     }
     if (est.fromRun) est.sizedBy = b.kind === "unknown" ? "run" : "both";
+    if (stat?.measured && est.checked) est.checked += " (counted by Measure)";
+    else if (stat?.cutShort && stat.ran && est.checked && !/stopped/.test(est.checked)) est.checked += " (in the runs the trace finished)";
     const sized = est as SizedLoop;
     sized.cost = amortized ?? perPass;
     sized.amortized = !!amortized;
@@ -862,6 +968,8 @@ class Estimator {
     } else {
       spaceCost = add(spaceCost, space.kept, space.globalGrowth);
     }
+    if (checked && stat?.measured) checked += " (counted by Measure)";
+    else if (checked && stat?.cutShort) checked += " before the trace stopped";
     const result: FunctionResult = { time, space: spaceCost, wholeRun, kept: space.kept, why, checked };
     this.inProgress.delete(fn.name);
     this.results.set(fn.name, result);
@@ -1009,28 +1117,42 @@ function nameSizes(used: string[], syms: Map<string, Sym>): Map<string, string> 
 
 const cache = new WeakMap<Trace, Estimate | null>();
 
-export function estimateComplexity(trace: Trace): Estimate | null {
+const measuredCache = new WeakMap<Trace, { measurement: Measurement; result: Estimate | null }>();
+
+/**
+ * The estimate for a trace. `measurement`: Measure's counts for the same
+ * code, used for what a trace that stopped early didn't finish.
+ */
+export function estimateComplexity(trace: Trace, measurement: Measurement | null = null): Estimate | null {
+  const useMeasure = trace.truncated && measurement?.status === "done" ? measurement : null;
+  if (useMeasure) {
+    const hit = measuredCache.get(trace);
+    if (hit?.measurement === useMeasure) return hit.result;
+    const result = compute(trace, useMeasure);
+    measuredCache.set(trace, { measurement: useMeasure, result });
+    return result;
+  }
   if (cache.has(trace)) return cache.get(trace)!;
-  const result = compute(trace);
+  const result = compute(trace, null);
   cache.set(trace, result);
   return result;
 }
 
-function compute(trace: Trace): Estimate | null {
+function compute(trace: Trace, measurement: Measurement | null): Estimate | null {
   const functions = trace.cost?.functions;
   if (!functions?.length || !trace.steps.length) return null;
   // Neighbors of a node can be 0 (a node with no edges); a grid's row length can't.
   let graphs = new Set<string>();
   setCanBeZero((k) => graphs.has(k));
   try {
-    return computeWith(trace, functions, (g) => (graphs = g));
+    return computeWith(trace, functions, measurement, (g) => (graphs = g));
   } finally {
     setCanBeZero(() => false);
   }
 }
 
-function computeWith(trace: Trace, functions: CostFunction[], shareGraphs: (keys: Set<string>) => void): Estimate | null {
-  const facts = new RunFacts(trace);
+function computeWith(trace: Trace, functions: CostFunction[], measurement: Measurement | null, shareGraphs: (keys: Set<string>) => void): Estimate | null {
+  const facts = new RunFacts(trace, measurement);
   const syms = new Symbols(facts, trace, functions);
   const graphInner = new Set<string>();
   shareGraphs(graphInner);
@@ -1100,7 +1222,14 @@ function computeWith(trace: Trace, functions: CostFunction[], shareGraphs: (keys
       return { name, line: fn.line, time: fmt(t), space: fmt(s), why: r.why.map(fill), checked: r.checked };
     });
 
-  const run: string[] = [`${trace.steps.length} steps`];
+  const run: string[] = [trace.counts && trace.counts.steps > trace.steps.length
+    ? `${trace.counts.steps.toLocaleString()} steps ran, ${trace.steps.length.toLocaleString()} recorded`
+    : `${trace.steps.length} steps`];
+  if (trace.truncated) {
+    est.notes.push(facts.measured
+      ? "The trace stopped before the program finished, so what it didn't finish is sized from Measure's full counts."
+      : "The trace stopped before the program finished, so loops and calls it didn't finish are sized from the code alone. Measure the program to check them against full counts.");
+  }
   const deepest = [...facts.calls.entries()].filter(([f]) => f !== "Global").sort((a, b) => b[1].depth - a[1].depth)[0];
   if (deepest && deepest[1].depth > 1) run.push(`${deepest[0]}() recursed ${deepest[1].depth} deep`);
 
@@ -1113,5 +1242,9 @@ function computeWith(trace: Trace, functions: CostFunction[], shareGraphs: (keys
     notes: [...new Set(est.notes.map(fill))],
     run,
     raw: { time, space },
+    symbols: [...used].map((key) => {
+      const s = syms.all.get(key);
+      return { key, letter: show(key), name: s?.name ?? key, meaning: s?.meaning ?? key, value: s?.value ?? 0 };
+    }),
   };
 }

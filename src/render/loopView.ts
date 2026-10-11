@@ -26,7 +26,7 @@ function nameLabel(g: SVGGElement, x: number, midY: number, name: string, size: 
 }
 import type { HeapObject, SequenceObject, Trace, Value } from "../trace/types";
 import {
-  CELL_H, CELL_MIN_W, INDEX_H, POINTER_H, arrowMarkers, cellWidth, changeArrow, pointerMarkers, pointersFor,
+  CELL_H, CELL_MIN_W, INDEX_H, POINTER_H, STRIP_H, stripBar, arrowMarkers, cellWidth, changeArrow, pointerMarkers, pointersFor,
   rowPointerMarkers, rowPointersWidth, s, textWidth, uiTextWidth, valueCell,
 } from "./draw";
 
@@ -61,7 +61,11 @@ function cellsOf(obj: ContainerObject): Cell[] {
     case "set":
       return obj.items.map((value) => ({ key: valueKey(value), label: "", value }));
     default:
-      return obj.items.map((value, index) => ({ key: String(index), label: String(index), value }));
+    {
+      // A long list's items are a window of it: keys and labels are real indices.
+      const offset = obj.offset ?? 0;
+      return obj.items.map((value, index) => ({ key: String(offset + index), label: String(offset + index), value }));
+    }
   }
 }
 
@@ -160,9 +164,17 @@ interface ContainerColumn {
   grid?: { rows: number; cols: number; rowIndexW: number; hasColumnPointers: boolean };
   /** Height of the content under the top line of cells. */
   bodyH: number;
+  /** Width of the widest row of cells. */
+  cellsW?: number;
+  /** Some row is a long list of numbers: a color strip of all of it goes above the cells. */
+  strip?: boolean;
 }
 
-type Item = { kind: "row"; row: LoopRow; index: number } | { kind: "band"; from: number; to: number };
+type Item =
+  | { kind: "row"; row: LoopRow; index: number }
+  | { kind: "band"; from: number; to: number }
+  /** Passes that ran but weren't recorded (a sampled loop). */
+  | { kind: "gap"; from: number; to: number };
 
 interface TrackLayout {
   track: LinkedTrack;
@@ -488,6 +500,7 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     let cellW = CELL_MIN_W;
     let maxCells = 1;
     let hasPointers = false;
+    let strip = false;
     for (const row of all) {
       const obj = containerIn(row, name);
       if (!obj) continue;
@@ -495,8 +508,9 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       maxCells = Math.max(maxCells, cells.length);
       for (const cell of cells) cellW = Math.max(cellW, cellWidth(cell.value), textWidth(cell.label, 11) + 10);
       if (pointersFor(name, trace.indexNames, new Map(row.frame.locals)).length) hasPointers = true;
+      if (obj.kind !== "dict" && obj.strip) strip = true;
     }
-    columns.push({ name, x: x + labelW, cellW, hasPointers, bodyH: CELL_H + (hasPointers ? POINTER_H : 6) });
+    columns.push({ name, x: x + labelW, cellW, hasPointers, bodyH: CELL_H + (hasPointers ? POINTER_H : 6), cellsW: maxCells * cellW, strip });
     x += labelW + maxCells * cellW + CONTAINER_GAP;
   }
   // The linked track goes after the containers, with nodes in fixed columns.
@@ -519,7 +533,8 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
   // Space above the cells: index labels, or arcs for links that jump over
   // nodes. Below: whatever is tallest (a grid, a tree, pointer markers).
   const isTree = track?.shape === "tree";
-  const rowTop = track && !isTree ? ARC_TOP : INDEX_H;
+  const stripTop = columns.some((c) => c.strip) ? STRIP_H : 0;
+  const rowTop = (track && !isTree ? ARC_TOP : INDEX_H) + stripTop;
   const trackPointers = trackRows.some((r) => !!r?.pointers.length);
   let trackBodyH = 0;
   if (track && isTree) {
@@ -545,6 +560,8 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
   const items: Item[] = [];
   rows.forEach((row, index) => {
     const isLast = index === rows.length - 1;
+    const before = rows[index - 1];
+    if (before && row.iteration - before.iteration > 1) items.push({ kind: "gap", from: before.iteration + 1, to: row.iteration - 1 });
     if (!options.hideQuiet || !mutates || changed[index] || isLast || !hasContent) {
       items.push({ kind: "row", row, index });
       return;
@@ -576,6 +593,8 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
   }
 
   let prevDrawn: { row: LoopRow; y: number; index: number } | null = null;
+  /** The row being drawn follows unrecorded passes: no change arrows across them. */
+  let afterGap = false;
   if (live) {
     // One row: the live state, compared with the step before it.
     items.length = 0;
@@ -583,6 +602,21 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     prevDrawn = { row: live.prev, y: Number.NaN, index: all.length - 2 };
   }
   for (const item of items) {
+    if (item.kind === "gap") {
+      const count = item.to - item.from + 1;
+      const text = count === 1
+        ? `#${item.from}: 1 pass ran, not recorded`
+        : `#${item.from} to #${item.to}: ${count.toLocaleString()} passes like these ran, not recorded`;
+      const textX = MARGIN + GUTTER_W;
+      rowLayer.append(s("g", { class: "quiet-band sampled-band" },
+        s("title", {}, "A long loop is sampled: its first passes, passes at round numbers and its last passes are recorded. The passes in between ran, and are counted, but weren't recorded."),
+        s("line", { x1: MARGIN, x2: contentW, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }),
+        s("rect", { x: textX - 8, y: y + 4, width: uiTextWidth(text, 12.5) + 16, height: BAND_H - 8, rx: 4 }),
+        s("text", { x: textX, y: y + BAND_H / 2, "dominant-baseline": "central" }, text)));
+      y += BAND_H + 6;
+      afterGap = true;
+      continue;
+    }
     if (item.kind === "band") {
       const text = item.from === item.to ? `#${item.from}: nothing changed` : `#${item.from} to #${item.to}: nothing changed`;
       const textX = MARGIN + GUTTER_W;
@@ -670,9 +704,16 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       });
       if (obj.kind !== "dict" && obj.kind !== "set") {
         const pointers = pointersFor(column.name, trace.indexNames, new Map(row.frame.locals), changedNames);
+        const offset = obj.offset ?? 0;
         if (pointers.length) {
-          containerG.append(pointerMarkers(pointers, (i) => column.x + i * column.cellW, column.cellW, cellsY + CELL_H, cells.length,
+          const shown = pointers.map((p) => ({ ...p, index: p.index - offset }));
+          containerG.append(pointerMarkers(shown, (i) => column.x + i * column.cellW, column.cellW, cellsY + CELL_H, cells.length,
             { key: `ptr:${column.name}`, originX: 0, originY: 0 }));
+        }
+        if (obj.strip && obj.length > obj.items.length) {
+          containerG.append(stripBar({
+            ...obj.strip, length: obj.length, window: { start: offset, count: obj.items.length }, pointers,
+          }, column.x, labelsY - STRIP_H, column.cellsW ?? cells.length * column.cellW, `strip:${column.name}`));
         }
       }
       g.append(containerG);
@@ -680,9 +721,9 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       // Change arrows from the previous drawn row. For lists, a value that
       // moved from another changed index (a swap) gets a crossing arrow.
       // (Animated mode has one row: the values slide instead.)
-      if (prevDrawn && prevObj && !replaced && !live) {
+      if (prevDrawn && prevObj && !replaced && !live && !afterGap) {
         const fromY = prevDrawn.y + rowTop + CELL_H + (column.hasPointers ? POINTER_H - 2 : 2);
-        const toY = labelsY - 3;
+        const toY = labelsY - 3 - (column.strip ? STRIP_H : 0);
         const used = new Set<string>();
         const prevByValue = (c: Cell) => prevCells.find((p) =>
           p.key !== c.key && changedKeys.has(p.key) && !used.has(p.key) && valueKey(p.value) === valueKey(c.value));
@@ -728,6 +769,7 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
 
     rowLayer.append(g);
     prevDrawn = { row, y, index };
+    afterGap = false;
     y += rowH + ROW_GAP;
   }
 

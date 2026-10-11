@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HeapObject, Step, Trace, Value } from "../trace/types";
+import type { HeapObject, SequenceObject, Step, Trace, Value } from "../trace/types";
 import { inspect, parseParams } from "./runtime";
 import { traceJavaScript } from "./trace";
 
@@ -214,9 +214,17 @@ describe("errors, limits and output", () => {
     expect(t.error).toMatchObject({ type: "TypeError", line: 3 });
   });
 
-  it("stops infinite loops at the step limit", async () => {
-    const t = await traceJavaScript(`while (true) {}`, 200);
+  it("stops infinite loops (sampled, so at the time budget)", async () => {
+    const t = await traceJavaScript(`while (true) {}`, 200, 0.3);
     expect(t.truncated).toBe(true);
+    expect(t.stoppedBy).toBe("time");
+    expect(t.steps.length).toBeLessThanOrEqual(200);
+  });
+
+  it("stops at the step limit when nothing can be sampled", async () => {
+    const t = await traceJavaScript(`let a = 0;\n` + Array.from({ length: 300 }, () => "a++;").join("\n"), 200);
+    expect(t.truncated).toBe(true);
+    expect(t.stoppedBy).toBe("steps");
     expect(t.steps.length).toBe(200);
   });
 
@@ -228,7 +236,7 @@ describe("errors, limits and output", () => {
       } catch (e) {
         console.log("caught", e);
       }
-    `, 150);
+    `, 150, 0.3);
     expect(t.truncated).toBe(true);
     expect(t.stdout).toBe("");
   });
@@ -277,5 +285,78 @@ setTimeout(() => console.log("later"), 5);
     const i = trace.steps.findIndex((s) => s.output?.line === 4);
     expect(printedAt(trace, i)).toEqual({ text: "sorted: [ 1, 2, 3 ] [ 9 ]", line: 4, refs: [numsId] });
     expect(printedAt(trace, i - 1)).toBeNull();
+  });
+});
+
+describe("sampling long loops", () => {
+  const passes = (t: Trace, loop: string) => {
+    const seen = new Set<number>();
+    for (const s of t.steps) for (const c of s.loops) if (c.loop === loop && c.instance === 1) seen.add(c.iteration);
+    return seen;
+  };
+
+  it("records a short loop in full", async () => {
+    const t = await traceJavaScript(`let s = 0;\nfor (let i = 0; i < 30; i++) s += i;`, 3000);
+    expect(t.sampled).toBeFalsy();
+    expect([...passes(t, "L2")].length).toBe(31);
+  });
+
+  it("keeps a long loop's first, round-numbered and last passes, and counts the rest", async () => {
+    const t = await traceJavaScript(`let s = 0;\nfor (let i = 0; i < 40000; i++) {\n  s += i;\n}\nconsole.log(s);`, 3000);
+    expect(t.truncated).toBe(false);
+    expect(t.sampled).toBe(true);
+    expect(t.stdout).toBe("799980000\n");
+    const seen = passes(t, "L2");
+    for (const n of [1, 5, 10, 100, 1000, 30000, 39996, 40000]) expect(seen.has(n)).toBe(true);
+    expect(seen.has(6)).toBe(false);
+    expect(seen.has(1234)).toBe(false);
+    const skipped = t.steps.reduce((sum, s) => sum + (s.skipped ?? 0), 0) + (last(t).skippedAfter ?? 0);
+    expect(t.steps.length + skipped).toBe(t.counts!.steps);
+  });
+
+  it("keeps the last passes of a while loop that ends on a round number", async () => {
+    const t = await traceJavaScript(`let n = 0;\nwhile (n < 20000) {\n  n++;\n}\nconst done = n;`, 3000);
+    const seen = passes(t, "L2");
+    for (const n of [19996, 19997, 19998, 19999, 20000]) expect(seen.has(n)).toBe(true);
+    expect(localsOf(last(t)).get("done")).toMatchObject({ repr: "20000" });
+  });
+
+  it("samples a callback called again and again (Array.from, map)", async () => {
+    const t = await traceJavaScript(`const nums = Array.from({ length: 40000 }, (_, i) => i);\nconst d = nums.map((x) => x * 2);`, 3000);
+    expect(t.truncated).toBe(false);
+    expect(t.sampled).toBe(true);
+    expect(t.steps.length).toBeLessThan(1500);
+  });
+
+  it("counts calls and recursion depth", async () => {
+    const t = await traceJavaScript(`function fact(n) { return n <= 1 ? 1 : n * fact(n - 1); }\nfact(30);`);
+    expect(t.counts!.calls.fact).toBe(30);
+    expect(t.counts!.depth.fact).toBe(30);
+  });
+
+  it("stops at the time budget", async () => {
+    const t = await traceJavaScript(`let i = 0;\nwhile (true) { i++; }`, 3000, 0.3);
+    expect(t.truncated).toBe(true);
+    expect(t.stoppedBy).toBe("time");
+    expect(t.counts!.steps).toBeGreaterThan(1000);
+  });
+});
+
+describe("long lists", () => {
+  const listAt = (step: Step) => Object.values(step.heap).find((o) => o.kind === "list") as SequenceObject;
+  it("shows a window of cells that follows the index variables", async () => {
+    const t = await traceJavaScript(`const nums = Array.from({ length: 1000 }, (_, i) => i);\nfor (let j = 990; j > 400; j--) {\n  nums[j] = nums[j - 1];\n}`, 3000);
+    const offsets = new Set(t.steps.map((s) => listAt(s)?.offset ?? 0));
+    expect(offsets.has(940)).toBe(true);
+    const step = t.steps.find((s) => listAt(s)?.offset === 940)!;
+    expect(listAt(step).items[0]).toMatchObject({ repr: expect.any(String) });
+  });
+
+  it("adds a strip of evenly spaced samples of a long list of numbers", async () => {
+    const t = await traceJavaScript(`const nums = Array.from({ length: 40000 }, (_, i) => i);`, 3000);
+    const list = listAt(last(t));
+    expect(list.strip!.values.length).toBe(256);
+    expect(list.strip!.values[128]).toBe(20000);
+    expect(list.offset).toBeUndefined();
   });
 });

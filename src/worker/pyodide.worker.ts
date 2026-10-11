@@ -5,7 +5,9 @@
  * Loads Pyodide (CPython compiled to WebAssembly) from the jsDelivr CDN,
  * loads tracer.py into it, then answers "run" messages with a Trace.
  */
+import { expandHeaps } from "../trace/delta";
 import tracerSource from "./tracer.py?raw";
+import measureSource from "./measure.py?raw";
 import type { FromWorker, ToWorker } from "./protocol";
 import type { Trace } from "../trace/types";
 
@@ -21,12 +23,14 @@ interface Pyodide {
   globals: { get(name: string): unknown };
 }
 
-type RunTrace = (source: string, maxSteps: number) => string;
+type RunTrace = (source: string, maxSteps: number, maxSeconds: number) => string;
+type RunMeasure = (source: string, limitMs: number, report: (json: string) => void, overridesJson?: string) => string;
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const post = (message: FromWorker) => ctx.postMessage(message);
 
 let runTrace: RunTrace | null = null;
+let runMeasure: RunMeasure | null = null;
 const queue: ToWorker[] = [];
 
 async function boot(): Promise<void> {
@@ -34,7 +38,9 @@ async function boot(): Promise<void> {
     const module = await import(/* @vite-ignore */ `${INDEX_URL}pyodide.mjs`);
     const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL });
     pyodide.runPython(tracerSource);
+    pyodide.runPython(measureSource); // uses the tracer's helpers, from the same namespace
     runTrace = pyodide.globals.get("run_trace") as RunTrace;
+    runMeasure = pyodide.globals.get("run_measure") as RunMeasure;
     const pythonVersion = String(pyodide.runPython("import sys; sys.version.split()[0]"));
     post({ type: "ready", label: `Python ${pythonVersion}` });
     while (queue.length) handle(queue.shift()!);
@@ -49,10 +55,22 @@ function handle(message: ToWorker): void {
     queue.push(message);
     return;
   }
+  if (message.type === "measure") {
+    try {
+      const runId = message.runId;
+      const report = (json: string) => post({ type: "measureProgress", runId, progress: JSON.parse(json) });
+      const json = runMeasure!(message.source, message.limitMs, report, message.overrides ? JSON.stringify(message.overrides) : undefined);
+      post({ type: "measured", runId, result: JSON.parse(json) });
+    } catch (error) {
+      post({ type: "crash", runId: message.runId, message: error instanceof Error ? error.message : String(error) });
+    }
+    return;
+  }
   const started = performance.now();
   try {
-    const json = runTrace(message.source, message.maxSteps);
-    const trace = JSON.parse(json) as Trace;
+    const json = runTrace(message.source, message.maxSteps, message.maxSeconds);
+    // Rebuilt here, so the page gets heaps that share unchanged objects.
+    const trace = expandHeaps(JSON.parse(json) as Trace);
     post({ type: "result", runId: message.runId, trace, elapsedMs: performance.now() - started });
   } catch (error) {
     post({

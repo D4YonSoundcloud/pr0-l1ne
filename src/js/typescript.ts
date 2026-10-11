@@ -75,6 +75,6 @@ export function instrumentTypeScript(source: string): Instrumented {
   return instrumentAst(stripTypes(parseProgram(source, ["typescript"]), source), source);
 }
 
-export function traceTypeScript(source: string, maxSteps = 2000): Promise<Trace> {
-  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript);
+export function traceTypeScript(source: string, maxSteps = 2000, maxSeconds?: number): Promise<Trace> {
+  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds);
 }

@@ -395,6 +395,31 @@ function analyze(ast: t.File, source: string): Analysis {
 // 3. Transform
 // ---------------------------------------------------------------------------
 
+/** Simple enough to evaluate one extra time: names, numbers, a.length, arithmetic. */
+function pureExpression(n: t.Node): boolean {
+  if (t.isIdentifier(n) || t.isNumericLiteral(n)) return true;
+  if (t.isMemberExpression(n) && !n.computed) return pureExpression(n.object);
+  if (t.isBinaryExpression(n) && /^[-+*/%]$/.test(n.operator)) return pureExpression(n.left as t.Node) && pureExpression(n.right);
+  if (t.isUnaryExpression(n) && n.operator === "-") return pureExpression(n.argument);
+  return false;
+}
+
+/** for (let i = A; i < B; i++) -> B - A (or B - A + 1 for <=), when A and B are simple. */
+function countedLoopTotal(node: t.ForStatement): t.Expression | null {
+  if (!t.isVariableDeclaration(node.init) || node.init.declarations.length !== 1) return null;
+  const decl = node.init.declarations[0];
+  if (!t.isIdentifier(decl.id) || !decl.init || !pureExpression(decl.init)) return null;
+  const id = decl.id.name;
+  const test = node.test;
+  const update = node.update;
+  const steps = (t.isUpdateExpression(update) && update.operator === "++" && t.isIdentifier(update.argument, { name: id }))
+    || (t.isAssignmentExpression(update) && update.operator === "+=" && t.isIdentifier(update.left, { name: id }) && t.isNumericLiteral(update.right, { value: 1 }));
+  if (!steps || !t.isBinaryExpression(test) || (test.operator !== "<" && test.operator !== "<=")
+    || !t.isIdentifier(test.left, { name: id }) || !pureExpression(test.right)) return null;
+  const count = t.binaryExpression("-", t.cloneNode(test.right as t.Expression), t.cloneNode(decl.init));
+  return test.operator === "<=" ? t.binaryExpression("+", count, t.numericLiteral(1)) : count;
+}
+
 const runtimeCall = (method: string, args: t.Expression[]) =>
   t.callExpression(t.memberExpression(t.identifier(RUNTIME), t.identifier(method)), args);
 
@@ -546,6 +571,16 @@ function transform(ast: t.File, a: Analysis): void {
         // `for await` pauses before every item without an await of its own,
         // so the runtime wraps the iterable to see those pauses.
         if (t.isForOfStatement(node) && node.await) node.right = frameCall("asyncIter", [node.right]);
+        // Tell the runtime how many passes the loop will make, when that's
+        // known as it starts, so a long loop can be sampled (see runtime.ts).
+        else if (t.isForOfStatement(node)) node.right = frameCall("loopLength", [t.stringLiteral(id), node.right]);
+        if (t.isForStatement(node)) {
+          const total = countedLoopTotal(node);
+          if (total && t.isVariableDeclaration(node.init)) {
+            const decl = node.init.declarations[0];
+            decl.init = t.sequenceExpression([frameCall("loopTotal", [t.stringLiteral(id), total]), decl.init!]);
+          }
+        }
         return;
       }
 

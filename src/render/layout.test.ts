@@ -6,6 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { expandHeaps } from "../trace/delta";
 import { JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES, type Example } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
@@ -21,7 +22,7 @@ function tracePython(source: string): Trace | null {
     const json = execFileSync("python3", ["-c",
       "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
     { input: source, encoding: "utf8" });
-    return JSON.parse(json) as Trace;
+    return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null; // Python not installed: those cases are skipped
   }

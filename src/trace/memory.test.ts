@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { expandHeaps } from "./delta";
 import { traceJavaScript } from "../js/trace";
 import { formatBytes, ownAndTotal, stepSizes } from "./memory";
 import type { Trace } from "./types";
@@ -8,7 +9,7 @@ function py(code: string): Trace | null {
   try {
     const json = execFileSync("python3", ["-c", "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
       { input: code, encoding: "utf8" });
-    return JSON.parse(json) as Trace;
+    return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null;
   }

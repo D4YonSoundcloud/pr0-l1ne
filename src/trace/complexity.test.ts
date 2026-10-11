@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { expandHeaps } from "./delta";
 import { JAVASCRIPT_EXAMPLES } from "../examples/javascript";
 import { PYTHON_EXAMPLES } from "../examples/python";
 import { TYPESCRIPT_EXAMPLES } from "../examples/typescript";
@@ -7,6 +8,7 @@ import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
 import { estimateComplexity } from "./complexity";
 import { applyHints } from "./hints";
+import type { Measurement } from "./measurement";
 import type { Trace } from "./types";
 
 function tracePython(source: string): Trace | null {
@@ -14,7 +16,7 @@ function tracePython(source: string): Trace | null {
     const json = execFileSync("python3", ["-c",
       "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
     { input: source, encoding: "utf8" });
-    return JSON.parse(json) as Trace;
+    return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null; // Python not installed: those cases are skipped
   }
@@ -177,5 +179,44 @@ while (queue.length > 0) {
     if (!e) return;
     expect(e.time).toBe("O(n²)");
     expect(e.notes.some((n) => /queue\.shift\(\) costs n/.test(n))).toBe(true);
+  });
+});
+
+describe("estimates from runs that were sampled or cut short", () => {
+  const measurement = (extra: Partial<Measurement>): Measurement => ({
+    status: "done", error: null, lines: {}, passes: {}, calls: {}, work: {}, workKind: {}, totals: {},
+    ms: 1, plainMs: 1, peakBytes: null, heldBytes: null, stdout: "", droppedOutput: 0, ...extra,
+  });
+
+  it("scales an inner loop's passes up to the outer passes a sampled run skipped", async () => {
+    const t = applyHints(await traceJavaScript(`const n = 3000;\nconst k = 50;\nlet t = 0;\nlet i = 0;\nwhile (i < n) {\n  let j = 0;\n  while (j < k) {\n    j++;\n    t++;\n  }\n  i++;\n}`, 3000));
+    expect(t.sampled).toBe(true);
+    expect(t.truncated).toBe(false);
+    expect(estimateComplexity(t)!.time).toBe("O(n·k)");
+  });
+
+  it("doesn't size a data-dependent loop from a run that stopped inside it", async () => {
+    const code = `let x = 27;\nlet steps = 0;\nwhile (x !== -1) {\n  x = (x * 7 + 3) % 1000003;\n  steps++;\n}`;
+    const t = applyHints(await traceJavaScript(code, 3000, 0.2));
+    expect(t.truncated).toBe(true);
+    const e = estimateComplexity(t)!;
+    expect(e.loops.find((l) => l.line === 3)!.checked).toMatch(/stopped before it finished/);
+    expect(e.notes.join(" ")).toMatch(/Measure/);
+    // With Measure's full counts for the same code, it's sized from those.
+    const m = measurement({ lines: { 3: 1 }, passes: { 3: 111 } });
+    const withMeasure = estimateComplexity(t, m)!;
+    expect(withMeasure.loops.find((l) => l.line === 3)!.checked).toMatch(/counted by Measure/);
+  });
+
+  it("doesn't call recursion pruned because the trace stopped partway through it", async () => {
+    const code = `function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2);\n}\nfib(20);`;
+    const t = applyHints(await traceJavaScript(code, 400));
+    expect(t.truncated).toBe(true);
+    const e = estimateComplexity(t)!;
+    expect(e.time).toBe("O(2ⁿ)");
+    expect(e.functions[0].why.join(" ")).not.toMatch(/prunes/);
+    const withMeasure = estimateComplexity(t, measurement({ calls: { 1: 21891 } }))!;
+    expect(withMeasure.time).toBe("O(2ⁿ)");
+    expect(withMeasure.functions[0].checked).toMatch(/21891 calls.*counted by Measure/);
   });
 });

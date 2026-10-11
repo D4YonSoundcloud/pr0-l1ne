@@ -18,6 +18,9 @@
  *   viz: graph adj directed: seen    ...with options, and variables to
  *                                    draw on it
  *   viz: plain adj                   never draw adj as a graph
+ *   viz: size n                      n is the input size: Measure can
+ *   viz: size n = 40000, k             rerun the program at smaller sizes
+ *                                    to see how its cost grows
  */
 import { GRAPH_OPTIONS, type GraphOption, type LinkedHint, type RawHint, type Trace, type VizHints } from "./types";
 
@@ -25,7 +28,9 @@ const NAME = /^[A-Za-z_$][\w$]*$/;
 const CONTAINER = /^([A-Za-z_$][\w$]*)(\[\])?$/;
 const CLASS_LINKS = /^([A-Za-z_$][\w$.]*)\s*\(([^)]*)\)$/;
 
-const KEYWORDS = ["hide", "show", "pointers", "tree", "list", "graph", "plain"] as const;
+const KEYWORDS = ["hide", "show", "pointers", "tree", "list", "graph", "plain", "size"] as const;
+/** n, or n = 40000 */
+const SIZE = /^([A-Za-z_$][\w$]*)\s*(?:=\s*([0-9][0-9_]*))?$/;
 const DOTTED = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
 /** graph <target>[(fields)] [options] [: names] */
 const GRAPH = /^([A-Za-z_$][\w$.]*)\s*(?:\(([^)]*)\))?\s*([A-Za-z\s]*?)\s*(?::\s*(.*))?$/;
@@ -35,7 +40,7 @@ function names(text: string): string[] {
 }
 
 export function emptyHints(): VizHints {
-  return { hide: [], show: [], pointers: {}, linked: [], graphs: [], plain: [], warnings: [] };
+  return { hide: [], show: [], pointers: {}, linked: [], graphs: [], plain: [], sizes: [], warnings: [] };
 }
 
 /** Parse hint comments. Anything that doesn't make sense becomes a warning. */
@@ -73,6 +78,19 @@ export function parseHints(raw: RawHint[]): VizHints {
       }
       const key = container[1] + (container[2] ?? "");
       hints.pointers[key] = [...new Set([...(hints.pointers[key] ?? []), ...pointerNames])];
+      continue;
+    }
+
+    if (keyword === "size") {
+      const parts = names(rest).map((part) => SIZE.exec(part));
+      if (!parts.length || parts.some((m) => !m)) {
+        warn(line, `"size" looks like: viz: size n  or  viz: size n = 40000, k  (variables set to a number at the top of the program)`);
+        continue;
+      }
+      for (const m of parts as RegExpExecArray[]) {
+        const value = m[2] !== undefined ? Number(m[2].replace(/_/g, "")) : undefined;
+        hints.sizes = [...hints.sizes.filter((s) => s.name !== m[1]), { name: m[1], ...(value !== undefined ? { value } : {}), line }];
+      }
       continue;
     }
 

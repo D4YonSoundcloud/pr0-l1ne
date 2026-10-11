@@ -6,8 +6,8 @@ import type { Trace } from "../trace/types";
 import { RUNTIME, InstrumentError, instrument, type Instrumented } from "./instrument";
 import { Runtime } from "./runtime";
 
-export function traceJavaScript(source: string, maxSteps = 2000): Promise<Trace> {
-  return traceProgram(source, maxSteps, "javascript", instrument);
+export function traceJavaScript(source: string, maxSteps = 2000, maxSeconds?: number): Promise<Trace> {
+  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds);
 }
 
 /** Most turns of the event loop to run before giving up (setInterval forever). */
@@ -18,7 +18,7 @@ const MAX_TURNS = 10_000;
  * async function that can continue) runs first. MessageChannel is used
  * because nested setTimeout(0) is slowed to 4 ms by browsers.
  */
-function macrotask(): Promise<void> {
+export function macrotask(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof MessageChannel === "function") {
       const channel = new MessageChannel();
@@ -38,7 +38,7 @@ function macrotask(): Promise<void> {
  * with no await or .catch on it): the browser worker reports them as an
  * event, Node through its process object.
  */
-function onUnhandledRejection(handler: (reason: unknown) => void): () => void {
+export function onUnhandledRejection(handler: (reason: unknown) => void): () => void {
   const proc = (globalThis as { process?: { on?: Function; off?: Function } }).process;
   if (proc?.on && proc.off) {
     const listener = (reason: unknown) => handler(reason);
@@ -67,6 +67,7 @@ export async function traceProgram(
   maxSteps: number,
   language: "javascript" | "typescript",
   instrumenter: (source: string) => Instrumented,
+  maxSeconds?: number,
 ): Promise<Trace> {
   const trace: Trace = {
     version: 1,
@@ -92,7 +93,8 @@ export async function traceProgram(
   if (program.hints.length) trace.hints = program.hints;
   if (program.cost) trace.cost = program.cost;
 
-  const runtime = new Runtime(maxSteps);
+  const runtime = new Runtime(maxSteps, maxSeconds);
+  runtime.indexNames = withPointerHints(program.indexNames, program.hints);
   let stopped = false;
   const fail = (error: unknown) => {
     if (stopped) return;
@@ -121,11 +123,15 @@ export async function traceProgram(
     }
     // The event loop: let async functions continue, then run timers in
     // order, until nothing is left (or something went wrong).
-    for (let turn = 0; turn < MAX_TURNS && !stopped; turn++) {
+    for (let turn = 0; !stopped; turn++) {
       await macrotask();
       if (stopped || runtime.isAborted) break;
       const timer = runtime.nextTimer();
       if (!timer) break;
+      if (turn >= MAX_TURNS) {
+        fail(runtime.ABORT); // timers that never stop (sampled, so not out of steps)
+        break;
+      }
       try {
         timer();
       } catch (error) {
@@ -141,5 +147,21 @@ export async function traceProgram(
   }
   trace.steps = runtime.steps;
   trace.stdout = runtime.stdout;
+  trace.counts = runtime.counts;
+  if (runtime.sampled) trace.sampled = true;
+  if (trace.truncated) trace.stoppedBy = runtime.stoppedBy ?? "steps";
+  if (runtime.skippedAtEnd && trace.steps.length) trace.steps[trace.steps.length - 1].skippedAfter = runtime.skippedAtEnd;
   return trace;
+}
+
+/** Index names from the code, plus `viz: pointers nums: lo, hi` hints. */
+function withPointerHints(indexNames: Record<string, string[]>, hints: { text: string }[]): Record<string, string[]> {
+  const out = { ...indexNames };
+  for (const hint of hints) {
+    const m = /^pointers\s+([\w.]+(?:\[\])?)\s*:\s*(.+)$/.exec(hint.text);
+    if (!m) continue;
+    const extra = m[2].split(",").map((n) => n.trim()).filter(Boolean);
+    out[m[1]] = [...new Set([...(out[m[1]] ?? []), ...extra])].sort();
+  }
+  return out;
 }

@@ -24,7 +24,11 @@ export function slotsOf(obj: HeapObject): Map<string, Value> {
     case "list":
     case "tuple":
     case "set":
-      obj.items.forEach((item, index) => slots.set(String(index), item));
+    {
+      // A long list's items are a window of it: keys are real indices.
+      const offset = obj.offset ?? 0;
+      obj.items.forEach((item, index) => slots.set(String(offset + index), item));
+    }
       break;
     case "dict":
       for (const [key, val] of obj.entries) slots.set(valueKey(key), val);

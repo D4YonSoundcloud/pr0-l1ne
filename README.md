@@ -4,6 +4,8 @@ PR0L1NE is a split-screen tool for seeing your code's data while you write it. P
 
 Binary trees are drawn top-down. Graphs (adjacency lists, matrices, tries, graphs of objects) are drawn as nodes and edges, with your algorithm's own state on them: the visited set filled in, the queue numbered, distances labeled, the search tree in green. Generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
 
+Big inputs still trace: long loops are **sampled** (their first passes, passes at round numbers and their last passes are recorded, and the rest are counted), and a long list of numbers is drawn as a **color strip** of all of it, with the cells following your index variables. For the full picture, **Measure** runs the whole program at full size with counters instead of a trace: how many times every line ran, the work hidden inside built-ins, time and memory. Mark the input size with a hint (`# viz: size n`) and Measure reruns the program at n/64, n/16, n/4 and n to chart **how it grows**, against the code's estimate and against other versions you kept.
+
 It also estimates your code's **time and space complexity** (O(n²), O(n log n), O(V + E)) from the shape of the code, checks the estimate against the run, and labels every loop and function in the editor with what it costs.
 
 ![Dijkstra's algorithm on a small road map: done places filled in, the heap numbered in the order it pops, distances beside each place](docs/graph-dijkstra.png)
@@ -59,7 +61,7 @@ Open the URL Vite prints (usually http://localhost:5173). Pick **Python**, **Jav
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
 | `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
-| `npm run test:pyodide` | Runs the same tests inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
+| `npm run test:pyodide` | Runs the same tests (the tracer's and Measure's) inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
 | `npm run instrument -- file.js` | Prints the instrumented version of a JavaScript or TypeScript file. |
@@ -332,6 +334,56 @@ The menu next to the switch picks how sizes are counted. Each language remembers
 
 Turning sizes on costs almost nothing: they're computed once per step and cached, and stepping is no slower in practice (about 3 ms a step either way).
 
+### Big inputs
+
+A trace records the program step by step, which is what lets you scrub back and forth. It keeps up to 20,000 steps, and stops after 6 seconds when you press **Run** (1.5 seconds for Live runs while you type, so the page keeps up). Rotating an array of 40,000 items right 10,000 times would be 20,000 steps or more for every rotation, so a big input would stop almost at once if every step were kept. Three things let it get further:
+
+**Long loops are sampled.** A loop whose passes would use more than its share of the steps keeps its first 5 passes, passes at round numbers (10, 20 … 90, 100, 200 … 1,000, 2,000 …, as many as its share allows) and its last 5 passes. The passes in between still run, and are counted, but aren't recorded. The loop history shows where they were: "#6 to #9: 4 passes like these ran, not recorded". The step label says when steps were skipped just before the one you're on ("1.99K steps skipped"). A loop of unknown length (a `while`) has its passes buffered as it goes, so its last 5 are kept wherever it ends. A function called again and again from one line (a callback given to `map`, `Array.from`, `sorted(key=...)`) is sampled the same way, and so is a comprehension.
+
+![Rotating 40,000 items 10,000 times, sampled: the first passes, round-numbered ones and the last ones, with a color strip of the whole array above each row](docs/sampled-loop.png)
+
+**Long lists are drawn as a strip.** A list or array of more than 60 numbers gets a band of color above its cells: 256 evenly spaced samples of the whole list, darkest for the smallest value and yellow for the largest. A bracket shows where the cells below are, and small triangles show the index variables. The 60 cells follow those index variables (`j` sweeping down a 40,000-item list shows items near `j`, with their real indices), moving 10 at a time so they don't jump on every step. In the loop history, a rotation's gradient slides along each row.
+
+**Steps share what didn't change.** Each step stores only the objects that changed since the step before; unchanged ones are the same object in memory. That makes traces 3 to 15 times smaller, which is what makes 20,000 steps practical.
+
+When a trace still stops early, the banner says why (the time or the step budget), how many steps ran in all, and offers **Measure**.
+
+### Measuring at full size
+
+Sampling shows what a big run does; it doesn't run it all. Rotating an array of 40,000 items right 10,000 times, one place at a time, is 400 million steps. **Measure** (next to **Run**, or `Ctrl + Shift + '`) runs the whole program at full size with counters instead of a trace, and shows where the time goes:
+
+![Two ways to rotate an array, measured: the inner loop of the step-by-step version ran 40 million times; unshift(pop()) ran 1,000 times but moved 40 million items inside the built-ins](docs/measure-editor.png)
+
+- **On every line in the editor**: how many times it ran (`40M×`), or for a loop, how many passes its body made (`1K passes`). Lines are tinted by how hot they were.
+- **Work hidden inside built-ins.** `nums.unshift(nums.pop())` is one line that ran 1,000 times, but each time it moved all 40,000 items: `1K× · 40M moved`. The same goes for `list.insert(0, x)` and `list.pop(0)` in Python, `shift()` and `splice()`, `x in some_list` and `indexOf` ("scanned"), slices and `concat` ("copied"), and sorting. Same Big-O as the hand-written loop, but done in C, which is why it's so much faster: the kind of thing this is for.
+- **The panel** opens with the results: the time; the totals (lines run, items processed inside built-ins, memory, and the complexity estimate from the small run beside them); the hottest lines (click one to go to it); and the output.
+
+![The Measure panel: time, totals, and the hottest lines](docs/measure-panel.png)
+
+**Times.** The counters slow a program down, typically 2 to 4 times. So if the counted run was quick (under 5 seconds), the program runs once more untouched, and that's the time shown, with the counted time beside it. Times are this computer's and this browser's; Python runs as WebAssembly here, a few times slower than Python on a desktop. Counts are exact either way, so compare counts, not milliseconds, across machines.
+
+**The time limit** (5 seconds, 20 seconds, 1 minute or 5 minutes, in the panel; 20 seconds by default) stops a run that takes too long. Progress shows in the status bar meanwhile ("Measuring… 4.1 s · 23% of line 3's loop"), and **Measure** becomes **Stop**. A run stopped at the limit still shows its counts so far, how far its outermost loop got ("31 passes of 10,000 through the loop on line 3"), and, from that, about how long the whole run would take.
+
+**Memory** (Python): what the program's variables hold at the end, with the same 64-bit sizes as the [Sizes](#memory-sizes) view, and, for programs quick enough to run a third time with every allocation tracked, the peak. Slicing a 40,000-item list peaks higher than rotating it in place, even though both end up holding the same list. Browsers don't let a page measure a JavaScript program's memory, so JavaScript shows none.
+
+Measure only runs when you ask (never on every edit), and editing the code takes its counts off the lines, since they'd no longer line up. Live runs wait until a measurement finishes.
+
+### How it grows
+
+One measurement is one number. How that number grows with the input is what separates an O(n) solution from an O(n²) one, so Measure can also run a program at several sizes.
+
+Mark the input size with a hint naming the variable that sets it: `# viz: size n` (or `// viz: size n` in JavaScript), for a program with `n = 40000` at its top level. Name several to grow them together: `viz: size n, k`. Give a value to scale up to a bigger size than the one you trace: with `n = 200` in the code (quick to step through) and `viz: size n = 40000`, growth runs go up to 40,000. Without a hint, the **How it grows** section of the Measure panel offers to add one for the biggest number assigned at the top level.
+
+**Measure growth** (in the panel, or "Measure Growth" in the command palette) then runs the program at n/64, n/16, n/4 and n, one after the other, each with the panel's time limit. With two or more size variables, a menu picks which grow: all together, or one alone.
+
+![Growth runs for two ways to rotate: the naive one measured O(n²), the slicing one O(n), each on log scales with its fitted curve](docs/growth.png)
+
+- **The measured growth**, fitted to 1, log n, n, n log n, n², n² log n or n³ from the counts (lines run plus items handled inside built-ins), on log scales, where every power of n is a straight line and steeper is worse. Counts are exact, so the fit is too; the time chart is there for the feel of it, and very quick runs can be too fast for the browser's clock to time.
+- **The code's estimate**, dashed, through the largest size. When the two disagree, the panel says so and what might cause it: work below the estimate usually means a loop that stops early, a check that skips work, or a size reduced first (like `k % n`); work above it usually means a built-in that walks the data.
+- **Keep for comparison** puts the results on the charts as "Version 1" (click the name to rename it). Change the code, measure its growth again, and both versions are drawn together: the naive rotation's O(n²) beside the slicing version's O(n). Up to 5 versions are kept per language, in this browser.
+
+If a size stops at the time limit or with an error, the ladder stops there, and the panel estimates how long the full size would take from the sizes that finished.
+
 ### Time and space complexity
 
 The **Time · Space** button in the toolbar shows how the program's running time and extra memory grow with its input, like **Time O(n²) · Space O(1)** for bubble sort, or **Time O(V + E) · Space O(V)** for breadth-first search. The editor labels each loop with how many times it runs, and each function with what it costs:
@@ -525,6 +577,7 @@ A hint is a comment whose text starts with `viz:`:
 | `viz: graph adj: seen, todo, here` | The same, and also draws these variables on the graph, whatever they're called. Each is drawn by its type: a set fills nodes in, a list numbers them, a dict of numbers labels them, a variable holding a node gets a ▲ marker. |
 | `viz: graph Node(neighbors)` | Draws objects of class `Node` as a graph, with `neighbors` as the edges. It can be a list, a set, a dict (its keys label the edges) or a direct link. List several fields to use them all. |
 | `viz: plain graph` | Never draws `graph` as a graph, even though it looks like one. It's drawn as an ordinary dict or list instead. Takes variable or class names. |
+| `viz: size n` | Marks `n` as the input size, for [growth runs](#how-it-grows). `n` must be set to a number at the top level of the program (`n = 40000`). `viz: size n = 40000, k` names several, with an optional full size to grow to. |
 
 Names are the variable or field names as written in your code. Class names in `tree`, `list` and `graph` are what the canvas shows as the box title (a Python class name, or a JavaScript constructor name). If two hints name the same class or variable, the later one wins.
 
@@ -644,7 +697,7 @@ At each event, `record()` walks the stack from the current frame outward, serial
 
 **Safety rails:**
 
-- **Step budget.** After `maxSteps` events (3,000 by default, set in `main.ts`), the trace function raises `StepLimitExceeded`. It subclasses `BaseException` rather than `Exception`, so user code with `except Exception:` can't swallow it.
+- **Step and time budgets.** After `maxSteps` recorded steps (20,000, set in `main.ts`), or after `max_seconds` (6 for Run, 1.5 for Live runs), the trace function raises `StepLimitExceeded`. It subclasses `BaseException` rather than `Exception`, so user code with `except Exception:` can't swallow it.
 - **Size caps.** Containers show at most 60 items and primitives at most 48 characters, so a 10,000-element list doesn't produce a huge trace.
 - **Output capture.** `sys.stdout` is swapped for a `StringIO` during the run. Each step records how many characters had been printed so far, so the output panel shows exactly what was printed up to the step you're on.
 - **No `input()`.** There's no keyboard in a worker, so `input()` raises an error asking you to hard-code test data.
@@ -820,13 +873,16 @@ A trace looks like this (trimmed):
 }
 ```
 
-Each step is a complete snapshot, which keeps the renderer simple: any step can be drawn on its own, so scrubbing backward is free. The cost is memory, which is fine at algorithm-sized programs and the 3,000-step budget. To see the full trace for any program, run `npm run trace -- my_program.py` or `npm run trace:js -- my_program.js`.
+Each step is a complete snapshot, which keeps the renderer simple: any step can be drawn on its own, so scrubbing backward is free. Memory is kept down by sharing: an object that didn't change since the previous step is the same object in both steps' heaps (see [Sampling, strips and shared steps](#20-sampling-strips-and-shared-steps)), so nothing may change a trace's objects in place. To see the full trace for any program, run `npm run trace -- my_program.py` or `npm run trace:js -- my_program.js`.
 
 A few optional fields cover the newer features:
 
 - `event` can also be `"yield"`, `"await"` or `"resume"`. A yield step carries the yielded value in `returnValue`.
 - `suspended` on a step lists paused frames, in the same shape as `stack` but with `"state": "suspended"`. `liveFrames(step)` in `types.ts` gives the stack plus the suspended frames, which is what anything that looks up a frame by id should use.
 - `output` on a step says that a `print()` / `console.log()` ran since the previous step: `{ "line": 14, "refs": ["o18"] }`, the line that printed and the ids of printed objects drawn at this step. The text itself is `stdout` from the previous step's `stdoutLength` to this one's; `printedAt()` in [`trace/output.ts`](src/trace/output.ts) puts the two together. Python gets this by giving the program its own `print`, which prints as usual and remembers what it was given; JavaScript's `console` already belongs to the runtime. Each tracer turns the remembered objects into ids when it records the next step, listing only objects that are in that step's heap.
+- `skipped` on a step: events that ran just before it without being recorded (the middle of a sampled loop); `skippedAfter` on the last step, for events after it. `sampled` on the trace says some loop was sampled, `counts` holds every event, call and the deepest recursion per function, recorded or not, and `stoppedBy` (`"steps"` or `"time"`) says what stopped a truncated trace.
+- `offset` and `strip` on a long list: its `items` are a window of 60 starting at `offset`, and `strip` is 256 evenly spaced samples of the whole list, with their smallest and largest values.
+- `heapDelta` on a trace from the Python tracer: each step's `heap` holds only the objects that changed, and `heapIds` lists every id in order. The worker rebuilds full heaps with `expandHeaps()` ([`trace/delta.ts`](src/trace/delta.ts)) before the page sees the trace.
 - `hints` on the trace lists the raw hint comments, as `{ "line": 3, "text": "hide temp" }`. The tracers only collect them. `applyHints()` adds the parsed result as `viz` before anything is drawn.
 
 ### 8. Diffing snapshots
@@ -1037,12 +1093,51 @@ A `SizeRef` names a size the way the program does: `{ name: "nums", len: true }`
 
 1. Turns each `SizeRef` into a symbol, by looking the name up in the run: a list's length, a number's value, an object's count of same-class objects reachable from it (a linked list's nodes). A dict whose values are lists is a graph, so its length is V and the sum of its lists is E.
 2. Works out each function bottom-up. A loop's cost is its bound times its body. Calls substitute the callee's cost, renamed from its parameters to the caller's arguments. Recursion is solved from the number of self-calls `a`, how they shrink, and the work per call `f`: `half` uses the master theorem (with `a = 2` and linear `f`, n log n), `minus` gives n·f for one call and aⁿ for more, `child` gives (nodes)·f, and a memo gives (values)·f.
-3. Checks against the run. `RunFacts` counts each loop's passes per run (from the steps' `LoopContext`s) and, for a nested loop, its total passes over each run of the loop around it; and each function's calls and deepest recursion. `match()` turns a count into a size by comparing it with the values of the inputs that existed when that code ran: close to a size, about log₂ of one (only for sizes of 16 or more, since small logs are indistinguishable from "a few"), about a square, or "at most" the next size up.
+3. Checks against the run, honestly. Only loop runs and calls the trace finished count: when a trace stops early, a loop still running at its last step would look shorter than it is, so its partial count is left out, and a loop that depends on the data and never finished is noted ("the trace stopped before it finished") instead of being sized from part of a run. If Measure has run the same code, its full counts fill in (passes per entry, and calls per function, `(counted by Measure)`). In a sampled trace, an inner loop's total over the loop around it is scaled up by the passes that weren't recorded, and call counts come from the tracer's own counts, which include every call. `RunFacts` counts each loop's passes per run (from the steps' `LoopContext`s) and, for a nested loop, its total passes over each run of the loop around it; and each function's calls and deepest recursion. `match()` turns a count into a size by comparing it with the values of the inputs that existed when that code ran: close to a size, about log₂ of one (only for sizes of 16 or more, since small logs are indistinguishable from "a few"), about a square, or "at most" the next size up.
 4. Names the sizes: graph sizes V, E and d; one-letter variables keep their names; everything else gets n, m, k... A grid's rows times columns is written n·m.
 
 Explanations are written with placeholders for any Big-O they mention, filled in once the sizes have their letters. The editor labels are an `::after` per label with its text in a generated stylesheet, since the trimmed-down Monaco build doesn't draw injected text. [`complexityPanel.ts`](src/complexityPanel.ts) draws the chip, the panel and the labels' hover text.
 
 [`complexity.test.ts`](src/trace/complexity.test.ts) pins the textbook answer for every algorithm example in all three languages (bubble sort O(n²), merge sort O(n log n), BFS O(V + E), Kruskal's O(E log E), and so on), plus amortization, recursion patterns and the notes.
+
+### 19. Measuring
+
+[`worker/measure.py`](src/worker/measure.py) and [`js/measure.ts`](src/js/measure.ts) run a program at full size and return a `Measurement` ([`trace/measurement.ts`](src/trace/measurement.ts)): counts per line, passes per loop, work per line inside built-ins, the length of each loop as it started, times, memory and the output.
+
+**Counting without tracing.** Tracing calls a function on every line, about 100 times slower than the program itself, so it couldn't run 400 million lines. Instead, each language's syntax tree is rewritten with counters:
+
+- before every statement, `_mc[12] += 1` (Python) or `__m.c[__m.l = 12]++` (JavaScript, which also remembers the line running);
+- first in every function, a call `_mf[3] += 1` (`__m.f[3]++`), by the line the function starts on;
+- first in every loop body, a pass `_mp[5] += 1`, and in loop bodies and functions, a countdown that every 5,000 times checks the clock: it reports progress every quarter second and raises at the time limit. (Python's is a `BaseException`, so `except Exception` can't swallow it; JavaScript's keeps throwing at every check after.) Recursion without loops is caught by the check at the top of each function.
+- a loop's length is noted as it starts: `for x in _miter(5, xs)` records `len(xs)` when it has one, and a JavaScript `for (let i = A; i < B; i++)` records `B - A` when both are simple. Progress, and the projection for a run stopped at the limit, use the outermost loop still running: passes done over its length, and the time so far over that fraction.
+
+That costs 2 to 4 times the program's own time, against about 100 for tracing. Line numbers are kept, so errors still point at the right line.
+
+**Work inside built-ins.** In Python, calls like `xs.insert(...)`, `xs.pop(i)`, `xs.index(...)`, `v in xs`, `xs[a:b]`, `sorted(xs)` and `sum(xs)` are rewritten to `(_mw(line, xs, kind) or <the call>)` when their container is a plain name or attribute, so it can be read first without side effects. `_mw` adds the container's length if it's a list, tuple, string or deque (sets and dicts are hashed, so they cost nothing extra), and returns None so the call itself still runs. In JavaScript, the `Array.prototype` methods that aren't O(1) (`shift`, `unshift`, `splice`, `indexOf`, `includes`, `slice`, `concat`, `sort`...) are wrapped for the run and put back after: each adds its array's length to the line in `__m.l`. Sorting counts n·log₂ n. Formatting `console.log` output and the event loop's own calls aren't counted.
+
+**Times and memory.** If counting took under 5 seconds, the untouched program runs again for its time. Python's peak memory needs `tracemalloc`, which slows a program 25 to 80 times, so it's measured in a third run only for programs that took under a quarter of a second untouched. What the variables hold at the end is always added up, walking from the globals with the tracer's `size64()`.
+
+**In the browser,** the workers answer a `measure` message with `measureProgress` messages and then `measured` ([`worker/protocol.ts`](src/worker/protocol.ts)). The program stops itself at the limit; the runner only terminates the worker (and starts a fresh one) when the person presses Stop, or if the program is stuck past the limit inside a single built-in call. [`measurePanel.ts`](src/measurePanel.ts) draws the panel and the editor's heat map: a tint per line on a log scale of its count plus work, and the count as an `::after` label like the complexity labels.
+
+### 20. Sampling, strips and shared steps
+
+**Sampling.** Both tracers keep a state per running loop: its pass, its length when it's known as it starts (a Python `for` over something with a `len()`, from a rewrite to `for x in __viz_len__(line, xs)`; a JavaScript `for...of` over an array, string, Map or Set, or a counted `for (let i = A; i < B; i++)`), and a mode decided after its first 5 passes. A loop of known length whose passes would use more than half the room left is `sampled`; one of unknown length is `watch`ed, and sampled once it has used a quarter. In a sampled loop, each pass is kept or not as it starts: the first 5, the last 5 when the length is known, and round numbers (10, 20 … 100, 200 …) while the loop's steps so far, plus room for its last passes, fit in 60% of its share. Every event is counted in `counts`; an event in a pass that isn't kept adds to the next recorded step's `skipped`.
+
+A loop of unknown length can't know its last passes until it ends, so its passes go into a buffer of the latest 5 (each pass capped at a quarter of the budget). Kept passes that arrive meanwhile (round numbers) are pinned in the buffer, so the order stays right. When the loop ends, the buffer is saved; passes that fall out of it become `skipped`. "Loops" that aren't loop statements are sampled too, without the buffer: the same function called again and again from one line (a callback), and, in Python, the same line running again and again (a comprehension).
+
+**Strips and windows.** Before serializing a step, each tracer looks at every list longer than 60 in the frames on the stack: the names it's indexed with (from the static analysis, `viz: pointers` hints and conventional names like `lo` and `hi`) that hold whole numbers in the same frame give the window, centered on them and rounded to a multiple of 10. A list of numbers also gets 256 samples, read by index, so it costs the same for 40,000 items as for 400. Slot keys in diffs are real indices, so highlights and arrows line up when the window moves.
+
+**Shared steps.** The Python tracer compares each object with the previous recorded step's (`dict` equality, in C) and sends only the ones that differ, plus every id in order: the trace that crosses from the worker is 3 to 15 times smaller. The JavaScript runtime compares with `sameData()` and reuses the previous step's object when equal; `postMessage` keeps shared objects shared, so the page gets the same structure either way.
+
+### 21. Growth runs
+
+[`trace/growth.ts`](src/trace/growth.ts) is the arithmetic, [`growthView.ts`](src/growthView.ts) the panel section and charts, and `measureGrowth()` in [`main.ts`](src/main.ts) runs the ladder.
+
+- **Sizes.** `findSizes()` reads the `viz: size` hints straight from the code (no trace needed) and finds each name's top-level `name = <integer>` with a regular expression. Growth runs need that line: Measure rewrites it. Python's `apply_overrides()` replaces the value of a module-level `Assign` or `AnnAssign`; JavaScript's `applyOverrides()` replaces a top-level declarator's or assignment's numeric literal, in the counted run and the untouched one.
+- **The ladder** is n/64, n/16, n/4 and n for the growing names (at least 1, with repeats dropped); other size names stay at their full size. Each size is an ordinary Measure run with `overrides` in its message.
+- **Fitting** is least squares on a log scale: for each curve x^d (log x)^l, the best scale is the mean of log(y) − log(curve), and the error is what's left. A more complex curve has to fit clearly better (30% less error) to win, since four points with some constant overhead can't tell n from n log n by a hair. The slope on the log-log plot is reported too.
+- **The code's estimate** is tied to the sizes by `staticGrowth()`: a size in the estimate grows if it's named like a growing variable (`k`), or if its value in the traced run equals that variable's (`len(nums)` was 40,000 when n was). Its degree is then the largest sum of those sizes' powers in any term. `compareGrowth()` says whether the two agree, differ by a log factor, or disagree, and how.
+- **Charts** are hand-drawn SVG: log axes with ticks at powers of ten (and 2 and 5 between them for narrow ranges), points, a fitted curve per series, and the estimate dashed through the largest size. Kept series are stored per language in `localStorage`.
 
 ---
 
@@ -1069,6 +1164,8 @@ algoviz/
     ├── appearance.test.ts      Style settings tests
     ├── stylePanel.ts           The Style panel in the toolbar
     ├── complexityPanel.ts      The complexity chip, its panel and the editor labels
+    ├── measurePanel.ts         Measure's results panel and the editor heat map
+    ├── growthView.ts           "How it grows": growth runs' charts and comparisons
     ├── examples/
     │   ├── index.ts            The Example type (group, name, code)
     │   ├── python.ts           Python examples, grouped by topic
@@ -1086,6 +1183,10 @@ algoviz/
     │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
     │   ├── graph.test.ts       Graph tests
     │   ├── output.ts           What a step printed (text, line, printed objects)
+    │   ├── measurement.ts      What a Measure run reports, and formatting it
+    │   ├── growth.ts           Growth runs: size hints, the ladder, fitting, the code's estimate
+    │   ├── growth.test.ts      Growth tests
+    │   ├── delta.ts            Rebuilding heaps sent as deltas; deep equality
     │   ├── memory.ts           Memory sizes: the Python, textbook and V8 models
     │   ├── memory.test.ts      Memory size tests
     │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
@@ -1107,6 +1208,8 @@ algoviz/
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel)
     │   ├── cost.ts             The code's shape, for complexity estimates
+    │   ├── measure.ts          Measure: run at full size with counters
+    │   ├── measure.test.ts     Measure tests
     │   ├── typescript.ts       Strips TypeScript types, then instruments as JS
     │   ├── runtime.ts          Records steps: shadow stack, loops, serialization
     │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
@@ -1122,7 +1225,9 @@ algoviz/
         ├── runner.ts           Starts a worker, runs code, watchdog
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
         ├── tracer.py           The Python tracer (settrace + ast)
-        └── test_tracer.py      Python tracer tests
+        ├── test_tracer.py      Python tracer tests
+        ├── measure.py          Measure for Python: run at full size with counters
+        └── test_measure.py     Measure tests
 ```
 
 The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every color, line weight and corner radius there is a CSS custom property. The Style panel sets them (see [Styling](#14-styling)), and the defaults on `:root` match the Graph paper theme. To add a theme, add an entry to `PRESETS` in `appearance.ts`.
@@ -1206,7 +1311,9 @@ Everything after the worker only depends on the trace format, so any language wo
 
 - **Printed output is shown in the memory window only.** The loop history isn't dimmed or labeled with what each iteration printed. Output written another way (`sys.stdout.write`, `print(..., file=sys.stderr)`) shows in the card when it reaches the output pane, but without arrows to objects; output to stderr doesn't appear at all.
 
-- **Big programs.** Each step is a full snapshot, so traces grow with steps times data size. The step budget (3,000) and container cap (60 items) keep it manageable. Raise `MAX_STEPS` in `main.ts` if you need longer runs.
+- **Big programs.** A trace keeps up to 20,000 steps and 6 seconds (1.5 while typing), with long loops sampled and lists capped at 60 cells plus a strip. A sampled loop's skipped passes can't be stepped through, and a program that does a lot outside loops (deep recursion, many separate statements) can still reach the budget. Measure runs any size, without the step-by-step view. A dict or object that changes one entry per step is still stored whole at each step, so programs that update a big dict in a long loop use the most memory.
+- **Strips** are for lists of numbers (and booleans). Lists of strings or objects show their 60-cell window without one. Sets aren't windowed: they show their first 60 items.
+- **Growth runs** need the size set by a number at the top level (`n = 40000`), not computed (`n = len(data)`) or read from a file. Sizes below 64 can't be divided by 64, so small sizes give fewer points. Times of runs under about 0.1 ms can't be measured in a browser.
 - **Strings** are drawn as single values. A list or array of characters (`list("hello")`, `"hello".split("")`) is drawn as cells.
 - **Nested lists** (matrices) are a list of references to row lists in arrows mode. Nested mode and the loop history draw them as grids.
 - **Grids are two levels.** A list of lists is a grid. Deeper nesting (a 3D list) shows a grid of dots in the loop history, and nested boxes in nested mode.
@@ -1233,6 +1340,14 @@ Everything after the worker only depends on the trace format, so any language wo
 - **One-line loops** like `for x in xs: total += x` put the header and body on the same line, so iterations can't be told apart. Put the body on its own line.
 - **`asyncio` runs on a virtual clock.** Sleeps cost no time, so code that measures elapsed time with `time.time()` sees almost none. There's no real I/O: sockets, subprocesses and `run_in_executor` aren't available in the browser.
 - **Code that hangs inside a single C call** is stopped by the 10-second watchdog, which restarts the worker. The next run then waits a few seconds while Pyodide reloads (from the browser cache). A faster alternative is Pyodide's interrupt buffer, which needs a `SharedArrayBuffer` and therefore cross-origin isolation headers (`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`) on the server. It's a worthwhile upgrade, but it makes hosting and CDN loading fussier, so it's left out of this version.
+
+**Measure**
+
+- **Counts are exact; times aren't portable.** Times depend on the machine, the browser and what else it's doing, and include the counters unless the program was quick enough to time again untouched.
+- **The projection for a stopped run assumes every pass of the outermost loop takes about as long as the ones so far.** For a loop whose passes grow (an inner loop over `range(i)`), the real total is longer. And it needs a loop whose length is known when it starts: `for` over a list, a `range`, or a simple counting `for`. A `while` loop has none, so a run stopped inside one can't be projected.
+- **Work inside built-ins is counted for common list and array operations**, on containers named directly (`nums.insert(0, x)`, not `get_list().insert(0, x)`). Others count as one line each: string building, `[...spread]`, `Array.from`, dict and set operations (which are O(1) anyway), and your own classes' methods (whose lines are counted themselves).
+- **No memory figures for JavaScript**, since browsers don't let a page measure its own memory use. Python's peak needs a third, much slower run, so it's only shown for quick programs.
+- **Stop restarts the language's worker**, since it's busy running the program. For Python that means reloading Pyodide from the browser's cache, which takes a few seconds; the counts from a stopped run are lost (a run that reaches the time limit keeps them).
 
 **Complexity estimates**
 
@@ -1290,7 +1405,11 @@ Everything listed for JavaScript applies, plus:
 
 **Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl + '`. A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
 
-**"Stopped after 3,000 steps."** The program hit the step budget. Usually that's an infinite loop, but a correct program on bigger input can hit it too. Use a smaller input, or raise `MAX_STEPS` in `main.ts`.
+**"Traced for 6 seconds and stopped" or "Stopped after 20,000 recorded steps."** The trace hit its time or step budget (the banner says how many steps ran in all). Usually that's an infinite loop, but a correct program on a big input can hit it too: what's shown is the start of the run. Press **Measure** to run all of it with counters, use a smaller input, or raise `MAX_STEPS` / `RUN_SECONDS` in `main.ts`. A Live run while typing stops after 1.5 seconds; **Run** gives it 6.
+
+**"#6 to #9: 4 passes like these ran, not recorded" in the loop history.** The loop was long, so it was [sampled](#big-inputs). Those passes ran; they just weren't kept.
+
+**"How it grows" says there's no `n = <number>` at the top level.** Growth runs change that line, so the size has to be set by a plain number outside any function: `n = 40000`, `const n = 40_000;`. Put the hint's name on that variable.
 
 **A dict is drawn as a graph, but I want to see the dict.** Add `viz: plain name`, using the variable's name (or the class name, for a graph of objects).
 
@@ -1316,11 +1435,12 @@ Everything listed for JavaScript applies, plus:
 - Exporting a played run as a GIF or video.
 - Type checking for TypeScript, by running the TypeScript compiler in a worker (it's large, so probably loaded on demand).
 - Cross-origin isolation plus Pyodide's interrupt buffer for instant stops.
-- Delta-encoded steps (store only what changed) for much longer traces.
 - Exporting and importing saved programs as files, to move them between browsers or share them.
 - Saving the memory layout with a saved program, so a carefully arranged tree comes back when you reopen it.
 - Moving boxes with the keyboard.
 - Exporting and importing styles, to share a theme.
 - Routing arrows around boxes you've dragged, not just the automatic layout.
-- Best and worst cases for complexity: run the code on inputs of several sizes and shapes (sorted, reversed, random) and fit each growth curve, alongside the estimate from the code.
+- Best and worst cases for complexity: growth runs over inputs of several shapes (sorted, reversed, random) as well as sizes, each with its own curve.
+- Per-entry deltas for dicts and objects, so a big dict updated once per step costs one entry per step.
+- Stepping into a sampled loop's skipped passes on demand, by re-running up to that pass.
 - A `viz: complexity n = len(nums)` hint to name the input size when the estimate picks the wrong one.

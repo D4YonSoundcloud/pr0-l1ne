@@ -11,13 +11,26 @@ import { SIZE_MODELS, formatBytes, stepSizes, type SizeModel } from "./trace/mem
 import { APPEARANCE_KEY, applyAppearance, parseAppearance, type Appearance } from "./appearance";
 import { StylePanel } from "./stylePanel";
 import { ComplexityPanel, costLabels } from "./complexityPanel";
+import { MEASURE_LIMITS, MeasurePanel, measureLabels } from "./measurePanel";
+import { GrowthView, type GrowthSeries } from "./growthView";
+import { findSizes, ladder, pointFrom, staticGrowth, type GrowthPoint } from "./trace/growth";
+import { compact, duration, type Measurement } from "./trace/measurement";
 import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
 import { availableLoops, buildLoopHistory, type LoopHistory, type LoopRow } from "./trace/loopHistory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
 import { Runner, type RunOutcome, type RunnerStatus } from "./worker/runner";
 
-const MAX_STEPS = 3000;
+const MAX_STEPS = 20_000;
+/**
+ * How long tracing may take: short while typing (Live), so the page keeps
+ * up; longer for Run. Long loops are sampled, so a big input runs until
+ * one of these instead of the step budget.
+ */
+const LIVE_SECONDS = 1.5;
+const RUN_SECONDS = 6;
+type Budget = "live" | "run";
+let lastBudget: Budget = "run";
 const LIVE_DELAY_MS = 600;
 const LANGUAGE_KEY = "algoviz:language";
 const codeKey = (id: LanguageId) => `algoviz:code:${id}`;
@@ -121,6 +134,8 @@ const els = {
   swap: byId<HTMLButtonElement>("swap"),
   style: byId<HTMLButtonElement>("style"),
   complexity: byId<HTMLButtonElement>("complexity"),
+  measure: byId<HTMLButtonElement>("measure"),
+  measureResults: byId<HTMLButtonElement>("measure-results"),
   memorySection: byId<HTMLElement>("memory-section"),
   loopSection: byId<HTMLElement>("loop-section"),
 };
@@ -152,23 +167,39 @@ function runnerFor(id: LanguageId): Runner {
 }
 
 let inFlight = false;
-let queued: { code: string; language: LanguageId } | null = null;
+let queued: { code: string; language: LanguageId; budget: Budget } | null = null;
 
-async function run(code: string, lang: LanguageId = language): Promise<void> {
-  if (inFlight) {
-    queued = { code, language: lang }; // only the newest edit matters
+async function run(code: string, lang: LanguageId = language, budget: Budget = "run"): Promise<void> {
+  if (inFlight || measuring) {
+    queued = { code, language: lang, budget }; // only the newest edit matters
     return;
   }
   inFlight = true;
-  const outcome = await runnerFor(lang).run(code, MAX_STEPS);
+  const outcome = await runnerFor(lang).run(code, MAX_STEPS, budget === "live" ? LIVE_SECONDS : RUN_SECONDS);
+  lastBudget = budget;
   inFlight = false;
   // Ignore results for a language the person has switched away from.
-  if (lang === language) applyOutcome(outcome);
+  if (lang === language) {
+    if (outcome.kind === "trace" && !(outcome.trace.error && !outcome.trace.steps.length)) tracedCode = code;
+    applyOutcome(outcome);
+  }
   if (queued !== null) {
     const next = queued;
     queued = null;
-    run(next.code, next.language);
+    run(next.code, next.language, next.budget);
   }
+}
+
+/** Why a trace stopped early, and what to do about it. */
+function truncationBanner(t: Trace): string {
+  const ran = t.counts ? ` (${t.counts.steps.toLocaleString()} steps ran)` : "";
+  const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
+  if (t.stoppedBy === "time") {
+    const seconds = lastBudget === "live" ? LIVE_SECONDS : RUN_SECONDS;
+    const runLonger = lastBudget === "live" ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${RUN_SECONDS} seconds.` : "";
+    return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
+  }
+  return `Stopped after ${MAX_STEPS.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
 }
 
 function setBanner(html: string | null): void {
@@ -217,7 +248,7 @@ function applyOutcome(outcome: RunOutcome): void {
   stepIndex = wasAtEnd ? trace.steps.length - 1 : Math.max(firstStep(), Math.min(stepIndex, trace.steps.length - 1));
 
   if (trace.truncated) {
-    setBanner(`Stopped after ${MAX_STEPS.toLocaleString()} steps. If that's unexpected, look for a loop that never ends.`);
+    setBanner(truncationBanner(trace));
   } else if (trace.error) {
     const where = trace.error.line ? ` on line ${trace.error.line}` : "";
     setBanner(`<strong>${escapeHtml(trace.error.type)}</strong>${where}: ${escapeHtml(trace.error.message)}`);
@@ -382,7 +413,7 @@ const stylePanel = new StylePanel({
   get: () => appearance,
   set: setAppearance,
   replay: () => replayStep(),
-  onOpen: () => complexityPanel.toggle(false),
+  onOpen: () => { complexityPanel.toggle(false); measurePanel.toggle(false); },
 });
 
 // ---------------------------------------------------------------- complexity
@@ -399,8 +430,216 @@ const complexityPanel = new ComplexityPanel({
     store(COST_LABELS_KEY, on ? "on" : "off");
     updateComplexity();
   },
-  onOpen: () => stylePanel.toggle(false),
+  onOpen: () => { stylePanel.toggle(false); measurePanel.toggle(false); },
 });
+
+// ---------------------------------------------------------------- measure
+
+/**
+ * Measure: run the whole program at full size with counters instead of a
+ * trace (see trace/measurement.ts). Runs only when asked: never on every
+ * edit, since a big run can take a while. Live runs wait until it's done.
+ */
+const MEASURE_LIMIT_KEY = "algoviz:measure-limit";
+const MEASURE_LABELS_KEY = "algoviz:measure-labels";
+let measuring = false;
+/** The language being measured (the runner to stop, if the person switches away). */
+let measuringLanguage: LanguageId = language;
+let measureLimit = Number(stored(MEASURE_LIMIT_KEY)) || 20_000;
+if (!MEASURE_LIMITS.some((l) => l.ms === measureLimit)) measureLimit = 20_000;
+let measureLabelsOn = stored(MEASURE_LABELS_KEY) !== "off";
+/** The last measurement and the code it was for (labels are hidden once the code changes). */
+let measured: { result: Measurement; code: string; language: LanguageId } | null = null;
+
+/** The code the trace on screen ran (growth runs compare with its estimate). */
+let tracedCode: string | null = null;
+
+/** A top-level `name = number` to suggest a `viz: size` hint for: the biggest number. */
+function sizeSuggestion(code: string): { name: string; line: number } | null {
+  let best: { name: string; line: number; value: number } | null = null;
+  code.split("\n").forEach((text, i) => {
+    const m = /^(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*(?::\s*[\w<>[\]|. ]+?\s*)?=\s*([0-9][0-9_]*)\s*;?\s*(?:(?:#|\/\/).*)?$/.exec(text);
+    const value = m ? Number(m[2].replace(/_/g, "")) : 0;
+    if (m && value >= 8 && (!best || value > best.value)) best = { name: m[1], line: i + 1, value };
+  });
+  return best ? { name: (best as { name: string }).name, line: (best as { line: number }).line } : null;
+}
+
+const growthView = new GrowthView({
+  sizes: () => findSizes(editor.getCode()),
+  suggestion: () => sizeSuggestion(editor.getCode()),
+  addHint(name, line) {
+    const lines = editor.getCode().split("\n");
+    const comment = language === "python" ? "#" : "//";
+    lines.splice(line - 1, 0, `${comment} viz: size ${name}`);
+    editor.setCode(lines.join("\n"));
+    growthView.render();
+  },
+  start: (scaled) => measureGrowth(scaled),
+  stop: () => runnerFor(measuringLanguage).stopMeasure(),
+  storageKey: () => `algoviz:growth-kept:${language}`,
+});
+
+const measurePanel = new MeasurePanel({
+  growth: growthView.el,
+  renderGrowth: () => growthView.render(),
+  host: els.editorPane,
+  reveal: (line) => editor.revealLine(line),
+  labelsShown: () => measureLabelsOn,
+  setLabelsShown(on) {
+    measureLabelsOn = on;
+    store(MEASURE_LABELS_KEY, on ? "on" : "off");
+    updateMeasureLabels();
+  },
+  limit: () => measureLimit,
+  setLimit(ms) {
+    measureLimit = ms;
+    store(MEASURE_LIMIT_KEY, String(ms));
+  },
+  measureAgain: () => measureNow(),
+  estimate: () => {
+    try {
+      return trace ? estimateComplexity(trace, stale ? null : currentMeasurement())?.time ?? null : null;
+    } catch {
+      return null;
+    }
+  },
+  onOpen: () => { stylePanel.toggle(false); complexityPanel.toggle(false); els.measureResults.setAttribute("aria-expanded", "true"); },
+});
+new MutationObserver(() => els.measureResults.setAttribute("aria-expanded", String(measurePanel.isOpen)))
+  .observe(measurePanel.el, { attributes: true, attributeFilter: ["hidden"] });
+
+/** Measure's result, when it's for the code in the editor now. */
+function currentMeasurement(): Measurement | null {
+  return measured && measured.language === language && measured.code === editor.getCode() ? measured.result : null;
+}
+
+function updateMeasureLabels(): void {
+  const current = currentMeasurement();
+  editor.setMeasureLabels(measureLabelsOn ? measureLabels(current) : []);
+}
+
+function setMeasureButton(on: boolean): void {
+  els.measure.textContent = on ? "Stop" : "Measure";
+  els.measure.classList.toggle("is-measuring", on);
+  els.measure.title = on ? "Stop measuring" : "Run the whole program at full size, counting how many times each line runs (Ctrl + Shift + ')";
+}
+
+/**
+ * Growth runs: Measure at n/64, n/16, n/4 and n (the `viz: size` variables
+ * in `scaled` grow; others stay at their full size), then fit the counts
+ * and compare with the code's estimate.
+ */
+async function measureGrowth(scaled?: string[]): Promise<void> {
+  if (measuring) return;
+  const code = editor.getCode();
+  const lang = language;
+  const { vars } = findSizes(code);
+  const grow = scaled ?? vars.map((v) => v.name);
+  const rungs = ladder(vars, grow);
+  measurePanel.toggle(true);
+  if (rungs.length < 2) {
+    growthView.render();
+    return;
+  }
+  setPlaying(false);
+  measuring = true;
+  measuringLanguage = lang;
+  setMeasureButton(true);
+  while (inFlight) await new Promise((r) => setTimeout(r, 30));
+  const x = grow[0];
+  const points: GrowthPoint[] = [];
+  let stopped: GrowthSeries["stopped"];
+  for (const [i, rung] of rungs.entries()) {
+    const label = `Measuring ${x} = ${rung.x.toLocaleString()} (${i + 1} of ${rungs.length})…`;
+    growthView.setProgress(label);
+    const outcome = await runnerFor(lang).measure(code, measureLimit, (p) => growthView.setProgress(`${label} ${duration(p.elapsedMs)}`), rung.sizes);
+    const full = rungs[rungs.length - 1].x;
+    const at = `At ${x} = ${rung.x.toLocaleString()}`;
+    if (outcome.kind !== "measured") {
+      stopped = { x: full, why: outcome.kind === "stopped" && outcome.reason === "person" ? `Stopped at ${x} = ${rung.x.toLocaleString()}.` : `${at} the run didn't stop at the time limit.` };
+      break;
+    }
+    const m = outcome.result;
+    if (m.status === "error") {
+      stopped = { x: full, why: `${at} the program stopped with ${m.error?.type ?? "an error"}: ${m.error?.message ?? ""}` };
+      break;
+    }
+    if (m.status === "limit") {
+      stopped = { x: full, why: `${at} it reached the ${duration(measureLimit)} time limit.` };
+      break;
+    }
+    points.push(pointFrom(rung, m));
+  }
+  measuring = false;
+  setMeasureButton(false);
+  showStatus(runnerFor(language).status);
+  // The code's estimate, from the trace of this same code.
+  let expected = null;
+  try {
+    const estimate = trace && !stale && tracedCode === code ? estimateComplexity(trace) : null;
+    expected = estimate ? staticGrowth(estimate, vars, grow) : null;
+  } catch {
+    expected = null;
+  }
+  if (lang === language) growthView.setResult({ label: "This version", x, scaled: grow, points, stopped, expected });
+  else growthView.setProgress(null);
+  if (queued !== null) {
+    const next = queued;
+    queued = null;
+    run(next.code, next.language, next.budget);
+  }
+}
+
+async function measureNow(): Promise<void> {
+  if (measuring) {
+    runnerFor(measuringLanguage).stopMeasure();
+    return;
+  }
+  setPlaying(false);
+  const code = editor.getCode();
+  const lang = language;
+  measuring = true;
+  measuringLanguage = lang;
+  setMeasureButton(true);
+  // A traced run may be finishing: measure right after it.
+  while (inFlight) await new Promise((r) => setTimeout(r, 30));
+  const started = performance.now();
+  const showProgress = (text: string) => { if (lang === language) els.status.textContent = text; };
+  showProgress("Measuring…");
+  const tick = window.setInterval(() => showProgress(`Measuring… ${duration(performance.now() - started)}`), 500);
+  const outcome = await runnerFor(lang).measure(code, measureLimit, (p) => {
+    const share = p.loop ? ` · ${Math.min(99, Math.floor((100 * p.loop.done) / p.loop.total))}% of line ${p.loop.line}'s loop` : "";
+    showProgress(`Measuring… ${duration(p.elapsedMs)}${share}`);
+  });
+  window.clearInterval(tick);
+  measuring = false;
+  setMeasureButton(false);
+  showStatus(runnerFor(language).status);
+  if (lang === language) {
+    if (outcome.kind === "measured") {
+      measured = { result: outcome.result, code, language: lang };
+      updateComplexity();
+      els.measureResults.hidden = false;
+      measurePanel.show(outcome.result, code);
+      updateMeasureLabels();
+    } else if (outcome.kind === "stopped") {
+      setBanner(outcome.reason === "person"
+        ? "Measuring stopped. Nothing was counted, since the run was cut off from outside."
+        : `The program didn't stop at the ${duration(measureLimit)} limit (probably stuck inside one long built-in call), so it was stopped from outside.`);
+    } else {
+      setBanner(`Measuring failed: <code>${escapeHtml(outcome.message)}</code>`);
+    }
+  }
+  // Edits made while measuring were waiting.
+  if (queued !== null) {
+    const next = queued;
+    queued = null;
+    run(next.code, next.language, next.budget);
+  }
+}
+els.measure.addEventListener("click", () => measureNow());
+els.measureResults.addEventListener("click", () => measurePanel.toggle());
 
 /**
  * The estimate is worked out once per run (it's cached on the trace), after
@@ -412,7 +651,8 @@ function updateComplexity(): void {
   complexityTimer = window.setTimeout(() => {
     let estimate = null;
     try {
-      estimate = trace ? estimateComplexity(trace) : null;
+      // A trace cut short uses Measure's full counts for the same code, if there are any.
+      estimate = trace ? estimateComplexity(trace, stale ? null : currentMeasurement()) : null;
     } catch (error) {
       console.warn("Complexity estimate failed", error);
     }
@@ -539,6 +779,12 @@ function render(updateMarks = true): void {
   // text is in its tooltip when it doesn't fit.
   els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step, prev)}`;
   els.stepLabel.title = els.stepLabel.textContent;
+  const skipped = (step.skipped ?? 0) + (stepIndex === trace.steps.length - 1 ? step.skippedAfter ?? 0 : 0);
+  if (skipped) {
+    // Passes in the middle of a long loop ran here without being recorded.
+    els.stepLabel.textContent += ` (${compact(skipped)} steps skipped)`;
+    els.stepLabel.title += `\n${skipped.toLocaleString()} steps ran ${step.skipped ? "just before this one" : "after this one"} without being recorded: the middle of a long, sampled loop.`;
+  }
 
   renderMemoryView();
 
@@ -717,13 +963,22 @@ els.loopAnimated.setAttribute("aria-pressed", String(loopMode === "animated"));
 // ---------------------------------------------------------------- editor
 
 let liveTimer = 0;
+let growthTimer = 0;
 const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId, code: savedCode(language) }, {
   onChange(code) {
     setPlaying(false);
     store(codeKey(language), code);
     updateProgramUI();
+    // The growth section reads the code's `viz: size` hints.
+    window.clearTimeout(growthTimer);
+    if (measurePanel.isOpen && !growthView.running) growthTimer = window.setTimeout(() => growthView.render(), 250);
     window.clearTimeout(liveTimer);
-    if (els.live.checked) liveTimer = window.setTimeout(() => run(code), LIVE_DELAY_MS);
+    if (els.live.checked) liveTimer = window.setTimeout(() => run(code, language, "live"), LIVE_DELAY_MS);
+    // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
+    if (measured) {
+      updateMeasureLabels();
+      if (measured.code !== code) measurePanel.markStale();
+    }
   },
   // Also available from the command palette (F1) as "AlgoViz: ...".
   commands: {
@@ -737,6 +992,8 @@ const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId
     swapPanels: () => setSwapped(!swapped),
     togglePlay: () => setPlaying(!playing),
     playOrRewind: () => playOrRewind(),
+    measure: () => measureNow(),
+    measureGrowth: () => measureGrowth(),
     toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
   },
 });
@@ -909,8 +1166,13 @@ els.language.addEventListener("change", () => {
   fillProgramMenu();
   fillSizeModels();
   updateProgramUI();
+  growthView.reload();
   // A trace from the other language has nothing to do with this code.
   trace = null;
+  if (measuring) runnerFor(measuringLanguage).stopMeasure();
+  els.measureResults.hidden = !measured || measured.language !== language;
+  measurePanel.toggle(false);
+  updateMeasureLabels();
   updateComplexity();
   memoryView.restartAutoFit();
   loopView.restartAutoFit();
@@ -933,6 +1195,11 @@ els.sizeModel.hidden = !sizesOn;
 updateProgramUI();
 
 els.run.addEventListener("click", () => runNow());
+els.banner.addEventListener("click", (e) => {
+  const action = (e.target as HTMLElement).closest<HTMLElement>("[data-action]")?.dataset.action;
+  if (action === "measure") measureNow();
+  else if (action === "run") runNow();
+});
 els.hideQuiet.addEventListener("change", () => { hideQuiet = els.hideQuiet.checked; render(); });
 els.first.addEventListener("click", () => goTo(firstStep()));
 els.prev.addEventListener("click", () => goTo(stepIndex - 1));
@@ -947,9 +1214,10 @@ document.addEventListener("keydown", (event) => {
 
   // Ctrl + ' runs, and Ctrl/Cmd + Enter plays (or goes back to where
   // playing started), from anywhere on the page, not just the editor.
-  if (event.ctrlKey && (event.code === "Quote" || event.key === "'")) {
+  if (event.ctrlKey && (event.code === "Quote" || event.key === "'" || event.key === '"')) {
     event.preventDefault();
-    runNow();
+    if (event.shiftKey) measureNow();
+    else runNow();
     return;
   }
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {

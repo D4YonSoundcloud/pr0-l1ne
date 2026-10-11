@@ -44,6 +44,8 @@ export const HEADER_H = 26;        // title bar of a frame or object
 export const LABEL_H = 18;         // small label above a list
 export const INDEX_H = 14;         // index numbers above list cells
 export const POINTER_H = 24;       // room under a list for i / j markers
+export const STRIP_H = 22;         // a long list's color strip, above its cells
+export const STRIP_MAX_W = 480;
 
 /** Width of monospace text. */
 export const textWidth = (text: string, size = FONT) => text.length * size * 0.6;
@@ -235,3 +237,71 @@ export function rowPointersWidth(pointers: { name: string; index: number }[]): n
   for (const p of pointers) byIndex.set(p.index, [...(byIndex.get(p.index) ?? []), p.name]);
   return 16 + Math.max(...[...byIndex.values()].map((names) => textWidth(names.join(", "), SMALL)));
 }
+
+// ---------------------------------------------------------------------------
+// The strip: a long list of numbers, all of it, as a band of color
+// ---------------------------------------------------------------------------
+
+/** Viridis: dark purple (smallest) to yellow (largest), distinct in grayscale too. */
+const RAMP = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
+
+export function rampColor(t: number): string {
+  const x = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
+  const i = Math.min(RAMP.length - 2, Math.floor(x));
+  const f = x - i;
+  const [a, b] = [RAMP[i], RAMP[i + 1]];
+  const c = a.map((v, k) => Math.round(v + (b[k] - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+export interface StripInfo {
+  values: number[];
+  min: number;
+  max: number;
+  /** The list's length. */
+  length: number;
+  /** The cells drawn below: which items they are. */
+  window: { start: number; count: number };
+  pointers: { name: string; index: number }[];
+}
+
+/**
+ * A band of color, one slice per sample, left to right across the whole
+ * list; a bracket shows where the cells below are, and ticks show the
+ * index variables. Drawn at (x, y), up to `room` wide (at most STRIP_MAX_W), STRIP_H tall.
+ */
+export function stripBar(info: StripInfo, x: number, y: number, room: number, key: string): SVGGElement {
+  const { values, min, max, length } = info;
+  // An overview: no wider than a glance, even when the cells run on.
+  const w = Math.max(120, Math.min(room, STRIP_MAX_W));
+  const barY = y + 3;
+  const barH = 9;
+  const span = max - min || 1;
+  const g = s("g", { class: "strip", "data-key": key },
+    s("title", {}, `All ${length.toLocaleString()} items as colors: darkest is the smallest (${min}), yellow the largest (${max}). The bracket marks the ${info.window.count} cells drawn below.`));
+  const sliceW = w / values.length;
+  // Neighbors of the same color share one rectangle.
+  let runStart = 0;
+  for (let i = 1; i <= values.length; i++) {
+    if (i < values.length && values[i] === values[runStart]) continue;
+    g.append(s("rect", {
+      class: "strip-slice", x: x + runStart * sliceW, y: barY, width: (i - runStart) * sliceW + 0.4, height: barH,
+      fill: rampColor((values[runStart] - min) / span),
+    }));
+    runStart = i;
+  }
+  g.append(s("rect", { class: "strip-frame", x, y: barY, width: w, height: barH }));
+  // Where the cells are.
+  const wx = x + (info.window.start / length) * w;
+  const ww = Math.max(3, (info.window.count / length) * w);
+  g.append(s("rect", { class: "strip-window", x: wx - 1, y: barY - 2, width: ww + 2, height: barH + 4, rx: 2 }));
+  // Index variables, all of them, even outside the cells.
+  for (const p of info.pointers) {
+    if (p.index < 0 || p.index > length) continue;
+    const px = x + ((p.index + 0.5) / length) * w;
+    g.append(s("path", { class: "strip-pointer", d: `M${px - 3.5},${barY + barH + 7} L${px},${barY + barH + 2} L${px + 3.5},${barY + barH + 7} z` },
+      s("title", {}, `${p.name} = ${p.index}`)));
+  }
+  return g;
+}
+

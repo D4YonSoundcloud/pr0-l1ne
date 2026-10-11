@@ -27,6 +27,8 @@ export interface EditorCommands {
   toggleNested(): void;
   togglePlay(): void;
   playOrRewind(): void;
+  measure(): void;
+  measureGrowth(): void;
 }
 
 export interface EditorHandle {
@@ -43,6 +45,8 @@ export interface EditorHandle {
   setCostLabels(labels: { line: number; text: string; hover: string; kind: "loop" | "function" }[]): void;
   /** Move the cursor to a line and show it. */
   revealLine(line: number): void;
+  /** Measure's heat map: a tint and a count on each line that ran (empty to clear). */
+  setMeasureLabels(labels: { line: number; text: string; hover: string; heat: number }[]): void;
 }
 
 const MARKER_OWNER = "algoviz";
@@ -135,6 +139,8 @@ export function createEditor(
   const CTRL = IS_MAC ? KeyMod.WinCtrl : KeyMod.CtrlCmd;
   const actions: [string, string, number[], () => void][] = [
     ["algoviz.run", "AlgoViz: Run", [CTRL | KeyCode.Quote], callbacks.commands.run],
+    ["algoviz.measure", "AlgoViz: Measure at Full Size", [CTRL | KeyMod.Shift | KeyCode.Quote], callbacks.commands.measure],
+    ["algoviz.measureGrowth", "AlgoViz: Measure Growth (at n/64, n/16, n/4, n)", [], callbacks.commands.measureGrowth],
     ["algoviz.playOrRewind", "AlgoViz: Play From Here / Back to Where Play Started", [KeyMod.CtrlCmd | KeyCode.Enter], callbacks.commands.playOrRewind],
     ["algoviz.save", "AlgoViz: Save Program", [KeyMod.CtrlCmd | KeyCode.KeyS], callbacks.commands.save],
     ["algoviz.saveAs", "AlgoViz: Save Program As…", [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS], callbacks.commands.saveAs],
@@ -156,6 +162,9 @@ export function createEditor(
   const costDecorations = editor.createDecorationsCollection();
   const costStyle = document.createElement("style");
   document.head.append(costStyle);
+  const measureDecorations = editor.createDecorationsCollection();
+  const measureStyle = document.createElement("style");
+  document.head.append(measureStyle);
 
   const lineDecoration = (line: number, kind: "next" | "prev" | "error", rulerColor: string) => ({
     range: new monaco.Range(line, 1, line, 1),
@@ -221,6 +230,27 @@ export function createEditor(
             stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           },
         };
+      }));
+    },
+    setMeasureLabels(labels) {
+      const model = editor.getModel();
+      if (!model) return;
+      const lines = model.getLineCount();
+      const shown = labels.filter((l) => l.line >= 1 && l.line <= lines);
+      measureStyle.textContent = shown.map((l, i) => `.monaco-editor .measure-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`).join("\n");
+      measureDecorations.set(shown.flatMap((l, i) => {
+        const end = model.getLineMaxColumn(l.line);
+        return [
+          { range: new monaco.Range(l.line, 1, l.line, 1), options: { isWholeLine: true, className: `heat-line heat-${l.heat}` } },
+          {
+            range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
+            options: {
+              afterContentClassName: `measure-label measure-label-${i}`,
+              hoverMessage: { value: l.hover },
+              stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+            },
+          },
+        ];
       }));
     },
     revealLine(line) {

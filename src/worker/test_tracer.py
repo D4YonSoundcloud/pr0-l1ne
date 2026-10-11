@@ -8,8 +8,20 @@ import unittest
 from tracer import run_trace
 
 
-def trace(source, max_steps=2000):
-    return json.loads(run_trace(textwrap.dedent(source), max_steps))
+def expand_heaps(t):
+    """Rebuild full heaps from deltas, as trace/delta.ts does."""
+    prev = {}
+    for step in t["steps"]:
+        ids = step.pop("heapIds", None)
+        if ids is not None:
+            step["heap"] = {oid: step["heap"].get(oid, prev.get(oid)) for oid in ids}
+        prev = step["heap"]
+    t.pop("heapDelta", None)
+    return t
+
+
+def trace(source, max_steps=2000, max_seconds=6.0):
+    return expand_heaps(json.loads(run_trace(textwrap.dedent(source), max_steps, max_seconds)))
 
 
 def last_locals(t):
@@ -249,9 +261,13 @@ class TracerTests(unittest.TestCase):
         self.assertEqual(t["error"]["line"], 2)
 
     def test_infinite_loop_hits_step_limit(self):
-        t = trace("while True:\n    pass\n", max_steps=200)
+        # The loop is sampled once it's clearly long, so it runs until the time
+        # budget rather than filling the step budget.
+        t = trace("while True:\n    pass\n", max_steps=200, max_seconds=0.5)
         self.assertTrue(t["truncated"])
-        self.assertEqual(len(t["steps"]), 200)
+        self.assertEqual(t["stoppedBy"], "time")
+        self.assertLessEqual(len(t["steps"]), 200)
+        self.assertGreater(t["counts"]["steps"], 1000)
 
     def test_step_limit_cannot_be_swallowed_by_except_exception(self):
         t = trace("""
@@ -367,6 +383,115 @@ class CostShapeTests(unittest.TestCase):
     def test_a_shape_the_analysis_cant_read_never_stops_the_run(self):
         t = trace("x = [i async for i in range(3)] if False else 1")
         self.assertNotIn("Traceback", json.dumps(t))
+
+
+def passes(t, loop_line):
+    """The iterations recorded for the loop on loop_line (its first instance)."""
+    seen = []
+    for step in t["steps"]:
+        for ctx in step["loops"]:
+            if ctx["loop"] == "L%d" % loop_line and ctx["instance"] == 1 and ctx["iteration"] not in seen:
+                seen.append(ctx["iteration"])
+    return seen
+
+
+class SamplingTests(unittest.TestCase):
+    def test_a_short_loop_is_recorded_in_full(self):
+        t = trace("""\
+            total = 0
+            for i in range(30):
+                total += i
+        """, 3000)
+        self.assertFalse(t.get("sampled"))
+        self.assertEqual(passes(t, 2), list(range(31)))
+
+    def test_a_long_for_loop_keeps_its_first_round_and_last_passes(self):
+        t = trace("""\
+            total = 0
+            for i in range(40000):
+                total += i
+            print(total)
+        """, 3000)
+        self.assertFalse(t["truncated"])
+        self.assertTrue(t["sampled"])
+        self.assertEqual(t["stdout"], "799980000\n")
+        seen = passes(t, 2)
+        for n in [1, 2, 3, 4, 5, 10, 50, 100, 900, 1000, 30000, 39996, 40000]:
+            self.assertIn(n, seen)
+        self.assertNotIn(6, seen)
+        self.assertNotIn(1234, seen)
+        self.assertTrue(any(s.get("skipped") for s in t["steps"]))
+        self.assertGreater(t["counts"]["steps"], 80000)  # counted, recorded or not
+        # Every skipped event is accounted for.
+        recorded = len(t["steps"])
+        skipped = sum(s.get("skipped", 0) for s in t["steps"]) + t["steps"][-1].get("skippedAfter", 0)
+        self.assertEqual(recorded + skipped, t["counts"]["steps"])
+
+    def test_a_long_while_loop_keeps_its_last_passes(self):
+        t = trace("""\
+            n = 0
+            while n < 20000:
+                n += 1
+            done = n
+        """, 3000)
+        self.assertFalse(t["truncated"])
+        seen = passes(t, 2)
+        self.assertIn(20000, seen)
+        self.assertIn(19996, seen)
+        self.assertNotIn(19990 - 1, seen)
+        self.assertEqual(last_locals(t)["done"]["repr"], "20000")
+
+    def test_a_function_called_many_times_from_one_line_is_sampled(self):
+        t = trace("""\
+            def double(x):
+                return x * 2
+            nums = list(map(double, range(40000)))
+        """, 3000)
+        self.assertFalse(t["truncated"])
+        self.assertTrue(t["sampled"])
+        self.assertEqual(t["counts"]["calls"]["double"], 40000)
+        self.assertLess(len(t["steps"]), 1500)
+
+    def test_a_comprehension_is_sampled(self):
+        t = trace("nums = [i * 2 for i in range(40000)]\n", 3000)
+        self.assertFalse(t["truncated"])
+        self.assertEqual(last_locals(t)["nums"]["kind"], "ref")
+
+    def test_counts_hold_calls_and_recursion_depth(self):
+        t = trace("""\
+            def fact(n):
+                return 1 if n <= 1 else n * fact(n - 1)
+            fact(30)
+        """)
+        self.assertEqual(t["counts"]["calls"]["fact"], 30)
+        self.assertEqual(t["counts"]["depth"]["fact"], 30)
+
+
+class LongListTests(unittest.TestCase):
+    def test_the_window_follows_the_index_variables(self):
+        t = trace("""\
+            nums = list(range(1000))
+            for j in range(990, 400, -1):
+                nums[j] = nums[j - 1]
+        """, 3000)
+        windows = {o.get("offset", 0) for s in t["steps"] for o in s["heap"].values() if o["kind"] == "list"}
+        self.assertIn(940, windows)  # j near 990: the last 60 items
+        self.assertTrue(any(400 <= w <= 420 for w in windows))
+        last = [o for o in t["steps"][-1]["heap"].values() if o["kind"] == "list"][0]
+        self.assertEqual(len(last["items"]), 60)
+
+    def test_a_long_list_of_numbers_has_a_strip_of_all_of_it(self):
+        t = trace("nums = list(range(40000))\n")
+        lst = [o for o in t["steps"][-1]["heap"].values() if o["kind"] == "list"][0]
+        self.assertEqual(len(lst["strip"]["values"]), 256)
+        self.assertEqual(lst["strip"]["values"][128], 20000)
+        self.assertEqual(lst["strip"]["min"], 0)
+        self.assertNotIn("offset", lst)  # no index variables: the start
+
+    def test_no_strip_for_short_lists_or_non_numbers(self):
+        t = trace("short = [1, 2, 3]\nwords = ['a'] * 100\n")
+        for o in t["steps"][-1]["heap"].values():
+            self.assertNotIn("strip", o)
 
 
 if __name__ == "__main__":
