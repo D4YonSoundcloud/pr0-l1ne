@@ -467,6 +467,23 @@ class SamplingTests(unittest.TestCase):
         self.assertEqual(t["counts"]["depth"]["fact"], 30)
 
 
+class LoopHeaderTests(unittest.TestCase):
+    def test_each_run_of_a_range_loop_carries_its_range(self):
+        t = trace("""\
+            n = 4
+            for i in range(n):
+                for j in range(n - 1 - i):
+                    pass
+            for x in [1, 2]:
+                pass
+        """)
+        calls = {(c["loop"], c["instance"]): c.get("call") for s in t["steps"] for c in s["loops"] if c["iteration"] > 0}
+        self.assertEqual(calls[("L2", 1)], "range(0, 4)")
+        self.assertEqual(calls[("L3", 1)], "range(0, 3)")
+        self.assertEqual(calls[("L3", 2)], "range(0, 2)")
+        self.assertIsNone(calls[("L5", 1)])  # not a range
+
+
 class LongListTests(unittest.TestCase):
     def test_the_window_follows_the_index_variables(self):
         t = trace("""\

@@ -687,6 +687,14 @@ select {
 .quiet-band text { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
 .sampled-band line { stroke: var(--paper-ink-soft); stroke-dasharray: 1 3; stroke-width: 3; stroke-linecap: round; }
 .sampled-band text { font-style: normal; }
+/* A run of a loop starts (loopView.ts): its header as written, then with this run's values. */
+.loop-header text { font-family: var(--font-code); font-size: 12.5px; fill: var(--paper-ink-soft); }
+.loop-header-arrow { fill: var(--paper-ink-faint); }
+.loop-header-rule { stroke: var(--paper-ink-faint); stroke-width: 1; stroke-dasharray: 1 3; }
+.loop-header-call { fill: var(--ballpoint); font-weight: 600; }
+/* All loops together: rows of inner loops are indented, with a guide. */
+.nest-guide { stroke: var(--paper-ink-faint); stroke-width: 1; stroke-dasharray: 2 3; }
+.iteration-label.is-inner { font-size: 12px; }
 .loop-note { font-family: var(--font-ui); font-size: 12.5px; font-style: italic; fill: var(--paper-ink-soft); }
 
 @media (prefers-reduced-motion: reduce) {

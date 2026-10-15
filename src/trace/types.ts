@@ -141,6 +141,11 @@ export interface LoopContext {
   instance: number;
   /** 0 while on the header before the first pass, then 1, 2, 3... */
   iteration: number;
+  /**
+   * The loop's header with its values as this run of it started: Python
+   * "range(0, 4)", JavaScript "j = 0; j < 4; j++". Only for counting loops.
+   */
+  call?: string;
 }
 
 export interface Step {
@@ -321,6 +326,13 @@ export interface CostInfo {
   functions: CostFunction[];
 }
 
+export interface GridAccess {
+  name: string;
+  line: number;
+  row: string;
+  col: string;
+}
+
 export interface TraceError {
   type: string;
   message: string;
@@ -340,6 +352,13 @@ export interface Trace {
    * names that index the inner lists.
    */
   indexNames: Record<string, string[]>;
+  /**
+   * Every `grid[a][b]` in the code: the grid's name, the line, and the row
+   * and column index expressions as written ("up", "col", "n - 1 - j").
+   * The cell a step reads or writes is the one these give on the line that
+   * ran (or is about to run): see trace/gridFocus.ts.
+   */
+  gridAccesses?: GridAccess[];
   stdout: string;
   error: TraceError | null;
   /**

@@ -191,7 +191,12 @@ export function pointersFor(
   const out: { name: string; index: number; changed: boolean }[] = [];
   const subscripts = indexNames[containerName];
   if (!subscripts) return out;
-  const names = new Set([...subscripts, ...CONVENTIONAL_POINTERS.filter((n) => locals.has(n))]);
+  // In a grid, a conventional name the code only uses for the other
+  // dimension (matrix[row][left]: left picks a column) isn't this one's.
+  const otherKey = containerName.endsWith("[]") ? containerName.slice(0, -2) : `${containerName}[]`;
+  const other = indexNames[otherKey] ?? [];
+  const conventional = CONVENTIONAL_POINTERS.filter((n) => locals.has(n) && !(other.includes(n) && !subscripts.includes(n)));
+  const names = new Set([...subscripts, ...conventional]);
   for (const name of names) {
     const value = locals.get(name);
     // Python reports "int"; JavaScript reports "number", which may not be whole.

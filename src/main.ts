@@ -17,7 +17,7 @@ import { findSizes, ladder, pointFrom, staticGrowth, type GrowthPoint } from "./
 import { compact, duration, type Measurement } from "./trace/measurement";
 import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
-import { availableLoops, buildLoopHistory, type LoopHistory, type LoopRow } from "./trace/loopHistory";
+import { ALL_LOOPS, availableLoops, buildLoopHistory, buildNestedHistory, nestedLoopsAt, type LoopHistory, type LoopRow } from "./trace/loopHistory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
 import { Runner, type RunOutcome, type RunnerStatus } from "./worker/runner";
 
@@ -80,6 +80,9 @@ let trace: Trace | null = null;
 let stepIndex = 0;
 let selectedLoop: string | null = null;
 let hideQuiet = true;
+/** Loop history: containers one above another instead of side by side. */
+const LOOP_VERTICAL_KEY = "algoviz:loop-vertical";
+let loopVertical = stored(LOOP_VERTICAL_KEY) === "on";
 let stale = false;
 
 // ---------------------------------------------------------------- elements
@@ -109,6 +112,7 @@ const els = {
   loop: byId<HTMLDivElement>("loop"),
   loopTabs: byId<HTMLDivElement>("loop-tabs"),
   hideQuiet: byId<HTMLInputElement>("hide-quiet"),
+  loopVertical: byId<HTMLInputElement>("loop-vertical"),
   first: byId<HTMLButtonElement>("first"),
   prev: byId<HTMLButtonElement>("prev"),
   next: byId<HTMLButtonElement>("next"),
@@ -789,23 +793,34 @@ function render(updateMarks = true): void {
   renderMemoryView();
 
   // Loop history and its tabs.
+  // Nested loops are drawn together unless one loop is picked (animated
+  // mode always shows one: the live state of a single loop).
   const { contexts } = availableLoops(trace, stepIndex);
-  const history = buildLoopHistory(trace, stepIndex, selectedLoop);
-  els.loopTabs.replaceChildren(...contexts.map((ctx) => {
-    const info = trace!.loops.find((loop) => loop.id === ctx.loop);
+  const together = loopMode === "stacked" && nestedLoopsAt(trace, stepIndex).length > 0;
+  const wantsAll = together && (selectedLoop === null || selectedLoop === ALL_LOOPS);
+  const history = (wantsAll ? buildNestedHistory(trace, stepIndex) : null)
+    ?? buildLoopHistory(trace, stepIndex, selectedLoop === ALL_LOOPS ? null : selectedLoop);
+  const tab = (text: string, selected: boolean, pick: string, title = "") => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "loop-tab";
     button.setAttribute("role", "tab");
-    button.setAttribute("aria-selected", String(history?.info.id === ctx.loop));
-    button.textContent = `${info?.header ?? ctx.loop}  (line ${info?.line ?? "?"})`;
-    button.addEventListener("click", () => { selectedLoop = ctx.loop; render(); });
+    button.setAttribute("aria-selected", String(selected));
+    button.textContent = text;
+    if (title) button.title = title;
+    button.addEventListener("click", () => { selectedLoop = pick; render(); });
     return button;
-  }));
+  };
+  els.loopTabs.replaceChildren(
+    ...(together ? [tab("All loops", !!history?.nested, ALL_LOOPS, "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it")] : []),
+    ...contexts.map((ctx) => {
+      const info = trace!.loops.find((loop) => loop.id === ctx.loop);
+      return tab(`${info?.header ?? ctx.loop}  (line ${info?.line ?? "?"})`, !history?.nested && history?.info.id === ctx.loop, ctx.loop);
+    }));
   if (history && history.rows.length) {
     const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
     const animation = animationFor("loop");
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes() }), "", live ? animation.duration : 0, animation.easing, animation.enter);
+    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes(), vertical: loopVertical }), "", live ? animation.duration : 0, animation.easing, animation.enter);
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
     if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
@@ -1201,6 +1216,12 @@ els.banner.addEventListener("click", (e) => {
   else if (action === "run") runNow();
 });
 els.hideQuiet.addEventListener("change", () => { hideQuiet = els.hideQuiet.checked; render(); });
+els.loopVertical.checked = loopVertical;
+els.loopVertical.addEventListener("change", () => {
+  loopVertical = els.loopVertical.checked;
+  store(LOOP_VERTICAL_KEY, loopVertical ? "on" : "off");
+  render();
+});
 els.first.addEventListener("click", () => goTo(firstStep()));
 els.prev.addEventListener("click", () => goTo(stepIndex - 1));
 els.next.addEventListener("click", () => goTo(stepIndex + 1));

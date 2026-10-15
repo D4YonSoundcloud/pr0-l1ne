@@ -90,6 +90,7 @@ export async function traceProgram(
   }
   trace.loops = program.loops;
   trace.indexNames = program.indexNames;
+  if (program.gridAccesses.length) trace.gridAccesses = program.gridAccesses;
   if (program.hints.length) trace.hints = program.hints;
   if (program.cost) trace.cost = program.cost;
 

@@ -11,7 +11,8 @@
  */
 import { valueKey } from "../trace/diff";
 import { findLinkedTrack, linkedRow, linkedSignature, treeDepths, type LinkedRow, type LinkedTrack } from "../trace/linked";
-import type { LoopHistory, LoopRow } from "../trace/loopHistory";
+import { focusLines, gridFocus } from "../trace/gridFocus";
+import { runKey, type LoopHistory, type LoopRow } from "../trace/loopHistory";
 import { findGraphs, graphOverlay, graphSignature, layoutFor, legendOverlaysFor, type GraphData, type GraphOverlay, type Scope } from "../trace/graph";
 import { graphPicture, type GraphPicture } from "./graphView";
 import { formatBytes, stepSizes, type SizeModel } from "../trace/memory";
@@ -24,7 +25,7 @@ function nameLabel(g: SVGGElement, x: number, midY: number, name: string, size: 
   g.append(s("text", { class: "container-name", x, y: size ? midY - 7 : midY, "text-anchor": "end", "dominant-baseline": "central" }, name));
   if (size) g.append(s("text", { class: "loop-size", x, y: midY + 8, "text-anchor": "end", "dominant-baseline": "central" }, size));
 }
-import type { HeapObject, SequenceObject, Trace, Value } from "../trace/types";
+import { liveFrames, type HeapObject, type LoopInfo, type SequenceObject, type Trace, type Value } from "../trace/types";
 import {
   CELL_H, CELL_MIN_W, INDEX_H, POINTER_H, STRIP_H, stripBar, arrowMarkers, cellWidth, changeArrow, pointerMarkers, pointersFor,
   rowPointerMarkers, rowPointersWidth, s, textWidth, uiTextWidth, valueCell,
@@ -168,19 +169,98 @@ interface ContainerColumn {
   cellsW?: number;
   /** Some row is a long list of numbers: a color strip of all of it goes above the cells. */
   strip?: boolean;
+  /** Stacked vertically (LoopViewOptions.vertical): its top within the row. */
+  dy?: number;
 }
 
 type Item =
   | { kind: "row"; row: LoopRow; index: number }
-  | { kind: "band"; from: number; to: number }
+  /** Passes that changed nothing, collapsed. `run`: the loop run they're passes of. */
+  | { kind: "band"; from: number; to: number; run: string; name: string | null }
   /** Passes that ran but weren't recorded (a sampled loop). */
-  | { kind: "gap"; from: number; to: number };
+  | { kind: "gap"; from: number; to: number; name: string | null }
+  /** A run of a loop starts: its header as written, and with its values. */
+  | { kind: "header"; loop: string; call: string | undefined; depth: number };
+
+/** A loop's variable, from its header: "for j in ..." / "for (let j = ..." -> "j". Null for while loops. */
+export function loopVariable(info: LoopInfo | undefined): string | null {
+  if (!info || info.kind !== "for") return null;
+  const m = /^(?:async\s+)?for\s+\(?\s*(?:(?:let|const|var)\s+)?\[?\s*([A-Za-z_$][\w$]*)/.exec(info.header);
+  return m ? m[1] : null;
+}
+
+/**
+ * A loop's header with this run's values: Python's range as it was
+ * (`for j in range(0, 3)`), JavaScript's start and bound
+ * (`for (j = 0; j < 3; j++)`).
+ */
+export function evaluatedHeader(info: LoopInfo, call: string): string {
+  if (/^(async\s+)?for\s+\(/.test(info.header)) return `for (${call})`;
+  const at = info.header.lastIndexOf(" in ");
+  return at >= 0 ? `${info.header.slice(0, at)} in ${call}` : call;
+}
+
+/** Indent per level of nesting, in the row labels' gutter. */
+const INDENT = 16;
 
 interface TrackLayout {
   track: LinkedTrack;
   x: number;        // where the first node starts
   valueW: number;   // width of a node's value cell
   nodeW: number;    // value cell plus link slots
+  /**
+   * One above another: separate lists (chains of linked nodes) each on its
+   * own line. Each node's line and column; without it, one line in
+   * `track.order`'s columns.
+   */
+  places?: Map<string, { line: number; column: number }>;
+  lines?: number;
+  /** From one line's cells to the next's. */
+  lineStep?: number;
+}
+
+/** The linked structure at every step of this run of the loop after the last row (up to 3,000 steps). */
+function laterRows(trace: Trace, history: LoopHistory, track: LinkedTrack): LinkedRow[] {
+  const ctx = history.context;
+  const last = history.rows[history.rows.length - 1];
+  const out: LinkedRow[] = [];
+  if (!last) return out;
+  for (let i = last.stepIndex + 1; i < Math.min(trace.steps.length, last.stepIndex + 3000); i++) {
+    const step = trace.steps[i];
+    if (!step.loops.some((c) => c.frame === ctx.frame && c.loop === ctx.loop && c.instance === ctx.instance)) break;
+    const frame = liveFrames(step).find((f) => f.id === ctx.frame);
+    if (frame) out.push(linkedRow(track, { locals: frame.locals, heap: step.heap }));
+  }
+  return out;
+}
+
+/**
+ * Separate lists: nodes joined by a link in any row are in the same chain,
+ * so a node stays on one line from row to row. Chains in the order their
+ * first node appears in the track.
+ */
+export function linkedChains(order: string[], rows: (LinkedRow | null)[]): string[][] {
+  const parent = new Map(order.map((id) => [id, id]));
+  const find = (id: string): string => {
+    let at = id;
+    while (parent.get(at) !== at) at = parent.get(at)!;
+    parent.set(id, at);
+    return at;
+  };
+  for (const row of rows) {
+    for (const [id, node] of row?.nodes ?? []) {
+      for (const target of node.links) {
+        if (target !== null && parent.has(target) && parent.has(id)) parent.set(find(id), find(target));
+      }
+    }
+  }
+  const chains = new Map<string, string[]>();
+  for (const id of order) {
+    const root = find(id);
+    if (!chains.has(root)) chains.set(root, []);
+    chains.get(root)!.push(id);
+  }
+  return [...chains.values()];
 }
 
 const EMPTY: Value = { kind: "prim", type: "none", repr: "" };
@@ -197,18 +277,24 @@ function drawTrack(
 ): void {
   const { track, valueW, nodeW } = layout;
   const columnX = (index: number) => layout.x + index * (nodeW + NODE_GAP);
-  const midY = cellsY + CELL_H / 2;
+  const placeOf = (id: string) => layout.places?.get(id) ?? { line: 0, column: track.order.indexOf(id) };
+  const lineStep = layout.lineStep ?? 0;
+  const firstCellsY = cellsY;
   const trackG = s("g", { class: "linked-track" });
-  nameLabel(g, layout.x - 8, midY, track.typeName, size);
+  // One name for every line, at their middle.
+  nameLabel(g, layout.x - 8, firstCellsY + (((layout.lines ?? 1) - 1) * lineStep) / 2 + CELL_H / 2, track.typeName, size);
 
-  track.order.forEach((id, column) => {
+  track.order.forEach((id) => {
     const node = state.nodes.get(id);
     if (!node) return; // not reachable in this row
+    const { line, column } = placeOf(id);
+    const cellsY = firstCellsY + line * lineStep;
+    const midY = cellsY + CELL_H / 2;
     const before = prev?.nodes.get(id);
     const nx = columnX(column);
     const nodeG = s("g", {
       class: ["linked-node", prev && !before && "is-new"].filter(Boolean).join(" "),
-      "data-flip": `lnode:${id}`, "data-x": nx, "data-y": 0,
+      "data-flip": `lnode:${id}`, "data-x": nx, "data-y": line * lineStep,
     });
     const valueChanged = !!before && valueKey(before.value ?? EMPTY) !== valueKey(node.value ?? EMPTY);
     nodeG.append(valueCell(node.value ?? EMPTY, { x: nx, y: cellsY, w: valueW, changed: valueChanged }).el);
@@ -225,7 +311,7 @@ function drawTrack(
       }
       const cx = sx + SLOT_W / 2;
       nodeG.append(s("circle", { class: "ref-dot", cx, cy: midY, r: 3.5 }));
-      const tColumn = track.order.indexOf(target);
+      const tColumn = placeOf(target).column;
       const tx = columnX(tColumn);
       const span = Math.abs(tColumn - column);
       let d: string;
@@ -257,8 +343,18 @@ function drawTrack(
     const was = prev?.pointers.find((q) => q.name === p.name);
     return { ...p, changed: !!prev && was?.index !== p.index };
   });
-  if (pointers.length) {
-    trackG.append(pointerMarkers(pointers, columnX, valueW, cellsY + CELL_H, track.order.length, { key: "tptr", originX: 0, originY: cellsY }));
+  // Under each line, the markers for its nodes (pointers carry track.order columns).
+  for (let line = 0; line < (layout.lines ?? 1); line++) {
+    const here = pointers.flatMap((p) => {
+      const id = track.order[p.index];
+      if (id === undefined) return line === 0 && !layout.places ? [p] : []; // past the end
+      const place = placeOf(id);
+      return place.line === line ? [{ ...p, index: place.column }] : [];
+    });
+    if (!here.length) continue;
+    const y = firstCellsY + line * lineStep;
+    const count = layout.places ? Math.max(...[...layout.places.values()].filter((p) => p.line === line).map((p) => p.column)) + 1 : track.order.length;
+    trackG.append(pointerMarkers(here, columnX, valueW, y + CELL_H, count, { key: `tptr${line}`, originX: 0, originY: y }));
   }
   g.append(trackG);
 }
@@ -310,10 +406,18 @@ function drawGrid(
   if (colPointers.length) {
     containerG.append(pointerMarkers(colPointers, (ci) => column.x + ci * cellW, cellW, cellsY + rowsCount * CELL_H, cols, flip));
   }
-  const ri = rowPointers.find((p) => p.index >= 0 && p.index < rowsCount);
-  const ci = colPointers.find((p) => ri && p.index >= 0 && p.index < (grid?.[ri.index].items.length ?? 0));
-  if (ri && ci) {
-    containerG.append(s("rect", { class: "grid-focus", x: column.x + ci.index * cellW - 2, y: cellsY + ri.index * CELL_H - 2, width: cellW + 4, height: CELL_H + 4, rx: 4 }));
+  // The cell this row's step works on: from the code's own grid[a][b] on
+  // the line that ran (or runs next); a guess only if the code never
+  // indexes the grid by this name.
+  let focus = gridFocus(trace.gridAccesses, column.name, focusLines(trace, row.stepIndex), locals,
+    { rows: rowsCount, cols: (r) => grid?.[r]?.items.length ?? 0 }, trace.language === "python");
+  if (focus === null) {
+    const ri = rowPointers.find((p) => p.index >= 0 && p.index < rowsCount);
+    const ci = colPointers.find((p) => ri && p.index >= 0 && p.index < (grid?.[ri.index].items.length ?? 0));
+    focus = ri && ci ? { row: ri.index, col: ci.index } : "none";
+  }
+  if (focus !== "none") {
+    containerG.append(s("rect", { class: "grid-focus", x: column.x + focus.col * cellW - 2, y: cellsY + focus.row * CELL_H - 2, width: cellW + 4, height: CELL_H + 4, rx: 4 }));
   }
   g.append(containerG);
 }
@@ -403,7 +507,15 @@ export interface LoopViewOptions {
    * stays steady from step to step.
    */
   live?: { prev: LoopRow; current: LoopRow };
+  /**
+   * Each container (and the graph, and the linked list) on its own line,
+   * one above another, instead of side by side; the row's label and its
+   * variables sit at the middle of the stack.
+   */
+  vertical?: boolean;
 }
+
+const LANE_GAP = 16;
 
 /** Mark a cell so a value moving between slots can slide (render/animate.ts). */
 function markCell(el: SVGGElement, container: string, slot: string, value: Value, cx: number): void {
@@ -453,9 +565,21 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     track ? linkedRow(track, { locals: row.frame.locals, heap: row.heap }) : null);
   const { containers, scalars } = pickVariables(trace, rows, !!track || !!firstGraph, exclude);
 
+  // Row labels: "#3", or with every loop together, the loop's variable and
+  // its pass ("j #3"), indented by how deeply the loop is nested.
+  const infoOf = (loop: string | undefined) => trace.loops.find((l) => l.id === (loop ?? history.info.id));
+  const runOf = (row: LoopRow) => (row.loop !== undefined ? runKey(row.loop, row.instance ?? 0) : runKey(history.context.loop, history.context.instance));
+  const nameOf = (row: LoopRow) => (history.nested ? loopVariable(infoOf(row.loop)) : null);
+  const labelOf = (row: LoopRow) => (row.iteration === 0 ? "before" : `${nameOf(row) ? `${nameOf(row)} ` : ""}#${row.iteration}`);
+  const indentOf = (row: LoopRow) => (history.nested ? (row.depth ?? 0) * INDENT : 0);
+  const GUTTER = Math.max(GUTTER_W, ...rows.map((row) => indentOf(row) + uiTextWidth(labelOf(row), 13) + 18));
+
   // Column layout is shared by every row, so cells line up vertically.
   const columns: ContainerColumn[] = [];
-  let x = MARGIN + GUTTER_W;
+  let x = MARGIN + GUTTER;
+  // What each row draws, in order, with its name's width and its own width
+  // (for laying them out one above another).
+  const lanes: { labelW: number; w: number; place: (x: number) => void; column?: ContainerColumn; kind: "graph" | "column" | "track" }[] = [];
   // The graph goes first, one picture per row, all the same size.
   let graphLayout: { x: number; layout: ReturnType<typeof layoutFor>; overlays: GraphOverlay[]; h: number } | null = null;
   if (firstGraph) {
@@ -464,6 +588,8 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     const sample: GraphPicture = graphPicture(firstGraph, layout, overlays[0], { flipKey: "g", legendOverlays: overlays });
     const labelW = textWidth(firstGraph.name) + 12;
     graphLayout = { x: x + labelW, layout, overlays, h: sample.h };
+    const g = graphLayout;
+    lanes.push({ kind: "graph", labelW, w: sample.w, place: (lx) => { g.x = lx; } });
     x += labelW + sample.w + CONTAINER_GAP;
   }
   for (const name of containers) {
@@ -489,11 +615,13 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
         if (pointersFor(`${name}[]`, trace.indexNames, locals).some((p) => p.index < widest)) hasColumnPointers = true;
       }
       const rowIndexW = textWidth(String(gridRows - 1), 10.5) + 10;
-      columns.push({
+      const column: ContainerColumn = {
         name, x: x + labelW + rowIndexW, cellW, hasPointers: hasColumnPointers,
         grid: { rows: gridRows, cols, rowIndexW, hasColumnPointers },
         bodyH: gridRows * CELL_H + (hasColumnPointers ? POINTER_H : 6),
-      });
+      };
+      columns.push(column);
+      lanes.push({ kind: "column", column, labelW, w: rowIndexW + cols * cellW + pointersW, place: (lx) => { column.x = lx + rowIndexW; } });
       x += labelW + rowIndexW + cols * cellW + pointersW + CONTAINER_GAP;
       continue;
     }
@@ -510,7 +638,9 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       if (pointersFor(name, trace.indexNames, new Map(row.frame.locals)).length) hasPointers = true;
       if (obj.kind !== "dict" && obj.strip) strip = true;
     }
-    columns.push({ name, x: x + labelW, cellW, hasPointers, bodyH: CELL_H + (hasPointers ? POINTER_H : 6), cellsW: maxCells * cellW, strip });
+    const column: ContainerColumn = { name, x: x + labelW, cellW, hasPointers, bodyH: CELL_H + (hasPointers ? POINTER_H : 6), cellsW: maxCells * cellW, strip };
+    columns.push(column);
+    lanes.push({ kind: "column", column, labelW, w: maxCells * cellW, place: (lx) => { column.x = lx; } });
     x += labelW + maxCells * cellW + CONTAINER_GAP;
   }
   // The linked track goes after the containers, with nodes in fixed columns.
@@ -523,13 +653,42 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     const nodeW = valueW + track.links.length * SLOT_W;
     const labelW = textWidth(track.typeName) + 12;
     trackLayout = { track, x: x + labelW, valueW, nodeW };
-    x += labelW + track.order.length * (nodeW + NODE_GAP) - NODE_GAP + CONTAINER_GAP;
+    const t = trackLayout;
+    let w = track.order.length * (nodeW + NODE_GAP) - NODE_GAP;
+    // One above another: separate lists on separate lines.
+    if (options.vertical && track.shape === "list") {
+      // Over the loop's whole run, not just up to this step, so a node that
+      // gets linked in later (a new node, before `curr.next = node`) is on
+      // its list's line from the start.
+      const chains = linkedChains(track.order, [...trackRows, ...laterRows(trace, history, track)]);
+      if (chains.length > 1) {
+        t.places = new Map(chains.flatMap((chain, line) => chain.map((id, column) => [id, { line, column }] as const)));
+        t.lines = chains.length;
+        w = Math.max(...chains.map((c) => c.length)) * (nodeW + NODE_GAP) - NODE_GAP;
+      }
+    }
+    lanes.push({ kind: "track", labelW, w, place: (lx) => { t.x = lx; } });
+    x += labelW + w + CONTAINER_GAP;
+  }
+  // One above another: everything starts at the same x, after the widest name.
+  const vertical = !!options.vertical && (lanes.length > 1 || (trackLayout?.lines ?? 1) > 1);
+  if (vertical) {
+    const lanesX = MARGIN + GUTTER + Math.max(...lanes.map((l) => l.labelW));
+    for (const lane of lanes) lane.place(lanesX);
+    x = lanesX + Math.max(...lanes.map((l) => l.w)) + CONTAINER_GAP;
   }
   const hasContent = columns.length > 0 || !!track || !!firstGraph;
 
-  const scalarsX = hasContent ? x - CONTAINER_GAP + SCALARS_GAP : MARGIN + GUTTER_W;
+  const scalarsX = hasContent ? x - CONTAINER_GAP + SCALARS_GAP : MARGIN + GUTTER;
   const scalarsW = Math.max(0, ...all.map((row) => scalarText(row, scalars).length)) * 12.5 * 0.6;
-  const contentW = scalarsX + scalarsW;
+  // Loop headers sit beside the cells, in the scalars' column, so change
+  // arrows between rows never cross them.
+  const headerText = (loop: string, call: string | undefined) => {
+    const info = infoOf(loop);
+    return info ? `${info.header}${call ? `  →  ${evaluatedHeader(info, call)}` : ""}` : "";
+  };
+  const headersW = Math.max(0, ...rows.map((row) => textWidth(headerText(row.loop ?? history.info.id, history.calls.get(runOf(row))), 12.5)));
+  const contentW = scalarsX + Math.max(scalarsW, headersW);
   // Space above the cells: index labels, or arcs for links that jump over
   // nodes. Below: whatever is tallest (a grid, a tree, pointer markers).
   const isTree = track?.shape === "tree";
@@ -542,8 +701,37 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     trackBodyH = (levels - 1) * LEVEL_H + CELL_H + POINTER_H;
   } else if (track) {
     trackBodyH = CELL_H + (trackPointers ? POINTER_H : 6) + (track.links.length > 1 ? ARC_BOTTOM : 0);
+    // Separate lists on separate lines: each line below the last, with room for its arcs.
+    const lines = trackLayout?.lines ?? 1;
+    if (trackLayout && lines > 1) {
+      trackLayout.lineStep = ARC_TOP + trackBodyH + 6;
+      trackBodyH += (lines - 1) * trackLayout.lineStep;
+    }
   }
-  const rowH = Math.max(rowTop + Math.max(CELL_H + 6, trackBodyH, ...columns.map((c) => c.bodyH)), graphLayout?.h ?? 0);
+  // Where each lane's cells start, below the row's top: the same for all
+  // side by side; stacked, each lane below the last.
+  let graphTop = 0;
+  let trackTop = rowTop;
+  let rowH = Math.max(rowTop + Math.max(CELL_H + 6, trackBodyH, ...columns.map((c) => c.bodyH)), graphLayout?.h ?? 0);
+  if (vertical) {
+    let at = 0;
+    for (const lane of lanes) {
+      if (lane.kind === "graph") {
+        graphTop = at;
+        at += graphLayout!.h + LANE_GAP;
+      } else if (lane.kind === "column") {
+        const top = INDEX_H + (lane.column!.strip ? STRIP_H : 0);
+        lane.column!.dy = at + top;
+        at += top + lane.column!.bodyH + LANE_GAP;
+      } else {
+        trackTop = at + (isTree ? INDEX_H : ARC_TOP);
+        at += (isTree ? INDEX_H : ARC_TOP) + trackBodyH + LANE_GAP;
+      }
+    }
+    rowH = at - LANE_GAP;
+  }
+  /** Where a container's cells start, below the row's top. */
+  const cellsTop = (column: ContainerColumn) => column.dy ?? rowTop;
 
   // Which rows changed something compared with the row before?
   const trackSignature = (i: number) => (trackRows[i] ? linkedSignature(trackRows[i]!) : "");
@@ -558,17 +746,28 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
   // indices are the story, so every row stays.
   const mutates = changed.some((c, i) => c && i > 0);
   const items: Item[] = [];
+  const lastPass = new Map<string, number>();
   rows.forEach((row, index) => {
     const isLast = index === rows.length - 1;
-    const before = rows[index - 1];
-    if (before && row.iteration - before.iteration > 1) items.push({ kind: "gap", from: before.iteration + 1, to: row.iteration - 1 });
+    const run = runOf(row);
+    // A run of a loop starts: its header, with its values when known. With
+    // every loop together, each inner run gets one, so you can see which
+    // range it covers.
+    if (!lastPass.has(run)) {
+      const call = history.calls.get(run);
+      if (call || (history.nested && (row.depth ?? 0) > 0)) items.push({ kind: "header", loop: row.loop ?? history.info.id, call, depth: history.nested ? row.depth ?? 0 : 0 });
+    }
+    const before = lastPass.get(run);
+    lastPass.set(run, row.iteration);
+    const name = nameOf(row);
+    if (before !== undefined && row.iteration - before > 1) items.push({ kind: "gap", from: before + 1, to: row.iteration - 1, name });
     if (!options.hideQuiet || !mutates || changed[index] || isLast || !hasContent) {
       items.push({ kind: "row", row, index });
       return;
     }
     const prev = items[items.length - 1];
-    if (prev?.kind === "band") prev.to = row.iteration;
-    else items.push({ kind: "band", from: row.iteration, to: row.iteration });
+    if (prev?.kind === "band" && prev.run === run) prev.to = row.iteration;
+    else items.push({ kind: "band", from: row.iteration, to: row.iteration, run, name });
   });
   let hiddenRows = 0;
   const rowItems = items.filter((item) => item.kind === "row").length;
@@ -602,12 +801,31 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
     prevDrawn = { row: live.prev, y: Number.NaN, index: all.length - 2 };
   }
   for (const item of items) {
+    if (item.kind === "header") {
+      const info = infoOf(item.loop);
+      if (!info) continue;
+      const g = s("g", { class: "loop-header" });
+      g.append(s("line", { class: "loop-header-rule", x1: MARGIN + item.depth * INDENT, x2: scalarsX - 10, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }));
+      const text = s("text", { x: scalarsX, y: y + BAND_H / 2, "dominant-baseline": "central" },
+        s("tspan", { class: "loop-header-code" }, info.header));
+      if (item.call) {
+        text.append(
+          s("tspan", { class: "loop-header-arrow", dx: 10 }, "→"),
+          s("tspan", { class: "loop-header-call", dx: 10 }, evaluatedHeader(info, item.call)));
+        g.append(s("title", {}, `This run of the loop on line ${info.line}, with its values as it started`));
+      }
+      g.append(text);
+      rowLayer.append(g);
+      y += BAND_H;
+      continue;
+    }
     if (item.kind === "gap") {
       const count = item.to - item.from + 1;
+      const n = item.name ? `${item.name} ` : "";
       const text = count === 1
-        ? `#${item.from}: 1 pass ran, not recorded`
-        : `#${item.from} to #${item.to}: ${count.toLocaleString()} passes like these ran, not recorded`;
-      const textX = MARGIN + GUTTER_W;
+        ? `${n}#${item.from}: 1 pass ran, not recorded`
+        : `${n}#${item.from} to #${item.to}: ${count.toLocaleString()} passes like these ran, not recorded`;
+      const textX = MARGIN + GUTTER;
       rowLayer.append(s("g", { class: "quiet-band sampled-band" },
         s("title", {}, "A long loop is sampled: its first passes, passes at round numbers and its last passes are recorded. The passes in between ran, and are counted, but weren't recorded."),
         s("line", { x1: MARGIN, x2: contentW, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }),
@@ -618,8 +836,9 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       continue;
     }
     if (item.kind === "band") {
-      const text = item.from === item.to ? `#${item.from}: nothing changed` : `#${item.from} to #${item.to}: nothing changed`;
-      const textX = MARGIN + GUTTER_W;
+      const n = item.name ? `${item.name} ` : "";
+      const text = item.from === item.to ? `${n}#${item.from}: nothing changed` : `${n}#${item.from} to #${item.to}: nothing changed`;
+      const textX = MARGIN + GUTTER;
       rowLayer.append(s("g", { class: "quiet-band" },
         s("line", { x1: MARGIN, x2: contentW, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }),
         s("rect", { x: textX - 8, y: y + 4, width: uiTextWidth(text, 12.5) + 16, height: BAND_H - 8, rx: 4 }),
@@ -638,10 +857,17 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       g.append(s("rect", { class: "current-band", x: MARGIN - 8, y: y - 6, width: contentW - MARGIN + 16, height: rowH + 10, rx: 6 }));
     }
     const cellsY = y + rowTop;
-    const labelsY = cellsY - INDEX_H;
-    const midY = cellsY + CELL_H / 2;
-    g.append(s("text", { class: "iteration-label", x: MARGIN, y: midY, "dominant-baseline": "central" },
-      row.iteration === 0 ? "before" : `#${row.iteration}`));
+    // The row's label and variables: level with the cells, or stacked, at
+    // the middle of the stack.
+    const midY = vertical ? y + rowH / 2 : cellsY + CELL_H / 2;
+    const indent = indentOf(row);
+    // With every loop together, a guide line marks rows of inner loops.
+    for (let d = 1; d <= (history.nested ? row.depth ?? 0 : 0); d++) {
+      const gx = MARGIN + (d - 1) * INDENT + 4;
+      g.append(s("line", { class: "nest-guide", x1: gx, x2: gx, y1: y - 8, y2: y + rowH + 8 }));
+    }
+    g.append(s("text", { class: ["iteration-label", history.nested && (row.depth ?? 0) > 0 && "is-inner"].filter(Boolean).join(" "), x: MARGIN + indent, y: midY, "dominant-baseline": "central" },
+      labelOf(row)));
 
     // Scalars to the right of the cells: "i = 2   j = 0", changes emphasized.
     const scalarLine = s("text", { class: "scalars", x: scalarsX, y: midY, "dominant-baseline": "central" });
@@ -670,8 +896,10 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
 
     for (const column of columns) {
       const obj = containerIn(row, column.name);
+      const cellsY = y + cellsTop(column);
+      const labelsY = cellsY - INDEX_H;
       const nameX = column.x - 8 - (column.grid?.rowIndexW ?? 0);
-      nameLabel(g, nameX, midY, column.name, obj ? totalOf(obj.id) : null);
+      nameLabel(g, nameX, cellsY + CELL_H / 2, column.name, obj ? totalOf(obj.id) : null);
       if (!obj) continue;
       if (column.grid) {
         drawGrid(g, column, row, prevDrawn?.row ?? null, cellsY, labelsY, trace, changedNames);
@@ -720,9 +948,10 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
 
       // Change arrows from the previous drawn row. For lists, a value that
       // moved from another changed index (a swap) gets a crossing arrow.
-      // (Animated mode has one row: the values slide instead.)
-      if (prevDrawn && prevObj && !replaced && !live && !afterGap) {
-        const fromY = prevDrawn.y + rowTop + CELL_H + (column.hasPointers ? POINTER_H - 2 : 2);
+      // (Animated mode has one row: the values slide instead. Stacked one
+      // above another, an arrow would cross the other lanes: highlights only.)
+      if (prevDrawn && prevObj && !replaced && !live && !afterGap && !vertical) {
+        const fromY = prevDrawn.y + cellsTop(column) + CELL_H + (column.hasPointers ? POINTER_H - 2 : 2);
         const toY = labelsY - 3 - (column.strip ? STRIP_H : 0);
         const used = new Set<string>();
         const prevByValue = (c: Cell) => prevCells.find((p) =>
@@ -746,8 +975,8 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
       // The linked structure's size: every node in this row, once.
       const nodes = [...trackRows[index]!.nodes.keys()].map((id) => ({ kind: "ref" as const, id }));
       const trackSize = sizes ? formatBytes(sizes.of(nodes), sizes.approximate) : null;
-      if (isTree) drawTree(g, trackLayout, trackRows[index]!, prevState, cellsY, trackSize);
-      else drawTrack(g, arrowLayer, trackLayout, trackRows[index]!, prevState, cellsY, trackSize);
+      if (isTree) drawTree(g, trackLayout, trackRows[index]!, prevState, y + trackTop, trackSize);
+      else drawTrack(g, arrowLayer, trackLayout, trackRows[index]!, prevState, y + trackTop, trackSize);
     }
 
     const graphRow = graphRows[index];
@@ -758,12 +987,12 @@ export function renderLoopHistory(trace: Trace, history: LoopHistory, options: L
           ? formatBytes(sizes.of([...graphRow.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id }))), sizes.approximate)
           : totalOf(graphRow.graph.hostId);
       }
-      nameLabel(g, graphLayout.x - 8, midY, firstGraph.name, graphSize);
+      nameLabel(g, graphLayout.x - 8, vertical ? y + graphTop + graphLayout.h / 2 : midY, firstGraph.name, graphSize);
       if (graphRow) {
         const prevGraph = prevDrawn ? graphRows[prevDrawn.index] : null;
         graphPicture(graphRow.graph, graphLayout.layout, graphRow.overlay, {
           flipKey: "gptr", prev: prevGraph ?? null, legendOverlays: graphLayout.overlays,
-        }).draw(graphLayout.x, y, g);
+        }).draw(graphLayout.x, y + graphTop, g);
       }
     }
 

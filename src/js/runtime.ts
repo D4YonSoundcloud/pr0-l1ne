@@ -40,6 +40,8 @@ interface LoopState {
   start: number;
   /** Not a loop statement: one function called again and again from one line (no last passes kept). */
   pseudo?: boolean;
+  /** The header with its values as it started: "j = 0; j < 4; j++". */
+  call?: string;
   /** Is the current pass recorded (decided as it starts), and how many have been. */
   keep?: boolean;
   kept?: number;
@@ -246,6 +248,16 @@ export class Runtime {
       : iterable instanceof Map || iterable instanceof Set ? iterable.size : null;
     if (state && state.iteration === 0 && n !== null) state.total = n;
     return iterable;
+  }
+
+  /** for (let j = A; j < B; j++): the header with A and B's values, shown on the loop's rows. */
+  loopCall(frame: FrameState, id: string, name: string, op: string, update: string, start: unknown, bound: unknown): void {
+    const state = frame.loops.get(id);
+    if (!state || state.iteration !== 0) return;
+    const show = (v: unknown) => (typeof v === "number" || typeof v === "bigint" ? String(v) : null);
+    const a = show(start);
+    const b = show(bound);
+    if (a !== null && b !== null) state.call = `${name} = ${a}; ${name} ${op} ${b}; ${update}`;
   }
 
   /** for (let i = A; i < B; i++): B - A passes. */
@@ -585,7 +597,9 @@ export class Runtime {
       const paused = [...this.suspended].filter((frame) => !this.frames.includes(frame));
       // Loops in paused frames stay active, so their history isn't cut short.
       const loops: LoopContext[] = [...this.frames, ...paused].flatMap((frame) =>
-        [...frame.loops].map(([loop, state]) => ({ frame: frame.id, loop, instance: state.instance, iteration: state.iteration })));
+        [...frame.loops].map(([loop, state]) => ({
+          frame: frame.id, loop, instance: state.instance, iteration: state.iteration, ...(state.call ? { call: state.call } : {}),
+        })));
       const step: Step = {
         event,
         line: this.frames[this.frames.length - 1]?.line ?? 0,

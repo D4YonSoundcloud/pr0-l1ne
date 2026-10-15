@@ -31,6 +31,7 @@ import {
   uiTextWidth, valueCell,
 } from "./draw";
 import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
+import { focusLines, gridFocus, type GridFocus } from "../trace/gridFocus";
 import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
 import { graphOverlay, graphsAt, layoutFor, legendOverlaysFor, stepScopes, type GraphData, type GraphOverlay } from "../trace/graph";
 import { graphPicture, type GraphPicture } from "./graphView";
@@ -177,6 +178,8 @@ interface Ctx {
   functionKeyword: string;
   /** Index pointers for a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
   pointersFor(id: string, level?: 0 | 1): Pointers;
+  /** The grid cell this step reads or writes (trace/gridFocus.ts); null if the code never indexes it by name. */
+  gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** Memory sizes, when they're shown. */
   sizes: StepSizes | null;
 }
@@ -410,10 +413,17 @@ function gridShape(
       const flip = { key: `ptr:${obj.id}`, originX: x, originY: y };
       if (opts.pointers.length) g.append(rowPointerMarkers(opts.pointers, rowMid, x0 + cols * cellW, rows.length, flip));
       if (columnPointers.length) g.append(pointerMarkers(columnPointers, (c) => x0 + c * cellW, cellW, top + gridH, cols, flip));
-      const r = opts.pointers.find((p) => p.index >= 0 && p.index < rows.length);
-      const c = columnPointers.find((p) => p.index >= 0 && p.index < (rows[r?.index ?? 0]?.items.length ?? 0));
-      if (r && c) {
-        g.append(s("rect", { class: "grid-focus", x: x0 + c.index * cellW - 2, y: top + rowTops[r.index] - 2, width: cellW + 4, height: rowHs[r.index] + 4, rx: 4 }));
+      // The cell this step works on: from the code's own grid[a][b] on the
+      // line that ran (or runs next). Only if the code never indexes the
+      // grid by name, a guess: the first row and column pointers.
+      let focus = ctx.gridFocus(obj.id, { rows: rows.length, cols: (r) => rows[r]?.items.length ?? 0 });
+      if (focus === null) {
+        const r = opts.pointers.find((p) => p.index >= 0 && p.index < rows.length);
+        const c = columnPointers.find((p) => p.index >= 0 && p.index < (rows[r?.index ?? 0]?.items.length ?? 0));
+        focus = r && c ? { row: r.index, col: c.index } : "none";
+      }
+      if (focus !== "none") {
+        g.append(s("rect", { class: "grid-focus", x: x0 + focus.col * cellW - 2, y: top + rowTops[focus.row] - 2, width: cellW + 4, height: rowHs[focus.row] + 4, rx: 4 }));
       }
       layer.append(g);
     },
@@ -622,6 +632,11 @@ export function renderMemory(
       const changedNames = new Set(owner.frame.locals.map(([n]) => n).filter((n) => diff.changedLocals.has(localKey(owner.frame.id, n))));
       const name = level === 1 ? `${owner.name}[]` : owner.name;
       return pointersFor(name, trace.indexNames, new Map(owner.frame.locals), changedNames);
+    },
+    gridFocus(id, size) {
+      const owner = pointerOwner.get(id);
+      if (!owner) return null;
+      return gridFocus(trace.gridAccesses, owner.name, focusLines(trace, stepIndex), new Map(owner.frame.locals), size, trace.language === "python");
     },
   };
 

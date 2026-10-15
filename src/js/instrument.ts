@@ -33,7 +33,7 @@ import { generate } from "@babel/generator";
 import { parse } from "@babel/parser";
 import traverse, { type NodePath, type Scope } from "@babel/traverse";
 import * as t from "@babel/types";
-import type { CostInfo, LoopInfo, RawHint } from "../trace/types";
+import type { CostInfo, GridAccess, LoopInfo, RawHint } from "../trace/types";
 import { costAnalysis } from "./cost";
 
 /** The name the runtime is passed in as. Variables with this prefix are hidden. */
@@ -45,6 +45,8 @@ export interface Instrumented {
   code: string;
   loops: LoopInfo[];
   indexNames: Record<string, string[]>;
+  /** Every grid[a][b] (see Trace.gridAccesses). */
+  gridAccesses: GridAccess[];
   /** `// viz: ...` comments, unparsed (see trace/hints.ts). */
   hints: RawHint[];
   /** The code's shape, for complexity estimates (see js/cost.ts). */
@@ -93,6 +95,7 @@ interface Analysis {
   returns: Set<t.Node>;
   continues: Map<t.Node, { loop: t.Node; vars: string[] }>;
   indexNames: Map<string, Set<string>>;
+  gridAccesses: GridAccess[];
   programVars: string[];
 }
 
@@ -155,7 +158,8 @@ export function instrumentAst(ast: t.File, source: string): Instrumented {
   const loops = [...analysis.loops.values()].map((d) => d.info).sort((a, b) => a.line - b.line);
   const indexNames: Record<string, string[]> = {};
   for (const [name, subs] of analysis.indexNames) if (subs.size) indexNames[name] = [...subs].sort();
-  return { code: generate(ast).code, loops, indexNames, hints, ...(cost ? { cost } : {}) };
+  const gridAccesses = [...analysis.gridAccesses].sort((a, b) => a.line - b.line);
+  return { code: generate(ast).code, loops, indexNames, gridAccesses, hints, ...(cost ? { cost } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +298,7 @@ function analyze(ast: t.File, source: string): Analysis {
     returns: new Set(),
     continues: new Map(),
     indexNames: new Map(),
+    gridAccesses: [],
     programVars: [],
   };
   const usedLoopIds = new Set<string>();
@@ -374,8 +379,14 @@ function analyze(ast: t.File, source: string): Analysis {
       // "grid[]": a name that indexes the rows of grid.
       let key: string;
       if (t.isIdentifier(node.object)) key = node.object.name;
-      else if (t.isMemberExpression(node.object) && node.object.computed && t.isIdentifier(node.object.object)) key = `${node.object.object.name}[]`;
-      else return;
+      else if (t.isMemberExpression(node.object) && node.object.computed && t.isIdentifier(node.object.object)) {
+        key = `${node.object.object.name}[]`;
+        // grid[a][b]: which cell this line touches (see trace/gridFocus.ts).
+        const text = (n: t.Node) => (n.start != null && n.end != null ? source.slice(n.start, n.end) : generate(n).code);
+        if (node.loc) {
+          analysis.gridAccesses.push({ name: node.object.object.name, line: node.loc.start.line, row: text(node.object.property), col: text(node.property) });
+        }
+      } else return;
       const names = analysis.indexNames.get(key) ?? new Set<string>();
       analysis.indexNames.set(key, names);
       const property = path.get("property");
@@ -418,6 +429,28 @@ function countedLoopTotal(node: t.ForStatement): t.Expression | null {
     || !t.isIdentifier(test.left, { name: id }) || !pureExpression(test.right)) return null;
   const count = t.binaryExpression("-", t.cloneNode(test.right as t.Expression), t.cloneNode(decl.init));
   return test.operator === "<=" ? t.binaryExpression("+", count, t.numericLiteral(1)) : count;
+}
+
+/**
+ * for (let j = A; j OP B; UPDATE): the parts shown as the loop's header on
+ * its rows ("j = 0; j < 4; j++"), with A and B evaluated as it starts.
+ * Null unless A and B can be evaluated a second time safely.
+ */
+function countedLoopCall(node: t.ForStatement): t.Expression[] | null {
+  if (!t.isVariableDeclaration(node.init) || node.init.declarations.length !== 1) return null;
+  const decl = node.init.declarations[0];
+  if (!t.isIdentifier(decl.id) || !decl.init || !pureExpression(decl.init)) return null;
+  const name = decl.id.name;
+  const test = node.test;
+  if (!t.isBinaryExpression(test) || !["<", "<=", ">", ">=", "!=="].includes(test.operator)
+    || !t.isIdentifier(test.left, { name }) || !pureExpression(test.right)) return null;
+  const update = node.update;
+  let updateText: string | null = null;
+  if (t.isUpdateExpression(update) && t.isIdentifier(update.argument, { name })) updateText = `${name}${update.operator}`;
+  else if (t.isAssignmentExpression(update) && (update.operator === "+=" || update.operator === "-=" || update.operator === "*=")
+    && t.isIdentifier(update.left, { name }) && t.isNumericLiteral(update.right)) updateText = `${name} ${update.operator} ${update.right.value}`;
+  if (!updateText) return null;
+  return [t.stringLiteral(name), t.stringLiteral(test.operator), t.stringLiteral(updateText), t.cloneNode(decl.init), t.cloneNode(test.right as t.Expression)];
 }
 
 const runtimeCall = (method: string, args: t.Expression[]) =>
@@ -576,9 +609,14 @@ function transform(ast: t.File, a: Analysis): void {
         else if (t.isForOfStatement(node)) node.right = frameCall("loopLength", [t.stringLiteral(id), node.right]);
         if (t.isForStatement(node)) {
           const total = countedLoopTotal(node);
+          const call = countedLoopCall(node); // before either rewrites the start
           if (total && t.isVariableDeclaration(node.init)) {
             const decl = node.init.declarations[0];
             decl.init = t.sequenceExpression([frameCall("loopTotal", [t.stringLiteral(id), total]), decl.init!]);
+          }
+          if (call && t.isVariableDeclaration(node.init)) {
+            const decl = node.init.declarations[0];
+            decl.init = t.sequenceExpression([frameCall("loopCall", [t.stringLiteral(id), ...call]), decl.init!]);
           }
         }
         return;

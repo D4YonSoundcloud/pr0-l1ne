@@ -103,6 +103,7 @@ def analyze(source):
     lines = source.splitlines()
     loops = []
     index_names = {}
+    accesses = []
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.For, ast.While, ast.AsyncFor)) and node.body:
@@ -124,6 +125,11 @@ def analyze(source):
                 key = node.value.id
             elif isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name):
                 key = node.value.value.id + "[]"
+                # grid[a][b]: which cell this line touches (see trace/gridFocus.ts).
+                row = ast.get_source_segment(source, node.value.slice)
+                col = ast.get_source_segment(source, node.slice)
+                if row and col and not isinstance(node.slice, ast.Slice) and not isinstance(node.value.slice, ast.Slice):
+                    accesses.append({"name": node.value.value.id, "line": node.lineno, "row": row, "col": col})
             else:
                 continue
             names = index_names.setdefault(key, set())
@@ -132,7 +138,8 @@ def analyze(source):
                     names.add(sub.id)
 
     loops.sort(key=lambda loop: loop["line"])
-    return loops, {name: sorted(subs) for name, subs in index_names.items() if subs}
+    accesses.sort(key=lambda a: a["line"])
+    return loops, {name: sorted(subs) for name, subs in index_names.items() if subs}, accesses
 
 
 # ---------------------------------------------------------------------------
@@ -1406,7 +1413,8 @@ class Tracer:
         # step has been sampled with it (see trace()).
 
     def loop_length(self, line, iterable):
-        """__viz_len__(line, xs): note a for loop's length as it starts."""
+        """__viz_len__(line, xs): note a for loop's length as it starts, and
+        for a range, the range itself ("range(0, 4)"), shown on the loop's rows."""
         try:
             n = len(iterable)
         except Exception:
@@ -1415,6 +1423,8 @@ class Tracer:
         state = self.active_loops.get(self.frame_ids.get(id(caller)), {}).get("L%d" % line)
         if state is not None and state["iteration"] == 0:
             state["total"] = n
+            if type(iterable) is range:
+                state["call"] = repr(iterable)
         return iterable
 
     def loop_context(self, frame_ids):
@@ -1424,9 +1434,12 @@ class Tracer:
             for loop in self.loops:
                 state = active.get(loop["id"])
                 if state is not None:
-                    context.append({"frame": fid, "loop": loop["id"],
-                                    "instance": state["instance"],
-                                    "iteration": state["iteration"]})
+                    ctx = {"frame": fid, "loop": loop["id"],
+                           "instance": state["instance"],
+                           "iteration": state["iteration"]}
+                    if "call" in state:
+                        ctx["call"] = state["call"]
+                    context.append(ctx)
         return context
 
     # -- recording ---------------------------------------------------------
@@ -1696,7 +1709,9 @@ class Tracer:
         result = {"version": 1, "language": "python", "steps": self.steps, "loops": [], "indexNames": {}, "heapDelta": True,
                   "stdout": "", "error": None, "truncated": False}
         try:
-            self.loops, result["indexNames"] = analyze(self.source)
+            self.loops, result["indexNames"], accesses = analyze(self.source)
+            if accesses:
+                result["gridAccesses"] = accesses
             result["loops"] = self.loops
             hints = collect_hints(self.source)
             if hints:

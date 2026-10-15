@@ -294,7 +294,7 @@ Arrows are drawn as straight runs with rounded corners, and they travel through 
 The **Arrows | Nested** switch in the Memory header changes how references are drawn. Your choice is remembered, and `F1` → "AlgoViz: Toggle Nested Memory View" switches it too.
 
 - **Arrows** (the default) draws every object as its own box, with an arrow for every reference.
-- **Nested** draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, and an object's fields hold their sub-objects. A list of lists becomes a **grid**: rows stacked, column numbers along the top, row numbers down the side. If your code indexes it as `grid[i][j]`, `i` is marked beside its row, `j` under its column, and their cell gets a dashed outline.
+- **Nested** draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, and an object's fields hold their sub-objects. A list of lists becomes a **grid**: rows stacked, column numbers along the top, row numbers down the side. If your code indexes it as `grid[i][j]`, `i` is marked beside its row, `j` under its column, and the cell the step works on gets a dashed outline. That cell comes from the code itself: the `grid[a][b]` on the line that just ran (or, if that line doesn't touch the grid, the one about to run), with `a` and `b` worked out from the variables at that step. In a spiral traversal, `results.append(matrix[up][col])` outlines `matrix[up][col]`, even with `down`, `left`, `right` and `row` all pointing somewhere too; on lines that don't index the grid, nothing is outlined. Names like `left`, `right`, `lo` and `hi` that the code only uses for columns are drawn only under columns, and the same for rows.
 
 ![A binary search tree in nested mode](docs/nested-memory.png)
 
@@ -427,7 +427,19 @@ When the current step is inside a loop, the bottom section stacks the state at t
 - **Variables to the right** (`i = 2`, `left = 3`) are the scalars that change during the loop. The ones that changed in that iteration are red.
 - **The current iteration** is highlighted while the loop is still running.
 
-If there are several active loops (nested loops, or a loop inside a function called from a loop), tabs above the history let you pick which one to show. The innermost loop is selected by default while running, and once a loop finishes its full history stays visible until the program enters another loop.
+**Each run's header, with its values.** Above a loop's rows, its header is shown as written and as it ran: `for j in range(n - 1 - i)  →  for j in range(0, 3)`, or in JavaScript `for (let j = 0; j < n - 1 - i; j++)  →  for (j = 0; j < 3; j++)`. That's for loops that count (a Python `range`, or a JavaScript `for` with a start, a bound and a step), so you can see which range this run covers without working it out. Loops over a list, and `while` loops, show only their rows.
+
+#### All loops together
+
+![Bubble sort with both loops together: each pass of j indented under the pass of i it's in, with each run's range](docs/loops-together.png)
+
+When loops are nested in the same function, **All loops** (the first tab, and the default) draws them in one history, in the order things happened: every pass of the inner loop, indented under a header with that run's range (`for j in range(0, 3)`, then `range(0, 2)`...), then the row for the outer pass it was part of, its state once the inner loop is done. Labels name the loop's variable (`j #2`, `i #1`), and arrows and highlights compare each row with the row above it, across loops. Collapsed rows and [sampled](#big-inputs) passes are per loop: `j #4 to #9: nothing changed`.
+
+The other tabs show one loop at a time, as before: pick one to see only its passes. Loops in different functions (a loop inside a function called from a loop) are always separate tabs. Animated mode shows one loop, since it draws a single live row.
+
+#### One above another
+
+When a loop works on several things at once (a list and a linked list, two arrays, a grid and a queue, a graph and the list it fills), they're drawn side by side in each row. Tick **One above another** in the Loop history header to draw each on its own line instead, left-aligned with their names in one column, and the iteration (`#4`) and its variables (`i = 2  j = 0`) at the middle of the stack. Separate linked lists get a line each too: in "add two numbers", `l1`'s nodes, `l2`'s and the result list are three lines instead of one long one. Nodes that are linked at any point during the loop count as one list, so a new node is on its list's line from the moment it's created, before it's linked in; lists that get merged share a line. Rows get taller but narrower, so wide structures don't push each other off screen, and in Animated mode each one stays put while it changes. Changes are shown by the yellow highlights; the red arrows between rows are left out in this layout, since they'd have to cross the other lines. The choice is remembered.
 
 #### Stacked or animated
 
@@ -881,6 +893,7 @@ A few optional fields cover the newer features:
 - `suspended` on a step lists paused frames, in the same shape as `stack` but with `"state": "suspended"`. `liveFrames(step)` in `types.ts` gives the stack plus the suspended frames, which is what anything that looks up a frame by id should use.
 - `output` on a step says that a `print()` / `console.log()` ran since the previous step: `{ "line": 14, "refs": ["o18"] }`, the line that printed and the ids of printed objects drawn at this step. The text itself is `stdout` from the previous step's `stdoutLength` to this one's; `printedAt()` in [`trace/output.ts`](src/trace/output.ts) puts the two together. Python gets this by giving the program its own `print`, which prints as usual and remembers what it was given; JavaScript's `console` already belongs to the runtime. Each tracer turns the remembered objects into ids when it records the next step, listing only objects that are in that step's heap.
 - `skipped` on a step: events that ran just before it without being recorded (the middle of a sampled loop); `skippedAfter` on the last step, for events after it. `sampled` on the trace says some loop was sampled, `counts` holds every event, call and the deepest recursion per function, recorded or not, and `stoppedBy` (`"steps"` or `"time"`) says what stopped a truncated trace.
+- `call` on a step's loop context: a counting loop's header with its values as this run started (`"range(0, 3)"`, `"j = 0; j < 3; j++"`).
 - `offset` and `strip` on a long list: its `items` are a window of 60 starting at `offset`, and `strip` is 256 evenly spaced samples of the whole list, with their smallest and largest values.
 - `heapDelta` on a trace from the Python tracer: each step's `heap` holds only the objects that changed, and `heapIds` lists every id in order. The worker rebuilds full heaps with `expandHeaps()` ([`trace/delta.ts`](src/trace/delta.ts)) before the page sees the trace.
 - `hints` on the trace lists the raw hint comments, as `{ "line": 3, "text": "hide temp" }`. The tracers only collect them. `applyHints()` adds the parsed result as `viz` before anything is drawn.
@@ -963,6 +976,12 @@ The dividers in [`main.ts`](src/main.ts) share one helper, `makeDivider()`, whic
 - **Aligns columns.** Every row shares the same cell width and x positions per container, so index 3 is directly below index 3 in every row and arrows can be vertical.
 - **Draws change arrows.** For each changed cell, it looks for a different changed index whose *previous* value equals this cell's *new* value. If it finds one, the value moved, and the arrow starts there (that's a swap). Otherwise the arrow goes straight down from the same index.
 - **Collapses quiet rows**, as described in [Loop history](#loop-history), and caps the view at the latest 120 rows.
+
+**One above another** (`vertical` in `LoopViewOptions`): the layout pass records each lane it places (the graph, each container, the linked list) with its name's width and its own width. A linked lane is split into lines by `linkedChains()`: nodes joined by a link in any row of the loop's run (including the steps after the one on screen, so a node doesn't change lines when it's linked in) are one chain, and each chain gets its own line and its own columns from the left. Stacked, every lane starts at the same x after the widest name, and each gets a `dy` within the row, below the last plus a gap; the row's height is their sum, and its label and scalars are drawn at its vertical middle.
+
+**All loops together** is `buildNestedHistory()`: from the outermost loop running in the frame of the innermost one, it takes the outermost loop's run, and for every step in it, every loop of that frame running at that step. A step belongs to the innermost one: the row for a pass is the last step of that pass at which no loop inside it was running, so an outer pass's row is its state after its inner loops, not a copy of their last row. Rows from every loop are then sorted by step, and each carries its loop, run and depth. The renderer indents labels by depth, starts a header at each run, and keeps collapsing and sampling gaps per run. **Loop headers with values** come from the tracers: Python's `__viz_len__` (see [Sampling](#20-sampling-strips-and-shared-steps)) records `repr()` of a `range` as a loop starts, and the JavaScript instrumenter adds `loopCall(id, "j", "<", "j++", A, B)` to a counted `for`'s initializer, evaluating its start and bound once more (only when both are simple enough to evaluate twice: names, numbers, `.length`, arithmetic). Each step's `LoopContext` carries it as `call`.
+
+**Grid cells.** Each tracer records every `grid[a][b]` in the code with its line and the row and column expressions as written (`Trace.gridAccesses`: Python's `ast.get_source_segment`, the original source for JavaScript). [`trace/gridFocus.ts`](src/trace/gridFocus.ts) picks the access on the line that just ran in the same frame, else the line about to run, and evaluates its expressions with a small evaluator (whole numbers, variables, `+ - * // % /`, parentheses; Python's negative indices wrap). Anything it can't evaluate (a call, an attribute) is skipped. A grid the code never indexes by name falls back to the first row and column pointers. In `pointersFor()`, a conventional index name (`left`, `hi`...) isn't added to a grid dimension when the code uses it only for the other one.
 
 **Linked structures** come from [`trace/linked.ts`](src/trace/linked.ts), which is pure and has its own tests:
 
@@ -1415,7 +1434,7 @@ Everything listed for JavaScript applies, plus:
 
 **My graph isn't drawn as a graph.** Lists of lists, matrices and edge lists need a hint: `viz: graph adj`. A dict is only recognized automatically when most of the neighbors are also keys. If your nodes are spelled differently in the keys and the lists (`"1"` and `1` in Python), they're different nodes.
 
-**The loop history shows a different loop than I expected.** Click the loop you want in the tabs above it. Your choice sticks while that loop is active.
+**The loop history shows a different loop than I expected.** Click the loop you want in the tabs above it, or **All loops** for every loop in the function together. Your choice sticks while that loop is active.
 
 **Nothing animates.** Animation only happens when moving one step at a time, and it's turned off when your operating system's "reduce motion" setting is on (on macOS: System Settings → Accessibility → Display; on Windows: Settings → Accessibility → Visual effects → Animation effects).
 
@@ -1432,7 +1451,7 @@ Everything listed for JavaScript applies, plus:
 - ELK.js layouts for large graphs, routing edges around nodes.
 - Hints scoped to a function or a loop, and more hint kinds (`viz: graph`, `viz: matrix`).
 - Morphing arrows between steps, by matching routes point by point.
-- Exporting a played run as a GIF or video.
+- Exporting a played run as a GIF or video, rendered off-screen frame by frame (double-buffered) rather than recorded live: each frame of the memory view and the loop history is drawn to a hidden buffer at a fixed frame rate and only then encoded, so effects too costly to run live (morphing arrows, longer easings) can be used in the export without slowing down stepping.
 - Type checking for TypeScript, by running the TypeScript compiler in a worker (it's large, so probably loaded on demand).
 - Cross-origin isolation plus Pyodide's interrupt buffer for instant stops.
 - Exporting and importing saved programs as files, to move them between browsers or share them.
