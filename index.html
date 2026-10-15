@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="is-booting">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PR0L1NE</title>
+    <meta name="description" content="See your code run. Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -38,7 +39,7 @@
         <label class="toggle" title="Re-run automatically as you type">
           <input id="live" type="checkbox" checked /> Live
         </label>
-        <span id="status" class="status" role="status" aria-live="polite">Loading Python…</span>
+        <span id="status" class="status" role="status" aria-live="polite">Loading…</span>
         <button id="complexity" class="button cx-chip" type="button" aria-expanded="false" aria-controls="complexity-panel">Complexity</button>
         <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
@@ -47,6 +48,18 @@
       <main class="workspace" id="workspace">
         <section class="editor-pane" id="editor-pane" aria-label="Code editor">
           <div id="editor" class="editor"></div>
+          <!-- Shown until the app's script has loaded (main.ts removes .is-booting). -->
+          <div class="boot-editor" aria-hidden="true">
+            <span style="--w: 38%"></span>
+            <span style="--w: 0%"></span>
+            <span style="--w: 52%; --indent: 1"></span>
+            <span style="--w: 46%; --indent: 2"></span>
+            <span style="--w: 58%; --indent: 3"></span>
+            <span style="--w: 64%; --indent: 4"></span>
+            <span style="--w: 0%"></span>
+            <span style="--w: 30%"></span>
+          </div>
+          <noscript><p class="boot-noscript">PR0L1NE runs your code in the browser, so it needs JavaScript turned on.</p></noscript>
           <div class="console" aria-label="Program output">
             <div class="pane-title">Output</div>
             <pre id="output" class="output"></pre>

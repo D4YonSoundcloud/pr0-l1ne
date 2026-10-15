@@ -1,2 +1,27 @@
-node_modules
-dist
+# Dependencies and build output
+node_modules/
+dist/
+
+# Test and coverage reports
+coverage/
+test-results/
+playwright-report/
+
+# Python
+__pycache__/
+*.pyc
+
+# Local environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log

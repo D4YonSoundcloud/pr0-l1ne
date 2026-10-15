@@ -74,7 +74,9 @@ const openProgramFor = (id: LanguageId) => programs.get(stored(openKey(id))) ?? 
 // ---------------------------------------------------------------- state
 
 const savedLanguage = stored(LANGUAGE_KEY);
-let language: LanguageId = isLanguageId(savedLanguage) ? savedLanguage : "python";
+// First visit: JavaScript, which is ready at once. Python downloads about
+// 6 MB the first time, so it only loads when someone picks it.
+let language: LanguageId = isLanguageId(savedLanguage) ? savedLanguage : "javascript";
 let currentProgram: Program | null = openProgramFor(language);
 let trace: Trace | null = null;
 let stepIndex = 0;
@@ -148,8 +150,13 @@ const els = {
 
 function showStatus(status: RunnerStatus): void {
   els.status.classList.toggle("is-error", status.kind === "failed");
+  els.status.title = status.kind === "loading" && language === "python"
+    ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
+    : status.kind === "failed" ? status.message : ""; // a long error may be cut short on screen
   switch (status.kind) {
-    case "loading": els.status.textContent = `Loading ${LANGUAGES[language].label}…`; break;
+    case "loading":
+      els.status.textContent = language === "python" ? "Downloading Python (6 MB)…" : `Loading ${LANGUAGES[language].label}…`;
+      break;
     case "running": els.status.textContent = "Running…"; break;
     case "ready": els.status.textContent = status.label; break;
     case "failed": els.status.textContent = status.message; break;
@@ -1402,3 +1409,6 @@ els.swap.addEventListener("click", () => setSwapped(!swapped));
 
 render();
 run(editor.getCode());
+
+// Everything is wired up: drop the loading skeleton from index.html.
+document.documentElement.classList.remove("is-booting");

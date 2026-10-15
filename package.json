@@ -1,8 +1,13 @@
 {
-  "name": "algoviz",
+  "name": "pr0l1ne",
   "private": true,
   "version": "0.1.0",
+  "description": "See your code run: step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change.",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
