@@ -1,0 +1,45 @@
+# Runs the tests and a production build on every pull request and every
+# push to main. Cloudflare Pages (connected to this repo) does the deploying;
+# this workflow is the safety net. To make it a real gate, require its check
+# before merging into main: Settings -> Rules -> Rulesets (playbook Step 2).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch: # run it by hand from the Actions tab
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces a run that hasn't finished.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # the Python that Pyodide 0.27 ships
+
+      - run: npm ci
+
+      # TypeScript and JavaScript tests, then the Python tracer's under
+      # CPython and under Pyodide.
+      - run: npm test
+
+      # The same build Cloudflare runs, so a build that would fail there
+      # fails here first.
+      - run: npm run build

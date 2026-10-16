@@ -1,0 +1,233 @@
+[← Docs index](README.md)
+
+# Development
+
+## Requirements
+
+- **Node.js 22 or newer** and npm (check with `node --version`; the repo's `.nvmrc` says 22).
+- **An internet connection** the first time you use Python. The page downloads Pyodide (about 6 MB compressed) from the jsDelivr CDN, and your browser caches it after that. JavaScript and TypeScript need no download.
+- **A modern browser**: recent Chrome, Edge, Firefox or Safari. Code runs in ES module workers, which need Firefox 114+ or Safari 15+.
+- **Optional: Python 3.12** if you want to run the Python tracer's tests or inspect Python traces from the command line. The app itself doesn't need Python installed, because Python runs inside the browser.
+
+## Install and run
+
+```bash
+git clone https://github.com/D4YonSoundcloud/pr0-l1ne.git
+cd pr0-l1ne
+npm ci
+npm run dev
+```
+
+Open the URL Vite prints (usually http://localhost:5173). The bubble sort example runs automatically.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the dev server with hot reload. |
+| `npm run build` | Type-checks, then builds a static site into `dist/`. |
+| `npm run preview` | Serves the built `dist/` folder locally. |
+| `npm run typecheck` | Runs the TypeScript compiler without building. |
+| `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
+| `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
+| `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
+| `npm run test:pyodide` | Runs the same tests (the tracer's and Measure's) inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
+| `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
+| `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
+| `npm run instrument -- file.js` | Prints the instrumented version of a JavaScript or TypeScript file. |
+
+The output of `npm run build` is plain static files. You can host `dist/` anywhere that serves static content (GitHub Pages, Netlify, an S3 bucket, `python3 -m http.server`).
+
+## Deploying
+
+The site is hosted on [Cloudflare Pages](https://developers.cloudflare.com/pages/), connected to this GitHub repo. Cloudflare builds and deploys on its own:
+
+| Event | Where it goes |
+| --- | --- |
+| Push to `main` | Production: https://pr0l1ne.pages.dev |
+| Any other branch, or a pull request | A preview at `https://<branch>.pr0l1ne.pages.dev`, linked on the PR |
+
+Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` runs them (and the same build) on every pull request and push to `main`. Requiring that check before merging into `main` (Settings → Rules → Rulesets) means only tested code reaches the live site.
+
+`public/_headers` sets caching (built files are kept for a year, the page itself is re-checked on every visit) and basic security headers.
+
+### One-time setup
+
+1. In the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect to Git**, and authorize GitHub for `D4YonSoundcloud/pr0-l1ne`.
+2. Build settings:
+
+    | Setting | Value |
+    | --- | --- |
+    | Project name | `pr0l1ne` (gives `pr0l1ne.pages.dev`) |
+    | Production branch | `main` |
+    | Framework preset | None (or Vite) |
+    | Build command | `npm run build` |
+    | Build output directory | `dist` |
+    | Environment variable | `NODE_VERSION` = `22` |
+
+3. **Save and Deploy.** The first build takes a few minutes; later ones redeploy on every push.
+4. If something goes wrong after a deploy, open the project's **Deployments** list and use **Rollback** on the last good one.
+
+If the name `pr0l1ne` is taken, Cloudflare gives a slightly different address: update the links in this file and the README.
+
+## Project structure
+
+```
+pr0-l1ne/
+├── index.html                  Page layout: toolbar, editor, canvas, timeline
+├── package.json
+├── tsconfig.json               TypeScript config for the app
+├── tsconfig.node.json          ...and for Node-only code (the CLI, Node-run tests)
+├── vite.config.ts
+├── docs/                       Images used in this README
+├── scripts/
+│   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
+└── src/
+    ├── main.ts                 App state, run scheduling, rendering, controls
+    ├── languages.ts            Per-language worker, Monaco mode and examples
+    ├── programs.ts             Saved programs (localStorage)
+    ├── programs.test.ts        Saved program tests
+    ├── monaco.ts               Lean Monaco build: editor features + 3 languages
+    ├── editor.ts               Monaco setup, theme, commands and line markers
+    ├── appearance.ts           Canvas style settings, presets, applying them
+    ├── appearance.test.ts      Style settings tests
+    ├── stylePanel.ts           The Style panel in the toolbar
+    ├── complexityPanel.ts      The complexity chip, its panel and the editor labels
+    ├── measurePanel.ts         Measure's results panel and the editor heat map
+    ├── growthView.ts           "How it grows": growth runs' charts and comparisons
+    ├── examples/
+    │   ├── index.ts            The Example type (group, name, code)
+    │   ├── python.ts           Python examples, grouped by topic
+    │   ├── javascript.ts       JavaScript examples
+    │   └── typescript.ts       TypeScript examples
+    ├── styles.css              All styles, including the SVG diagram styles
+    ├── trace/
+    │   ├── types.ts            The trace format (the tracer/renderer contract)
+    │   ├── diff.ts             What changed between two steps
+    │   ├── loopHistory.ts      Group steps into loop iterations
+    │   ├── hints.ts            Parse and apply viz: comment hints
+    │   ├── hints.test.ts       Hint tests (all three languages)
+    │   ├── linked.ts           Linked lists and trees (loop history and memory)
+    │   ├── linked.test.ts      Linked structure tests
+    │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
+    │   ├── graph.test.ts       Graph tests
+    │   ├── output.ts           What a step printed (text, line, printed objects)
+    │   ├── measurement.ts      What a Measure run reports, and formatting it
+    │   ├── growth.ts           Growth runs: size hints, the ladder, fitting, the code's estimate
+    │   ├── growth.test.ts      Growth tests
+    │   ├── delta.ts            Rebuilding heaps sent as deltas; deep equality
+    │   ├── memory.ts           Memory sizes: the Python, textbook and V8 models
+    │   ├── memory.test.ts      Memory size tests
+    │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
+    │   ├── bigO.test.ts        Big-O tests
+    │   ├── complexity.ts       Time and space estimates: the code's shape plus the run
+    │   └── complexity.test.ts  Every example's complexity, in all three languages
+    ├── render/
+    │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointers
+    │   ├── memory.ts           The memory view (arrows or nested, draggable boxes)
+    │   ├── memory.test.ts      Tests for choosing what to nest
+    │   ├── route.ts            Arrow routing and non-overlapping placement
+    │   ├── route.test.ts       Routing tests
+    │   ├── layout.test.ts      Every example, every step: no overlaps or crossings
+    │   ├── loopView.ts         The loop history view (stacked or animated)
+    │   ├── graphView.ts        Drawing a graph, for both views
+    │   ├── animate.ts          FLIP tweening between two drawings
+    │   ├── animate.test.ts     Animation tests (jsdom)
+    │   └── viewport.ts         Pan, zoom and node dragging for both sections
+    ├── js/
+    │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel)
+    │   ├── cost.ts             The code's shape, for complexity estimates
+    │   ├── measure.ts          Measure: run at full size with counters
+    │   ├── measure.test.ts     Measure tests
+    │   ├── typescript.ts       Strips TypeScript types, then instruments as JS
+    │   ├── runtime.ts          Records steps: shadow stack, loops, serialization
+    │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
+    │   ├── serve.ts            Worker side of the protocol, shared by JS and TS
+    │   ├── javascript.worker.ts  Entry point for the JavaScript worker
+    │   ├── typescript.worker.ts  Entry point for the TypeScript worker
+    │   ├── cli.ts              npm run instrument / trace:js
+    │   ├── trace.test.ts       JavaScript tracer tests (Vitest)
+    │   ├── async.test.ts       Generators, async, timers and the event loop
+    │   └── typescript.test.ts  TypeScript tracer tests (Vitest)
+    └── worker/
+        ├── protocol.ts         Message types between page and workers
+        ├── runner.ts           Starts a worker, runs code, watchdog
+        ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
+        ├── tracer.py           The Python tracer (settrace + ast)
+        ├── test_tracer.py      Python tracer tests
+        ├── measure.py          Measure for Python: run at full size with counters
+        └── test_measure.py     Measure tests
+```
+
+The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every color, line weight and corner radius there is a CSS custom property. The Style panel sets them (see [Styling](how-it-works.md#14-styling)), and the defaults on `:root` match the Graph paper theme. To add a theme, add an entry to `PRESETS` in `appearance.ts`.
+
+---
+
+## Development workflow
+
+**Changing the tracer.** `tracer.py` is ordinary Python, so the fastest loop is outside the browser:
+
+```bash
+# See the trace for a program
+npm run trace -- path/to/program.py | python3 -m json.tool | less
+
+# Run the tests under your Python, then under Pyodide (the browser's Python)
+npm run test:tracer
+npm run test:pyodide
+```
+
+Use Python 3.12 locally to match Pyodide 0.27's interpreter, and run `npm run test:pyodide` before you're done: it runs the same tests in the real browser runtime, which is 32-bit and differs in small ways (that's how a Python 3.12 difference in where generators pause was caught). Line-event behavior (which lines fire, and when) can differ slightly between Python versions, and loop detection depends on it. Vite reloads the worker when `tracer.py` changes, so the browser picks up edits automatically.
+
+**Changing the JavaScript or TypeScript tracer.** Everything in `src/js/` except the worker entry points runs in Node, so you can work on it without a browser. The CLI picks TypeScript for `.ts` files:
+
+```bash
+# See what your code turns into
+npm run instrument -- path/to/program.js
+
+# See the trace
+npm run trace:js -- path/to/program.js | less
+
+# Run the tests (add --watch to re-run on save)
+npm run test:js
+```
+
+When something looks wrong in the canvas, `npm run instrument` is usually the quickest way to see why: the output is readable, and every `__av.` call corresponds to one recorded event. For TypeScript, it also shows you the JavaScript the types were stripped down to.
+
+Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build` and test the built worker in the browser.
+
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. Because rendering is a pure function of `(trace, stepIndex)`, you can paste a trace JSON into a test page or a unit test and render it without running any code.
+
+**Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
+
+---
+
+## Extending it
+
+### Draw a new kind of object
+
+Say you want sets drawn as bubbles or tuples drawn differently:
+
+1. **Tracers**: add a branch to `Serializer.describe()` in `tracer.py` (Python) and in `runtime.ts` (JavaScript) that returns a new `kind`.
+2. **Types**: add the shape to the `HeapObject` union in `trace/types.ts`. TypeScript will then point out every `switch` that needs a case.
+3. **Diff**: teach `slotsOf()` in `diff.ts` what the object's slots are, so changes get highlighted.
+4. **Render**: add a shape builder in `memory.ts` (and, if it's a container, handle it in `cellsOf()` in `loopView.ts`).
+
+### Add a structure-specific layout
+
+Binary trees (`findTreeBlocks()` in `memory.ts`) and graphs (`graphBoxes()`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. For bigger graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) could replace `computeLayout()` in `graph.ts`. Everything downstream only needs a position per node.
+
+### Teach graphs a new kind of state
+
+`graphOverlay()` in `trace/graph.ts` decides what each variable means for a graph. To draw something new (say, a `color` dict for graph coloring as actual colors), add a field to `GraphOverlay`, fill it in the loop over variables, and draw it in `graphPicture()`. Add a line to `legendItems()` too, and to `nodeSignature()` so changes get highlighted.
+
+### Add a hint
+
+1. Add the keyword to `KEYWORDS` in [`trace/hints.ts`](../src/trace/hints.ts), parse it in `parseHints()` into a new field of `VizHints` (in `trace/types.ts`), and warn with the expected form when it doesn't parse.
+2. Use it: either in `applyHints()`, if it changes the trace itself (like `hide`), or in a renderer through `trace.viz` (like `show`).
+3. Add a case to `hints.test.ts` and document it in the [Hints](hints.md#hints-viz-comments) table.
+
+No tracer needs to change, since they pass every `viz:` comment through as text.
+
+### Add another language
+
+Everything after the worker only depends on the trace format, so any language works if something can produce that JSON. The tracers here show the three main strategies. If the language's runtime has a tracing hook, like Python's `sys.settrace`, use it. If not, rewrite the program to report on itself, like the JavaScript tracer does. And if the language compiles to one that's already supported, compile it first and keep the line numbers, like the TypeScript tracer does. The language also needs to run in the browser, either natively or compiled to WebAssembly, unless you add a server.
