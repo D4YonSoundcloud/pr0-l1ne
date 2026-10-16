@@ -11,6 +11,7 @@
 import type { LanguageId } from "../languages";
 import type { Program, ProgramStore } from "../programs";
 import type { Settings } from "../settings";
+import type { Trace } from "../trace/types";
 import { Store } from "./store";
 
 /** Playback speeds offered, in steps per second. */
@@ -28,6 +29,15 @@ export interface AppState {
   readonly playing: boolean;
   /** Playback speed, in steps per second (one of SPEEDS). */
   readonly speed: number;
+  /** The trace on screen (hints applied), or null before the first run. */
+  readonly trace: Trace | null;
+  /** The code that trace ran, so Measure can tell whether it still matches. */
+  readonly tracedCode: string | null;
+  /**
+   * The picture is from older code: the latest run failed to start (a
+   * syntax error mid-typing), crashed or timed out. It's shown dimmed.
+   */
+  readonly stale: boolean;
 }
 
 export class AppStore extends Store<AppState> {
@@ -45,6 +55,9 @@ export class AppStore extends Store<AppState> {
       stepIndex: 0,
       playing: false,
       speed: speed !== null && (SPEEDS as readonly number[]).includes(speed) ? speed : DEFAULT_SPEED,
+      trace: null,
+      tracedCode: null,
+      stale: false,
     });
   }
 
@@ -75,6 +88,21 @@ export class AppStore extends Store<AppState> {
     if (!(SPEEDS as readonly number[]).includes(speed)) return;
     this.settings.speed.set(speed);
     this.update("setSpeed", { speed });
+  }
+
+  /** A run finished: show its trace, at `stepIndex`. */
+  showTrace(trace: Trace, code: string, stepIndex: number): void {
+    this.update("showTrace", { trace, tracedCode: code, stale: false, stepIndex });
+  }
+
+  /** The latest run didn't produce a picture: keep the old one, dimmed. */
+  markStale(): void {
+    this.update("markStale", { stale: true });
+  }
+
+  /** Forget the trace (a different language: it has nothing to do with the new code). */
+  clearTrace(): void {
+    this.update("clearTrace", { trace: null, tracedCode: null, stale: false, stepIndex: 0 });
   }
 
   /** The saved program now open (null: the code isn't a saved program). */

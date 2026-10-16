@@ -83,9 +83,11 @@ Part of the Python tracer can't be measured. Python pauses all other tracing and
 | --- | --- |
 | `src/settings.ts` | Everything saved between visits (see "Saved settings") |
 | `src/app/store.ts` | A small store: one state object, changed by named actions, with listeners |
-| `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`), which also save what's remembered |
+| `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`, the `trace` on screen, the `tracedCode` it came from, and whether it's `stale`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`, `showTrace`, `markStale`, `clearTrace`), which also save what's remembered |
 | `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
 | `src/app/playbackController.ts` | Moving through the steps: first / previous / next / last, the scrubber, Play and the speed menu, and the stepping keys (arrows, Home / End, Space, F10, Ctrl/Cmd + Enter) |
+| `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
+| `src/app/html.ts` | `escapeHtml`, for text put into the banner and panels |
 
 How the pieces talk:
 
@@ -175,7 +177,8 @@ pr0-l1ne/
 ├── scripts/
 │   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
 └── src/
-    ├── main.ts                 App state, run scheduling, rendering, controls
+    ├── main.ts                 Wires the pieces together; rendering, Measure, layout (being split up)
+    ├── app/                    The app's state and controllers (see "How the app is put together")
     ├── languages.ts            Per-language worker, Monaco mode and examples
     ├── programs.ts             Saved programs (localStorage)
     ├── programs.test.ts        Saved program tests

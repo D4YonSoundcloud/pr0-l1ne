@@ -49,6 +49,11 @@ export interface PlaybackOptions {
  */
 const SKIPPED_STEPS = 2;
 
+/** The first step worth showing in a trace of `count` steps. */
+export function firstStepFor(count: number): number {
+  return count ? Math.max(0, Math.min(SKIPPED_STEPS, count - 1)) : 0;
+}
+
 export class PlaybackController {
   private timer = 0;
   /** The step the current (or last) playback started from. */
@@ -91,8 +96,7 @@ export class PlaybackController {
 
   /** The first step worth showing. */
   firstStep(): number {
-    const count = this.options.stepCount();
-    return count ? Math.max(0, Math.min(SKIPPED_STEPS, count - 1)) : 0;
+    return firstStepFor(this.options.stepCount());
   }
 
   /** The animation for the step being drawn right now (for the app's renderers). */

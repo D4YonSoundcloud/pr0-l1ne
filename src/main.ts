@@ -1,6 +1,8 @@
 import "./styles.css";
+import { escapeHtml } from "./app/html";
 import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
+import { RunController } from "./app/runController";
 import { AppStore } from "./app/state";
 import { type Appearance, applyAppearance, parseAppearance } from "./appearance";
 import { ComplexityPanel, costLabels } from "./complexityPanel";
@@ -18,7 +20,6 @@ import { StylePanel } from "./stylePanel";
 import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
 import { findSizes, type GrowthPoint, ladder, pointFrom, staticGrowth } from "./trace/growth";
-import { applyHints } from "./trace/hints";
 import {
   ALL_LOOPS,
   availableLoops,
@@ -31,19 +32,6 @@ import {
 import { compact, duration, type Measurement } from "./trace/measurement";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "./trace/memory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
-import { Runner, type RunnerStatus, type RunOutcome } from "./worker/runner";
-
-const MAX_STEPS = 20_000;
-/**
- * How long tracing may take: short while typing (Live), so the page keeps
- * up; longer for Run. Long loops are sampled, so a big input runs until
- * one of these instead of the step budget.
- */
-const LIVE_SECONDS = 1.5;
-const RUN_SECONDS = 6;
-type Budget = "live" | "run";
-let lastBudget: Budget = "run";
-const LIVE_DELAY_MS = 600;
 
 // ---------------------------------------------------------------- settings
 
@@ -59,12 +47,10 @@ const currentLanguage = () => app.get().language;
 
 // ---------------------------------------------------------------- state
 
-let trace: Trace | null = null;
 let selectedLoop: string | null = null;
 let hideQuiet = true;
 /** Loop history: containers one above another instead of side by side. */
 let loopVertical = settings.loopVertical.get();
-let stale = false;
 
 // ---------------------------------------------------------------- elements
 
@@ -128,6 +114,7 @@ const els = {
 // ---------------------------------------------------------------- playback
 
 const currentStep = () => app.get().stepIndex;
+const currentTrace = () => app.get().trace;
 
 const playback = new PlaybackController({
   app,
@@ -140,7 +127,7 @@ const playback = new PlaybackController({
     last: els.last,
     scrubber: els.scrubber,
   },
-  stepCount: () => trace?.steps.length ?? 0,
+  stepCount: () => currentTrace()?.steps.length ?? 0,
   show: () => render(),
   ownsKeys: (target) => !!target.closest(".style-panel"),
   reducedMotion: prefersReducedMotion,
@@ -148,155 +135,25 @@ const playback = new PlaybackController({
 
 // ---------------------------------------------------------------- running code
 
-function showStatus(status: RunnerStatus): void {
-  els.status.classList.toggle("is-error", status.kind === "failed");
-  els.status.title =
-    status.kind === "loading" && currentLanguage() === "python"
-      ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
-      : status.kind === "failed"
-        ? status.message
-        : ""; // a long error may be cut short on screen
-  switch (status.kind) {
-    case "loading":
-      els.status.textContent =
-        currentLanguage() === "python"
-          ? "Downloading Python (6 MB)…"
-          : `Loading ${LANGUAGES[currentLanguage()].label}…`;
-      break;
-    case "running":
-      els.status.textContent = "Running…";
-      break;
-    case "ready":
-      els.status.textContent = status.label;
-      break;
-    case "failed":
-      els.status.textContent = status.message;
-      break;
-  }
-}
-
-// One runner per language, started the first time it's needed, so people
-// writing JavaScript never download Python.
-const runners = new Map<LanguageId, Runner>();
-function runnerFor(id: LanguageId): Runner {
-  let runner = runners.get(id);
-  if (!runner) {
-    runner = new Runner(LANGUAGES[id].createWorker, (status) => {
-      if (id === currentLanguage()) showStatus(status);
-    });
-    runners.set(id, runner);
-  }
-  return runner;
-}
-
-let inFlight = false;
-let queued: { code: string; language: LanguageId; budget: Budget } | null = null;
-
-async function run(code: string, lang: LanguageId = currentLanguage(), budget: Budget = "run"): Promise<void> {
-  if (inFlight || measuring) {
-    queued = { code, language: lang, budget }; // only the newest edit matters
-    return;
-  }
-  inFlight = true;
-  const outcome = await runnerFor(lang).run(code, MAX_STEPS, budget === "live" ? LIVE_SECONDS : RUN_SECONDS);
-  lastBudget = budget;
-  inFlight = false;
-  // Ignore results for a language the person has switched away from.
-  if (lang === currentLanguage()) {
-    if (outcome.kind === "trace" && !(outcome.trace.error && !outcome.trace.steps.length)) tracedCode = code;
-    applyOutcome(outcome);
-  }
-  if (queued !== null) {
-    const next = queued;
-    queued = null;
-    run(next.code, next.language, next.budget);
-  }
-}
-
-/** Why a trace stopped early, and what to do about it. */
-function truncationBanner(t: Trace): string {
-  const ran = t.counts ? ` (${t.counts.steps.toLocaleString()} steps ran)` : "";
-  const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
-  if (t.stoppedBy === "time") {
-    const seconds = lastBudget === "live" ? LIVE_SECONDS : RUN_SECONDS;
-    const runLonger =
-      lastBudget === "live"
-        ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${RUN_SECONDS} seconds.`
-        : "";
-    return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
-  }
-  return `Stopped after ${MAX_STEPS.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
-}
-
 function setBanner(html: string | null): void {
   els.banner.hidden = html === null;
   els.banner.innerHTML = html ?? "";
 }
 
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
-function applyOutcome(outcome: RunOutcome): void {
-  if (outcome.kind === "timeout") {
-    stale = true;
-    setBanner(
-      `Your code ran for more than ${outcome.seconds} seconds and was stopped. Check for a loop that never ends.`,
-    );
-    render();
+const runs = new RunController({
+  app,
+  status: els.status,
+  editor: {
+    setMarks: (marks) => editor.setMarks(marks),
+    setHintWarnings: (warnings) => editor.setHintWarnings(warnings),
+  },
+  setBanner,
+  onResult(updateMarks) {
+    render(updateMarks);
     updateComplexity();
-    return;
-  }
-  if (outcome.kind === "crash") {
-    stale = true;
-    setBanner(`The tracer failed: <code>${escapeHtml(outcome.message)}</code>`);
-    render();
-    updateComplexity();
-    return;
-  }
-
-  const next = outcome.trace;
-  if (next.error && next.steps.length === 0) {
-    // Couldn't even start (usually a syntax error mid-typing). Keep the last
-    // good picture on screen, dimmed, and point at the problem.
-    stale = true;
-    const where = next.error.line ? ` on line ${next.error.line}` : "";
-    setBanner(
-      `<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`,
-    );
-    editor.setMarks({
-      next: null,
-      prev: null,
-      error: { line: next.error.line, message: `${next.error.type}: ${next.error.message}` },
-    });
-    render(false);
-    updateComplexity();
-    return;
-  }
-
-  // Stay on the last step if we were there, so live edits show the result.
-  const wasAtEnd = !trace || currentStep() >= trace.steps.length - 1;
-  trace = applyHints(next);
-  const warnings = trace.viz?.warnings ?? [];
-  editor.setHintWarnings(warnings);
-  stale = false;
-  app.setStep(
-    wasAtEnd ? trace.steps.length - 1 : Math.max(playback.firstStep(), Math.min(currentStep(), trace.steps.length - 1)),
-  );
-
-  if (trace.truncated) {
-    setBanner(truncationBanner(trace));
-  } else if (trace.error) {
-    const where = trace.error.line ? ` on line ${trace.error.line}` : "";
-    setBanner(`<strong>${escapeHtml(trace.error.type)}</strong>${where}: ${escapeHtml(trace.error.message)}`);
-  } else if (warnings.length) {
-    const more = warnings.length > 1 ? ` (and ${warnings.length - 1} more, underlined in the editor)` : "";
-    setBanner(`<strong>Hint on line ${warnings[0].line}</strong>: ${escapeHtml(warnings[0].message)}${more}`);
-  } else {
-    setBanner(null);
-  }
-  render();
-  updateComplexity();
-}
+  },
+  busy: () => measuring,
+});
 
 // ---------------------------------------------------------------- rendering
 
@@ -388,7 +245,7 @@ function setSizes(on: boolean): void {
 /** "Program: 1.4 KB" in the memory header, for the step on screen. */
 function updateMemoryTotal(): void {
   const model = shownSizes();
-  const step = trace?.steps[currentStep()];
+  const step = currentTrace()?.steps[currentStep()];
   els.memoryTotal.hidden = !model || !step;
   if (!model || !step) return;
   const sizes = stepSizes(step, model);
@@ -487,9 +344,6 @@ let measureLabelsOn = settings.measureLabels.get();
 /** The last measurement and the code it was for (labels are hidden once the code changes). */
 let measured: { result: Measurement; code: string; language: LanguageId } | null = null;
 
-/** The code the trace on screen ran (growth runs compare with its estimate). */
-let tracedCode: string | null = null;
-
 /** A top-level `name = number` to suggest a `viz: size` hint for: the biggest number. */
 function sizeSuggestion(code: string): { name: string; line: number } | null {
   let best: { name: string; line: number; value: number } | null = null;
@@ -515,7 +369,7 @@ const growthView = new GrowthView({
     growthView.render();
   },
   start: (scaled) => measureGrowth(scaled),
-  stop: () => runnerFor(measuringLanguage).stopMeasure(),
+  stop: () => runs.runnerFor(measuringLanguage).stopMeasure(),
   kept: () => settings.growthKept(currentLanguage()),
 });
 
@@ -538,6 +392,7 @@ const measurePanel = new MeasurePanel({
   measureAgain: () => measureNow(),
   estimate: () => {
     try {
+      const { trace, stale } = app.get();
       return trace ? (estimateComplexity(trace, stale ? null : currentMeasurement())?.time ?? null) : null;
     } catch {
       return null;
@@ -595,19 +450,16 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   measuring = true;
   measuringLanguage = lang;
   setMeasureButton(true);
-  while (inFlight) await new Promise((r) => setTimeout(r, 30));
+  await runs.whenIdle();
   const x = grow[0];
   const points: GrowthPoint[] = [];
   let stopped: GrowthSeries["stopped"];
   for (const [i, rung] of rungs.entries()) {
     const label = `Measuring ${x} = ${rung.x.toLocaleString()} (${i + 1} of ${rungs.length})…`;
     growthView.setProgress(label);
-    const outcome = await runnerFor(lang).measure(
-      code,
-      measureLimit,
-      (p) => growthView.setProgress(`${label} ${duration(p.elapsedMs)}`),
-      rung.sizes,
-    );
+    const outcome = await runs
+      .runnerFor(lang)
+      .measure(code, measureLimit, (p) => growthView.setProgress(`${label} ${duration(p.elapsedMs)}`), rung.sizes);
     const full = rungs[rungs.length - 1].x;
     const at = `At ${x} = ${rung.x.toLocaleString()}`;
     if (outcome.kind !== "measured") {
@@ -636,10 +488,11 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   }
   measuring = false;
   setMeasureButton(false);
-  showStatus(runnerFor(currentLanguage()).status);
+  runs.refreshStatus();
   // The code's estimate, from the trace of this same code.
   let expected = null;
   try {
+    const { trace, stale, tracedCode } = app.get();
     const estimate = trace && !stale && tracedCode === code ? estimateComplexity(trace) : null;
     expected = estimate ? staticGrowth(estimate, vars, grow) : null;
   } catch {
@@ -648,16 +501,12 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   if (lang === currentLanguage())
     growthView.setResult({ label: "This version", x, scaled: grow, points, stopped, expected });
   else growthView.setProgress(null);
-  if (queued !== null) {
-    const next = queued;
-    queued = null;
-    run(next.code, next.language, next.budget);
-  }
+  runs.resumeQueued();
 }
 
 async function measureNow(): Promise<void> {
   if (measuring) {
-    runnerFor(measuringLanguage).stopMeasure();
+    runs.runnerFor(measuringLanguage).stopMeasure();
     return;
   }
   playback.setPlaying(false);
@@ -667,14 +516,14 @@ async function measureNow(): Promise<void> {
   measuringLanguage = lang;
   setMeasureButton(true);
   // A traced run may be finishing: measure right after it.
-  while (inFlight) await new Promise((r) => setTimeout(r, 30));
+  await runs.whenIdle();
   const started = performance.now();
   const showProgress = (text: string) => {
     if (lang === currentLanguage()) els.status.textContent = text;
   };
   showProgress("Measuring…");
   const tick = window.setInterval(() => showProgress(`Measuring… ${duration(performance.now() - started)}`), 500);
-  const outcome = await runnerFor(lang).measure(code, measureLimit, (p) => {
+  const outcome = await runs.runnerFor(lang).measure(code, measureLimit, (p) => {
     const share = p.loop
       ? ` · ${Math.min(99, Math.floor((100 * p.loop.done) / p.loop.total))}% of line ${p.loop.line}'s loop`
       : "";
@@ -683,7 +532,7 @@ async function measureNow(): Promise<void> {
   window.clearInterval(tick);
   measuring = false;
   setMeasureButton(false);
-  showStatus(runnerFor(currentLanguage()).status);
+  runs.refreshStatus();
   if (lang === currentLanguage()) {
     if (outcome.kind === "measured") {
       measured = { result: outcome.result, code, language: lang };
@@ -702,11 +551,7 @@ async function measureNow(): Promise<void> {
     }
   }
   // Edits made while measuring were waiting.
-  if (queued !== null) {
-    const next = queued;
-    queued = null;
-    run(next.code, next.language, next.budget);
-  }
+  runs.resumeQueued();
 }
 els.measure.addEventListener("click", () => measureNow());
 els.measureResults.addEventListener("click", () => measurePanel.toggle());
@@ -719,6 +564,7 @@ let complexityTimer = 0;
 function updateComplexity(): void {
   window.clearTimeout(complexityTimer);
   complexityTimer = window.setTimeout(() => {
+    const { trace, stale } = app.get();
     let estimate = null;
     try {
       // A trace cut short uses Measure's full counts for the same code, if there are any.
@@ -750,6 +596,7 @@ function clearLayout(): void {
 updateResetLayout();
 
 function renderMemoryView(): void {
+  const trace = currentTrace();
   if (!trace?.steps.length) return;
   const stepIndex = currentStep();
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
@@ -812,6 +659,7 @@ els.sizeModel.addEventListener("change", () => {
 });
 
 function render(updateMarks = true): void {
+  const { trace, stale } = app.get();
   els.canvas.classList.toggle("is-stale", stale);
   const total = trace?.steps.length ?? 0;
   const stepIndex = currentStep();
@@ -978,7 +826,6 @@ els.loopAnimated.setAttribute("aria-pressed", String(loopMode === "animated"));
 
 // ---------------------------------------------------------------- editor
 
-let liveTimer = 0;
 let growthTimer = 0;
 const editor = createEditor(
   els.editor,
@@ -991,8 +838,8 @@ const editor = createEditor(
       // The growth section reads the code's `viz: size` hints.
       window.clearTimeout(growthTimer);
       if (measurePanel.isOpen && !growthView.running) growthTimer = window.setTimeout(() => growthView.render(), 250);
-      window.clearTimeout(liveTimer);
-      if (els.live.checked) liveTimer = window.setTimeout(() => run(code, currentLanguage(), "live"), LIVE_DELAY_MS);
+      if (els.live.checked) runs.scheduleLive(code);
+      else runs.cancelLive();
       // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
       if (measured) {
         updateMeasureLabels();
@@ -1020,8 +867,7 @@ const editor = createEditor(
 
 function runNow(): void {
   playback.setPlaying(false);
-  window.clearTimeout(liveTimer); // don't run the same code twice
-  run(editor.getCode());
+  runs.runNow(editor.getCode());
 }
 
 // ---------------------------------------------------------------- saved programs
@@ -1062,28 +908,26 @@ for (const lang of Object.values(LANGUAGES)) els.language.append(new Option(lang
 els.language.value = currentLanguage();
 els.language.addEventListener("change", () => {
   if (!isLanguageId(els.language.value) || els.language.value === currentLanguage()) return;
-  window.clearTimeout(liveTimer);
+  runs.cancelLive();
   app.setLanguage(els.language.value); // also reopens that language's program and refills the Open menu
   editor.setLanguage(LANGUAGES[currentLanguage()].monacoId, savedCode(currentLanguage()));
   fillSizeModels();
   programsController.updateUI();
   growthView.reload();
   // A trace from the other language has nothing to do with this code.
-  trace = null;
-  if (measuring) runnerFor(measuringLanguage).stopMeasure();
+  app.clearTrace();
+  if (measuring) runs.runnerFor(measuringLanguage).stopMeasure();
   els.measureResults.hidden = !measured || measured.language !== currentLanguage();
   measurePanel.toggle(false);
   updateMeasureLabels();
   updateComplexity();
   memoryView.restartAutoFit();
   loopView.restartAutoFit();
-  app.setStep(0);
   selectedLoop = null;
   clearLayout();
-  stale = false;
   setBanner(null);
   render();
-  showStatus(runnerFor(currentLanguage()).status);
+  runs.refreshStatus();
   runNow();
 });
 fillSizeModels();
@@ -1259,7 +1103,7 @@ setSwapped(swapped);
 els.swap.addEventListener("click", () => setSwapped(!swapped));
 
 render();
-run(editor.getCode());
+runs.runNow(editor.getCode());
 
 // Everything is wired up: drop the loading skeleton from index.html.
 document.documentElement.classList.remove("is-booting");
