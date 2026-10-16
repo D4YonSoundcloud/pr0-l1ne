@@ -1,8 +1,33 @@
 /**
  * The trace format: the contract between a language tracer and the renderer.
  *
- * Nothing in here is Python-specific. A future TypeScript tracer only has to
- * produce the same shape for the whole visual layer to work with it.
+ * Nothing in here is Python-specific. A new tracer only has to produce the
+ * same shape for the whole visual layer to work with it.
+ *
+ * How it's kept honest
+ * - schema/trace.schema.json is generated from this file (`npm run schema`).
+ *   A test fails if it's out of date, so a change here shows up in review as
+ *   a change to the schema.
+ * - Every golden trace (src/examples/golden.test.ts) and conformance trace
+ *   (src/trace/conformance.test.ts) is checked against the schema, and in
+ *   development builds so is every trace a worker sends (worker/runner.ts).
+ * - The conformance suite checks the Python and JavaScript tracers give the
+ *   same shape for the same program.
+ *
+ * Versions: `Trace.version`, now 1
+ * - Not breaking (no version change): adding an optional field that older
+ *   code can ignore, adding a new kind of heap object or value that older
+ *   code can draw as opaque, or loosening a rule (a required field becoming
+ *   optional is NOT this: see below).
+ * - Breaking (version goes to 2): removing or renaming a field; changing a
+ *   field's type or what it means; making an optional field required;
+ *   changing how ids, iterations or lines are counted.
+ * - A breaking change comes with a `migrate` from the old version to the
+ *   new, so saved traces and shared links keep opening, and a test that an
+ *   old golden trace still migrates and validates.
+ * - Never reuse a removed field's name for something else.
+ * - The renderer accepts every version it can migrate from, and says so
+ *   plainly when a trace is from a newer version than it knows.
  */
 
 /** A primitive value, stored inline. `repr` is already display-ready. */

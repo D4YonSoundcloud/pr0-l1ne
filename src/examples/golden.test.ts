@@ -1,6 +1,6 @@
 /**
- * Golden traces: every example, in every language, traced and compared with
- * the trace saved in fixtures/traces/. Any change in what a tracer records
+ * Golden traces: every example, in every language, traced, checked against
+ * the trace schema, and compared with the trace saved in fixtures/traces/. Any change in what a tracer records
  * shows up here as a diff of the steps it touched.
  *
  * When a change is intended, accept it with
@@ -12,13 +12,12 @@
  * they stop on steps, never on the clock, and come out the same on any
  * machine. Python runs in Pyodide, the same Python the browser runs.
  */
-import { readFileSync } from "node:fs";
-import { loadPyodide } from "pyodide";
 import { beforeAll, describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
+import { pythonTracer, type TracePython } from "../testing/pythonTracer";
 import { goldenText, slug } from "../trace/golden";
-import type { Trace } from "../trace/types";
+import { traceProblems } from "../trace/validate";
 import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./index";
 
 const MAX_STEPS = 20_000; // as src/main.ts
@@ -30,6 +29,7 @@ describe("golden traces: JavaScript", () => {
   for (const example of JAVASCRIPT_EXAMPLES) {
     it(example.name, async () => {
       const trace = await traceJavaScript(example.code, MAX_STEPS, MAX_SECONDS);
+      expect(traceProblems(trace), "matches the trace schema").toEqual([]);
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("javascript", example));
     });
   }
@@ -39,24 +39,23 @@ describe("golden traces: TypeScript", () => {
   for (const example of TYPESCRIPT_EXAMPLES) {
     it(example.name, async () => {
       const trace = await traceTypeScript(example.code, MAX_STEPS, MAX_SECONDS);
+      expect(traceProblems(trace), "matches the trace schema").toEqual([]);
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("typescript", example));
     });
   }
 });
 
 describe("golden traces: Python (in Pyodide)", () => {
-  let runTrace: (source: string, maxSteps: number, maxSeconds: number) => string;
+  let tracePython: TracePython;
 
   beforeAll(async () => {
-    // Set up as src/worker/pyodide.worker.ts does: a fixed hash seed, then the tracer.
-    const pyodide = await loadPyodide({ env: { PYTHONHASHSEED: "0" } });
-    pyodide.runPython(readFileSync(new URL("../worker/tracer.py", import.meta.url), "utf8"));
-    runTrace = pyodide.globals.get("run_trace");
+    tracePython = await pythonTracer();
   }, 120_000);
 
   for (const example of PYTHON_EXAMPLES) {
     it(example.name, async () => {
-      const trace = JSON.parse(runTrace(example.code, MAX_STEPS, MAX_SECONDS)) as Trace;
+      const trace = tracePython(example.code, MAX_STEPS, MAX_SECONDS);
+      expect(traceProblems(trace), "matches the trace schema").toEqual([]);
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("python", example));
     });
   }

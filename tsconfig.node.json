@@ -11,7 +11,12 @@
     "src/trace/graph.test.ts",
     "src/trace/memory.test.ts",
     "src/trace/complexity.test.ts",
-    "src/trace/bigO.test.ts"
+    "src/trace/bigO.test.ts",
+    "src/trace/schema.test.ts",
+    "src/examples/golden.test.ts",
+    "src/trace/gridFocus.test.ts",
+    "src/testing/**/*.ts",
+    "src/trace/conformance.test.ts"
   ],
   "exclude": []
 }

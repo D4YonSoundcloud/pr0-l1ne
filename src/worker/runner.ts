@@ -24,6 +24,15 @@ export type MeasureOutcome =
   | { kind: "stopped"; reason: "person" | "unresponsive" }
   | { kind: "crash"; message: string };
 
+/**
+ * Development builds only: what's wrong with a trace, per the trace schema.
+ * `null` in production builds, where the bundler drops it together with the
+ * validator and the schema.
+ */
+const checkTrace = import.meta.env.DEV
+  ? async (trace: Trace) => (await import("../trace/validate")).traceProblems(trace)
+  : null;
+
 /** Extra time a Measure run gets past its own limit, for the untouched timing run and reporting. */
 const MEASURE_GRACE_MS = 15_000;
 
@@ -90,7 +99,8 @@ export class Runner {
         this.setStatus({ kind: "failed", message: `Couldn't load the language runtime: ${message.message}` });
         break;
       case "result":
-        this.settle(message.runId, { kind: "trace", trace: message.trace, elapsedMs: message.elapsedMs });
+        if (checkTrace) void this.settleChecked(message.runId, message.trace, message.elapsedMs);
+        else this.settle(message.runId, { kind: "trace", trace: message.trace, elapsedMs: message.elapsedMs });
         break;
       case "crash":
         if (this.measuring?.runId === message.runId) this.settleMeasure({ kind: "crash", message: message.message });
@@ -112,6 +122,26 @@ export class Runner {
     this.pending = null;
     if (this.isReady) this.setStatus({ kind: "ready", label: this.label });
     resolve(outcome);
+  }
+
+  /**
+   * Development builds only: check the trace against the trace schema
+   * before using it, so a tracer that sends the wrong shape fails here,
+   * naming the field, rather than somewhere deep in the renderer.
+   * Production builds leave this out entirely (with the validator and the
+   * schema), so it costs them nothing.
+   */
+  private async settleChecked(runId: number, trace: Trace, elapsedMs: number): Promise<void> {
+    const problems = (await checkTrace?.(trace)) ?? [];
+    if (!problems.length) {
+      this.settle(runId, { kind: "trace", trace, elapsedMs });
+      return;
+    }
+    console.error("Trace doesn't match the trace format (schema/trace.schema.json):", problems, trace);
+    this.settle(runId, {
+      kind: "crash",
+      message: `the trace doesn't match the trace format (checked in development builds): ${problems.join(" · ")}`,
+    });
   }
 
   private settleMeasure(outcome: MeasureOutcome): void {

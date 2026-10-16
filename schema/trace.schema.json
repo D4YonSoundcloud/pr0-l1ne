@@ -1,0 +1,1298 @@
+{
+  "$id": "https://pr0l1ne.pages.dev/schema/trace.schema.json",
+  "$comment": "Generated from src/trace/types.ts by `npm run schema`. Don't edit by hand.",
+  "title": "PR0L1NE trace",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/Trace",
+  "definitions": {
+    "Trace": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "python",
+            "javascript",
+            "typescript"
+          ],
+          "description": "Which tracer produced this. Affects small details like \"def\" vs \"function\"."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Step"
+          }
+        },
+        "loops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LoopInfo"
+          }
+        },
+        "indexNames": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Which names are used to index which containers, from static analysis. `arr[j + 1]` in the code gives { arr: [\"j\"] }. For nested indexing, `grid[i][j]` gives { grid: [\"i\"], \"grid[]\": [\"j\"] }: the \"[]\" key holds names that index the inner lists."
+        },
+        "gridAccesses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GridAccess"
+          },
+          "description": "Every `grid[a][b]` in the code: the grid's name, the line, and the row and column index expressions as written (\"up\", \"col\", \"n - 1 - j\"). The cell a step reads or writes is the one these give on the line that ran (or is about to run): see trace/gridFocus.ts."
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TraceError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "heapDelta": {
+          "type": "boolean",
+          "description": "Steps' heaps hold only what changed since the step before (see Step.heapIds). trace/delta.ts's expandHeaps rebuilds them, sharing unchanged objects between steps. Never set on a trace the page uses."
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "True when the step budget (or the time budget) ran out before the program finished."
+        },
+        "stoppedBy": {
+          "type": "string",
+          "enum": [
+            "steps",
+            "time"
+          ],
+          "description": "What stopped a truncated trace."
+        },
+        "sampled": {
+          "type": "boolean",
+          "description": "Some long loops were sampled: their first passes, passes at round numbers (10, 20 ... 100, 200 ...) and last passes were recorded; the rest ran and were counted but not recorded (steps carry `skipped`)."
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "steps": {
+              "type": "number"
+            },
+            "calls": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "depth": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "steps",
+            "calls",
+            "depth"
+          ],
+          "additionalProperties": false,
+          "description": "Counted over the whole run, recorded or not."
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RawHint"
+          },
+          "description": "`# viz:` / `// viz:` comments in the program (see README, \"Hints\")."
+        },
+        "cost": {
+          "$ref": "#/definitions/CostInfo",
+          "description": "The shape of the code, for complexity estimates."
+        },
+        "viz": {
+          "$ref": "#/definitions/VizHints",
+          "description": "The hints, parsed and applied (added by applyHints, not by tracers)."
+        }
+      },
+      "required": [
+        "version",
+        "steps",
+        "loops",
+        "indexNames",
+        "stdout",
+        "error",
+        "truncated"
+      ],
+      "additionalProperties": false
+    },
+    "Step": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": [
+            "call",
+            "line",
+            "return",
+            "exception",
+            "yield",
+            "await",
+            "resume"
+          ],
+          "description": "yield / await: a generator or async function pauses (its frame moves from the stack to `suspended`). resume: it picks up again."
+        },
+        "line": {
+          "type": "number",
+          "description": "The line about to run (for \"line\"), or where the event happened."
+        },
+        "stack": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Frame"
+          },
+          "description": "Outermost frame first. The last frame is the one executing."
+        },
+        "suspended": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Frame"
+          },
+          "description": "Generators and async functions that are paused, oldest first. Their variables are kept, so they can be shown next to the stack."
+        },
+        "heap": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/HeapObject"
+          },
+          "description": "Every heap object reachable from the stack at this step."
+        },
+        "stdoutLength": {
+          "type": "number",
+          "description": "How much of `Trace.stdout` had been printed by this step."
+        },
+        "loops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LoopContext"
+          }
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "line": {
+              "type": "number"
+            },
+            "refs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "line",
+            "refs"
+          ],
+          "additionalProperties": false,
+          "description": "Set on the step right after a print() / console.log() ran: the line that printed, and the printed objects that are drawn at this step. The text itself is Trace.stdout, from the previous step's stdoutLength to this one's."
+        },
+        "skipped": {
+          "type": "number",
+          "description": "Events that ran but weren't recorded just before this step: passes in the middle of a long loop (see Trace.sampled)."
+        },
+        "skippedAfter": {
+          "type": "number",
+          "description": "On the last step: events that ran after it without being recorded."
+        },
+        "heapIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "With Trace.heapDelta: every object id in `heap`, in order. `heap` then holds only objects that differ from the previous step's."
+        },
+        "returnValue": {
+          "$ref": "#/definitions/Value",
+          "description": "The returned value (return) or the yielded value (yield)."
+        },
+        "exception": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "event",
+        "line",
+        "stack",
+        "heap",
+        "stdoutLength",
+        "loops"
+      ],
+      "additionalProperties": false
+    },
+    "Frame": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable for the lifetime of the call, e.g. \"f3\"."
+        },
+        "func": {
+          "type": "string",
+          "description": "Function name, or \"Global\" for module scope."
+        },
+        "line": {
+          "type": "number"
+        },
+        "locals": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/Value"
+              }
+            ],
+            "maxItems": 2
+          }
+        },
+        "state": {
+          "type": "string",
+          "const": "suspended",
+          "description": "\"suspended\" for a generator or async function paused at a yield or await. Suspended frames aren't on the call stack; see Step.suspended."
+        }
+      },
+      "required": [
+        "id",
+        "func",
+        "line",
+        "locals"
+      ],
+      "additionalProperties": false,
+      "description": "One scope on the call stack."
+    },
+    "Value": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PrimValue"
+        },
+        {
+          "$ref": "#/definitions/RefValue"
+        }
+      ]
+    },
+    "PrimValue": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "prim"
+        },
+        "type": {
+          "type": "string",
+          "description": "Python: \"int\", \"float\", \"str\", \"bool\", \"none\", ... JavaScript: \"number\", \"string\", \"boolean\", \"null\", \"undefined\", \"bigint\", \"symbol\", plus \"key\" for an unquoted object key and \"getter\"."
+        },
+        "repr": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes this value takes on a 64-bit CPython, for values whose size the repr can't tell (strings and bytes, which may be shortened, and big ints). Other sizes are fixed (see trace/memory.ts)."
+        },
+        "length": {
+          "type": "number",
+          "description": "A shortened string's real length (JavaScript)."
+        }
+      },
+      "required": [
+        "kind",
+        "type",
+        "repr"
+      ],
+      "additionalProperties": false,
+      "description": "A primitive value, stored inline. `repr` is already display-ready."
+    },
+    "RefValue": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "ref"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "A pointer to a heap object, by stable id."
+    },
+    "HeapObject": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SequenceObject"
+        },
+        {
+          "$ref": "#/definitions/DictObject"
+        },
+        {
+          "$ref": "#/definitions/InstanceObject"
+        },
+        {
+          "$ref": "#/definitions/FunctionObject"
+        },
+        {
+          "$ref": "#/definitions/ClassObject"
+        },
+        {
+          "$ref": "#/definitions/OpaqueObject"
+        }
+      ]
+    },
+    "SequenceObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "list",
+            "tuple",
+            "set"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        },
+        "length": {
+          "type": "number",
+          "description": "Real length; `items` may be truncated."
+        },
+        "offset": {
+          "type": "number",
+          "description": "A long list's `items` are a window of it, following its index variables: the index of items[0]. Absent means 0."
+        },
+        "strip": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "values",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false,
+          "description": "A long list of numbers, all of it: evenly spaced samples (values[i] is item floor(i × length / values.length)), with the samples' smallest and largest values, for a color strip."
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes on a 64-bit CPython (sys.getsizeof)."
+        },
+        "capacity": {
+          "type": "number",
+          "description": "Python lists only: how many items it has room for before growing."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "items",
+        "length"
+      ],
+      "additionalProperties": false,
+      "description": "list, tuple, set: drawn as a horizontal row of cells."
+    },
+    "DictObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "dict"
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Value"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "length": {
+          "type": "number"
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes on a 64-bit CPython."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "entries",
+        "length"
+      ],
+      "additionalProperties": false
+    },
+    "InstanceObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/Value"
+              }
+            ],
+            "maxItems": 2
+          }
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: the instance plus its attribute dict, on a 64-bit CPython."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "An instance of a user class (fields from __dict__ or __slots__)."
+    },
+    "FunctionObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "function"
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/Value"
+              }
+            ],
+            "maxItems": 2
+          }
+        },
+        "builtin": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes on a 64-bit CPython."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "name",
+        "params",
+        "fields",
+        "builtin"
+      ],
+      "additionalProperties": false,
+      "description": "A function. `fields` holds closed-over variables."
+    },
+    "ClassObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "class"
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes on a 64-bit CPython."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "OpaqueObject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "opaque"
+        },
+        "id": {
+          "type": "string"
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "repr": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number",
+          "description": "Python only: bytes on a 64-bit CPython."
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "typeName",
+        "repr"
+      ],
+      "additionalProperties": false,
+      "description": "Anything we don't have a dedicated drawing for."
+    },
+    "LoopContext": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "type": "string"
+        },
+        "loop": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "number",
+          "description": "Increments each time the loop is entered again (e.g. an inner loop)."
+        },
+        "iteration": {
+          "type": "number",
+          "description": "0 while on the header before the first pass, then 1, 2, 3..."
+        },
+        "call": {
+          "type": "string",
+          "description": "The loop's header with its values as this run of it started: Python \"range(0, 4)\", JavaScript \"j = 0; j < 4; j++\". Only for counting loops."
+        }
+      },
+      "required": [
+        "frame",
+        "loop",
+        "instance",
+        "iteration"
+      ],
+      "additionalProperties": false,
+      "description": "Which loops are running at a step, and on which iteration."
+    },
+    "LoopInfo": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "for",
+            "while"
+          ]
+        },
+        "line": {
+          "type": "number"
+        },
+        "bodyStart": {
+          "type": "number"
+        },
+        "bodyEnd": {
+          "type": "number"
+        },
+        "header": {
+          "type": "string",
+          "description": "Source text of the loop header, e.g. \"for i in range(n)\"."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "line",
+        "bodyStart",
+        "bodyEnd",
+        "header"
+      ],
+      "additionalProperties": false
+    },
+    "GridAccess": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        },
+        "row": {
+          "type": "string"
+        },
+        "col": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "line",
+        "row",
+        "col"
+      ],
+      "additionalProperties": false
+    },
+    "TraceError": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "message",
+        "line"
+      ],
+      "additionalProperties": false
+    },
+    "RawHint": {
+      "type": "object",
+      "properties": {
+        "line": {
+          "type": "number"
+        },
+        "text": {
+          "type": "string",
+          "description": "Everything after \"viz:\", trimmed."
+        }
+      },
+      "required": [
+        "line",
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "A `# viz:` / `// viz:` comment, as written. Parsed by trace/hints.ts."
+    },
+    "CostInfo": {
+      "type": "object",
+      "properties": {
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CostFunction"
+          }
+        }
+      },
+      "required": [
+        "functions"
+      ],
+      "additionalProperties": false
+    },
+    "CostFunction": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "\"Global\" for the top level."
+        },
+        "line": {
+          "type": "number"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "memo": {
+          "type": "boolean",
+          "description": "Caches results in a dict or Map keyed by its arguments (memoization)."
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CostNode"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "line",
+        "params",
+        "memo",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "CostNode": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "loop"
+            },
+            "loop": {
+              "type": "string"
+            },
+            "line": {
+              "type": "number"
+            },
+            "bound": {
+              "$ref": "#/definitions/CostBound"
+            },
+            "body": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CostNode"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "bound",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "call"
+            },
+            "line": {
+              "type": "number"
+            },
+            "callee": {
+              "type": "string"
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/SizeRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "shrink": {
+              "$ref": "#/definitions/Shrink"
+            },
+            "alt": {
+              "type": "boolean",
+              "description": "`return f(...)`: one of several alternatives, only one of which runs per call."
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "callee",
+            "args",
+            "shrink"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "op"
+            },
+            "line": {
+              "type": "number"
+            },
+            "what": {
+              "type": "string"
+            },
+            "cost": {
+              "type": "string",
+              "enum": [
+                "linear",
+                "nlogn",
+                "log"
+              ]
+            },
+            "size": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/SizeRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "container": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "what",
+            "cost",
+            "size"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "alloc"
+            },
+            "line": {
+              "type": "number"
+            },
+            "what": {
+              "type": "string"
+            },
+            "sizes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SizeRef"
+              }
+            },
+            "name": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "line",
+            "what",
+            "sizes"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CostBound": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "size"
+            },
+            "sizes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SizeRef"
+              }
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "sizes",
+            "why"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "log"
+            },
+            "size": {
+              "$ref": "#/definitions/SizeRef"
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "size",
+            "why"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "const"
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "why"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "unknown"
+            },
+            "why": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "why"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "How many times a loop runs, each time it's reached."
+    },
+    "SizeRef": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "len": {
+          "type": "boolean"
+        },
+        "inner": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "description": "Something the running time can depend on, named as the program names it. `{ name: \"nums\", len: true }` is len(nums) / nums.length; `{ name: \"n\" }` is the value of n; `inner` is the length of one of its items (a row of a grid, a node's neighbor list). For an object, `len` is the number of objects of its kind reachable from it (a linked list's nodes). `name` can be dotted: \"self.items\"."
+    },
+    "Shrink": {
+      "type": "string",
+      "enum": [
+        "minus",
+        "half",
+        "child",
+        "same",
+        "unknown"
+      ],
+      "description": "How a recursive call's arguments compare with the parameters: `minus` (n - 1, i + 1, items[1:]), `half` (n // 2, items[:mid]), `child` (node.left: one step down a structure), `same`, or `unknown` (anything else, like a neighbor in a search)."
+    },
+    "VizHints": {
+      "type": "object",
+      "properties": {
+        "hide": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "show": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pointers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Extra index names, keyed like Trace.indexNames (\"nums\", \"grid[]\")."
+        },
+        "linked": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LinkedHint"
+          }
+        },
+        "graphs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GraphHint"
+          }
+        },
+        "plain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Variables or classes never to draw as a graph."
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "line": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name",
+              "line"
+            ],
+            "additionalProperties": false
+          },
+          "description": "`viz: size n = 40000, k`: input sizes, for Measure's growth runs."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "line": {
+                "type": "number"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "line",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Hints that couldn't be understood, to show to the person."
+        }
+      },
+      "required": [
+        "hide",
+        "show",
+        "pointers",
+        "linked",
+        "graphs",
+        "plain",
+        "sizes",
+        "warnings"
+      ],
+      "additionalProperties": false,
+      "description": "Parsed hints (trace/hints.ts), kept on the trace for the renderers."
+    },
+    "LinkedHint": {
+      "type": "object",
+      "properties": {
+        "shape": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "list"
+          ]
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "shape",
+        "typeName",
+        "links",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: tree Node(left, right)` or `viz: list Node(next)`."
+    },
+    "GraphHint": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "A variable (`adj`, `self.adj`) or, with `fields`, a class."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For a class: the fields that hold its neighbors."
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GraphOption"
+          }
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target",
+        "options",
+        "names",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: graph adj`, `viz: graph Node(neighbors)`, with options and the names of variables to draw on it: `viz: graph adj directed: seen, queue`."
+    },
+    "GraphOption": {
+      "type": "string",
+      "enum": [
+        "directed",
+        "undirected",
+        "circle",
+        "layered",
+        "force",
+        "matrix",
+        "edgelist"
+      ],
+      "description": "Options a `viz: graph` hint can carry."
+    }
+  }
+}

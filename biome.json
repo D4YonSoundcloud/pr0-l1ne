@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!!**/dist", "!!**/node_modules", "!**/package-lock.json", "!fixtures"]
+    "includes": ["**", "!!**/dist", "!!**/node_modules", "!**/package-lock.json", "!fixtures", "!schema"]
   },
   "formatter": {
     "enabled": true,
