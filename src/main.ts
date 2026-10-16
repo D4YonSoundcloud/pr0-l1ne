@@ -1,11 +1,13 @@
 import "./styles.css";
+import { ProgramsController } from "./app/programsController";
+import { AppStore } from "./app/state";
 import { type Appearance, applyAppearance, parseAppearance } from "./appearance";
 import { ComplexityPanel, costLabels } from "./complexityPanel";
 import { createEditor } from "./editor";
 import { type GrowthSeries, GrowthView } from "./growthView";
 import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
 import { MEASURE_LIMITS, MeasurePanel, measureLabels } from "./measurePanel";
-import { type Program, ProgramStore } from "./programs";
+import { ProgramStore } from "./programs";
 import { prefersReducedMotion } from "./render/animate";
 import { renderLoopHistory } from "./render/loopView";
 import { applyFocus, type MemoryMode, type Point, renderMemory } from "./render/memory";
@@ -49,17 +51,13 @@ const settings = createSettings();
 
 const savedCode = (id: LanguageId) => settings.code(id).get() ?? LANGUAGES[id].examples[0].code;
 
-// Saved programs, and which one (if any) is open in each language, so a
-// reload comes back to the same one.
+// Saved programs, and the app's state (the language, the open program...).
 const programs = new ProgramStore(settings.programStorage());
-const openProgramFor = (id: LanguageId) => programs.get(settings.openProgram(id).get()) ?? null;
+const app = new AppStore(settings, programs);
+const currentLanguage = () => app.get().language;
 
 // ---------------------------------------------------------------- state
 
-// First visit: JavaScript, which is ready at once. Python downloads about
-// 6 MB the first time, so it only loads when someone picks it.
-let language: LanguageId = settings.language.get() ?? "javascript";
-let currentProgram: Program | null = openProgramFor(language);
 let trace: Trace | null = null;
 let stepIndex = 0;
 let selectedLoop: string | null = null;
@@ -132,7 +130,7 @@ const els = {
 function showStatus(status: RunnerStatus): void {
   els.status.classList.toggle("is-error", status.kind === "failed");
   els.status.title =
-    status.kind === "loading" && language === "python"
+    status.kind === "loading" && currentLanguage() === "python"
       ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
       : status.kind === "failed"
         ? status.message
@@ -140,7 +138,9 @@ function showStatus(status: RunnerStatus): void {
   switch (status.kind) {
     case "loading":
       els.status.textContent =
-        language === "python" ? "Downloading Python (6 MB)…" : `Loading ${LANGUAGES[language].label}…`;
+        currentLanguage() === "python"
+          ? "Downloading Python (6 MB)…"
+          : `Loading ${LANGUAGES[currentLanguage()].label}…`;
       break;
     case "running":
       els.status.textContent = "Running…";
@@ -161,7 +161,7 @@ function runnerFor(id: LanguageId): Runner {
   let runner = runners.get(id);
   if (!runner) {
     runner = new Runner(LANGUAGES[id].createWorker, (status) => {
-      if (id === language) showStatus(status);
+      if (id === currentLanguage()) showStatus(status);
     });
     runners.set(id, runner);
   }
@@ -171,7 +171,7 @@ function runnerFor(id: LanguageId): Runner {
 let inFlight = false;
 let queued: { code: string; language: LanguageId; budget: Budget } | null = null;
 
-async function run(code: string, lang: LanguageId = language, budget: Budget = "run"): Promise<void> {
+async function run(code: string, lang: LanguageId = currentLanguage(), budget: Budget = "run"): Promise<void> {
   if (inFlight || measuring) {
     queued = { code, language: lang, budget }; // only the newest edit matters
     return;
@@ -181,7 +181,7 @@ async function run(code: string, lang: LanguageId = language, budget: Budget = "
   lastBudget = budget;
   inFlight = false;
   // Ignore results for a language the person has switched away from.
-  if (lang === language) {
+  if (lang === currentLanguage()) {
     if (outcome.kind === "trace" && !(outcome.trace.error && !outcome.trace.steps.length)) tracedCode = code;
     applyOutcome(outcome);
   }
@@ -336,8 +336,8 @@ const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript
 let sizesOn = settings.sizes.get();
 
 function sizeModel(): SizeModel {
-  const choices = SIZE_MODELS[sizeFamily(language)];
-  const saved = settings.sizeModel(sizeFamily(language)).get();
+  const choices = SIZE_MODELS[sizeFamily(currentLanguage())];
+  const saved = settings.sizeModel(sizeFamily(currentLanguage())).get();
   return choices.find((c) => c.value === saved)?.value ?? choices[0].value;
 }
 /** The model to draw sizes with, or null when sizes are off. */
@@ -345,7 +345,7 @@ const shownSizes = (): SizeModel | null => (sizesOn ? sizeModel() : null);
 
 function fillSizeModels(): void {
   els.sizeModel.replaceChildren(
-    ...SIZE_MODELS[sizeFamily(language)].map((c) => {
+    ...SIZE_MODELS[sizeFamily(currentLanguage())].map((c) => {
       const option = new Option(c.label, c.value);
       option.title = c.title;
       return option;
@@ -457,7 +457,7 @@ const complexityPanel = new ComplexityPanel({
  */
 let measuring = false;
 /** The language being measured (the runner to stop, if the person switches away). */
-let measuringLanguage: LanguageId = language;
+let measuringLanguage: LanguageId = currentLanguage();
 let measureLimit = settings.measureLimit.get() || 20_000;
 if (!MEASURE_LIMITS.some((l) => l.ms === measureLimit)) measureLimit = 20_000;
 let measureLabelsOn = settings.measureLabels.get();
@@ -486,14 +486,14 @@ const growthView = new GrowthView({
   suggestion: () => sizeSuggestion(editor.getCode()),
   addHint(name, line) {
     const lines = editor.getCode().split("\n");
-    const comment = language === "python" ? "#" : "//";
+    const comment = currentLanguage() === "python" ? "#" : "//";
     lines.splice(line - 1, 0, `${comment} viz: size ${name}`);
     editor.setCode(lines.join("\n"));
     growthView.render();
   },
   start: (scaled) => measureGrowth(scaled),
   stop: () => runnerFor(measuringLanguage).stopMeasure(),
-  kept: () => settings.growthKept(language),
+  kept: () => settings.growthKept(currentLanguage()),
 });
 
 const measurePanel = new MeasurePanel({
@@ -533,7 +533,9 @@ new MutationObserver(() => els.measureResults.setAttribute("aria-expanded", Stri
 
 /** Measure's result, when it's for the code in the editor now. */
 function currentMeasurement(): Measurement | null {
-  return measured && measured.language === language && measured.code === editor.getCode() ? measured.result : null;
+  return measured && measured.language === currentLanguage() && measured.code === editor.getCode()
+    ? measured.result
+    : null;
 }
 
 function updateMeasureLabels(): void {
@@ -557,7 +559,7 @@ function setMeasureButton(on: boolean): void {
 async function measureGrowth(scaled?: string[]): Promise<void> {
   if (measuring) return;
   const code = editor.getCode();
-  const lang = language;
+  const lang = currentLanguage();
   const { vars } = findSizes(code);
   const grow = scaled ?? vars.map((v) => v.name);
   const rungs = ladder(vars, grow);
@@ -611,7 +613,7 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   }
   measuring = false;
   setMeasureButton(false);
-  showStatus(runnerFor(language).status);
+  showStatus(runnerFor(currentLanguage()).status);
   // The code's estimate, from the trace of this same code.
   let expected = null;
   try {
@@ -620,7 +622,8 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   } catch {
     expected = null;
   }
-  if (lang === language) growthView.setResult({ label: "This version", x, scaled: grow, points, stopped, expected });
+  if (lang === currentLanguage())
+    growthView.setResult({ label: "This version", x, scaled: grow, points, stopped, expected });
   else growthView.setProgress(null);
   if (queued !== null) {
     const next = queued;
@@ -636,7 +639,7 @@ async function measureNow(): Promise<void> {
   }
   setPlaying(false);
   const code = editor.getCode();
-  const lang = language;
+  const lang = currentLanguage();
   measuring = true;
   measuringLanguage = lang;
   setMeasureButton(true);
@@ -644,7 +647,7 @@ async function measureNow(): Promise<void> {
   while (inFlight) await new Promise((r) => setTimeout(r, 30));
   const started = performance.now();
   const showProgress = (text: string) => {
-    if (lang === language) els.status.textContent = text;
+    if (lang === currentLanguage()) els.status.textContent = text;
   };
   showProgress("Measuring…");
   const tick = window.setInterval(() => showProgress(`Measuring… ${duration(performance.now() - started)}`), 500);
@@ -657,8 +660,8 @@ async function measureNow(): Promise<void> {
   window.clearInterval(tick);
   measuring = false;
   setMeasureButton(false);
-  showStatus(runnerFor(language).status);
-  if (lang === language) {
+  showStatus(runnerFor(currentLanguage()).status);
+  if (lang === currentLanguage()) {
     if (outcome.kind === "measured") {
       measured = { result: outcome.result, code, language: lang };
       updateComplexity();
@@ -791,7 +794,7 @@ els.dimOutput.addEventListener("click", () => {
   render(false);
 });
 els.sizeModel.addEventListener("change", () => {
-  settings.sizeModel(sizeFamily(language)).set(els.sizeModel.value);
+  settings.sizeModel(sizeFamily(currentLanguage())).set(els.sizeModel.value);
   render(false);
 });
 
@@ -1064,17 +1067,17 @@ let liveTimer = 0;
 let growthTimer = 0;
 const editor = createEditor(
   els.editor,
-  { monacoId: LANGUAGES[language].monacoId, code: savedCode(language) },
+  { monacoId: LANGUAGES[currentLanguage()].monacoId, code: savedCode(currentLanguage()) },
   {
     onChange(code) {
       setPlaying(false);
-      settings.code(language).set(code);
-      updateProgramUI();
+      settings.code(currentLanguage()).set(code);
+      programsController.updateUI();
       // The growth section reads the code's `viz: size` hints.
       window.clearTimeout(growthTimer);
       if (measurePanel.isOpen && !growthView.running) growthTimer = window.setTimeout(() => growthView.render(), 250);
       window.clearTimeout(liveTimer);
-      if (els.live.checked) liveTimer = window.setTimeout(() => run(code, language, "live"), LIVE_DELAY_MS);
+      if (els.live.checked) liveTimer = window.setTimeout(() => run(code, currentLanguage(), "live"), LIVE_DELAY_MS);
       // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
       if (measured) {
         updateMeasureLabels();
@@ -1084,8 +1087,8 @@ const editor = createEditor(
     // Also available from the command palette (F1) as "AlgoViz: ...".
     commands: {
       run: () => runNow(),
-      save: () => save(),
-      saveAs: () => saveAs(),
+      save: () => programsController.save(),
+      saveAs: () => programsController.saveAs(),
       nextStep: () => goTo(stepIndex + 1),
       prevStep: () => goTo(stepIndex - 1),
       firstStep: () => goTo(firstStep()),
@@ -1108,173 +1111,52 @@ function runNow(): void {
 
 // ---------------------------------------------------------------- saved programs
 
-function setOpenProgram(program: Program | null): void {
-  currentProgram = program;
-  settings.openProgram(language).set(program?.id ?? "");
-}
-
-/** Unsaved work: edits to a saved program, or code that's neither saved nor an example. */
-function hasUnsavedChanges(): boolean {
-  const code = editor.getCode();
-  if (currentProgram) return code !== currentProgram.code;
-  return code.trim() !== "" && !LANGUAGES[language].examples.some((example) => example.code === code);
-}
-
-function updateProgramUI(): void {
-  els.programName.textContent = currentProgram?.name ?? "Untitled";
-  els.programName.title = currentProgram?.name ?? "Not saved yet";
-  els.programName.classList.toggle("is-untitled", !currentProgram);
-  const dirty = hasUnsavedChanges();
-  els.programDirty.hidden = !dirty;
-  els.programDirtyLabel.textContent = dirty ? "Unsaved changes" : "";
-  els.delete.hidden = !currentProgram;
-}
-
-/** The "Open…" menu: your saved programs, then the examples. */
-function fillProgramMenu(): void {
-  els.programs.replaceChildren(new Option("Open…", "", true, true));
-  const saved = programs.list(language);
-  if (saved.length) {
-    const group = document.createElement("optgroup");
-    group.label = "Your programs";
-    for (const program of saved) group.append(new Option(program.name, `saved:${program.id}`));
-    els.programs.append(group);
-  }
-  // Examples, one group per topic, in the order the topics first appear.
-  const groups = new Map<string, HTMLOptGroupElement>();
-  for (const [index, example] of LANGUAGES[language].examples.entries()) {
-    const topic = example.group ?? "More";
-    let group = groups.get(topic);
-    if (!group) {
-      group = document.createElement("optgroup");
-      group.label = `Examples: ${topic}`;
-      groups.set(topic, group);
-      els.programs.append(group);
-    }
-    group.append(new Option(example.name, `example:${index}`));
-  }
-}
-
-function announce(message: string): void {
-  els.announce.textContent = message;
-}
-
-let savedTimer = 0;
-function showSaved(program: Program): void {
-  announce(`Saved "${program.name}"`);
-  els.save.textContent = "Saved";
-  window.clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    els.save.textContent = "Save";
-  }, 1200);
-}
-
-function writeProgram(name: string, id?: string): void {
-  try {
-    const program = programs.save({ id, name, language, code: editor.getCode() });
-    setOpenProgram(program);
-    fillProgramMenu();
-    updateProgramUI();
-    showSaved(program);
-  } catch (error) {
-    setBanner(escapeHtml(error instanceof Error ? error.message : String(error)));
-  }
-}
-
-/** Ctrl/Cmd + S: save over the open program, or ask for a name the first time. */
-function save(): void {
-  if (currentProgram) writeProgram(currentProgram.name, currentProgram.id);
-  else saveAs();
-}
-
-/** Ctrl/Cmd + Shift + S: always ask for a name. */
-function saveAs(): void {
-  if (els.saveDialog.open) return;
-  els.saveName.value = currentProgram?.name ?? "";
-  updateSaveHint();
-  els.saveDialog.returnValue = "";
-  els.saveDialog.showModal();
-  els.saveName.select();
-}
-
-function updateSaveHint(): void {
-  const existing = programs.findByName(language, els.saveName.value);
-  const replacing = !!existing && existing.id !== currentProgram?.id;
-  els.saveHint.textContent = replacing
-    ? `A ${LANGUAGES[language].label} program with this name already exists. Saving replaces it.`
-    : "Saved programs stay in this browser.";
-  els.saveHint.classList.toggle("is-warning", replacing);
-}
-
-els.saveName.addEventListener("input", updateSaveHint);
-els.saveDialog.querySelector<HTMLButtonElement>('button[value="cancel"]')!.addEventListener("click", (event) => {
-  event.preventDefault();
-  els.saveDialog.close("cancel");
-});
-els.saveDialog.addEventListener("close", () => {
-  if (els.saveDialog.returnValue !== "save") return;
-  const name = els.saveName.value.trim();
-  if (!name) return;
-  // Saving under an existing name replaces that program (the hint warned).
-  writeProgram(name, programs.findByName(language, name)?.id);
-  editor.editor.focus();
-});
-
-els.save.addEventListener("click", () => save());
-
-els.delete.addEventListener("click", () => {
-  if (!currentProgram) return;
-  if (!window.confirm(`Delete "${currentProgram.name}"? This can't be undone.`)) return;
-  const name = currentProgram.name;
-  programs.remove(currentProgram.id);
-  // The code stays in the editor, now as an unsaved program.
-  setOpenProgram(null);
-  fillProgramMenu();
-  updateProgramUI();
-  announce(`Deleted "${name}"`);
-});
-
-els.programs.addEventListener("change", () => {
-  const [kind, key] = els.programs.value.split(/:(.*)/s);
-  els.programs.value = "";
-  const program = kind === "saved" ? programs.get(key) : undefined;
-  const example = kind === "example" ? LANGUAGES[language].examples[Number(key)] : undefined;
-  if (!program && !example) return;
-  if (program && program.id === currentProgram?.id && !hasUnsavedChanges()) return;
-
-  if (hasUnsavedChanges()) {
-    const what = currentProgram ? `your changes to "${currentProgram.name}"` : "your unsaved program";
-    if (!window.confirm(`Discard ${what}?`)) return;
-  }
+/** Load code into the editor as a newly opened program, and run it. */
+function loadProgram(code: string): void {
   selectedLoop = null;
   clearLayout(); // a different program has different boxes
   memoryView.restartAutoFit();
   loopView.restartAutoFit();
-  setOpenProgram(program ?? null); // before setCode, so the dirty dot is right
-  editor.setCode(program?.code ?? example!.code);
-  updateProgramUI();
+  editor.setCode(code);
   runNow();
+}
+
+const programsController = new ProgramsController({
+  app,
+  programs,
+  els: {
+    menu: els.programs,
+    name: els.programName,
+    dirty: els.programDirty,
+    dirtyLabel: els.programDirtyLabel,
+    save: els.save,
+    delete: els.delete,
+    dialog: els.saveDialog,
+    dialogName: els.saveName,
+    dialogHint: els.saveHint,
+    announce: els.announce,
+  },
+  editor: { getCode: () => editor.getCode(), focus: () => editor.editor.focus() },
+  load: loadProgram,
+  showError: (message) => setBanner(escapeHtml(message)),
 });
 
 // ---------------------------------------------------------------- controls
 
 for (const lang of Object.values(LANGUAGES)) els.language.append(new Option(lang.label, lang.id));
-els.language.value = language;
+els.language.value = currentLanguage();
 els.language.addEventListener("change", () => {
-  if (!isLanguageId(els.language.value) || els.language.value === language) return;
+  if (!isLanguageId(els.language.value) || els.language.value === currentLanguage()) return;
   window.clearTimeout(liveTimer);
-  language = els.language.value;
-  settings.language.set(language);
-  currentProgram = openProgramFor(language);
-  editor.setLanguage(LANGUAGES[language].monacoId, savedCode(language));
-  fillProgramMenu();
+  app.setLanguage(els.language.value); // also reopens that language's program and refills the Open menu
+  editor.setLanguage(LANGUAGES[currentLanguage()].monacoId, savedCode(currentLanguage()));
   fillSizeModels();
-  updateProgramUI();
+  programsController.updateUI();
   growthView.reload();
   // A trace from the other language has nothing to do with this code.
   trace = null;
   if (measuring) runnerFor(measuringLanguage).stopMeasure();
-  els.measureResults.hidden = !measured || measured.language !== language;
+  els.measureResults.hidden = !measured || measured.language !== currentLanguage();
   measurePanel.toggle(false);
   updateMeasureLabels();
   updateComplexity();
@@ -1286,17 +1168,15 @@ els.language.addEventListener("change", () => {
   stale = false;
   setBanner(null);
   render();
-  showStatus(runnerFor(language).status);
+  showStatus(runnerFor(currentLanguage()).status);
   runNow();
 });
-fillProgramMenu();
 fillSizeModels();
 els.sizes.setAttribute("aria-pressed", String(sizesOn));
 els.showOutput.setAttribute("aria-pressed", String(outputOn));
 els.dimOutput.setAttribute("aria-pressed", String(dimForOutput));
 els.dimOutput.disabled = !outputOn;
 els.sizeModel.hidden = !sizesOn;
-updateProgramUI();
 
 els.run.addEventListener("click", () => runNow());
 els.banner.addEventListener("click", (e) => {
@@ -1343,8 +1223,8 @@ document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
     event.preventDefault();
     if (!els.saveDialog.open) {
-      if (event.shiftKey) saveAs();
-      else save();
+      if (event.shiftKey) programsController.saveAs();
+      else programsController.save();
     }
     return;
   }

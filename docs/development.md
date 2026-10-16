@@ -74,6 +74,26 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer (the code-shape analysis, the `Serializer` and the helpers) is tested directly in `test_analysis.py` and `test_serializer.py`.
 
 
+
+## How the app is put together
+
+`src/main.ts` is being split into small pieces, one concern at a time (the code health plan's W3). The pieces so far:
+
+| File | What it does |
+| --- | --- |
+| `src/settings.ts` | Everything saved between visits (see "Saved settings") |
+| `src/app/store.ts` | A small store: one state object, changed by named actions, with listeners |
+| `src/app/state.ts` | The app's state (`language`, the open `program`) and its actions (`setLanguage`, `setProgram`), which also save what's remembered |
+| `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
+
+How the pieces talk:
+
+- **Controllers read the state** with `app.get()`.
+- **They change it only through actions.** For example, `app.setLanguage("python")` also reopens the program that was open in Python.
+- **They react to changes** with `app.watch(...)`. When the language changes, the programs controller refills its menu, so `main.ts` doesn't have to remember to.
+- **Each controller takes its page elements and helpers as arguments,** so its tests (`*.test.ts` beside it, in a jsdom page) build a small page and check what a person would see.
+- **`src/app/elements.test.ts` guards the page itself.** It checks that every element `main.ts` looks up by id exists in `index.html`; a missing one would stop the app as it starts.
+
 ## Saved settings
 
 Everything the app remembers between visits (the language, the code, saved programs, panel sizes, the Style panel, playback speed...) is defined in `src/settings.ts`. Nothing else reads or writes `localStorage`.

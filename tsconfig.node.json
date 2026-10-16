@@ -16,7 +16,8 @@
     "src/examples/golden.test.ts",
     "src/trace/gridFocus.test.ts",
     "src/testing/**/*.ts",
-    "src/trace/conformance.test.ts"
+    "src/trace/conformance.test.ts",
+    "src/app/elements.test.ts"
   ],
   "exclude": []
 }
