@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type ProgramStorage, ProgramStore, StorageFullError } from "./programs";
+import { PROGRAMS_KEY } from "./settings";
 
 function fakeStorage(): ProgramStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -53,10 +54,10 @@ describe("ProgramStore", () => {
 
   it("ignores corrupt or malformed data", () => {
     const storage = fakeStorage();
-    storage.data.set("algoviz:programs", "{not json");
+    storage.data.set(PROGRAMS_KEY, "{not json");
     expect(new ProgramStore(storage).list("python")).toEqual([]);
     storage.data.set(
-      "algoviz:programs",
+      PROGRAMS_KEY,
       JSON.stringify([{ id: 1 }, { id: "a", name: "ok", language: "python", code: "", updatedAt: 1 }]),
     );
     expect(new ProgramStore(storage).list("python").map((p) => p.name)).toEqual(["ok"]);

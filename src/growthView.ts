@@ -5,6 +5,7 @@
  * earlier versions kept to compare against.
  */
 
+import type { Setting } from "./settings";
 import { h } from "./stylePanel";
 import {
   compareGrowth,
@@ -42,8 +43,8 @@ export interface GrowthViewOptions {
   addHint(name: string, line: number): void;
   start(scaled: string[]): void;
   stop(): void;
-  /** Kept series are stored per language family. */
-  storageKey(): string;
+  /** Where kept series are saved (per language, see settings.ts). */
+  kept(): Setting<string | null>;
 }
 
 const COLORS = ["#7cc4ff", "#ffb37a", "#8be08b", "#d6a4ff", "#ff8fb1", "#f2e27a"];
@@ -97,7 +98,7 @@ export class GrowthView {
 
   private loadKept(): void {
     try {
-      const raw = localStorage.getItem(this.options.storageKey());
+      const raw = this.options.kept().get();
       this.kept = raw ? (JSON.parse(raw) as GrowthSeries[]).slice(0, MAX_KEPT) : [];
     } catch {
       this.kept = [];
@@ -105,11 +106,7 @@ export class GrowthView {
   }
 
   private saveKept(): void {
-    try {
-      localStorage.setItem(this.options.storageKey(), JSON.stringify(this.kept));
-    } catch {
-      // storage unavailable: kept for this visit only
-    }
+    this.options.kept().set(JSON.stringify(this.kept));
   }
 
   render(): void {

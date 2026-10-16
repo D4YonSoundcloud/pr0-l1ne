@@ -1,11 +1,13 @@
 /**
- * Saved programs, kept in the browser's localStorage.
+ * Saved programs, kept in the browser's localStorage under PROGRAMS_KEY
+ * (settings.ts owns every storage key).
  *
  * Each program belongs to one language. Everything is stored under a single
  * key as a JSON array, which is plenty for hand-written programs (browsers
  * allow about 5 MB per site).
  */
 import { isLanguageId, type LanguageId } from "./languages";
+import { PROGRAMS_KEY } from "./settings";
 
 export interface Program {
   id: string;
@@ -19,7 +21,7 @@ export interface Program {
 /** The part of the Storage API we use, so tests can pass a fake. */
 export type ProgramStorage = Pick<Storage, "getItem" | "setItem">;
 
-const STORAGE_KEY = "algoviz:programs";
+const STORAGE_KEY = PROGRAMS_KEY;
 
 export class StorageFullError extends Error {
   constructor() {

@@ -73,6 +73,16 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer (the code-shape analysis, the `Serializer` and the helpers) is tested directly in `test_analysis.py` and `test_serializer.py`.
 
+
+## Saved settings
+
+Everything the app remembers between visits (the language, the code, saved programs, panel sizes, the Style panel, playback speed...) is defined in `src/settings.ts`. Nothing else reads or writes `localStorage`.
+
+- **Reading and writing:** `settings.speed.get()`, `settings.code("python").set(code)`. Each setting has a type and a default, so a missing or garbled saved value comes back as the default.
+- **Keys** are `pr0l1ne:<name>`. Before settings version 1 they were `algoviz:<name>`. The first visit after the change copies every old key over once, and leaves the old keys in place so an older build still works.
+- **Changing a key or format:** bump `SETTINGS_VERSION` and add a step to `MIGRATIONS`, so people keep what they saved. Add a test for it in `settings.test.ts`.
+- **When storage is unavailable** (some privacy modes), settings last for the visit only.
+
 ## Code style
 
 Formatting and lint rules are automatic, so nobody has to think about spacing or argue about style:

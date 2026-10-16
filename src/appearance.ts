@@ -411,5 +411,3 @@ export function applyAppearance(
     setGridSize(name, p.gridSize);
   }
 }
-
-export const APPEARANCE_KEY = "algoviz:appearance";

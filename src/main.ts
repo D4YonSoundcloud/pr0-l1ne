@@ -1,5 +1,5 @@
 import "./styles.css";
-import { APPEARANCE_KEY, type Appearance, applyAppearance, parseAppearance } from "./appearance";
+import { type Appearance, applyAppearance, parseAppearance } from "./appearance";
 import { ComplexityPanel, costLabels } from "./complexityPanel";
 import { createEditor } from "./editor";
 import { type GrowthSeries, GrowthView } from "./growthView";
@@ -10,6 +10,7 @@ import { prefersReducedMotion } from "./render/animate";
 import { renderLoopHistory } from "./render/loopView";
 import { applyFocus, type MemoryMode, type Point, renderMemory } from "./render/memory";
 import { type AutoFit, Viewport } from "./render/viewport";
+import { createSettings, type Setting } from "./settings";
 import { StylePanel } from "./stylePanel";
 import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
@@ -40,61 +41,31 @@ const RUN_SECONDS = 6;
 type Budget = "live" | "run";
 let lastBudget: Budget = "run";
 const LIVE_DELAY_MS = 600;
-const LANGUAGE_KEY = "algoviz:language";
-const codeKey = (id: LanguageId) => `algoviz:code:${id}`;
 
-// ---------------------------------------------------------------- storage
+// ---------------------------------------------------------------- settings
 
-function stored(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null; // storage can be unavailable (privacy modes, sandboxes)
-  }
-}
+/** Everything remembered between visits (see settings.ts). */
+const settings = createSettings();
 
-function store(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* ignore */
-  }
-}
+const savedCode = (id: LanguageId) => settings.code(id).get() ?? LANGUAGES[id].examples[0].code;
 
-// Code saved before JavaScript support existed was always Python.
-const legacyCode = stored("algoviz:code");
-if (legacyCode !== null && stored(codeKey("python")) === null) store(codeKey("python"), legacyCode);
-
-const savedCode = (id: LanguageId) => stored(codeKey(id)) ?? LANGUAGES[id].examples[0].code;
-
-// Saved programs. `openKey` remembers which saved program (if any) is open in
-// each language, so a reload comes back to the same one.
-const programs = new ProgramStore(
-  (() => {
-    try {
-      return window.localStorage;
-    } catch {
-      return null;
-    }
-  })(),
-);
-const openKey = (id: LanguageId) => `algoviz:open:${id}`;
-const openProgramFor = (id: LanguageId) => programs.get(stored(openKey(id))) ?? null;
+// Saved programs, and which one (if any) is open in each language, so a
+// reload comes back to the same one.
+const programs = new ProgramStore(settings.programStorage());
+const openProgramFor = (id: LanguageId) => programs.get(settings.openProgram(id).get()) ?? null;
 
 // ---------------------------------------------------------------- state
 
-const savedLanguage = stored(LANGUAGE_KEY);
 // First visit: JavaScript, which is ready at once. Python downloads about
 // 6 MB the first time, so it only loads when someone picks it.
-let language: LanguageId = isLanguageId(savedLanguage) ? savedLanguage : "javascript";
+let language: LanguageId = settings.language.get() ?? "javascript";
 let currentProgram: Program | null = openProgramFor(language);
 let trace: Trace | null = null;
 let stepIndex = 0;
 let selectedLoop: string | null = null;
 let hideQuiet = true;
 /** Loop history: containers one above another instead of side by side. */
-const LOOP_VERTICAL_KEY = "algoviz:loop-vertical";
-let loopVertical = stored(LOOP_VERTICAL_KEY) === "on";
+let loopVertical = settings.loopVertical.get();
 let stale = false;
 
 // ---------------------------------------------------------------- elements
@@ -343,12 +314,11 @@ function describe(step: Step, prev: Step | undefined): string {
 const positions = new Map<string, Point>();
 
 // Arrows, or objects drawn inside the thing that refers to them.
-const MODE_KEY = "algoviz:memory-mode";
-let memoryMode: MemoryMode = stored(MODE_KEY) === "nested" ? "nested" : "arrows";
+let memoryMode: MemoryMode = settings.memoryMode.get();
 
 function setMemoryMode(mode: MemoryMode): void {
   memoryMode = mode;
-  store(MODE_KEY, mode);
+  settings.memoryMode.set(mode);
   els.modeArrows.setAttribute("aria-pressed", String(mode === "arrows"));
   els.modeNested.setAttribute("aria-pressed", String(mode === "nested"));
   renderMemoryView();
@@ -357,21 +327,17 @@ let draggingNode: string | null = null;
 
 // Memory sizes: on or off, and which model, per language family (Python
 // has its own real sizes; JavaScript and TypeScript share theirs).
-const OUTPUT_KEY = "algoviz:show-output";
 /** On a step that prints, show the output on the canvas and dim the rest. */
-let outputOn = stored(OUTPUT_KEY) !== "off";
-const OUTPUT_DIM_KEY = "algoviz:dim-output";
+let outputOn = settings.showOutput.get();
 /** ...and dim everything else while it's shown (off unless turned on). */
-let dimForOutput = stored(OUTPUT_DIM_KEY) === "on";
+let dimForOutput = settings.dimOutput.get();
 
-const SIZES_KEY = "algoviz:sizes";
 const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript");
-const sizeModelKey = (id: LanguageId) => `algoviz:size-model:${sizeFamily(id)}`;
-let sizesOn = stored(SIZES_KEY) === "on";
+let sizesOn = settings.sizes.get();
 
 function sizeModel(): SizeModel {
   const choices = SIZE_MODELS[sizeFamily(language)];
-  const saved = stored(sizeModelKey(language));
+  const saved = settings.sizeModel(sizeFamily(language)).get();
   return choices.find((c) => c.value === saved)?.value ?? choices[0].value;
 }
 /** The model to draw sizes with, or null when sizes are off. */
@@ -390,7 +356,7 @@ function fillSizeModels(): void {
 
 function setSizes(on: boolean): void {
   sizesOn = on;
-  store(SIZES_KEY, on ? "on" : "off");
+  settings.sizes.set(on);
   els.sizes.setAttribute("aria-pressed", String(on));
   els.sizeModel.hidden = !on;
   render(false);
@@ -408,10 +374,9 @@ function updateMemoryTotal(): void {
 }
 
 /** Auto-fit (see Viewport) is remembered per window. */
-const autoFitKey = (pane: "memory" | "loop") => `algoviz:auto-fit:${pane}`;
 function storedAutoFit(pane: "memory" | "loop"): AutoFit {
   try {
-    const raw = JSON.parse(stored(autoFitKey(pane)) ?? "null") as Partial<AutoFit> | null;
+    const raw = JSON.parse(settings.autoFit(pane).get() ?? "null") as Partial<AutoFit> | null;
     return { on: raw?.on === true, mode: raw?.mode === "both" ? "both" : "out" };
   } catch {
     return { on: false, mode: "out" };
@@ -426,11 +391,11 @@ const memoryView = new Viewport(els.memory, {
     renderMemoryView();
     updateResetLayout();
   },
-  onAutoFitChange: (state) => store(autoFitKey("memory"), JSON.stringify(state)),
+  onAutoFitChange: (state) => settings.autoFit("memory").set(JSON.stringify(state)),
 });
 const loopView = new Viewport(els.loop, {
   label: "Loop history",
-  onAutoFitChange: (state) => store(autoFitKey("loop"), JSON.stringify(state)),
+  onAutoFitChange: (state) => settings.autoFit("loop").set(JSON.stringify(state)),
 });
 memoryView.setAutoFit(storedAutoFit("memory"), false);
 loopView.setAutoFit(storedAutoFit("loop"), false);
@@ -438,7 +403,7 @@ loopView.setAutoFit(storedAutoFit("loop"), false);
 // ---------------------------------------------------------------- style
 
 /** How the canvas looks (the Style panel). Applied as CSS variables, live. */
-let appearance: Appearance = parseAppearance(stored(APPEARANCE_KEY));
+let appearance: Appearance = parseAppearance(settings.appearance.get());
 let saveAppearanceTimer = 0;
 function setAppearance(next: Appearance): void {
   appearance = next;
@@ -449,7 +414,7 @@ function setAppearance(next: Appearance): void {
   memoryView.setZoomAnimation(appearance.memory.duration, appearance.memory.easing);
   loopView.setZoomAnimation(appearance.loop.duration, appearance.loop.easing);
   window.clearTimeout(saveAppearanceTimer);
-  saveAppearanceTimer = window.setTimeout(() => store(APPEARANCE_KEY, JSON.stringify(appearance)), 250);
+  saveAppearanceTimer = window.setTimeout(() => settings.appearance.set(JSON.stringify(appearance)), 250);
 }
 setAppearance(appearance);
 const stylePanel = new StylePanel({
@@ -466,8 +431,7 @@ const stylePanel = new StylePanel({
 
 // ---------------------------------------------------------------- complexity
 
-const COST_LABELS_KEY = "algoviz:complexity-labels";
-let costLabelsOn = stored(COST_LABELS_KEY) !== "off";
+let costLabelsOn = settings.complexityLabels.get();
 const complexityPanel = new ComplexityPanel({
   host: els.editorPane,
   button: els.complexity,
@@ -475,7 +439,7 @@ const complexityPanel = new ComplexityPanel({
   labelsShown: () => costLabelsOn,
   setLabelsShown(on) {
     costLabelsOn = on;
-    store(COST_LABELS_KEY, on ? "on" : "off");
+    settings.complexityLabels.set(on);
     updateComplexity();
   },
   onOpen: () => {
@@ -491,14 +455,12 @@ const complexityPanel = new ComplexityPanel({
  * trace (see trace/measurement.ts). Runs only when asked: never on every
  * edit, since a big run can take a while. Live runs wait until it's done.
  */
-const MEASURE_LIMIT_KEY = "algoviz:measure-limit";
-const MEASURE_LABELS_KEY = "algoviz:measure-labels";
 let measuring = false;
 /** The language being measured (the runner to stop, if the person switches away). */
 let measuringLanguage: LanguageId = language;
-let measureLimit = Number(stored(MEASURE_LIMIT_KEY)) || 20_000;
+let measureLimit = settings.measureLimit.get() || 20_000;
 if (!MEASURE_LIMITS.some((l) => l.ms === measureLimit)) measureLimit = 20_000;
-let measureLabelsOn = stored(MEASURE_LABELS_KEY) !== "off";
+let measureLabelsOn = settings.measureLabels.get();
 /** The last measurement and the code it was for (labels are hidden once the code changes). */
 let measured: { result: Measurement; code: string; language: LanguageId } | null = null;
 
@@ -531,7 +493,7 @@ const growthView = new GrowthView({
   },
   start: (scaled) => measureGrowth(scaled),
   stop: () => runnerFor(measuringLanguage).stopMeasure(),
-  storageKey: () => `algoviz:growth-kept:${language}`,
+  kept: () => settings.growthKept(language),
 });
 
 const measurePanel = new MeasurePanel({
@@ -542,13 +504,13 @@ const measurePanel = new MeasurePanel({
   labelsShown: () => measureLabelsOn,
   setLabelsShown(on) {
     measureLabelsOn = on;
-    store(MEASURE_LABELS_KEY, on ? "on" : "off");
+    settings.measureLabels.set(on);
     updateMeasureLabels();
   },
   limit: () => measureLimit,
   setLimit(ms) {
     measureLimit = ms;
-    store(MEASURE_LIMIT_KEY, String(ms));
+    settings.measureLimit.set(ms);
   },
   measureAgain: () => measureNow(),
   estimate: () => {
@@ -817,19 +779,19 @@ setMemoryMode(memoryMode);
 els.sizes.addEventListener("click", () => setSizes(!sizesOn));
 els.showOutput.addEventListener("click", () => {
   outputOn = !outputOn;
-  store(OUTPUT_KEY, outputOn ? "on" : "off");
+  settings.showOutput.set(outputOn);
   els.showOutput.setAttribute("aria-pressed", String(outputOn));
   els.dimOutput.disabled = !outputOn;
   render(false);
 });
 els.dimOutput.addEventListener("click", () => {
   dimForOutput = !dimForOutput;
-  store(OUTPUT_DIM_KEY, dimForOutput ? "on" : "off");
+  settings.dimOutput.set(dimForOutput);
   els.dimOutput.setAttribute("aria-pressed", String(dimForOutput));
   render(false);
 });
 els.sizeModel.addEventListener("change", () => {
-  store(sizeModelKey(language), els.sizeModel.value);
+  settings.sizeModel(sizeFamily(language)).set(els.sizeModel.value);
   render(false);
 });
 
@@ -1008,12 +970,11 @@ function animationFor(pane: "memory" | "loop"): {
 }
 
 // Loop history: a row per iteration, or one live row that animates.
-const LOOP_MODE_KEY = "algoviz:loop-mode";
-let loopMode: "stacked" | "animated" = stored(LOOP_MODE_KEY) === "animated" ? "animated" : "stacked";
+let loopMode: "stacked" | "animated" = settings.loopMode.get();
 
 function setLoopMode(mode: "stacked" | "animated"): void {
   loopMode = mode;
-  store(LOOP_MODE_KEY, mode);
+  settings.loopMode.set(mode);
   els.loopStacked.setAttribute("aria-pressed", String(mode === "stacked"));
   els.loopAnimated.setAttribute("aria-pressed", String(mode === "animated"));
   render(false);
@@ -1034,8 +995,8 @@ function liveRows(t: Trace, index: number, history: LoopHistory): { prev: LoopRo
 
 // Playback: step forward on a timer.
 const SPEEDS = [0.5, 1, 2, 4, 8, 16];
-const SPEED_KEY = "algoviz:speed";
-let speed = SPEEDS.includes(Number(stored(SPEED_KEY))) ? Number(stored(SPEED_KEY)) : 2;
+const savedSpeed = settings.speed.get();
+let speed = savedSpeed !== null && SPEEDS.includes(savedSpeed) ? savedSpeed : 2;
 let playing = false;
 let playTimer = 0;
 
@@ -1088,7 +1049,7 @@ for (const value of SPEEDS) {
 }
 els.speed.addEventListener("change", () => {
   speed = Number(els.speed.value);
-  store(SPEED_KEY, String(speed));
+  settings.speed.set(speed);
   if (playing) setPlaying(true); // restart the timer at the new speed
 });
 els.play.addEventListener("click", () => setPlaying(!playing));
@@ -1107,7 +1068,7 @@ const editor = createEditor(
   {
     onChange(code) {
       setPlaying(false);
-      store(codeKey(language), code);
+      settings.code(language).set(code);
       updateProgramUI();
       // The growth section reads the code's `viz: size` hints.
       window.clearTimeout(growthTimer);
@@ -1149,7 +1110,7 @@ function runNow(): void {
 
 function setOpenProgram(program: Program | null): void {
   currentProgram = program;
-  store(openKey(language), program?.id ?? "");
+  settings.openProgram(language).set(program?.id ?? "");
 }
 
 /** Unsaved work: edits to a saved program, or code that's neither saved nor an example. */
@@ -1303,7 +1264,7 @@ els.language.addEventListener("change", () => {
   if (!isLanguageId(els.language.value) || els.language.value === language) return;
   window.clearTimeout(liveTimer);
   language = els.language.value;
-  store(LANGUAGE_KEY, language);
+  settings.language.set(language);
   currentProgram = openProgramFor(language);
   editor.setLanguage(LANGUAGES[language].monacoId, savedCode(language));
   fillProgramMenu();
@@ -1350,7 +1311,7 @@ els.hideQuiet.addEventListener("change", () => {
 els.loopVertical.checked = loopVertical;
 els.loopVertical.addEventListener("change", () => {
   loopVertical = els.loopVertical.checked;
-  store(LOOP_VERTICAL_KEY, loopVertical ? "on" : "off");
+  settings.loopVertical.set(loopVertical);
   render();
 });
 els.first.addEventListener("click", () => goTo(firstStep()));
@@ -1427,7 +1388,8 @@ interface DividerOptions {
   min: number;
   max: number;
   initial: number;
-  storageKey: string;
+  /** Where the position is remembered. */
+  saved: Setting<number | null>;
   /** Apply a value (a percentage). */
   apply(value: number): void;
   /**
@@ -1441,15 +1403,15 @@ interface DividerOptions {
 
 /** A draggable, keyboard-operable divider whose position is remembered. */
 function makeDivider(divider: HTMLElement, options: DividerOptions): (value: number) => void {
-  const { axis, container, min, max, initial, storageKey } = options;
+  const { axis, container, min, max, initial, saved } = options;
   let value = initial;
   const set = (next: number) => {
     value = Math.round(Math.max(min, Math.min(max, next)));
     options.apply(value);
     divider.setAttribute("aria-valuenow", String(value));
-    store(storageKey, String(value));
+    saved.set(value);
   };
-  set(Number(stored(storageKey)) || initial);
+  set(saved.get() || initial);
 
   divider.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
@@ -1489,8 +1451,7 @@ function makeDivider(divider: HTMLElement, options: DividerOptions): (value: num
 
 // The editor/canvas split. The value is always the editor's share of the
 // width, whichever side it's on.
-const LAYOUT_KEY = "algoviz:layout";
-let swapped = stored(LAYOUT_KEY) === "swapped";
+let swapped = settings.swapped.get();
 
 makeDivider(els.divider, {
   axis: "x",
@@ -1498,7 +1459,7 @@ makeDivider(els.divider, {
   min: 20,
   max: 75,
   initial: 40,
-  storageKey: "algoviz:split",
+  saved: settings.split,
   apply: (value) => els.workspace.style.setProperty("--split", `${value}%`),
   // Dragging or pressing arrows moves the divider itself, so which way the
   // editor grows depends on which side it's on.
@@ -1514,14 +1475,14 @@ makeDivider(els.canvasDivider, {
   min: 15,
   max: 85,
   initial: 55,
-  storageKey: "algoviz:canvas-split",
+  saved: settings.canvasSplit,
   apply: (value) => els.canvas.style.setProperty("--canvas-split", `${value}%`),
 });
 
 /** Put the canvas on the left (or back on the right). */
 function setSwapped(value: boolean): void {
   swapped = value;
-  store(LAYOUT_KEY, swapped ? "swapped" : "normal");
+  settings.swapped.set(swapped);
   // Reorder the DOM, not just the visual order, so Tab moves through the
   // panes in the order they appear.
   const order = swapped ? [els.canvasPane, els.divider, els.editorPane] : [els.editorPane, els.divider, els.canvasPane];
