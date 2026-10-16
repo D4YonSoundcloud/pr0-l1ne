@@ -1,4 +1,5 @@
 import "./styles.css";
+import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
 import { AppStore } from "./app/state";
 import { type Appearance, applyAppearance, parseAppearance } from "./appearance";
@@ -59,7 +60,6 @@ const currentLanguage = () => app.get().language;
 // ---------------------------------------------------------------- state
 
 let trace: Trace | null = null;
-let stepIndex = 0;
 let selectedLoop: string | null = null;
 let hideQuiet = true;
 /** Loop history: containers one above another instead of side by side. */
@@ -124,6 +124,27 @@ const els = {
   memorySection: byId<HTMLElement>("memory-section"),
   loopSection: byId<HTMLElement>("loop-section"),
 };
+
+// ---------------------------------------------------------------- playback
+
+const currentStep = () => app.get().stepIndex;
+
+const playback = new PlaybackController({
+  app,
+  els: {
+    play: els.play,
+    speed: els.speed,
+    first: els.first,
+    prev: els.prev,
+    next: els.next,
+    last: els.last,
+    scrubber: els.scrubber,
+  },
+  stepCount: () => trace?.steps.length ?? 0,
+  show: () => render(),
+  ownsKeys: (target) => !!target.closest(".style-panel"),
+  reducedMotion: prefersReducedMotion,
+});
 
 // ---------------------------------------------------------------- running code
 
@@ -253,12 +274,14 @@ function applyOutcome(outcome: RunOutcome): void {
   }
 
   // Stay on the last step if we were there, so live edits show the result.
-  const wasAtEnd = !trace || stepIndex >= trace.steps.length - 1;
+  const wasAtEnd = !trace || currentStep() >= trace.steps.length - 1;
   trace = applyHints(next);
   const warnings = trace.viz?.warnings ?? [];
   editor.setHintWarnings(warnings);
   stale = false;
-  stepIndex = wasAtEnd ? trace.steps.length - 1 : Math.max(firstStep(), Math.min(stepIndex, trace.steps.length - 1));
+  app.setStep(
+    wasAtEnd ? trace.steps.length - 1 : Math.max(playback.firstStep(), Math.min(currentStep(), trace.steps.length - 1)),
+  );
 
   if (trace.truncated) {
     setBanner(truncationBanner(trace));
@@ -365,7 +388,7 @@ function setSizes(on: boolean): void {
 /** "Program: 1.4 KB" in the memory header, for the step on screen. */
 function updateMemoryTotal(): void {
   const model = shownSizes();
-  const step = trace?.steps[stepIndex];
+  const step = trace?.steps[currentStep()];
   els.memoryTotal.hidden = !model || !step;
   if (!model || !step) return;
   const sizes = stepSizes(step, model);
@@ -422,7 +445,7 @@ const stylePanel = new StylePanel({
   button: els.style,
   get: () => appearance,
   set: setAppearance,
-  replay: () => replayStep(),
+  replay: () => playback.replay(),
   onOpen: () => {
     complexityPanel.toggle(false);
     measurePanel.toggle(false);
@@ -568,7 +591,7 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
     growthView.render();
     return;
   }
-  setPlaying(false);
+  playback.setPlaying(false);
   measuring = true;
   measuringLanguage = lang;
   setMeasureButton(true);
@@ -637,7 +660,7 @@ async function measureNow(): Promise<void> {
     runnerFor(measuringLanguage).stopMeasure();
     return;
   }
-  setPlaying(false);
+  playback.setPlaying(false);
   const code = editor.getCode();
   const lang = currentLanguage();
   measuring = true;
@@ -709,17 +732,6 @@ function updateComplexity(): void {
   }, 0);
 }
 
-/** Draw the step before this one, then animate into this one (previews easing). */
-function replayStep(): void {
-  if (!trace) return;
-  const target = stepIndex;
-  const from = target > firstStep() ? target - 1 : target + 1;
-  if (from >= trace.steps.length) return;
-  stepIndex = from;
-  render(false);
-  goTo(target);
-}
-
 const resetLayoutButton = memoryView.addControl("Reset layout", "Put every box back in its automatic position", () => {
   positions.clear();
   renderMemoryView();
@@ -739,6 +751,7 @@ updateResetLayout();
 
 function renderMemoryView(): void {
   if (!trace?.steps.length) return;
+  const stepIndex = currentStep();
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
   const animation = animationFor("memory");
   memoryView.setContent(
@@ -798,28 +811,11 @@ els.sizeModel.addEventListener("change", () => {
   render(false);
 });
 
-/**
- * The first step worth showing. Every trace starts with "called Global" and
- * "next is line 1", which both show an empty program, so the timeline starts
- * at the third step: the state after line 1 ran.
- */
-const SKIPPED_STEPS = 2;
-function firstStep(): number {
-  return trace ? Math.max(0, Math.min(SKIPPED_STEPS, trace.steps.length - 1)) : 0;
-}
-
 function render(updateMarks = true): void {
   els.canvas.classList.toggle("is-stale", stale);
   const total = trace?.steps.length ?? 0;
-  const first = firstStep();
-
-  els.scrubber.min = String(first);
-  els.scrubber.max = String(Math.max(first, total - 1));
-  els.scrubber.value = String(stepIndex);
-  els.scrubber.disabled = total - first <= 1;
-  els.play.disabled = total - first <= 1;
-  els.first.disabled = els.prev.disabled = stepIndex <= first;
-  els.next.disabled = els.last.disabled = stepIndex >= total - 1;
+  const stepIndex = currentStep();
+  playback.updateControls();
 
   if (!trace || !total) {
     memoryView.setContent(null, "Write some code and press Run. Variables, objects and scopes appear here.");
@@ -931,29 +927,7 @@ function render(updateMarks = true): void {
   }
 }
 
-/**
- * Move to a step. A single step forward or back animates (from the previous
- * drawing to the new one); jumps don't. Any navigation that isn't playback
- * pauses playback.
- */
-function goTo(index: number, how: { playing?: boolean } = {}): void {
-  if (!trace) return;
-  if (!how.playing) setPlaying(false);
-  const next = Math.max(firstStep(), Math.min(trace.steps.length - 1, index));
-  const single = Math.abs(next - stepIndex) === 1;
-  pendingAnimation = single && !prefersReducedMotion() ? { playing: !!how.playing } : null;
-  stepIndex = next;
-  try {
-    render();
-  } finally {
-    pendingAnimation = null;
-  }
-}
-
 // ---------------------------------------------------------------- animation
-
-/** Set by goTo while it draws a single step, so that render animates. */
-let pendingAnimation: { playing: boolean } | null = null;
 
 /**
  * How a window animates the step being drawn: its own easing and duration
@@ -967,8 +941,9 @@ function animationFor(pane: "memory" | "loop"): {
 } {
   const { duration, easing, enterFade, enterSlide } = appearance[pane];
   const enter = { fade: enterFade, slide: enterSlide };
-  if (!pendingAnimation) return { duration: 0, easing, enter };
-  const cap = pendingAnimation.playing ? (0.75 * 1000) / speed : Infinity;
+  const animation = playback.animation;
+  if (!animation) return { duration: 0, easing, enter };
+  const cap = animation.playing ? (0.75 * 1000) / app.get().speed : Number.POSITIVE_INFINITY;
   return { duration: Math.round(Math.min(duration, cap)), easing, enter };
 }
 
@@ -996,66 +971,6 @@ function liveRows(t: Trace, index: number, history: LoopHistory): { prev: LoopRo
   return { prev: at(index - 1) ?? current, current };
 }
 
-// Playback: step forward on a timer.
-const SPEEDS = [0.5, 1, 2, 4, 8, 16];
-const savedSpeed = settings.speed.get();
-let speed = savedSpeed !== null && SPEEDS.includes(savedSpeed) ? savedSpeed : 2;
-let playing = false;
-let playTimer = 0;
-
-function setPlaying(on: boolean): void {
-  window.clearTimeout(playTimer);
-  if (on === playing) {
-    if (on) scheduleTick();
-    return;
-  }
-  playing = on;
-  els.play.textContent = on ? "Pause" : "Play";
-  els.play.setAttribute("aria-pressed", String(on));
-  if (!on || !trace) return;
-  if (stepIndex >= trace.steps.length - 1) goTo(firstStep(), { playing: true }); // play again from the start
-  playOrigin = stepIndex;
-  scheduleTick();
-}
-
-/** The step the current (or last) playback started from. */
-let playOrigin: number | null = null;
-
-/**
- * Ctrl/Cmd + Enter: play from the current step. Pressed again while playing,
- * it stops and goes back to the step playing started from, so you can watch
- * the same stretch again.
- */
-function playOrRewind(): void {
-  if (!trace) return;
-  if (playing && playOrigin !== null) {
-    goTo(playOrigin); // goTo pauses
-    return;
-  }
-  setPlaying(true);
-}
-
-function scheduleTick(): void {
-  playTimer = window.setTimeout(() => {
-    if (!playing) return;
-    if (!trace || stepIndex >= trace.steps.length - 1) {
-      setPlaying(false);
-      return;
-    }
-    goTo(stepIndex + 1, { playing: true });
-    scheduleTick();
-  }, 1000 / speed);
-}
-
-for (const value of SPEEDS) {
-  els.speed.append(new Option(`${value} ${value === 1 ? "step" : "steps"}/s`, String(value), false, value === speed));
-}
-els.speed.addEventListener("change", () => {
-  speed = Number(els.speed.value);
-  settings.speed.set(speed);
-  if (playing) setPlaying(true); // restart the timer at the new speed
-});
-els.play.addEventListener("click", () => setPlaying(!playing));
 els.loopStacked.addEventListener("click", () => setLoopMode("stacked"));
 els.loopAnimated.addEventListener("click", () => setLoopMode("animated"));
 els.loopStacked.setAttribute("aria-pressed", String(loopMode === "stacked"));
@@ -1070,7 +985,7 @@ const editor = createEditor(
   { monacoId: LANGUAGES[currentLanguage()].monacoId, code: savedCode(currentLanguage()) },
   {
     onChange(code) {
-      setPlaying(false);
+      playback.setPlaying(false);
       settings.code(currentLanguage()).set(code);
       programsController.updateUI();
       // The growth section reads the code's `viz: size` hints.
@@ -1089,13 +1004,13 @@ const editor = createEditor(
       run: () => runNow(),
       save: () => programsController.save(),
       saveAs: () => programsController.saveAs(),
-      nextStep: () => goTo(stepIndex + 1),
-      prevStep: () => goTo(stepIndex - 1),
-      firstStep: () => goTo(firstStep()),
-      lastStep: () => goTo(Infinity),
+      nextStep: () => playback.step(1),
+      prevStep: () => playback.step(-1),
+      firstStep: () => playback.goTo(playback.firstStep()),
+      lastStep: () => playback.goTo(Number.POSITIVE_INFINITY),
       swapPanels: () => setSwapped(!swapped),
-      togglePlay: () => setPlaying(!playing),
-      playOrRewind: () => playOrRewind(),
+      togglePlay: () => playback.togglePlay(),
+      playOrRewind: () => playback.playOrRewind(),
       measure: () => measureNow(),
       measureGrowth: () => measureGrowth(),
       toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
@@ -1104,7 +1019,7 @@ const editor = createEditor(
 );
 
 function runNow(): void {
-  setPlaying(false);
+  playback.setPlaying(false);
   window.clearTimeout(liveTimer); // don't run the same code twice
   run(editor.getCode());
 }
@@ -1162,7 +1077,7 @@ els.language.addEventListener("change", () => {
   updateComplexity();
   memoryView.restartAutoFit();
   loopView.restartAutoFit();
-  stepIndex = 0;
+  app.setStep(0);
   selectedLoop = null;
   clearLayout();
   stale = false;
@@ -1194,11 +1109,6 @@ els.loopVertical.addEventListener("change", () => {
   settings.loopVertical.set(loopVertical);
   render();
 });
-els.first.addEventListener("click", () => goTo(firstStep()));
-els.prev.addEventListener("click", () => goTo(stepIndex - 1));
-els.next.addEventListener("click", () => goTo(stepIndex + 1));
-els.last.addEventListener("click", () => goTo(Infinity));
-els.scrubber.addEventListener("input", () => goTo(Number(els.scrubber.value)));
 
 document.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement;
@@ -1214,8 +1124,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-    event.preventDefault();
-    playOrRewind();
+    playback.handleKey(event);
     return;
   }
 
@@ -1230,33 +1139,8 @@ document.addEventListener("keydown", (event) => {
   }
   if (els.saveDialog.open) return;
 
-  // VS Code's debugger keys work everywhere else too.
-  if (event.key === "F10") {
-    event.preventDefault();
-    goTo(stepIndex + (event.shiftKey ? -1 : 1));
-    return;
-  }
-
-  if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) return;
-  // Keys inside the Style panel belong to its controls.
-  if (target.closest(".style-panel")) return;
-  // Space plays and pauses, except where it already means something.
-  if (event.key === " " && !(target instanceof HTMLButtonElement) && !(target instanceof HTMLTextAreaElement)) {
-    event.preventDefault();
-    setPlaying(!playing);
-    return;
-  }
-  const moves: Record<string, () => void> = {
-    ArrowLeft: () => goTo(stepIndex - 1),
-    ArrowRight: () => goTo(stepIndex + 1),
-    Home: () => goTo(firstStep()),
-    End: () => goTo(Infinity),
-  };
-  const move = moves[event.key];
-  if (move) {
-    event.preventDefault();
-    move();
-  }
+  // Stepping and playing: arrows, Home / End, Space, F10, Ctrl/Cmd + Enter.
+  playback.handleKey(event);
 });
 
 // ---------------------------------------------------------------- layout

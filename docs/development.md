@@ -83,8 +83,9 @@ Part of the Python tracer can't be measured. Python pauses all other tracing and
 | --- | --- |
 | `src/settings.ts` | Everything saved between visits (see "Saved settings") |
 | `src/app/store.ts` | A small store: one state object, changed by named actions, with listeners |
-| `src/app/state.ts` | The app's state (`language`, the open `program`) and its actions (`setLanguage`, `setProgram`), which also save what's remembered |
+| `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`), which also save what's remembered |
 | `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
+| `src/app/playbackController.ts` | Moving through the steps: first / previous / next / last, the scrubber, Play and the speed menu, and the stepping keys (arrows, Home / End, Space, F10, Ctrl/Cmd + Enter) |
 
 How the pieces talk:
 
