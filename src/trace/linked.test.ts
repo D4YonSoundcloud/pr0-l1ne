@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
-import { findLinkedTrack, linkedRow, linkedSignature, treeDepths, type RowSnapshot } from "./linked";
+import { findLinkedTrack, linkedRow, linkedSignature, type RowSnapshot, treeDepths } from "./linked";
 import { buildLoopHistory } from "./loopHistory";
 
 /** Rows of the first loop, as the loop view sees them. */
@@ -52,7 +52,12 @@ describe("linked structures", () => {
     const rows = await loopRows(REVERSE);
     const track = findLinkedTrack(rows)!;
     const before = linkedRow(track, rows[0]).pointers;
-    expect(before).toEqual(expect.arrayContaining([{ name: "head", index: 0 }, { name: "curr", index: 0 }]));
+    expect(before).toEqual(
+      expect.arrayContaining([
+        { name: "head", index: 0 },
+        { name: "curr", index: 0 },
+      ]),
+    );
   });
 
   it("finds nodes through `this` inside a method", async () => {
@@ -95,7 +100,7 @@ describe("linked structures", () => {
     `);
     const track = findLinkedTrack(rows)!;
     expect(track.links).toEqual(["left", "right"]);
-    const keys = track.order.map((id) => (linkedRow(track, rows[0]).nodes.get(id)?.value as { repr: string }).repr);
+    const keys = track.order.map((id) => (linkedRow(track, rows[0]).nodes.get(id)!.value as { repr: string }).repr);
     expect(keys).toEqual(["2", "3", "5", "8"]);
   });
 
@@ -115,7 +120,9 @@ describe("linked structures", () => {
     expect(track.shape).toBe("tree");
     const state = linkedRow(track, rows[0]);
     const depths = treeDepths(state);
-    const byKey = Object.fromEntries(track.order.map((id) => [(state.nodes.get(id)!.value as { repr: string }).repr, depths.get(id)]));
+    const byKey = Object.fromEntries(
+      track.order.map((id) => [(state.nodes.get(id)!.value as { repr: string }).repr, depths.get(id)]),
+    );
     expect(byKey).toEqual({ 5: 0, 2: 1, 8: 1, 3: 2 });
   });
 
@@ -147,6 +154,8 @@ describe("linked structures", () => {
   });
 
   it("finds nothing when there are no linked objects", async () => {
-    expect(findLinkedTrack(await loopRows(`const a = [1, 2];\nfor (const x of a) {\n  a.push(x);\n  break;\n}`))).toBeNull();
+    expect(
+      findLinkedTrack(await loopRows(`const a = [1, 2];\nfor (const x of a) {\n  a.push(x);\n  break;\n}`)),
+    ).toBeNull();
   });
 });

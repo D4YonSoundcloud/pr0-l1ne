@@ -29,8 +29,16 @@ describe("grid pointers", () => {
   it("doesn't draw a conventional name on rows when the code uses it only for columns", () => {
     const names = { matrix: ["down", "row", "up"], "matrix[]": ["col", "left", "right"] };
     const l = locals({ up: 0, down: 2, left: 0, right: 2, col: 1, row: 1 });
-    expect(pointersFor("matrix", names, l).map((p) => p.name).sort()).toEqual(["down", "row", "up"]);
-    expect(pointersFor("matrix[]", names, l).map((p) => p.name).sort()).toEqual(["col", "left", "right"]);
+    expect(
+      pointersFor("matrix", names, l)
+        .map((p) => p.name)
+        .sort(),
+    ).toEqual(["down", "row", "up"]);
+    expect(
+      pointersFor("matrix[]", names, l)
+        .map((p) => p.name)
+        .sort(),
+    ).toEqual(["col", "left", "right"]);
   });
 });
 
@@ -65,9 +73,14 @@ print(spiralOrder(matrix))
 
 function tracePython(source: string): Trace | null {
   try {
-    const json = execFileSync("python3", ["-c",
-      "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
-    { input: source, encoding: "utf8" });
+    const json = execFileSync(
+      "python3",
+      [
+        "-c",
+        "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))",
+      ],
+      { input: source, encoding: "utf8" },
+    );
     return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null;
@@ -76,7 +89,11 @@ function tracePython(source: string): Trace | null {
 
 /** For every step right after an access line ran: the value the program appended, and the outlined cell's value. */
 function checkSpiral(t: Trace) {
-  const grid = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+  const grid = [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9],
+  ];
   const checked: number[] = [];
   t.steps.forEach((step, i) => {
     const frame = step.stack[step.stack.length - 1];
@@ -84,7 +101,14 @@ function checkSpiral(t: Trace) {
     const prev = t.steps[i - 1];
     if (!prev || !t.gridAccesses!.some((a) => a.line === prev.line)) return;
     const l = new Map(frame.locals);
-    const focus = gridFocus(t.gridAccesses, "matrix", focusLines(t, i), l, { rows: 3, cols: () => 3 }, t.language === "python");
+    const focus = gridFocus(
+      t.gridAccesses,
+      "matrix",
+      focusLines(t, i),
+      l,
+      { rows: 3, cols: () => 3 },
+      t.language === "python",
+    );
     expect(focus).not.toBe("none");
     const cell = grid[(focus as { row: number }).row][(focus as { col: number }).col];
     // The cell is the value just appended to results.
@@ -99,7 +123,12 @@ describe("the cell a step works on", () => {
   it("is the one the line that just ran read, in Python (spiral order)", () => {
     const t = tracePython(SPIRAL_PY);
     if (!t) return;
-    expect(t.gridAccesses?.map((a) => `${a.line}:${a.row},${a.col}`)).toEqual(["11:up,col", "13:row,right", "16:down,col", "19:row,left"]);
+    expect(t.gridAccesses?.map((a) => `${a.line}:${a.row},${a.col}`)).toEqual([
+      "11:up,col",
+      "13:row,right",
+      "16:down,col",
+      "19:row,left",
+    ]);
     checkSpiral(t);
   });
 

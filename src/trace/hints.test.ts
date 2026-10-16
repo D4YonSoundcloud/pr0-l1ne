@@ -59,7 +59,10 @@ describe("parseHints", () => {
 describe("collecting hints", () => {
   it("collects // viz: comments in JavaScript and TypeScript", async () => {
     const js = await traceJavaScript(`let a = 1; // viz: hide a\n/* viz: show b */\nlet b = "// viz: not a comment";`);
-    expect(js.hints).toEqual([{ line: 1, text: "hide a" }, { line: 2, text: "show b" }]);
+    expect(js.hints).toEqual([
+      { line: 1, text: "hide a" },
+      { line: 2, text: "show b" },
+    ]);
     const ts = await traceTypeScript(`interface P { x: number }\n// viz: hide p\nconst p: P = { x: 1 };`);
     expect(ts.hints).toEqual([{ line: 2, text: "hide p" }]);
   });
@@ -67,25 +70,42 @@ describe("collecting hints", () => {
   it("collects # viz: comments in Python", () => {
     let json: string;
     try {
-      json = execFileSync("python3", ["-c", "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read()))"],
-        { input: `x = 1  # viz: hide x\ns = "# viz: nope"\n# viz: pointers a: i\n`, encoding: "utf8" });
+      json = execFileSync(
+        "python3",
+        [
+          "-c",
+          "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read()))",
+        ],
+        { input: `x = 1  # viz: hide x\ns = "# viz: nope"\n# viz: pointers a: i\n`, encoding: "utf8" },
+      );
     } catch {
       return; // no Python
     }
-    expect((JSON.parse(json) as Trace).hints).toEqual([{ line: 1, text: "hide x" }, { line: 3, text: "pointers a: i" }]);
+    expect((JSON.parse(json) as Trace).hints).toEqual([
+      { line: 1, text: "hide x" },
+      { line: 3, text: "pointers a: i" },
+    ]);
   });
 });
 
 describe("applying hints", () => {
   it("hides variables in every frame of every step", async () => {
-    const t = applyHints(await traceJavaScript(`// viz: hide scratch\nfunction f() {\n  const scratch = 2;\n  return scratch;\n}\nconst scratch = f();\nconst kept = 1;`));
+    const t = applyHints(
+      await traceJavaScript(
+        `// viz: hide scratch\nfunction f() {\n  const scratch = 2;\n  return scratch;\n}\nconst scratch = f();\nconst kept = 1;`,
+      ),
+    );
     const seen = new Set(t.steps.flatMap((s) => s.stack.flatMap((f) => f.locals.map(([n]) => n))));
     expect(seen.has("scratch")).toBe(false);
     expect(seen.has("kept")).toBe(true);
   });
 
   it("adds pointer names to the index analysis", async () => {
-    const t = applyHints(await traceJavaScript(`// viz: pointers nums: first, last\nconst nums = [1, 2, 3];\nconst first = 0;\nconst last = 2;`));
+    const t = applyHints(
+      await traceJavaScript(
+        `// viz: pointers nums: first, last\nconst nums = [1, 2, 3];\nconst first = 0;\nconst last = 2;`,
+      ),
+    );
     expect(t.indexNames.nums).toEqual(["first", "last"]);
   });
 
@@ -99,13 +119,16 @@ let node = root.left;
 while (node) {
   node = node.parent;
 }`;
-    const rowsOf = (t: Trace) => buildLoopHistory(t, t.steps.length - 2, null)!.rows.map((r) => ({ locals: r.frame.locals, heap: r.heap }));
+    const rowsOf = (t: Trace) =>
+      buildLoopHistory(t, t.steps.length - 2, null)!.rows.map((r) => ({ locals: r.frame.locals, heap: r.heap }));
     const plain = applyHints(await traceJavaScript(code(false)));
     expect(findLinkedTrack(rowsOf(plain), plain.viz?.linked)?.shape).toBe("list"); // three links: not a tree
     const hinted = applyHints(await traceJavaScript(code(true)));
     const track = findLinkedTrack(rowsOf(hinted), hinted.viz?.linked)!;
     expect(track).toMatchObject({ shape: "tree", links: ["left", "right"], valueField: "key" });
-    const keys = track.order.map((id) => (linkedRow(track, rowsOf(hinted)[0]).nodes.get(id)?.value as { repr: string }).repr);
+    const keys = track.order.map(
+      (id) => (linkedRow(track, rowsOf(hinted)[0]).nodes.get(id)!.value as { repr: string }).repr,
+    );
     expect(keys).toEqual(["2", "5", "8"]); // in order
   });
 

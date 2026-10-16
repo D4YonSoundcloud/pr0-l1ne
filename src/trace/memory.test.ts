@@ -1,14 +1,20 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { expandHeaps } from "./delta";
 import { traceJavaScript } from "../js/trace";
+import { expandHeaps } from "./delta";
 import { formatBytes, ownAndTotal, stepSizes } from "./memory";
 import type { Trace } from "./types";
 
 function py(code: string): Trace | null {
   try {
-    const json = execFileSync("python3", ["-c", "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
-      { input: code, encoding: "utf8" });
+    const json = execFileSync(
+      "python3",
+      [
+        "-c",
+        "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))",
+      ],
+      { input: code, encoding: "utf8" },
+    );
     return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null;
@@ -23,7 +29,9 @@ const idOf = (t: Trace, name: string) => {
 
 describe("textbook model", () => {
   it("is 8 bytes a slot, numbers in the slot, one byte a character", async () => {
-    const t = await traceJavaScript(`const nums = [1, 2, 3, 4];\nconst words = ["hi", "there"];\nconst map = new Map([["a", 1]]);\nconst point = { x: 1, y: 2 };`);
+    const t = await traceJavaScript(
+      `const nums = [1, 2, 3, 4];\nconst words = ["hi", "there"];\nconst map = new Map([["a", 1]]);\nconst point = { x: 1, y: 2 };`,
+    );
     const s = stepSizes(last(t), "textbook");
     expect(s.own(idOf(t, "nums"))).toBe(32);
     expect(s.total(idOf(t, "nums"))).toBe(32);
@@ -48,7 +56,9 @@ describe("textbook model", () => {
   });
 
   it("follows linked nodes into a total", async () => {
-    const t = await traceJavaScript(`class Node { constructor(v, next = null) { this.v = v; this.next = next; } }\nconst head = new Node(1, new Node(2, new Node(3)));`);
+    const t = await traceJavaScript(
+      `class Node { constructor(v, next = null) { this.v = v; this.next = next; } }\nconst head = new Node(1, new Node(2, new Node(3)));`,
+    );
     const s = stepSizes(last(t), "textbook");
     expect(s.own(idOf(t, "head"))).toBe(16);
     expect(s.total(idOf(t, "head"))).toBe(48);

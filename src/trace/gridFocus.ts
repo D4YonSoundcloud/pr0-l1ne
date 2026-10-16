@@ -66,11 +66,15 @@ export function evalIndex(expr: string, locals: Map<string, Value>): number | nu
   const tokens = expr.match(/\d+|[A-Za-z_$][\w$]*|\/\/|[-+*%/()]|\S/g) ?? [];
   let at = 0;
   const peek = () => tokens[at];
-  const fail = (): never => { throw new Error("not simple"); };
+  const fail = (): never => {
+    throw new Error("not simple");
+  };
   const value = (name: string): number => {
     const v = locals.get(name);
-    if (v?.kind !== "prim" || !(v.type === "int" || v.type === "number" || v.type === "bool" || v.type === "boolean")) return fail();
-    const n = v.repr === "True" || v.repr === "true" ? 1 : v.repr === "False" || v.repr === "false" ? 0 : Number(v.repr);
+    if (v?.kind !== "prim" || !(v.type === "int" || v.type === "number" || v.type === "bool" || v.type === "boolean"))
+      return fail();
+    const n =
+      v.repr === "True" || v.repr === "true" ? 1 : v.repr === "False" || v.repr === "false" ? 0 : Number(v.repr);
     return Number.isInteger(n) ? n : fail();
   };
   const atom = (): number => {
@@ -91,20 +95,38 @@ export function evalIndex(expr: string, locals: Map<string, Value>): number | nu
     let v = atom();
     for (;;) {
       const op = peek();
-      if (op === "*") { at++; v *= atom(); }
-      else if (op === "//") { at++; const d = atom(); if (d === 0) fail(); v = Math.floor(v / d); }
-      else if (op === "/") { at++; const d = atom(); if (d === 0 || v % d !== 0) fail(); v /= d; }
-      else if (op === "%") { at++; const d = atom(); if (d === 0) fail(); v = ((v % d) + d) % d; }
-      else return v;
+      if (op === "*") {
+        at++;
+        v *= atom();
+      } else if (op === "//") {
+        at++;
+        const d = atom();
+        if (d === 0) fail();
+        v = Math.floor(v / d);
+      } else if (op === "/") {
+        at++;
+        const d = atom();
+        if (d === 0 || v % d !== 0) fail();
+        v /= d;
+      } else if (op === "%") {
+        at++;
+        const d = atom();
+        if (d === 0) fail();
+        v = ((v % d) + d) % d;
+      } else return v;
     }
   };
   const sum = (): number => {
     let v = product();
     for (;;) {
       const op = peek();
-      if (op === "+") { at++; v += product(); }
-      else if (op === "-") { at++; v -= product(); }
-      else return v;
+      if (op === "+") {
+        at++;
+        v += product();
+      } else if (op === "-") {
+        at++;
+        v -= product();
+      } else return v;
     }
   };
   try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crosses, findFreeY, overlaps, roundedPath, routeEdges, type Point, type Rect } from "./route";
+import { crosses, findFreeY, overlaps, type Point, type Rect, roundedPath, routeEdges } from "./route";
 
 const box = (x: number, y: number, w = 100, h = 60): Rect => ({ x, y, w, h });
 const segments = (points: Point[]) => points.slice(1).map((p, i) => [points[i], p] as const);
@@ -24,7 +24,10 @@ describe("routeEdges", () => {
 
   it("draws a straight arrow when the target is level", () => {
     const [route] = routeEdges([{ from: { x: 80, y: 60 }, source: S, target: T, entryY: 60 }], [S, T]);
-    expect(route).toEqual([{ x: 80, y: 60 }, { x: 200, y: 60 }]);
+    expect(route).toEqual([
+      { x: 80, y: 60 },
+      { x: 200, y: 60 },
+    ]);
   });
 
   it("turns once in the gap for a forward arrow at a different height", () => {
@@ -38,16 +41,23 @@ describe("routeEdges", () => {
   });
 
   it("gives arrows sharing a gap separate lanes", () => {
-    const a = box(0, 0), b = box(0, 100), t1 = box(200, 300), t2 = box(200, 400);
-    const routes = routeEdges([
-      { from: { x: 80, y: 20 }, source: a, target: t1, entryY: 313 },
-      { from: { x: 80, y: 120 }, source: b, target: t2, entryY: 413 },
-    ], [a, b, t1, t2]);
+    const a = box(0, 0),
+      b = box(0, 100),
+      t1 = box(200, 300),
+      t2 = box(200, 400);
+    const routes = routeEdges(
+      [
+        { from: { x: 80, y: 20 }, source: a, target: t1, entryY: 313 },
+        { from: { x: 80, y: 120 }, source: b, target: t2, entryY: 413 },
+      ],
+      [a, b, t1, t2],
+    );
     expect(routes[0][1].x).not.toBe(routes[1][1].x);
   });
 
   it("u-turns on the right for a target in the same column", () => {
-    const above = box(0, 0, 100, 40), below = box(0, 100, 100, 40);
+    const above = box(0, 0, 100, 40),
+      below = box(0, 100, 100, 40);
     const [route] = routeEdges([{ from: { x: 80, y: 120 }, source: below, target: above, entryY: 13 }], [above, below]);
     expect(isOrthogonal(route)).toBe(true);
     expect(route[1].x).toBeGreaterThan(100);
@@ -55,7 +65,9 @@ describe("routeEdges", () => {
   });
 
   it("goes over the boxes in between for a target in an earlier column", () => {
-    const left = box(0, 60), middle = box(200, 40, 100, 200), source = box(400, 60);
+    const left = box(0, 60),
+      middle = box(200, 40, 100, 200),
+      source = box(400, 60);
     const [route] = routeEdges([{ from: { x: 480, y: 80 }, source, target: left, entryY: 73 }], [left, middle, source]);
     expect(isOrthogonal(route)).toBe(true);
     for (const [a, b] of segments(route).slice(1)) expect(crosses(a, b, middle)).toBe(false);
@@ -69,10 +81,13 @@ describe("routeEdges", () => {
     for (let dx = -320; dx <= 320; dx += 7.5) {
       for (let dy = -140; dy <= 140; dy += 9.5) {
         const source = box(100 + dx, 100 + dy, 160, 90);
-        const routes = routeEdges([
-          { from: { x: source.x + 140, y: source.y + 40 }, source, target, entryY: 113 },
-          { from: { x: source.x + 140, y: source.y + 70 }, exitDownY: source.y + 99, source, target, entryY: 113 },
-        ], [source, target]);
+        const routes = routeEdges(
+          [
+            { from: { x: source.x + 140, y: source.y + 40 }, source, target, entryY: 113 },
+            { from: { x: source.x + 140, y: source.y + 70 }, exitDownY: source.y + 99, source, target, entryY: 113 },
+          ],
+          [source, target],
+        );
         for (const route of routes) {
           for (const p of route) expect(Number.isFinite(p.x) && Number.isFinite(p.y), `dx ${dx}, dy ${dy}`).toBe(true);
           expect(roundedPath(route)).not.toContain("NaN");
@@ -82,18 +97,25 @@ describe("routeEdges", () => {
   });
 
   it("goes under when there's no room above", () => {
-    const left = box(0, 4), middle = box(200, 4, 100, 200), source = box(400, 4);
+    const left = box(0, 4),
+      middle = box(200, 4, 100, 200),
+      source = box(400, 4);
     const [route] = routeEdges([{ from: { x: 480, y: 30 }, source, target: left, entryY: 17 }], [left, middle, source]);
     for (const [a, b] of segments(route).slice(1)) expect(crosses(a, b, middle)).toBe(false);
     expect(Math.max(...route.map((p) => p.y))).toBeGreaterThan(204);
   });
 
   it("spreads arrowheads arriving at the same side, keeping a level one straight", () => {
-    const a = box(0, 0), b = box(0, 100), t = box(200, 0);
-    const routes = routeEdges([
-      { from: { x: 80, y: 13 }, source: a, target: t, entryY: 13 },
-      { from: { x: 80, y: 120 }, source: b, target: t, entryY: 13 },
-    ], [a, b, t]);
+    const a = box(0, 0),
+      b = box(0, 100),
+      t = box(200, 0);
+    const routes = routeEdges(
+      [
+        { from: { x: 80, y: 13 }, source: a, target: t, entryY: 13 },
+        { from: { x: 80, y: 120 }, source: b, target: t, entryY: 13 },
+      ],
+      [a, b, t],
+    );
     expect(routes[0]).toHaveLength(2); // still straight
     const ends = routes.map((r) => r[r.length - 1].y);
     expect(ends[0]).not.toBe(ends[1]);
@@ -102,7 +124,11 @@ describe("routeEdges", () => {
 
 describe("roundedPath", () => {
   it("rounds corners and keeps the end point", () => {
-    const d = roundedPath([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }]);
+    const d = roundedPath([
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 50, y: 50 },
+    ]);
     expect(d).toBe("M0,0 L44,0 Q50,0 50,6 L50,50");
   });
 });

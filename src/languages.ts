@@ -3,7 +3,7 @@
  * the code, which Monaco mode highlights it, and the starter examples.
  * Everything downstream of the worker only sees the trace format.
  */
-import { JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES, type Example } from "./examples/index";
+import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./examples/index";
 
 export type LanguageId = "python" | "javascript" | "typescript";
 
@@ -41,5 +41,4 @@ export const LANGUAGES: Record<LanguageId, Language> = {
   },
 };
 
-export const isLanguageId = (value: unknown): value is LanguageId =>
-  typeof value === "string" && value in LANGUAGES;
+export const isLanguageId = (value: unknown): value is LanguageId => typeof value === "string" && value in LANGUAGES;

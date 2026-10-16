@@ -1,7 +1,6 @@
 """Tests for tracer.py. Run with: npm run test:tracer"""
 
 import json
-import sys
 import textwrap
 import unittest
 
@@ -185,6 +184,7 @@ class TracerTests(unittest.TestCase):
 
     def test_asyncio_runs_on_a_virtual_clock(self):
         import time
+
         started = time.monotonic()
         t = trace("""
             import asyncio
@@ -226,7 +226,7 @@ class TracerTests(unittest.TestCase):
         nums_id = dict(t["steps"][-1]["stack"][0]["locals"])["nums"]["id"]
         self.assertEqual(second[1]["refs"], [nums_id])  # the temporary [9] isn't drawn, so it isn't listed
         before = t["steps"][second[0] - 1]["stdoutLength"]
-        self.assertEqual(t["stdout"][before:t["steps"][second[0]]["stdoutLength"]], "sorted: [1, 2, 3] [9]\n")
+        self.assertEqual(t["stdout"][before : t["steps"][second[0]]["stdoutLength"]], "sorted: [1, 2, 3] [9]\n")
         self.assertNotIn("print", dict(t["steps"][-1]["stack"][0]["locals"]))
 
     def test_recursion_shows_one_frame_per_call(self):
@@ -270,13 +270,16 @@ class TracerTests(unittest.TestCase):
         self.assertGreater(t["counts"]["steps"], 1000)
 
     def test_step_limit_cannot_be_swallowed_by_except_exception(self):
-        t = trace("""
+        t = trace(
+            """
             while True:
                 try:
                     pass
                 except Exception:
                     pass
-        """, max_steps=100)
+        """,
+            max_steps=100,
+        )
         self.assertTrue(t["truncated"])
 
     def test_stdout_is_captured_per_step(self):
@@ -287,7 +290,6 @@ class TracerTests(unittest.TestCase):
     def test_input_explains_itself(self):
         t = trace("name = input()\n")
         self.assertIn("input()", t["error"]["message"])
-
 
 
 def shape(source):
@@ -358,8 +360,10 @@ class CostShapeTests(unittest.TestCase):
                 fill(r - 1, c)
             halves([3, 1, 2]); count(3); walk(None); fill(0, 0)
         """)
+
         def shrinks(name):
             return [n["shrink"] for n in fns[name]["body"] if n["kind"] == "call" and n["callee"] == name]
+
         self.assertEqual(shrinks("halves"), ["half", "half"])
         self.assertEqual(shrinks("count"), ["minus"])
         self.assertEqual(shrinks("walk"), ["child"])
@@ -397,21 +401,27 @@ def passes(t, loop_line):
 
 class SamplingTests(unittest.TestCase):
     def test_a_short_loop_is_recorded_in_full(self):
-        t = trace("""\
+        t = trace(
+            """\
             total = 0
             for i in range(30):
                 total += i
-        """, 3000)
+        """,
+            3000,
+        )
         self.assertFalse(t.get("sampled"))
         self.assertEqual(passes(t, 2), list(range(31)))
 
     def test_a_long_for_loop_keeps_its_first_round_and_last_passes(self):
-        t = trace("""\
+        t = trace(
+            """\
             total = 0
             for i in range(40000):
                 total += i
             print(total)
-        """, 3000)
+        """,
+            3000,
+        )
         self.assertFalse(t["truncated"])
         self.assertTrue(t["sampled"])
         self.assertEqual(t["stdout"], "799980000\n")
@@ -428,12 +438,15 @@ class SamplingTests(unittest.TestCase):
         self.assertEqual(recorded + skipped, t["counts"]["steps"])
 
     def test_a_long_while_loop_keeps_its_last_passes(self):
-        t = trace("""\
+        t = trace(
+            """\
             n = 0
             while n < 20000:
                 n += 1
             done = n
-        """, 3000)
+        """,
+            3000,
+        )
         self.assertFalse(t["truncated"])
         seen = passes(t, 2)
         self.assertIn(20000, seen)
@@ -442,11 +455,14 @@ class SamplingTests(unittest.TestCase):
         self.assertEqual(last_locals(t)["done"]["repr"], "20000")
 
     def test_a_function_called_many_times_from_one_line_is_sampled(self):
-        t = trace("""\
+        t = trace(
+            """\
             def double(x):
                 return x * 2
             nums = list(map(double, range(40000)))
-        """, 3000)
+        """,
+            3000,
+        )
         self.assertFalse(t["truncated"])
         self.assertTrue(t["sampled"])
         self.assertEqual(t["counts"]["calls"]["double"], 40000)
@@ -477,7 +493,9 @@ class LoopHeaderTests(unittest.TestCase):
             for x in [1, 2]:
                 pass
         """)
-        calls = {(c["loop"], c["instance"]): c.get("call") for s in t["steps"] for c in s["loops"] if c["iteration"] > 0}
+        calls = {
+            (c["loop"], c["instance"]): c.get("call") for s in t["steps"] for c in s["loops"] if c["iteration"] > 0
+        }
         self.assertEqual(calls[("L2", 1)], "range(0, 4)")
         self.assertEqual(calls[("L3", 1)], "range(0, 3)")
         self.assertEqual(calls[("L3", 2)], "range(0, 2)")
@@ -486,11 +504,14 @@ class LoopHeaderTests(unittest.TestCase):
 
 class LongListTests(unittest.TestCase):
     def test_the_window_follows_the_index_variables(self):
-        t = trace("""\
+        t = trace(
+            """\
             nums = list(range(1000))
             for j in range(990, 400, -1):
                 nums[j] = nums[j - 1]
-        """, 3000)
+        """,
+            3000,
+        )
         windows = {o.get("offset", 0) for s in t["steps"] for o in s["heap"].values() if o["kind"] == "list"}
         self.assertIn(940, windows)  # j near 990: the last 60 items
         self.assertTrue(any(400 <= w <= 420 for w in windows))

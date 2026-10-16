@@ -23,20 +23,54 @@
  *             thing ("container in container"). Shared objects and cycles
  *             still need arrows, so they stay separate. See chooseNested.
  */
-import { localKey, slotsOf, valueKey, type StepDiff } from "../trace/diff";
-import { liveFrames, type Frame, type HeapObject, type SequenceObject, type Step, type Trace, type Value } from "../trace/types";
+import { localKey, type StepDiff, slotsOf, valueKey } from "../trace/diff";
 import {
-  CELL_H, CELL_MIN_W, FONT, HEADER_H, INDEX_H, LABEL_H, POINTER_H, ROW_H, SMALL, STRIP_H, stripBar,
-  arrowMarkers, cellWidth, pointerMarkers, pointersFor, rowPointerMarkers, rowPointersWidth, s, textWidth,
-  uiTextWidth, valueCell,
-} from "./draw";
+  type GraphData,
+  type GraphOverlay,
+  graphOverlay,
+  graphsAt,
+  layoutFor,
+  legendOverlaysFor,
+  stepScopes,
+} from "../trace/graph";
+import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
 import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
-import { focusLines, gridFocus, type GridFocus } from "../trace/gridFocus";
-import { findFreeY, roundedPath, routeEdges, type Rect } from "./route";
-import { graphOverlay, graphsAt, layoutFor, legendOverlaysFor, stepScopes, type GraphData, type GraphOverlay } from "../trace/graph";
-import { graphPicture, type GraphPicture } from "./graphView";
-import { formatBytes, stepSizes, type SizeModel, type StepSizes } from "../trace/memory";
-import { printedAt, type Printed } from "../trace/output";
+import { formatBytes, type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
+import { type Printed, printedAt } from "../trace/output";
+import {
+  type Frame,
+  type HeapObject,
+  liveFrames,
+  type SequenceObject,
+  type Step,
+  type Trace,
+  type Value,
+} from "../trace/types";
+import {
+  arrowMarkers,
+  CELL_H,
+  CELL_MIN_W,
+  cellWidth,
+  FONT,
+  HEADER_H,
+  INDEX_H,
+  LABEL_H,
+  POINTER_H,
+  pointerMarkers,
+  pointersFor,
+  ROW_H,
+  rowPointerMarkers,
+  rowPointersWidth,
+  SMALL,
+  STRIP_H,
+  s,
+  stripBar,
+  textWidth,
+  uiTextWidth,
+  valueCell,
+} from "./draw";
+import { type GraphPicture, graphPicture } from "./graphView";
+import { findFreeY, type Rect, roundedPath, routeEdges } from "./route";
 
 interface OutRef {
   from: Point;
@@ -60,7 +94,10 @@ interface Shape {
   draw(x: number, y: number, layer: SVGGElement, refs: OutRef[]): void;
 }
 
-export interface Point { x: number; y: number }
+export interface Point {
+  x: number;
+  y: number;
+}
 
 export type MemoryMode = "arrows" | "nested";
 
@@ -156,7 +193,8 @@ export function chooseNested(step: Step): Set<string> {
   };
   // Start from the variables, then from every object that stayed separate,
   // so things inside a shared object can still nest inside it.
-  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
+  for (const frame of liveFrames(step))
+    for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
   if (step.returnValue?.kind === "ref") tryNest(step.returnValue.id, 1);
   for (const [id, obj] of Object.entries(step.heap)) {
     if (nested.has(id)) continue;
@@ -206,7 +244,12 @@ function sizeLabel(ctx: Ctx, id: string): string | null {
 
 /** A label line with a size after it, the size in its own color. */
 function labelWithSize(x: number, y: number, label: string, size: string | null): SVGTextElement {
-  return s("text", { class: "seq-label", x, y }, label, size && s("tspan", { class: "mem-size" }, `${label ? " · " : ""}${size}`));
+  return s(
+    "text",
+    { class: "seq-label", x, y },
+    label,
+    size && s("tspan", { class: "mem-size" }, `${label ? " · " : ""}${size}`),
+  );
 }
 
 const sizedLabelWidth = (label: string, size: string | null) =>
@@ -221,10 +264,20 @@ interface View {
   h: number;
   nested: boolean;
   /** Returns the cell element, for plain values (used for animation). */
-  draw(x: number, y: number, w: number, h: number, layer: SVGGElement, refs: OutRef[], changed: boolean): SVGGElement | void;
+  draw(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    layer: SVGGElement,
+    refs: OutRef[],
+    changed: boolean,
+    // biome-ignore lint/suspicious/noConfusingVoidType: some draw()s return nothing, others the group they drew
+  ): SVGGElement | void;
 }
 
 /** Mark a list or grid cell, so a value moving between slots can slide (animate.ts). */
+// biome-ignore lint/suspicious/noConfusingVoidType: some draw()s return nothing, others the group they drew
 function markCell(el: SVGGElement | void, container: string, slot: string, value: Value, cx: number, cy: number): void {
   if (!el) return;
   el.setAttribute("data-cell", `${container}|${slot}`);
@@ -237,14 +290,18 @@ function viewOf(value: Value, ctx: Ctx, cellH: number): View {
   if (value.kind === "ref" && ctx.nested.has(value.id) && ctx.step.heap[value.id]) {
     const shape = objectShape(ctx.step.heap[value.id], ctx, true);
     return {
-      w: shape.w, h: shape.h, nested: true,
+      w: shape.w,
+      h: shape.h,
+      nested: true,
       draw(x, y, _w, _h, layer, refs) {
         shape.draw(x, y, layer, refs);
       },
     };
   }
   return {
-    w: cellWidth(value), h: cellH, nested: false,
+    w: cellWidth(value),
+    h: cellH,
+    nested: false,
     draw(x, y, w, h, layer, refs, changed) {
       const { el, dot } = valueCell(value, { x, y, w, h, changed });
       layer.append(el);
@@ -289,20 +346,43 @@ function tableShape(
   const h = HEADER_H + bodyH;
 
   return {
-    w, h, inY: HEADER_H / 2,
+    w,
+    h,
+    inY: HEADER_H / 2,
     draw(x, y, layer, refs) {
       const cls = ["box", opts.variant, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ");
       const g = s("g", { class: cls });
       g.append(
         s("rect", { class: "box-body", x, y, width: w, height: h, rx: 5 }),
-        s("path", { class: "box-header", d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z` }),
+        s("path", {
+          class: "box-header",
+          d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z`,
+        }),
         s("text", { class: "box-title", x: x + 10, y: y + HEADER_H / 2, "dominant-baseline": "central" }, title),
       );
       if (opts.sizeText) {
-        g.append(s("text", { class: "box-size", x: x + w - 9, y: y + HEADER_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, opts.sizeText));
+        g.append(
+          s(
+            "text",
+            {
+              class: "box-size",
+              x: x + w - 9,
+              y: y + HEADER_H / 2,
+              "text-anchor": "end",
+              "dominant-baseline": "central",
+            },
+            opts.sizeText,
+          ),
+        );
       }
       if (!rows.length && opts.emptyText) {
-        g.append(s("text", { class: "box-empty", x: x + 10, y: y + HEADER_H + ROW_H / 2, "dominant-baseline": "central" }, opts.emptyText));
+        g.append(
+          s(
+            "text",
+            { class: "box-empty", x: x + 10, y: y + HEADER_H + ROW_H / 2, "dominant-baseline": "central" },
+            opts.emptyText,
+          ),
+        );
       }
       let rowY = y + HEADER_H + 3;
       rows.forEach((row, i) => {
@@ -312,12 +392,26 @@ function tableShape(
         const labelY = view.nested ? rowY + NEST_PAD + HEADER_H / 2 : rowY + rowH / 2;
         const rowG = s("g", { class: ["row", row.variant, row.changed && "is-changed"].filter(Boolean).join(" ") });
         if (typeof row.label === "string") {
-          rowG.append(s("text", { class: "row-label", x: x + 10, y: labelY, "dominant-baseline": "central" }, row.label));
+          rowG.append(
+            s("text", { class: "row-label", x: x + 10, y: labelY, "dominant-baseline": "central" }, row.label),
+          );
         } else if (row.label.kind === "prim") {
-          const { el } = valueCell(row.label, { x: x + 6, y: labelY - (ROW_H - 8) / 2, w: leftW + 8, h: ROW_H - 8, variant: "key" });
+          const { el } = valueCell(row.label, {
+            x: x + 6,
+            y: labelY - (ROW_H - 8) / 2,
+            w: leftW + 8,
+            h: ROW_H - 8,
+            variant: "key",
+          });
           rowG.append(el);
         } else {
-          const { el, dot } = valueCell(row.label, { x: x + 6, y: labelY - (ROW_H - 8) / 2, w: 22, h: ROW_H - 8, variant: "key" });
+          const { el, dot } = valueCell(row.label, {
+            x: x + 6,
+            y: labelY - (ROW_H - 8) / 2,
+            w: 22,
+            h: ROW_H - 8,
+            variant: "key",
+          });
           rowG.append(el);
           if (dot) refs.push({ from: dot, target: row.label.id, changed: false });
         }
@@ -332,8 +426,7 @@ function tableShape(
   };
 }
 
-const isRow = (obj: HeapObject | undefined): obj is SequenceObject =>
-  obj?.kind === "list" || obj?.kind === "tuple";
+const isRow = (obj: HeapObject | undefined): obj is SequenceObject => obj?.kind === "list" || obj?.kind === "tuple";
 
 /**
  * In nested mode, a list whose items are all lists nested inside it is drawn
@@ -379,29 +472,52 @@ function gridShape(
   const h = cellsY + gridH + (columnPointers.length ? POINTER_H : 4);
 
   return {
-    w, h, inY: cellsY + CELL_H / 2,
+    w,
+    h,
+    inY: cellsY + CELL_H / 2,
     draw(x, y, layer, refs) {
-      const g = s("g", { class: ["seq", "grid", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
+      const g = s("g", {
+        class: ["seq", "grid", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" "),
+      });
       if (showLabel) g.append(labelWithSize(x, y + 11, label, size));
       const x0 = x + rowIndexW;
       const top = y + cellsY;
       for (let c = 0; c < cols; c++) {
-        g.append(s("text", { class: "index", x: x0 + c * cellW + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" }, String(c)));
+        g.append(
+          s(
+            "text",
+            { class: "index", x: x0 + c * cellW + cellW / 2, y: y + labelH + 9, "text-anchor": "middle" },
+            String(c),
+          ),
+        );
       }
       rows.forEach((row, r) => {
         const ry = top + rowTops[r];
-        g.append(s("text", { class: "index", x: x0 - 6, y: ry + CELL_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, String(r)));
+        g.append(
+          s(
+            "text",
+            { class: "index", x: x0 - 6, y: ry + CELL_H / 2, "text-anchor": "end", "dominant-baseline": "central" },
+            String(r),
+          ),
+        );
         const rowChanged = ctx.diff.changedSlots.get(row.id) ?? new Set<string>();
         const replaced = opts.changed.has(String(r));
         if (!row.items.length) {
-          g.append(s("g", { class: "cell is-empty" }, s("rect", { x: x0, y: ry, width: cellW, height: CELL_H, rx: 3 })));
+          g.append(
+            s("g", { class: "cell is-empty" }, s("rect", { x: x0, y: ry, width: cellW, height: CELL_H, rx: 3 })),
+          );
         }
         views[r].forEach((view, c) => {
           const cx = x0 + c * cellW;
           const changed = replaced || rowChanged.has(String(c));
           if (view.nested) {
-            g.append(s("g", { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
-              s("rect", { x: cx, y: ry, width: cellW, height: rowHs[r], rx: 3 })));
+            g.append(
+              s(
+                "g",
+                { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
+                s("rect", { x: cx, y: ry, width: cellW, height: rowHs[r], rx: 3 }),
+              ),
+            );
             view.draw(cx + pad, ry + pad, view.w, view.h, g, refs, changed);
           } else {
             markCell(view.draw(cx, ry, cellW, CELL_H, g, refs, changed), row.id, String(c), row.items[c], c * cellW, 0);
@@ -411,8 +527,10 @@ function gridShape(
       // grid[i][j]: i marks a row, j a column, and their cell gets an outline.
       const rowMid = (r: number) => top + rowTops[r] + CELL_H / 2;
       const flip = { key: `ptr:${obj.id}`, originX: x, originY: y };
-      if (opts.pointers.length) g.append(rowPointerMarkers(opts.pointers, rowMid, x0 + cols * cellW, rows.length, flip));
-      if (columnPointers.length) g.append(pointerMarkers(columnPointers, (c) => x0 + c * cellW, cellW, top + gridH, cols, flip));
+      if (opts.pointers.length)
+        g.append(rowPointerMarkers(opts.pointers, rowMid, x0 + cols * cellW, rows.length, flip));
+      if (columnPointers.length)
+        g.append(pointerMarkers(columnPointers, (c) => x0 + c * cellW, cellW, top + gridH, cols, flip));
       // The cell this step works on: from the code's own grid[a][b] on the
       // line that ran (or runs next). Only if the code never indexes the
       // grid by name, a guess: the first row and column pointers.
@@ -423,7 +541,16 @@ function gridShape(
         focus = r && c ? { row: r.index, col: c.index } : "none";
       }
       if (focus !== "none") {
-        g.append(s("rect", { class: "grid-focus", x: x0 + focus.col * cellW - 2, y: top + rowTops[focus.row] - 2, width: cellW + 4, height: rowHs[focus.row] + 4, rx: 4 }));
+        g.append(
+          s("rect", {
+            class: "grid-focus",
+            x: x0 + focus.col * cellW - 2,
+            y: top + rowTops[focus.row] - 2,
+            width: cellW + 4,
+            height: rowHs[focus.row] + 4,
+            rx: 4,
+          }),
+        );
       }
       layer.append(g);
     },
@@ -449,11 +576,19 @@ function sequenceShape(
   const anyNested = views.some((v) => v.nested);
   const pad = anyNested ? NEST_PAD : 0;
   // With sizes on, each cell says what its item costs, above its index.
-  const cellSizes = ctx.sizes && obj.items.length
-    ? obj.items.map((item) => { const n = ctx.sizes!.cell(item, obj); return n === null ? "" : formatBytes(n); })
-    : null;
+  const cellSizes =
+    ctx.sizes && obj.items.length
+      ? obj.items.map((item) => {
+          const n = ctx.sizes!.cell(item, obj);
+          return n === null ? "" : formatBytes(n);
+        })
+      : null;
   const sizeH = cellSizes ? SIZE_H : 0;
-  const cellW = Math.max(CELL_MIN_W, ...views.map((v) => v.w + 2 * pad), ...(cellSizes ?? []).map((t) => uiTextWidth(t, 9.5) + 8));
+  const cellW = Math.max(
+    CELL_MIN_W,
+    ...views.map((v) => v.w + 2 * pad),
+    ...(cellSizes ?? []).map((t) => uiTextWidth(t, 9.5) + 8),
+  );
   const cellH = Math.max(CELL_H, ...views.map((v) => (v.nested ? v.h + 2 * pad : CELL_H)));
   const count = Math.max(obj.items.length, 1) + (truncated ? 1 : 0) + (before ? 1 : 0);
   const firstX = before ? cellW : 0;
@@ -463,7 +598,9 @@ function sequenceShape(
   const showLabel = !opts.nested || truncated || before || !!size;
   const label = before
     ? `${obj.typeName}, items ${offset}–${offset + obj.items.length - 1} of ${obj.length}`
-    : truncated ? `${obj.typeName}, first ${obj.items.length} of ${obj.length}` : obj.typeName;
+    : truncated
+      ? `${obj.typeName}, first ${obj.items.length} of ${obj.length}`
+      : obj.typeName;
   const labelH = showLabel ? LABEL_H : 2;
   const hasPointers = opts.pointers.length > 0;
   const w = Math.max(count * cellW, showLabel ? sizedLabelWidth(label, size) + 8 : 0);
@@ -471,40 +608,98 @@ function sequenceShape(
   const h = cellsY + cellH + (hasPointers ? POINTER_H : 0);
 
   return {
-    w, h, inY: cellsY + Math.min(cellH, CELL_H) / 2,
+    w,
+    h,
+    inY: cellsY + Math.min(cellH, CELL_H) / 2,
     draw(x, y, layer, refs) {
-      const g = s("g", { class: ["seq", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" ") });
+      const g = s("g", {
+        class: ["seq", obj.kind, opts.isNew && "is-new", opts.nested && "is-nested"].filter(Boolean).join(" "),
+      });
       if (showLabel) g.append(labelWithSize(x, y + 11, label, size));
       if (strip) {
-        g.append(stripBar({
-          ...strip, length: obj.length, window: { start: offset, count: obj.items.length },
-          pointers: opts.pointers,
-        }, x, y + labelH, count * cellW, `strip:${obj.id}`));
+        g.append(
+          stripBar(
+            {
+              ...strip,
+              length: obj.length,
+              window: { start: offset, count: obj.items.length },
+              pointers: opts.pointers,
+            },
+            x,
+            y + labelH,
+            count * cellW,
+            `strip:${obj.id}`,
+          ),
+        );
       }
       if (before) {
-        g.append(s("text", { class: "value v-none", x: x + cellW / 2, y: y + cellsY + cellH / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "…"));
+        g.append(
+          s(
+            "text",
+            {
+              class: "value v-none",
+              x: x + cellW / 2,
+              y: y + cellsY + cellH / 2,
+              "text-anchor": "middle",
+              "dominant-baseline": "central",
+            },
+            "…",
+          ),
+        );
       }
       if (!obj.items.length) {
-        g.append(s("g", { class: "cell is-empty" },
-          s("rect", { x, y: y + cellsY, width: cellW, height: CELL_H, rx: 3 }),
-          s("text", { class: "value v-none", x: x + cellW / 2, y: y + cellsY + CELL_H / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "∅")));
+        g.append(
+          s(
+            "g",
+            { class: "cell is-empty" },
+            s("rect", { x, y: y + cellsY, width: cellW, height: CELL_H, rx: 3 }),
+            s(
+              "text",
+              {
+                class: "value v-none",
+                x: x + cellW / 2,
+                y: y + cellsY + CELL_H / 2,
+                "text-anchor": "middle",
+                "dominant-baseline": "central",
+              },
+              "∅",
+            ),
+          ),
+        );
       }
       obj.items.forEach((_item, i) => {
         const cx = x + firstX + i * cellW;
         const slot = String(offset + i);
         const changed = opts.changed.has(slot);
         if (cellSizes?.[i]) {
-          g.append(s("text", { class: "cell-size", x: cx + cellW / 2, y: y + labelH + stripH + 9, "text-anchor": "middle" }, cellSizes[i]));
+          g.append(
+            s(
+              "text",
+              { class: "cell-size", x: cx + cellW / 2, y: y + labelH + stripH + 9, "text-anchor": "middle" },
+              cellSizes[i],
+            ),
+          );
         }
         if (hasIndices) {
-          g.append(s("text", { class: "index", x: cx + cellW / 2, y: y + labelH + stripH + sizeH + 9, "text-anchor": "middle" }, slot));
+          g.append(
+            s(
+              "text",
+              { class: "index", x: cx + cellW / 2, y: y + labelH + stripH + sizeH + 9, "text-anchor": "middle" },
+              slot,
+            ),
+          );
         }
         const view = views[i];
         const before = refs.length;
         if (view.nested) {
           // A cell frame with the nested object inside it.
-          g.append(s("g", { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
-            s("rect", { x: cx, y: y + cellsY, width: cellW, height: cellH, rx: 3 })));
+          g.append(
+            s(
+              "g",
+              { class: ["cell", "is-holder", changed && "is-changed"].filter(Boolean).join(" ") },
+              s("rect", { x: cx, y: y + cellsY, width: cellW, height: cellH, rx: 3 }),
+            ),
+          );
           view.draw(cx + pad, y + cellsY + pad, view.w, view.h, g, refs, changed);
         } else {
           markCell(view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed), obj.id, slot, obj.items[i], cx - x, 0);
@@ -514,12 +709,29 @@ function sequenceShape(
       });
       if (truncated) {
         const cx = x + firstX + obj.items.length * cellW;
-        g.append(s("text", { class: "value v-none", x: cx + cellW / 2, y: y + cellsY + cellH / 2, "text-anchor": "middle", "dominant-baseline": "central" }, "…"));
+        g.append(
+          s(
+            "text",
+            {
+              class: "value v-none",
+              x: cx + cellW / 2,
+              y: y + cellsY + cellH / 2,
+              "text-anchor": "middle",
+              "dominant-baseline": "central",
+            },
+            "…",
+          ),
+        );
       }
       if (hasPointers) {
         const shown = opts.pointers.map((p) => ({ ...p, index: p.index - offset }));
-        g.append(pointerMarkers(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY + cellH, obj.items.length,
-          { key: `ptr:${obj.id}`, originX: x, originY: y }));
+        g.append(
+          pointerMarkers(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY + cellH, obj.items.length, {
+            key: `ptr:${obj.id}`,
+            originX: x,
+            originY: y,
+          }),
+        );
       }
       layer.append(g);
     },
@@ -535,28 +747,53 @@ function objectShape(obj: HeapObject, ctx: Ctx, nested = false): Shape {
     case "set":
       return sequenceShape(obj, ctx, { changed, isNew, pointers: ctx.pointersFor(obj.id), nested });
     case "dict":
-      return tableShape(obj.typeName, obj.entries.map(([key, value]) => ({ label: key, value, changed: changed.has(valueKey(key)) })),
-        ctx, { variant: "dict", isNew, emptyText: "empty", nested, sizeText: sizeLabel(ctx, obj.id) });
+      return tableShape(
+        obj.typeName,
+        obj.entries.map(([key, value]) => ({ label: key, value, changed: changed.has(valueKey(key)) })),
+        ctx,
+        { variant: "dict", isNew, emptyText: "empty", nested, sizeText: sizeLabel(ctx, obj.id) },
+      );
     case "object":
-      return tableShape(obj.typeName, obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
-        ctx, { variant: "instance", isNew, emptyText: "no fields", nested, sizeText: sizeLabel(ctx, obj.id) });
+      return tableShape(
+        obj.typeName,
+        obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
+        ctx,
+        { variant: "instance", isNew, emptyText: "no fields", nested, sizeText: sizeLabel(ctx, obj.id) },
+      );
     case "function": {
-      const title = obj.builtin ? `builtin ${obj.name}` : `${ctx.functionKeyword} ${obj.name}(${obj.params.join(", ")})`;
-      return tableShape(title, obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
-        ctx, { variant: "function", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
+      const title = obj.builtin
+        ? `builtin ${obj.name}`
+        : `${ctx.functionKeyword} ${obj.name}(${obj.params.join(", ")})`;
+      return tableShape(
+        title,
+        obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
+        ctx,
+        { variant: "function", isNew, nested, sizeText: sizeLabel(ctx, obj.id) },
+      );
     }
     case "class":
-      return tableShape(`class ${obj.name}`, [], ctx, { variant: "class", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
+      return tableShape(`class ${obj.name}`, [], ctx, {
+        variant: "class",
+        isNew,
+        nested,
+        sizeText: sizeLabel(ctx, obj.id),
+      });
     case "opaque":
-      return tableShape(obj.typeName, [{ label: "", value: { kind: "prim", type: "repr", repr: obj.repr }, changed: changed.has("*") }],
-        ctx, { variant: "opaque", isNew, nested, sizeText: sizeLabel(ctx, obj.id) });
+      return tableShape(
+        obj.typeName,
+        [{ label: "", value: { kind: "prim", type: "repr", repr: obj.repr }, changed: changed.has("*") }],
+        ctx,
+        { variant: "opaque", isNew, nested, sizeText: sizeLabel(ctx, obj.id) },
+      );
   }
 }
 
 function frameShape(frame: Frame, ctx: Ctx, isActive: boolean): Shape {
   const { step, diff } = ctx;
   const rows: TableRow[] = frame.locals.map(([name, value]) => ({
-    label: name, value, changed: diff.changedLocals.has(localKey(frame.id, name)),
+    label: name,
+    value,
+    changed: diff.changedLocals.has(localKey(frame.id, name)),
   }));
   if (isActive && step.event === "return" && step.returnValue && frame.func !== "Global") {
     rows.push({ label: "returns", value: step.returnValue, changed: true, variant: "return-row" });
@@ -614,7 +851,8 @@ export function renderMemory(
   // Index pointers (i, j, lo, hi...) belong to the variable that holds a list.
   const pointerOwner = new Map<string, { name: string; frame: Frame }>();
   for (const frame of liveFrames(step)) {
-    for (const [name, value] of frame.locals) if (value.kind === "ref" && !pointerOwner.has(value.id)) pointerOwner.set(value.id, { name, frame });
+    for (const [name, value] of frame.locals)
+      if (value.kind === "ref" && !pointerOwner.has(value.id)) pointerOwner.set(value.id, { name, frame });
   }
   // The running frame's names win over paused frames and callers.
   for (const frame of step.stack) {
@@ -629,14 +867,23 @@ export function renderMemory(
     pointersFor(id, level = 0) {
       const owner = pointerOwner.get(id);
       if (!owner) return [];
-      const changedNames = new Set(owner.frame.locals.map(([n]) => n).filter((n) => diff.changedLocals.has(localKey(owner.frame.id, n))));
+      const changedNames = new Set(
+        owner.frame.locals.map(([n]) => n).filter((n) => diff.changedLocals.has(localKey(owner.frame.id, n))),
+      );
       const name = level === 1 ? `${owner.name}[]` : owner.name;
       return pointersFor(name, trace.indexNames, new Map(owner.frame.locals), changedNames);
     },
     gridFocus(id, size) {
       const owner = pointerOwner.get(id);
       if (!owner) return null;
-      return gridFocus(trace.gridAccesses, owner.name, focusLines(trace, stepIndex), new Map(owner.frame.locals), size, trace.language === "python");
+      return gridFocus(
+        trace.gridAccesses,
+        owner.name,
+        focusLines(trace, stepIndex),
+        new Map(owner.frame.locals),
+        size,
+        trace.language === "python",
+      );
     },
   };
 
@@ -685,7 +932,12 @@ export function renderMemory(
   const shapes = new Map<string, Shape>();
   for (const id of order) {
     const box = graphs.get(id);
-    shapes.set(id, box ? graphShape(box, step.heap[id], diff.newObjects.has(id), graphSize(box, ctx)) : objectShape(step.heap[id], ctx));
+    shapes.set(
+      id,
+      box
+        ? graphShape(box, step.heap[id], diff.newObjects.has(id), graphSize(box, ctx))
+        : objectShape(step.heap[id], ctx),
+    );
   }
 
   // The call stack, then paused frames under it.
@@ -716,7 +968,8 @@ export function renderMemory(
   // else is placed automatically, moving down past anything already there,
   // so a new box is never hidden under another one.
   const frameKeys = frames.map((frame, index) =>
-    frame.state === "suspended" ? nodeKey.paused(frame.id) : nodeKey.frame(index, frame.func));
+    frame.state === "suspended" ? nodeKey.paused(frame.id) : nodeKey.frame(index, frame.func),
+  );
   const obstacles: Rect[] = [];
   frameShapes.forEach((shape, index) => {
     const moved = layout.positions.get(frameKeys[index]);
@@ -736,14 +989,28 @@ export function renderMemory(
     if (isMoved) g.classList.add("is-moved");
     // An invisible backing, so a press anywhere on the box (even between its
     // index numbers and cells) grabs the box instead of panning the canvas.
-    g.append(s("rect", { class: "node-hit", x: x - 2, y: y - 2, width: shape.w + 4, height: shape.h + 4, fill: "transparent" }));
+    g.append(
+      s("rect", {
+        class: "node-hit",
+        x: x - 2,
+        y: y - 2,
+        width: shape.w + 4,
+        height: shape.h + 4,
+        fill: "transparent",
+      }),
+    );
     const before = refs.length;
     shape.draw(x, y, g, refs);
     for (let i = before; i < refs.length; i++) refs[i].source = key;
     // Arrows leaving list cells downward turn under the box like the teeth
     // of a comb: the leftmost cell turns highest, so they stay in order.
-    const down = refs.slice(before).filter((r) => r.down).sort((a, b) => a.from.x - b.from.x);
-    down.forEach((ref, rank) => { ref.exitDownY = y + shape.h + EXIT_DROP + rank * EXIT_LANE; });
+    const down = refs
+      .slice(before)
+      .filter((r) => r.down)
+      .sort((a, b) => a.from.x - b.from.x);
+    down.forEach((ref, rank) => {
+      ref.exitDownY = y + shape.h + EXIT_DROP + rank * EXIT_LANE;
+    });
     // Line each target up with where its arrow arrives.
     for (let i = before; i < refs.length; i++) {
       const ref = refs[i];
@@ -793,9 +1060,12 @@ export function renderMemory(
         columnCursor[d] = y + block.h + STACK_GAP;
       }
       const slot = block.nodes.get(id)!;
-      drawNode(key, shape,
+      drawNode(
+        key,
+        shape,
         block.origin.x + slot.index * (block.slotW + TREE_GAP) + Math.round((block.slotW - shape.w) / 2),
-        block.origin.y + slot.depth * block.levelH);
+        block.origin.y + slot.depth * block.levelH,
+      );
       continue;
     }
     const want = preferredY.has(id) ? preferredY.get(id)! - shape.inY : TOP;
@@ -808,21 +1078,25 @@ export function renderMemory(
   // else dims, so the output and what it's about stand out.
   const printed = layout.output === false ? null : printedAt(trace, stepIndex);
   if (printed) {
-    const targets = printed.refs.map((id) => graphAlias.get(id) ?? id).filter((id, i, all) => rects.has(nodeKey.object(id)) && all.indexOf(id) === i);
+    const targets = printed.refs
+      .map((id) => graphAlias.get(id) ?? id)
+      .filter((id, i, all) => rects.has(nodeKey.object(id)) && all.indexOf(id) === i);
     const shape = outputShape(printed, targets, framesW);
     const key = nodeKey.output;
     const moved = layout.positions.get(key);
     if (moved) drawNode(key, shape, moved.x, moved.y);
     else drawNode(key, shape, MARGIN, findFreeY(MARGIN, shape.w, shape.h, frameY, obstacles, STACK_GAP));
     if (layout.dimForOutput) svg.classList.add("has-output");
-    for (const id of targets) boxLayer.querySelector(`.node[data-node-key="${CSS.escape(nodeKey.object(id))}"]`)?.classList.add("is-printed");
+    for (const id of targets)
+      boxLayer.querySelector(`.node[data-node-key="${CSS.escape(nodeKey.object(id))}"]`)?.classList.add("is-printed");
     const card = boxLayer.querySelector(`.node[data-node-key="${key}"]`);
     card?.classList.add("is-output");
     // Its entrance is its own (CSS, set in the Style panel), not the step's fade.
     card?.setAttribute("data-no-fade", "");
   }
   // Dim in when printing starts, and back up the step after.
-  const printedBefore = layout.output !== false && layout.dimForOutput === true && stepIndex > 0 && !!printedAt(trace, stepIndex - 1);
+  const printedBefore =
+    layout.output !== false && layout.dimForOutput === true && stepIndex > 0 && !!printedAt(trace, stepIndex - 1);
   if (printed && layout.dimForOutput && !printedBefore) svg.classList.add("output-in");
   if (!printed && printedBefore) svg.classList.add("output-out");
 
@@ -833,8 +1107,15 @@ export function renderMemory(
 
   // 4. Route the arrows through the gaps between boxes (see route.ts).
   const edges = refs
-    .map((ref) => ({ ref, source: rects.get(ref.source ?? ""), target: rects.get(nodeKey.object(graphAlias.get(ref.target) ?? ref.target)) }))
-    .filter((e): e is { ref: OutRef; source: Rect & { inY: number }; target: Rect & { inY: number } } => !!e.source && !!e.target);
+    .map((ref) => ({
+      ref,
+      source: rects.get(ref.source ?? ""),
+      target: rects.get(nodeKey.object(graphAlias.get(ref.target) ?? ref.target)),
+    }))
+    .filter(
+      (e): e is { ref: OutRef; source: Rect & { inY: number }; target: Rect & { inY: number } } =>
+        !!e.source && !!e.target,
+    );
   const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
   const routes = routeEdges(
     edges.map(({ ref, source, target }) => {
@@ -843,13 +1124,17 @@ export function renderMemory(
       // An arrow to a node of a graph lands level with that node.
       const host = graphAlias.get(ref.target) ?? ref.target;
       const center = graphs.get(host)?.picture.centers.get(ref.target);
-      const entryY = center && graphs.get(host)!.graph.objectNodes ? target.y + GRAPH_BODY_Y + center.y : target.y + target.inY;
+      const entryY =
+        center && graphs.get(host)!.graph.objectNodes ? target.y + GRAPH_BODY_Y + center.y : target.y + target.inY;
       const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY };
       if (!block?.origin) return base;
       // Parent to child inside a tree: drop from the parent to the child's top.
       const parent = block.nodes.get(sourceId);
       if (parent && blockOf.get(sourceId) === block && parent.children.includes(ref.target)) {
-        return { ...base, tree: block.nodes.get(ref.target)!.index < parent.index ? "left" as const : "right" as const };
+        return {
+          ...base,
+          tree: block.nodes.get(ref.target)!.index < parent.index ? ("left" as const) : ("right" as const),
+        };
       }
       // From outside, to the left of the tree: come down beside the tree and
       // in from above, so the arrow doesn't run through the node's neighbors.
@@ -870,13 +1155,15 @@ export function renderMemory(
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
     }
-    arrowLayer.append(s("path", {
-      d: roundedPath(points),
-      class: ref.printed ? "ref-arrow print-arrow" : ref.changed ? "ref-arrow is-changed" : "ref-arrow",
-      "marker-end": "url(#arrow-ref)",
-      "data-from": ref.source,
-      "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target),
-    }));
+    arrowLayer.append(
+      s("path", {
+        d: roundedPath(points),
+        class: ref.printed ? "ref-arrow print-arrow" : ref.changed ? "ref-arrow is-changed" : "ref-arrow",
+        "marker-end": "url(#arrow-ref)",
+        "data-from": ref.source,
+        "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target),
+      }),
+    );
   });
 
   const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - COLUMN_GAP + MARGIN);
@@ -932,11 +1219,16 @@ function outputShape(printed: Printed, targets: string[], width: number): Shape 
     }
     lines.push(rest);
   }
-  const shown = lines.length > OUTPUT_MAX_LINES ? [...lines.slice(0, OUTPUT_MAX_LINES - 1), `… ${lines.length - OUTPUT_MAX_LINES + 1} more lines`] : lines;
+  const shown =
+    lines.length > OUTPUT_MAX_LINES
+      ? [...lines.slice(0, OUTPUT_MAX_LINES - 1), `… ${lines.length - OUTPUT_MAX_LINES + 1} more lines`]
+      : lines;
   const w = width;
   const h = HEADER_H + 8 + shown.length * OUTPUT_LINE_H + 6;
   return {
-    w, h, inY: HEADER_H / 2,
+    w,
+    h,
+    inY: HEADER_H / 2,
     draw(x, y, layer, refs) {
       const g = s("g", { class: "box output-box" });
       g.append(
@@ -946,12 +1238,28 @@ function outputShape(printed: Printed, targets: string[], width: number): Shape 
       );
       shown.forEach((line, i) => {
         const more = i === OUTPUT_MAX_LINES - 1 && lines.length > OUTPUT_MAX_LINES;
-        g.append(s("text", { class: more ? "output-text is-more" : "output-text", x: x + 12, y: y + HEADER_H + 8 + i * OUTPUT_LINE_H + OUTPUT_LINE_H / 2, "dominant-baseline": "central" }, line));
+        g.append(
+          s(
+            "text",
+            {
+              class: more ? "output-text is-more" : "output-text",
+              x: x + 12,
+              y: y + HEADER_H + 8 + i * OUTPUT_LINE_H + OUTPUT_LINE_H / 2,
+              "dominant-baseline": "central",
+            },
+            line,
+          ),
+        );
       });
       layer.append(g);
       // An arrow to each printed object, leaving from the right edge.
       targets.forEach((target, i) => {
-        refs.push({ from: { x: x + w, y: y + HEADER_H / 2 + Math.min(i, 3) * 6 }, target, changed: false, printed: true });
+        refs.push({
+          from: { x: x + w, y: y + HEADER_H / 2 + Math.min(i, 3) * 6 },
+          target,
+          changed: false,
+          printed: true,
+        });
       });
     },
   };
@@ -994,14 +1302,21 @@ const GRAPH_BODY_Y = HEADER_H + 4;
 function graphBoxes(trace: Trace, stepIndex: number): Map<string, GraphBox> {
   const step = trace.steps[stepIndex];
   const before = trace.steps[stepIndex - 1];
-  const prev = new Map((before ? graphsAt(trace, before) : []).map((graph) => [graph.id, {
-    graph, overlay: graphOverlay(trace, graph, stepScopes(before), before.heap),
-  }]));
+  const prev = new Map(
+    (before ? graphsAt(trace, before) : []).map((graph) => [
+      graph.id,
+      {
+        graph,
+        overlay: graphOverlay(trace, graph, stepScopes(before), before.heap),
+      },
+    ]),
+  );
   const boxes = new Map<string, GraphBox>();
   for (const graph of graphsAt(trace, step)) {
     const overlay = graphOverlay(trace, graph, stepScopes(step), step.heap);
     const picture = graphPicture(graph, layoutFor(trace, graph), overlay, {
-      flipKey: `gptr:${graph.id}`, prev: before ? prev.get(graph.id) ?? null : null,
+      flipKey: `gptr:${graph.id}`,
+      prev: before ? (prev.get(graph.id) ?? null) : null,
       legendOverlays: [overlay, ...legendOverlaysFor(trace, graph)],
     });
     boxes.set(graph.hostId, { graph, overlay, picture });
@@ -1025,15 +1340,33 @@ function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean, size: string
   const w = Math.max(picture.w + 16, uiTextWidth(title, 12) + 28 + sizeW);
   const h = GRAPH_BODY_Y + picture.h + 4;
   return {
-    w, h, inY: HEADER_H / 2,
+    w,
+    h,
+    inY: HEADER_H / 2,
     draw(x, y, layer) {
       const g = s("g", { class: ["box", "graph-box", isNew && "is-new"].filter(Boolean).join(" ") });
       g.append(
         s("rect", { class: "box-body", x, y, width: w, height: h, rx: 5 }),
-        s("path", { class: "box-header", d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z` }),
+        s("path", {
+          class: "box-header",
+          d: `M${x},${y + HEADER_H} V${y + 5} q0,-5 5,-5 H${x + w - 5} q5,0 5,5 V${y + HEADER_H} z`,
+        }),
         s("text", { class: "box-title", x: x + 10, y: y + HEADER_H / 2, "dominant-baseline": "central" }, title),
       );
-      if (size) g.append(s("text", { class: "box-size", x: x + w - 9, y: y + HEADER_H / 2, "text-anchor": "end", "dominant-baseline": "central" }, size));
+      if (size)
+        g.append(
+          s(
+            "text",
+            {
+              class: "box-size",
+              x: x + w - 9,
+              y: y + HEADER_H / 2,
+              "text-anchor": "end",
+              "dominant-baseline": "central",
+            },
+            size,
+          ),
+        );
       picture.draw(x + Math.round((w - picture.w) / 2), y + GRAPH_BODY_Y, g);
       layer.append(g);
     },
@@ -1074,7 +1407,11 @@ function findTreeBlocks(trace: Trace, step: Step, nestedMode: boolean): TreeBloc
       placed.add(nodeId);
       const [left, right] = state.nodes.get(nodeId)!.links;
       visit(left, depth + 1);
-      block.nodes.set(nodeId, { index: block.inOrder.length, depth, children: [left, right].filter((c): c is string => !!c) });
+      block.nodes.set(nodeId, {
+        index: block.inOrder.length,
+        depth,
+        children: [left, right].filter((c): c is string => !!c),
+      });
       block.inOrder.push(nodeId);
       visit(right, depth + 1);
     };

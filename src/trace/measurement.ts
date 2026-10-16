@@ -49,7 +49,12 @@ export function workWord(kind: string | undefined): string {
 
 /** 400000000 -> "400M", 12345 -> "12.3K", 999 -> "999". */
 export function compact(n: number): string {
-  const units: [number, string][] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  const units: [number, string][] = [
+    [1e12, "T"],
+    [1e9, "B"],
+    [1e6, "M"],
+    [1e3, "K"],
+  ];
   for (const [size, unit] of units) {
     if (n >= size) {
       const v = n / size;

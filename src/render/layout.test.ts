@@ -6,22 +6,27 @@
  */
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { expandHeaps } from "../trace/delta";
-import { JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES, type Example } from "../examples/index";
+import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
+import { expandHeaps } from "../trace/delta";
 import { diffSteps } from "../trace/diff";
 import { applyHints } from "../trace/hints";
-import type { Trace } from "../trace/types";
-import { renderMemory, type MemoryMode, type Point } from "./memory";
 import { SIZE_MODELS, type SizeModel } from "../trace/memory";
+import type { Trace } from "../trace/types";
+import { type MemoryMode, type Point, renderMemory } from "./memory";
 import { crosses, overlaps, type Rect } from "./route";
 
 function tracePython(source: string): Trace | null {
   try {
-    const json = execFileSync("python3", ["-c",
-      "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
-    { input: source, encoding: "utf8" });
+    const json = execFileSync(
+      "python3",
+      [
+        "-c",
+        "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))",
+      ],
+      { input: source, encoding: "utf8" },
+    );
     return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null; // Python not installed: those cases are skipped
@@ -39,8 +44,10 @@ function read(svg: SVGSVGElement): Drawn {
   for (const g of svg.querySelectorAll<SVGGElement>(".node")) {
     const hit = g.querySelector(".node-hit")!;
     boxes.set(g.dataset.nodeKey!, {
-      x: Number(g.dataset.x), y: Number(g.dataset.y),
-      w: Number(hit.getAttribute("width")) - 4, h: Number(hit.getAttribute("height")) - 4,
+      x: Number(g.dataset.x),
+      y: Number(g.dataset.y),
+      w: Number(hit.getAttribute("width")) - 4,
+      h: Number(hit.getAttribute("height")) - 4,
     });
   }
   const arrows = [...svg.querySelectorAll<SVGPathElement>(".ref-arrow")].map((path) => {
@@ -61,8 +68,12 @@ function read(svg: SVGSVGElement): Drawn {
 type Tracer = (code: string) => Trace | null | Promise<Trace | null>;
 const programs: [string, Example, Tracer][] = [
   ...PYTHON_EXAMPLES.map((e) => ["python", e, tracePython] as [string, Example, Tracer]),
-  ...JAVASCRIPT_EXAMPLES.map((e) => ["javascript", e, (c: string) => traceJavaScript(c, 3000)] as [string, Example, Tracer]),
-  ...TYPESCRIPT_EXAMPLES.map((e) => ["typescript", e, (c: string) => traceTypeScript(c, 3000)] as [string, Example, Tracer]),
+  ...JAVASCRIPT_EXAMPLES.map(
+    (e) => ["javascript", e, (c: string) => traceJavaScript(c, 3000)] as [string, Example, Tracer],
+  ),
+  ...TYPESCRIPT_EXAMPLES.map(
+    (e) => ["typescript", e, (c: string) => traceTypeScript(c, 3000)] as [string, Example, Tracer],
+  ),
 ];
 
 describe.each(programs)("%s: %s", (language, example, trace) => {
@@ -70,8 +81,10 @@ describe.each(programs)("%s: %s", (language, example, trace) => {
   // and cells wider, so they get the same checks).
   const [first, second] = SIZE_MODELS[language === "python" ? "python" : "javascript"].map((m) => m.value);
   const cases: [string, MemoryMode, SizeModel | null][] = [
-    ["arrows", "arrows", null], ["nested", "nested", null],
-    [`arrows, ${first} sizes`, "arrows", first], [`nested, ${second} sizes`, "nested", second],
+    ["arrows", "arrows", null],
+    ["nested", "nested", null],
+    [`arrows, ${first} sizes`, "arrows", first],
+    [`nested, ${second} sizes`, "nested", second],
   ];
   it.each(cases)("%s: no overlapping boxes, no arrows through boxes", async (_name, mode, sizes) => {
     const raw = await trace(example.code);
@@ -79,7 +92,9 @@ describe.each(programs)("%s: %s", (language, example, trace) => {
     const t = applyHints(raw);
     expect(t.error).toBeNull();
     for (let i = 0; i < t.steps.length; i++) {
-      const { boxes, arrows } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode, sizes }));
+      const { boxes, arrows } = read(
+        renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode, sizes }),
+      );
       const list = [...boxes];
       for (let a = 0; a < list.length; a++) {
         for (let b = a + 1; b < list.length; b++) {
@@ -91,7 +106,8 @@ describe.each(programs)("%s: %s", (language, example, trace) => {
           const [p, q] = [arrow.points[k - 1], arrow.points[k]];
           for (const [key, rect] of boxes) {
             if (key === arrow.from && k === 1) continue; // leaving its own box
-            if (crosses(p, q, rect)) throw new Error(`step ${i + 1}: arrow ${arrow.from} -> ${arrow.to} crosses ${key}`);
+            if (crosses(p, q, rect))
+              throw new Error(`step ${i + 1}: arrow ${arrow.from} -> ${arrow.to} crosses ${key}`);
           }
         }
       }
@@ -113,7 +129,8 @@ describe("dragged boxes", () => {
         const { boxes } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions }));
         const moved = boxes.get("frame:0:Global")!;
         for (const [other, r] of boxes) {
-          if (other !== "frame:0:Global" && overlaps(moved, r)) throw new Error(`step ${i + 1}: ${other} is under the dragged frame`);
+          if (other !== "frame:0:Global" && overlaps(moved, r))
+            throw new Error(`step ${i + 1}: ${other} is under the dragged frame`);
         }
       }
     }

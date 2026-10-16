@@ -110,13 +110,7 @@ export interface OpaqueObject {
   size?: number;
 }
 
-export type HeapObject =
-  | SequenceObject
-  | DictObject
-  | InstanceObject
-  | FunctionObject
-  | ClassObject
-  | OpaqueObject;
+export type HeapObject = SequenceObject | DictObject | InstanceObject | FunctionObject | ClassObject | OpaqueObject;
 
 /** One scope on the call stack. */
 export interface Frame {
@@ -224,7 +218,15 @@ export interface LinkedHint {
 
 /** Options a `viz: graph` hint can carry. */
 export type GraphOption = "directed" | "undirected" | "circle" | "layered" | "force" | "matrix" | "edgelist";
-export const GRAPH_OPTIONS: readonly GraphOption[] = ["directed", "undirected", "circle", "layered", "force", "matrix", "edgelist"];
+export const GRAPH_OPTIONS: readonly GraphOption[] = [
+  "directed",
+  "undirected",
+  "circle",
+  "layered",
+  "force",
+  "matrix",
+  "edgelist",
+];
 
 /**
  * `viz: graph adj`, `viz: graph Node(neighbors)`, with options and the
@@ -299,12 +301,23 @@ export type CostNode =
   | { kind: "loop"; loop?: string; line: number; bound: CostBound; body: CostNode[] }
   /** A call to one of the program's own functions. */
   | {
-    kind: "call"; line: number; callee: string; args: (SizeRef | null)[]; shrink: Shrink;
-    /** `return f(...)`: one of several alternatives, only one of which runs per call. */
-    alt?: boolean;
-  }
+      kind: "call";
+      line: number;
+      callee: string;
+      args: (SizeRef | null)[];
+      shrink: Shrink;
+      /** `return f(...)`: one of several alternatives, only one of which runs per call. */
+      alt?: boolean;
+    }
   /** A built-in that isn't O(1): `x in list`, sorted(), arr.indexOf(), heappush. */
-  | { kind: "op"; line: number; what: string; cost: "linear" | "nlogn" | "log"; size: SizeRef | null; container?: string }
+  | {
+      kind: "op";
+      line: number;
+      what: string;
+      cost: "linear" | "nlogn" | "log";
+      size: SizeRef | null;
+      container?: string;
+    }
   /**
    * Memory: `sizes` multiplied together each time it runs ([] is one item).
    * `name`: assigned to a variable, replacing what it held (not kept per

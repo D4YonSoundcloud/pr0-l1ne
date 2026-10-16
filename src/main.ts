@@ -1,25 +1,33 @@
 import "./styles.css";
-import { createEditor } from "./editor";
-import { LANGUAGES, isLanguageId, type LanguageId } from "./languages";
-import { applyHints } from "./trace/hints";
-import { ProgramStore, type Program } from "./programs";
-import { renderLoopHistory } from "./render/loopView";
-import { prefersReducedMotion } from "./render/animate";
-import { applyFocus, renderMemory, type MemoryMode, type Point } from "./render/memory";
-import { Viewport, type AutoFit } from "./render/viewport";
-import { SIZE_MODELS, formatBytes, stepSizes, type SizeModel } from "./trace/memory";
-import { APPEARANCE_KEY, applyAppearance, parseAppearance, type Appearance } from "./appearance";
-import { StylePanel } from "./stylePanel";
+import { APPEARANCE_KEY, type Appearance, applyAppearance, parseAppearance } from "./appearance";
 import { ComplexityPanel, costLabels } from "./complexityPanel";
+import { createEditor } from "./editor";
+import { type GrowthSeries, GrowthView } from "./growthView";
+import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
 import { MEASURE_LIMITS, MeasurePanel, measureLabels } from "./measurePanel";
-import { GrowthView, type GrowthSeries } from "./growthView";
-import { findSizes, ladder, pointFrom, staticGrowth, type GrowthPoint } from "./trace/growth";
-import { compact, duration, type Measurement } from "./trace/measurement";
+import { type Program, ProgramStore } from "./programs";
+import { prefersReducedMotion } from "./render/animate";
+import { renderLoopHistory } from "./render/loopView";
+import { applyFocus, type MemoryMode, type Point, renderMemory } from "./render/memory";
+import { type AutoFit, Viewport } from "./render/viewport";
+import { StylePanel } from "./stylePanel";
 import { estimateComplexity } from "./trace/complexity";
 import { diffSteps } from "./trace/diff";
-import { ALL_LOOPS, availableLoops, buildLoopHistory, buildNestedHistory, nestedLoopsAt, type LoopHistory, type LoopRow } from "./trace/loopHistory";
+import { findSizes, type GrowthPoint, ladder, pointFrom, staticGrowth } from "./trace/growth";
+import { applyHints } from "./trace/hints";
+import {
+  ALL_LOOPS,
+  availableLoops,
+  buildLoopHistory,
+  buildNestedHistory,
+  type LoopHistory,
+  type LoopRow,
+  nestedLoopsAt,
+} from "./trace/loopHistory";
+import { compact, duration, type Measurement } from "./trace/measurement";
+import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "./trace/memory";
 import { liveFrames, type Step, type Trace } from "./trace/types";
-import { Runner, type RunOutcome, type RunnerStatus } from "./worker/runner";
+import { Runner, type RunnerStatus, type RunOutcome } from "./worker/runner";
 
 const MAX_STEPS = 20_000;
 /**
@@ -61,13 +69,15 @@ const savedCode = (id: LanguageId) => stored(codeKey(id)) ?? LANGUAGES[id].examp
 
 // Saved programs. `openKey` remembers which saved program (if any) is open in
 // each language, so a reload comes back to the same one.
-const programs = new ProgramStore((() => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-})());
+const programs = new ProgramStore(
+  (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+);
 const openKey = (id: LanguageId) => `algoviz:open:${id}`;
 const openProgramFor = (id: LanguageId) => programs.get(stored(openKey(id))) ?? null;
 
@@ -150,16 +160,26 @@ const els = {
 
 function showStatus(status: RunnerStatus): void {
   els.status.classList.toggle("is-error", status.kind === "failed");
-  els.status.title = status.kind === "loading" && language === "python"
-    ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
-    : status.kind === "failed" ? status.message : ""; // a long error may be cut short on screen
+  els.status.title =
+    status.kind === "loading" && language === "python"
+      ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
+      : status.kind === "failed"
+        ? status.message
+        : ""; // a long error may be cut short on screen
   switch (status.kind) {
     case "loading":
-      els.status.textContent = language === "python" ? "Downloading Python (6 MB)…" : `Loading ${LANGUAGES[language].label}…`;
+      els.status.textContent =
+        language === "python" ? "Downloading Python (6 MB)…" : `Loading ${LANGUAGES[language].label}…`;
       break;
-    case "running": els.status.textContent = "Running…"; break;
-    case "ready": els.status.textContent = status.label; break;
-    case "failed": els.status.textContent = status.message; break;
+    case "running":
+      els.status.textContent = "Running…";
+      break;
+    case "ready":
+      els.status.textContent = status.label;
+      break;
+    case "failed":
+      els.status.textContent = status.message;
+      break;
   }
 }
 
@@ -207,7 +227,10 @@ function truncationBanner(t: Trace): string {
   const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
   if (t.stoppedBy === "time") {
     const seconds = lastBudget === "live" ? LIVE_SECONDS : RUN_SECONDS;
-    const runLonger = lastBudget === "live" ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${RUN_SECONDS} seconds.` : "";
+    const runLonger =
+      lastBudget === "live"
+        ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${RUN_SECONDS} seconds.`
+        : "";
     return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
   }
   return `Stopped after ${MAX_STEPS.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
@@ -224,7 +247,9 @@ const escapeHtml = (text: string) =>
 function applyOutcome(outcome: RunOutcome): void {
   if (outcome.kind === "timeout") {
     stale = true;
-    setBanner(`Your code ran for more than ${outcome.seconds} seconds and was stopped. Check for a loop that never ends.`);
+    setBanner(
+      `Your code ran for more than ${outcome.seconds} seconds and was stopped. Check for a loop that never ends.`,
+    );
     render();
     updateComplexity();
     return;
@@ -243,8 +268,14 @@ function applyOutcome(outcome: RunOutcome): void {
     // good picture on screen, dimmed, and point at the problem.
     stale = true;
     const where = next.error.line ? ` on line ${next.error.line}` : "";
-    setBanner(`<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`);
-    editor.setMarks({ next: null, prev: null, error: { line: next.error.line, message: `${next.error.type}: ${next.error.message}` } });
+    setBanner(
+      `<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`,
+    );
+    editor.setMarks({
+      next: null,
+      prev: null,
+      error: { line: next.error.line, message: `${next.error.type}: ${next.error.message}` },
+    });
     render(false);
     updateComplexity();
     return;
@@ -347,11 +378,13 @@ function sizeModel(): SizeModel {
 const shownSizes = (): SizeModel | null => (sizesOn ? sizeModel() : null);
 
 function fillSizeModels(): void {
-  els.sizeModel.replaceChildren(...SIZE_MODELS[sizeFamily(language)].map((c) => {
-    const option = new Option(c.label, c.value);
-    option.title = c.title;
-    return option;
-  }));
+  els.sizeModel.replaceChildren(
+    ...SIZE_MODELS[sizeFamily(language)].map((c) => {
+      const option = new Option(c.label, c.value);
+      option.title = c.title;
+      return option;
+    }),
+  );
   els.sizeModel.value = sizeModel();
 }
 
@@ -409,8 +442,9 @@ let appearance: Appearance = parseAppearance(stored(APPEARANCE_KEY));
 let saveAppearanceTimer = 0;
 function setAppearance(next: Appearance): void {
   appearance = next;
-  applyAppearance(appearance, { canvas: els.canvas, memory: els.memorySection, loop: els.loopSection },
-    (pane, size) => (pane === "memory" ? memoryView : loopView).setGridSize(size));
+  applyAppearance(appearance, { canvas: els.canvas, memory: els.memorySection, loop: els.loopSection }, (pane, size) =>
+    (pane === "memory" ? memoryView : loopView).setGridSize(size),
+  );
   // Auto-fit glides with each window's step animation.
   memoryView.setZoomAnimation(appearance.memory.duration, appearance.memory.easing);
   loopView.setZoomAnimation(appearance.loop.duration, appearance.loop.easing);
@@ -424,7 +458,10 @@ const stylePanel = new StylePanel({
   get: () => appearance,
   set: setAppearance,
   replay: () => replayStep(),
-  onOpen: () => { complexityPanel.toggle(false); measurePanel.toggle(false); },
+  onOpen: () => {
+    complexityPanel.toggle(false);
+    measurePanel.toggle(false);
+  },
 });
 
 // ---------------------------------------------------------------- complexity
@@ -441,7 +478,10 @@ const complexityPanel = new ComplexityPanel({
     store(COST_LABELS_KEY, on ? "on" : "off");
     updateComplexity();
   },
-  onOpen: () => { stylePanel.toggle(false); measurePanel.toggle(false); },
+  onOpen: () => {
+    stylePanel.toggle(false);
+    measurePanel.toggle(false);
+  },
 });
 
 // ---------------------------------------------------------------- measure
@@ -469,7 +509,10 @@ let tracedCode: string | null = null;
 function sizeSuggestion(code: string): { name: string; line: number } | null {
   let best: { name: string; line: number; value: number } | null = null;
   code.split("\n").forEach((text, i) => {
-    const m = /^(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*(?::\s*[\w<>[\]|. ]+?\s*)?=\s*([0-9][0-9_]*)\s*;?\s*(?:(?:#|\/\/).*)?$/.exec(text);
+    const m =
+      /^(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*(?::\s*[\w<>[\]|. ]+?\s*)?=\s*([0-9][0-9_]*)\s*;?\s*(?:(?:#|\/\/).*)?$/.exec(
+        text,
+      );
     const value = m ? Number(m[2].replace(/_/g, "")) : 0;
     if (m && value >= 8 && (!best || value > best.value)) best = { name: m[1], line: i + 1, value };
   });
@@ -510,15 +553,21 @@ const measurePanel = new MeasurePanel({
   measureAgain: () => measureNow(),
   estimate: () => {
     try {
-      return trace ? estimateComplexity(trace, stale ? null : currentMeasurement())?.time ?? null : null;
+      return trace ? (estimateComplexity(trace, stale ? null : currentMeasurement())?.time ?? null) : null;
     } catch {
       return null;
     }
   },
-  onOpen: () => { stylePanel.toggle(false); complexityPanel.toggle(false); els.measureResults.setAttribute("aria-expanded", "true"); },
+  onOpen: () => {
+    stylePanel.toggle(false);
+    complexityPanel.toggle(false);
+    els.measureResults.setAttribute("aria-expanded", "true");
+  },
 });
-new MutationObserver(() => els.measureResults.setAttribute("aria-expanded", String(measurePanel.isOpen)))
-  .observe(measurePanel.el, { attributes: true, attributeFilter: ["hidden"] });
+new MutationObserver(() => els.measureResults.setAttribute("aria-expanded", String(measurePanel.isOpen))).observe(
+  measurePanel.el,
+  { attributes: true, attributeFilter: ["hidden"] },
+);
 
 /** Measure's result, when it's for the code in the editor now. */
 function currentMeasurement(): Measurement | null {
@@ -533,7 +582,9 @@ function updateMeasureLabels(): void {
 function setMeasureButton(on: boolean): void {
   els.measure.textContent = on ? "Stop" : "Measure";
   els.measure.classList.toggle("is-measuring", on);
-  els.measure.title = on ? "Stop measuring" : "Run the whole program at full size, counting how many times each line runs (Ctrl + Shift + ')";
+  els.measure.title = on
+    ? "Stop measuring"
+    : "Run the whole program at full size, counting how many times each line runs (Ctrl + Shift + ')";
 }
 
 /**
@@ -564,16 +615,30 @@ async function measureGrowth(scaled?: string[]): Promise<void> {
   for (const [i, rung] of rungs.entries()) {
     const label = `Measuring ${x} = ${rung.x.toLocaleString()} (${i + 1} of ${rungs.length})…`;
     growthView.setProgress(label);
-    const outcome = await runnerFor(lang).measure(code, measureLimit, (p) => growthView.setProgress(`${label} ${duration(p.elapsedMs)}`), rung.sizes);
+    const outcome = await runnerFor(lang).measure(
+      code,
+      measureLimit,
+      (p) => growthView.setProgress(`${label} ${duration(p.elapsedMs)}`),
+      rung.sizes,
+    );
     const full = rungs[rungs.length - 1].x;
     const at = `At ${x} = ${rung.x.toLocaleString()}`;
     if (outcome.kind !== "measured") {
-      stopped = { x: full, why: outcome.kind === "stopped" && outcome.reason === "person" ? `Stopped at ${x} = ${rung.x.toLocaleString()}.` : `${at} the run didn't stop at the time limit.` };
+      stopped = {
+        x: full,
+        why:
+          outcome.kind === "stopped" && outcome.reason === "person"
+            ? `Stopped at ${x} = ${rung.x.toLocaleString()}.`
+            : `${at} the run didn't stop at the time limit.`,
+      };
       break;
     }
     const m = outcome.result;
     if (m.status === "error") {
-      stopped = { x: full, why: `${at} the program stopped with ${m.error?.type ?? "an error"}: ${m.error?.message ?? ""}` };
+      stopped = {
+        x: full,
+        why: `${at} the program stopped with ${m.error?.type ?? "an error"}: ${m.error?.message ?? ""}`,
+      };
       break;
     }
     if (m.status === "limit") {
@@ -616,11 +681,15 @@ async function measureNow(): Promise<void> {
   // A traced run may be finishing: measure right after it.
   while (inFlight) await new Promise((r) => setTimeout(r, 30));
   const started = performance.now();
-  const showProgress = (text: string) => { if (lang === language) els.status.textContent = text; };
+  const showProgress = (text: string) => {
+    if (lang === language) els.status.textContent = text;
+  };
   showProgress("Measuring…");
   const tick = window.setInterval(() => showProgress(`Measuring… ${duration(performance.now() - started)}`), 500);
   const outcome = await runnerFor(lang).measure(code, measureLimit, (p) => {
-    const share = p.loop ? ` · ${Math.min(99, Math.floor((100 * p.loop.done) / p.loop.total))}% of line ${p.loop.line}'s loop` : "";
+    const share = p.loop
+      ? ` · ${Math.min(99, Math.floor((100 * p.loop.done) / p.loop.total))}% of line ${p.loop.line}'s loop`
+      : "";
     showProgress(`Measuring… ${duration(p.elapsedMs)}${share}`);
   });
   window.clearInterval(tick);
@@ -635,9 +704,11 @@ async function measureNow(): Promise<void> {
       measurePanel.show(outcome.result, code);
       updateMeasureLabels();
     } else if (outcome.kind === "stopped") {
-      setBanner(outcome.reason === "person"
-        ? "Measuring stopped. Nothing was counted, since the run was cut off from outside."
-        : `The program didn't stop at the ${duration(measureLimit)} limit (probably stuck inside one long built-in call), so it was stopped from outside.`);
+      setBanner(
+        outcome.reason === "person"
+          ? "Measuring stopped. Nothing was counted, since the run was cut off from outside."
+          : `The program didn't stop at the ${duration(measureLimit)} limit (probably stuck inside one long built-in call), so it was stopped from outside.`,
+      );
     } else {
       setBanner(`Measuring failed: <code>${escapeHtml(outcome.message)}</code>`);
     }
@@ -702,10 +773,23 @@ function clearLayout(): void {
 updateResetLayout();
 
 function renderMemoryView(): void {
-  if (!trace || !trace.steps.length) return;
+  if (!trace?.steps.length) return;
   const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
   const animation = animationFor("memory");
-  memoryView.setContent(renderMemory(trace, stepIndex, diff, { positions, raise: draggingNode, mode: memoryMode, sizes: shownSizes(), output: outputOn, dimForOutput }), "", animation.duration, animation.easing, animation.enter);
+  memoryView.setContent(
+    renderMemory(trace, stepIndex, diff, {
+      positions,
+      raise: draggingNode,
+      mode: memoryMode,
+      sizes: shownSizes(),
+      output: outputOn,
+      dimForOutput,
+    }),
+    "",
+    animation.duration,
+    animation.easing,
+    animation.enter,
+  );
   updateMemoryTotal();
   refreshFocus();
 }
@@ -790,7 +874,7 @@ function render(updateMarks = true): void {
   // text is in its tooltip when it doesn't fit.
   els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step, prev)}`;
   els.stepLabel.title = els.stepLabel.textContent;
-  const skipped = (step.skipped ?? 0) + (stepIndex === trace.steps.length - 1 ? step.skippedAfter ?? 0 : 0);
+  const skipped = (step.skipped ?? 0) + (stepIndex === trace.steps.length - 1 ? (step.skippedAfter ?? 0) : 0);
   if (skipped) {
     // Passes in the middle of a long loop ran here without being recorded.
     els.stepLabel.textContent += ` (${compact(skipped)} steps skipped)`;
@@ -805,8 +889,9 @@ function render(updateMarks = true): void {
   const { contexts } = availableLoops(trace, stepIndex);
   const together = loopMode === "stacked" && nestedLoopsAt(trace, stepIndex).length > 0;
   const wantsAll = together && (selectedLoop === null || selectedLoop === ALL_LOOPS);
-  const history = (wantsAll ? buildNestedHistory(trace, stepIndex) : null)
-    ?? buildLoopHistory(trace, stepIndex, selectedLoop === ALL_LOOPS ? null : selectedLoop);
+  const history =
+    (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
+    buildLoopHistory(trace, stepIndex, selectedLoop === ALL_LOOPS ? null : selectedLoop);
   const tab = (text: string, selected: boolean, pick: string, title = "") => {
     const button = document.createElement("button");
     button.type = "button";
@@ -815,19 +900,42 @@ function render(updateMarks = true): void {
     button.setAttribute("aria-selected", String(selected));
     button.textContent = text;
     if (title) button.title = title;
-    button.addEventListener("click", () => { selectedLoop = pick; render(); });
+    button.addEventListener("click", () => {
+      selectedLoop = pick;
+      render();
+    });
     return button;
   };
   els.loopTabs.replaceChildren(
-    ...(together ? [tab("All loops", !!history?.nested, ALL_LOOPS, "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it")] : []),
+    ...(together
+      ? [
+          tab(
+            "All loops",
+            !!history?.nested,
+            ALL_LOOPS,
+            "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it",
+          ),
+        ]
+      : []),
     ...contexts.map((ctx) => {
       const info = trace!.loops.find((loop) => loop.id === ctx.loop);
-      return tab(`${info?.header ?? ctx.loop}  (line ${info?.line ?? "?"})`, !history?.nested && history?.info.id === ctx.loop, ctx.loop);
-    }));
-  if (history && history.rows.length) {
+      return tab(
+        `${info?.header ?? ctx.loop}  (line ${info?.line ?? "?"})`,
+        !history?.nested && history?.info.id === ctx.loop,
+        ctx.loop,
+      );
+    }),
+  );
+  if (history?.rows.length) {
     const live = loopMode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
     const animation = animationFor("loop");
-    loopView.setContent(renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes(), vertical: loopVertical }), "", live ? animation.duration : 0, animation.easing, animation.enter);
+    loopView.setContent(
+      renderLoopHistory(trace, history, { hideQuiet, live, sizes: shownSizes(), vertical: loopVertical }),
+      "",
+      live ? animation.duration : 0,
+      animation.easing,
+      animation.enter,
+    );
     // As you step, keep the iteration that's running in view.
     const current = els.loop.querySelector(".loop-row.is-current");
     if (current) loopView.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
@@ -850,7 +958,10 @@ function render(updateMarks = true): void {
     editor.setMarks({
       next: nextLine,
       prev: prev && prev.line >= 1 ? prev.line : null,
-      error: atEnd && trace.error ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` } : null,
+      error:
+        atEnd && trace.error
+          ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` }
+          : null,
     });
   }
 }
@@ -884,7 +995,11 @@ let pendingAnimation: { playing: boolean } | null = null;
  * (from the Style panel), shortened while playing so an animation always
  * ends before the next step starts. Duration 0 means no animation.
  */
-function animationFor(pane: "memory" | "loop"): { duration: number; easing: string; enter: { fade: boolean; slide: boolean } } {
+function animationFor(pane: "memory" | "loop"): {
+  duration: number;
+  easing: string;
+  enter: { fade: boolean; slide: boolean };
+} {
   const { duration, easing, enterFade, enterSlide } = appearance[pane];
   const enter = { fade: enterFade, slide: enterSlide };
   if (!pendingAnimation) return { duration: 0, easing, enter };
@@ -986,39 +1101,43 @@ els.loopAnimated.setAttribute("aria-pressed", String(loopMode === "animated"));
 
 let liveTimer = 0;
 let growthTimer = 0;
-const editor = createEditor(els.editor, { monacoId: LANGUAGES[language].monacoId, code: savedCode(language) }, {
-  onChange(code) {
-    setPlaying(false);
-    store(codeKey(language), code);
-    updateProgramUI();
-    // The growth section reads the code's `viz: size` hints.
-    window.clearTimeout(growthTimer);
-    if (measurePanel.isOpen && !growthView.running) growthTimer = window.setTimeout(() => growthView.render(), 250);
-    window.clearTimeout(liveTimer);
-    if (els.live.checked) liveTimer = window.setTimeout(() => run(code, language, "live"), LIVE_DELAY_MS);
-    // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
-    if (measured) {
-      updateMeasureLabels();
-      if (measured.code !== code) measurePanel.markStale();
-    }
+const editor = createEditor(
+  els.editor,
+  { monacoId: LANGUAGES[language].monacoId, code: savedCode(language) },
+  {
+    onChange(code) {
+      setPlaying(false);
+      store(codeKey(language), code);
+      updateProgramUI();
+      // The growth section reads the code's `viz: size` hints.
+      window.clearTimeout(growthTimer);
+      if (measurePanel.isOpen && !growthView.running) growthTimer = window.setTimeout(() => growthView.render(), 250);
+      window.clearTimeout(liveTimer);
+      if (els.live.checked) liveTimer = window.setTimeout(() => run(code, language, "live"), LIVE_DELAY_MS);
+      // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
+      if (measured) {
+        updateMeasureLabels();
+        if (measured.code !== code) measurePanel.markStale();
+      }
+    },
+    // Also available from the command palette (F1) as "AlgoViz: ...".
+    commands: {
+      run: () => runNow(),
+      save: () => save(),
+      saveAs: () => saveAs(),
+      nextStep: () => goTo(stepIndex + 1),
+      prevStep: () => goTo(stepIndex - 1),
+      firstStep: () => goTo(firstStep()),
+      lastStep: () => goTo(Infinity),
+      swapPanels: () => setSwapped(!swapped),
+      togglePlay: () => setPlaying(!playing),
+      playOrRewind: () => playOrRewind(),
+      measure: () => measureNow(),
+      measureGrowth: () => measureGrowth(),
+      toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
+    },
   },
-  // Also available from the command palette (F1) as "AlgoViz: ...".
-  commands: {
-    run: () => runNow(),
-    save: () => save(),
-    saveAs: () => saveAs(),
-    nextStep: () => goTo(stepIndex + 1),
-    prevStep: () => goTo(stepIndex - 1),
-    firstStep: () => goTo(firstStep()),
-    lastStep: () => goTo(Infinity),
-    swapPanels: () => setSwapped(!swapped),
-    togglePlay: () => setPlaying(!playing),
-    playOrRewind: () => playOrRewind(),
-    measure: () => measureNow(),
-    measureGrowth: () => measureGrowth(),
-    toggleNested: () => setMemoryMode(memoryMode === "nested" ? "arrows" : "nested"),
-  },
-});
+);
 
 function runNow(): void {
   setPlaying(false);
@@ -1084,7 +1203,9 @@ function showSaved(program: Program): void {
   announce(`Saved "${program.name}"`);
   els.save.textContent = "Saved";
   window.clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => { els.save.textContent = "Save"; }, 1200);
+  savedTimer = window.setTimeout(() => {
+    els.save.textContent = "Save";
+  }, 1200);
 }
 
 function writeProgram(name: string, id?: string): void {
@@ -1222,7 +1343,10 @@ els.banner.addEventListener("click", (e) => {
   if (action === "measure") measureNow();
   else if (action === "run") runNow();
 });
-els.hideQuiet.addEventListener("change", () => { hideQuiet = els.hideQuiet.checked; render(); });
+els.hideQuiet.addEventListener("change", () => {
+  hideQuiet = els.hideQuiet.checked;
+  render();
+});
 els.loopVertical.checked = loopVertical;
 els.loopVertical.addEventListener("change", () => {
   loopVertical = els.loopVertical.checked;
@@ -1288,7 +1412,10 @@ document.addEventListener("keydown", (event) => {
     End: () => goTo(Infinity),
   };
   const move = moves[event.key];
-  if (move) { event.preventDefault(); move(); }
+  if (move) {
+    event.preventDefault();
+    move();
+  }
 });
 
 // ---------------------------------------------------------------- layout
@@ -1331,9 +1458,8 @@ function makeDivider(divider: HTMLElement, options: DividerOptions): (value: num
     divider.classList.add("is-dragging");
     const move = (e: PointerEvent) => {
       const rect = container.getBoundingClientRect();
-      const percent = axis === "x"
-        ? ((e.clientX - rect.left) / rect.width) * 100
-        : ((e.clientY - rect.top) / rect.height) * 100;
+      const percent =
+        axis === "x" ? ((e.clientX - rect.left) / rect.width) * 100 : ((e.clientY - rect.top) / rect.height) * 100;
       set(options.fromPointer ? options.fromPointer(percent) : percent);
     };
     const stop = () => {

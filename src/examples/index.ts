@@ -13,6 +13,6 @@ export interface Example {
   code: string;
 }
 
-export { PYTHON_EXAMPLES } from "./python";
 export { JAVASCRIPT_EXAMPLES } from "./javascript";
+export { PYTHON_EXAMPLES } from "./python";
 export { TYPESCRIPT_EXAMPLES } from "./typescript";

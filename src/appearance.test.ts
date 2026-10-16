@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
-  COLOR_FIELDS, DEFAULT_APPEARANCE, PRESETS, applyAppearance, clone, gridImage, isEasing, parseAppearance,
+  applyAppearance,
+  COLOR_FIELDS,
+  clone,
+  DEFAULT_APPEARANCE,
+  gridImage,
+  isEasing,
+  PRESETS,
+  parseAppearance,
 } from "./appearance";
 import { bezierPoints } from "./stylePanel";
 
@@ -19,15 +26,20 @@ describe("parseAppearance", () => {
   });
 
   it("replaces anything invalid with the default, field by field", () => {
-    const parsed = parseAppearance(JSON.stringify({
-      memory: { background: "red", grid: "plaid", gridSize: 900, easing: "bouncy", duration: -5 },
-      colors: { ink: "#123456", cell: "url(evil)" },
-      arrowWidth: "thick",
-      font: "Comic Sans",
-    }));
+    const parsed = parseAppearance(
+      JSON.stringify({
+        memory: { background: "red", grid: "plaid", gridSize: 900, easing: "bouncy", duration: -5 },
+        colors: { ink: "#123456", cell: "url(evil)" },
+        arrowWidth: "thick",
+        font: "Comic Sans",
+      }),
+    );
     expect(parsed.memory).toMatchObject({
-      background: DEFAULT_APPEARANCE.memory.background, grid: "lines", gridSize: 64,
-      easing: DEFAULT_APPEARANCE.memory.easing, duration: 0,
+      background: DEFAULT_APPEARANCE.memory.background,
+      grid: "lines",
+      gridSize: 64,
+      easing: DEFAULT_APPEARANCE.memory.easing,
+      duration: 0,
     });
     expect(parsed.colors.ink).toBe("#123456");
     expect(parsed.colors.cell).toBe(DEFAULT_APPEARANCE.colors.cell);
@@ -37,7 +49,8 @@ describe("parseAppearance", () => {
 
   it("has every color in every preset", () => {
     for (const preset of PRESETS) {
-      for (const field of COLOR_FIELDS) expect(preset.colors[field.key], `${preset.theme}: ${field.key}`).toMatch(/^#[0-9a-f]{6}$/i);
+      for (const field of COLOR_FIELDS)
+        expect(preset.colors[field.key], `${preset.theme}: ${field.key}`).toMatch(/^#[0-9a-f]{6}$/i);
     }
   });
 });
@@ -75,7 +88,10 @@ describe("applyAppearance", () => {
     expect(canvas.style.getPropertyValue("--arrow-width")).toBe("2");
     expect(memory.style.getPropertyValue("--paper")).toBe("#101010");
     expect(loop.style.getPropertyValue("--grid-image")).toBe("none");
-    expect(sizes).toEqual([["memory", 24], ["loop", 40]]);
+    expect(sizes).toEqual([
+      ["memory", 24],
+      ["loop", 40],
+    ]);
   });
 
   it("draws lines, dots or nothing", () => {
@@ -88,7 +104,9 @@ describe("applyAppearance", () => {
 describe("printed output motion", () => {
   it("defaults to fading and sliding in, and reads saved choices", () => {
     expect(parseAppearance(null).output).toEqual({ fade: true, slide: true, dimFade: true, duration: 240 });
-    const saved = parseAppearance(JSON.stringify({ output: { fade: false, slide: false, dimFade: "yes", duration: 5000 } }));
+    const saved = parseAppearance(
+      JSON.stringify({ output: { fade: false, slide: false, dimFade: "yes", duration: 5000 } }),
+    );
     expect(saved.output).toEqual({ fade: false, slide: false, dimFade: true, duration: 1000 });
   });
 

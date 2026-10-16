@@ -26,7 +26,6 @@ hold at the end, added up with the same 64-bit sizes as the Sizes view.
 """
 
 import ast
-import builtins
 import io
 import json
 import math
@@ -38,12 +37,12 @@ try:  # in the browser, tracer.py is loaded into the same namespace first
 except ImportError:
     pass
 
-POLL_EVERY = 5000          # loop passes and calls between clock checks
-PROGRESS_EVERY = 0.25      # seconds between progress reports
-PLAIN_RUN_UNDER = 5.0      # seconds: time the untouched program only if counting took less
-PEAK_RUN_UNDER = 0.25      # seconds: tracking every allocation costs ~25-80x, so only for quick programs
-HELD_OBJECTS = 2_000_000   # objects walked when adding up what the variables hold
-MAX_OUTPUT = 100_000       # characters of output kept
+POLL_EVERY = 5000  # loop passes and calls between clock checks
+PROGRESS_EVERY = 0.25  # seconds between progress reports
+PLAIN_RUN_UNDER = 5.0  # seconds: time the untouched program only if counting took less
+PEAK_RUN_UNDER = 0.25  # seconds: tracking every allocation costs ~25-80x, so only for quick programs
+HELD_OBJECTS = 2_000_000  # objects walked when adding up what the variables hold
+MAX_OUTPUT = 100_000  # characters of output kept
 
 SEQUENCES = (list, tuple, str, bytes, bytearray)
 
@@ -77,6 +76,7 @@ class CappedOutput(io.TextIOBase):
 # Rewriting the program
 # ---------------------------------------------------------------------------
 
+
 def _pure(node):
     """Safe to evaluate twice: names, attributes of names, constants, simple arithmetic."""
     if isinstance(node, (ast.Name, ast.Constant)):
@@ -96,17 +96,29 @@ def _name(id_, ctx=None):
 
 def _count(array, line, amount=1):
     """array[line] += amount"""
-    return ast.AugAssign(target=ast.Subscript(value=_name(array), slice=ast.Constant(line), ctx=ast.Store()),
-                         op=ast.Add(), value=ast.Constant(amount))
+    return ast.AugAssign(
+        target=ast.Subscript(value=_name(array), slice=ast.Constant(line), ctx=ast.Store()),
+        op=ast.Add(),
+        value=ast.Constant(amount),
+    )
 
 
 def _poll():
     """_mt[0] -= 1; if _mt[0] < 0: _mpoll()"""
-    tick = ast.AugAssign(target=ast.Subscript(value=_name("_mt"), slice=ast.Constant(0), ctx=ast.Store()),
-                         op=ast.Sub(), value=ast.Constant(1))
-    check = ast.If(test=ast.Compare(left=ast.Subscript(value=_name("_mt"), slice=ast.Constant(0), ctx=ast.Load()),
-                                    ops=[ast.Lt()], comparators=[ast.Constant(0)]),
-                   body=[ast.Expr(ast.Call(func=_name("_mpoll"), args=[], keywords=[]))], orelse=[])
+    tick = ast.AugAssign(
+        target=ast.Subscript(value=_name("_mt"), slice=ast.Constant(0), ctx=ast.Store()),
+        op=ast.Sub(),
+        value=ast.Constant(1),
+    )
+    check = ast.If(
+        test=ast.Compare(
+            left=ast.Subscript(value=_name("_mt"), slice=ast.Constant(0), ctx=ast.Load()),
+            ops=[ast.Lt()],
+            comparators=[ast.Constant(0)],
+        ),
+        body=[ast.Expr(ast.Call(func=_name("_mpoll"), args=[], keywords=[]))],
+        orelse=[],
+    )
     return [tick, check]
 
 
@@ -122,8 +134,19 @@ def _before(work, expr):
 # Methods whose cost is the receiver's length, and how to describe it.
 METHOD_WORK = {"insert": "m", "index": "s", "count": "s", "remove": "m", "reverse": "m", "copy": "c"}
 # Built-ins that walk a whole collection they're given.
-FUNCTION_WORK = {"sorted": "o", "sum": "s", "min": "s", "max": "s", "any": "s", "all": "s", "list": "c",
-                 "tuple": "c", "set": "c", "frozenset": "c", "dict": "c"}
+FUNCTION_WORK = {
+    "sorted": "o",
+    "sum": "s",
+    "min": "s",
+    "max": "s",
+    "any": "s",
+    "all": "s",
+    "list": "c",
+    "tuple": "c",
+    "set": "c",
+    "frozenset": "c",
+    "dict": "c",
+}
 
 
 class Counters(ast.NodeTransformer):
@@ -154,7 +177,12 @@ class Counters(ast.NodeTransformer):
         super().generic_visit(node)
         for field in ("body", "orelse", "finalbody"):
             stmts = getattr(node, field, None)
-            if isinstance(stmts, list) and stmts and isinstance(stmts[0], ast.stmt) and not isinstance(node, ast.Module):
+            if (
+                isinstance(stmts, list)
+                and stmts
+                and isinstance(stmts[0], ast.stmt)
+                and not isinstance(node, ast.Module)
+            ):
                 if isinstance(node, (ast.For, ast.AsyncFor, ast.While)) and field == "body":
                     continue  # done in visit_For / visit_While
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and field == "body":
@@ -168,8 +196,12 @@ class Counters(ast.NodeTransformer):
         """Add counters to an already-visited statement list."""
         out = []
         for stmt in stmts:
-            if not (isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Subscript)
-                    and isinstance(stmt.target.value, ast.Name) and stmt.target.value.id in ("_mc", "_mp", "_mf", "_mt")):
+            if not (
+                isinstance(stmt, ast.AugAssign)
+                and isinstance(stmt.target, ast.Subscript)
+                and isinstance(stmt.target.value, ast.Name)
+                and stmt.target.value.id in ("_mc", "_mp", "_mf", "_mt")
+            ):
                 self.lines.add(stmt.lineno)
                 out.append(_count("_mc", stmt.lineno))
             out.append(stmt)
@@ -226,13 +258,22 @@ class Counters(ast.NodeTransformer):
             name = func.attr
             if name in METHOD_WORK or (name == "pop" and node.args and not _is_minus_one(node.args[0])):
                 kind = "m" if name == "pop" else METHOD_WORK[name]
-                return ast.copy_location(_before(_call("_mw", ast.Constant(line), func.value, ast.Constant(kind)), node), node)
+                return ast.copy_location(
+                    _before(_call("_mw", ast.Constant(line), func.value, ast.Constant(kind)), node), node
+                )
             if name == "sort":
-                return ast.copy_location(_before(_call("_mw", ast.Constant(line), func.value, ast.Constant("o")), node), node)
+                return ast.copy_location(
+                    _before(_call("_mw", ast.Constant(line), func.value, ast.Constant("o")), node), node
+                )
             if name in ("extend", "join") and len(node.args) == 1 and _pure(node.args[0]):
-                return ast.copy_location(_before(_call("_mw", ast.Constant(line), node.args[0], ast.Constant("c")), node), node)
+                return ast.copy_location(
+                    _before(_call("_mw", ast.Constant(line), node.args[0], ast.Constant("c")), node), node
+                )
         if isinstance(func, ast.Name) and func.id in FUNCTION_WORK and len(node.args) == 1 and _pure(node.args[0]):
-            return ast.copy_location(_before(_call("_mw", ast.Constant(line), node.args[0], ast.Constant(FUNCTION_WORK[func.id])), node), node)
+            return ast.copy_location(
+                _before(_call("_mw", ast.Constant(line), node.args[0], ast.Constant(FUNCTION_WORK[func.id])), node),
+                node,
+            )
         return node
 
     def visit_Compare(self, node):
@@ -245,8 +286,12 @@ class Counters(ast.NodeTransformer):
     def visit_Subscript(self, node):
         self.generic_visit(node)
         sl = node.slice
-        if isinstance(node.ctx, ast.Load) and isinstance(sl, ast.Slice) and _pure(node.value) \
-                and all(part is None or _pure(part) for part in (sl.lower, sl.upper, sl.step)):
+        if (
+            isinstance(node.ctx, ast.Load)
+            and isinstance(sl, ast.Slice)
+            and _pure(node.value)
+            and all(part is None or _pure(part) for part in (sl.lower, sl.upper, sl.step))
+        ):
             parts = [part if part is not None else ast.Constant(None) for part in (sl.lower, sl.upper, sl.step)]
             work = _call("_mslice", ast.Constant(node.lineno), node.value, *parts)
             return ast.copy_location(_before(work, node), node)
@@ -260,8 +305,12 @@ class Counters(ast.NodeTransformer):
 
 
 def _is_minus_one(node):
-    return isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) \
-        and isinstance(node.operand, ast.Constant) and node.operand.value == 1
+    return (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, ast.USub)
+        and isinstance(node.operand, ast.Constant)
+        and node.operand.value == 1
+    )
 
 
 def apply_overrides(tree, overrides):
@@ -275,8 +324,12 @@ def apply_overrides(tree, overrides):
             target, value = stmt.target, stmt.value
         else:
             continue
-        if isinstance(target, ast.Name) and target.id in overrides and isinstance(value, ast.Constant) \
-                and type(value.value) is int:
+        if (
+            isinstance(target, ast.Name)
+            and target.id in overrides
+            and isinstance(value, ast.Constant)
+            and type(value.value) is int
+        ):
             value.value = int(overrides[target.id])
     return tree
 
@@ -292,6 +345,7 @@ def instrument(source, overrides=None):
 # ---------------------------------------------------------------------------
 # Running
 # ---------------------------------------------------------------------------
+
 
 def _line_of(tb):
     line = None
@@ -313,14 +367,14 @@ class Measure:
         self.limit = max(0.5, limit_ms / 1000)
         self.report = report
         size = source.count("\n") + 2
-        self.counts = [0] * size     # _mc: per line
-        self.passes = [0] * size     # _mp: per loop line
-        self.calls = [0] * size      # _mf: per function (def line)
-        self.tick = [POLL_EVERY]     # _mt
-        self.work = {}               # line -> items
-        self.work_kind = {}          # line -> m / s / c / o
-        self.totals = {}             # loop line -> passes it will make
-        self.entered = {}            # loop line -> (passes at entry, entry order)
+        self.counts = [0] * size  # _mc: per line
+        self.passes = [0] * size  # _mp: per loop line
+        self.calls = [0] * size  # _mf: per function (def line)
+        self.tick = [POLL_EVERY]  # _mt
+        self.work = {}  # line -> items
+        self.work_kind = {}  # line -> m / s / c / o
+        self.totals = {}  # loop line -> passes it will make
+        self.entered = {}  # loop line -> (passes at entry, entry order)
         self.order = 0
         self.started = 0.0
         self.last_report = 0.0
@@ -391,9 +445,22 @@ class Measure:
         return out
 
     def run(self):
-        result = {"status": "done", "lines": {}, "passes": {}, "calls": {}, "work": {}, "workKind": {}, "totals": {},
-                  "ms": 0, "plainMs": None, "peakBytes": None, "heldBytes": None, "stdout": "", "droppedOutput": 0,
-                  "error": None}
+        result = {
+            "status": "done",
+            "lines": {},
+            "passes": {},
+            "calls": {},
+            "work": {},
+            "workKind": {},
+            "totals": {},
+            "ms": 0,
+            "plainMs": None,
+            "peakBytes": None,
+            "heldBytes": None,
+            "stdout": "",
+            "droppedOutput": 0,
+            "error": None,
+        }
         try:
             tree, _lines = instrument(self.source, self.overrides)
             code = compile(tree, USER_FILENAME, "exec")
@@ -403,9 +470,19 @@ class Measure:
             return result
 
         out = CappedOutput()
-        env = {"__name__": "__main__", "input": _no_input, "_mc": self.counts, "_mp": self.passes, "_mf": self.calls, "_mt": self.tick,
-               "_mpoll": self.poll, "_miter": self.iterate, "_mcomp": self.comprehension, "_mw": self.add_work,
-               "_mslice": self.slice_work}
+        env = {
+            "__name__": "__main__",
+            "input": _no_input,
+            "_mc": self.counts,
+            "_mp": self.passes,
+            "_mf": self.calls,
+            "_mt": self.tick,
+            "_mpoll": self.poll,
+            "_miter": self.iterate,
+            "_mcomp": self.comprehension,
+            "_mw": self.add_work,
+            "_mslice": self.slice_work,
+        }
         status, error, elapsed, _peak, stopped_at = self._execute(code, env, out, memory=False)
         result["status"], result["error"] = status, error
         result["ms"] = round(elapsed * 1000, 2)
@@ -423,7 +500,9 @@ class Measure:
 
         # The honest time: the untouched program, if it's quick enough to run twice.
         if status == "done" and elapsed < PLAIN_RUN_UNDER:
-            plain = compile(apply_overrides(ast.parse(self.source, USER_FILENAME), self.overrides), USER_FILENAME, "exec")
+            plain = compile(
+                apply_overrides(ast.parse(self.source, USER_FILENAME), self.overrides), USER_FILENAME, "exec"
+            )
             env = {"__name__": "__main__", "input": _no_input}
             p_status, _e, p_elapsed, _p, _s = self._execute(plain, env, CappedOutput(), memory=False)
             if p_status == "done":
@@ -441,6 +520,7 @@ class Measure:
         uses_asyncio = "asyncio" in self.source
         if uses_asyncio:
             import asyncio
+
             saved = (asyncio.events._event_loop_policy, asyncio.run, asyncio.events._get_running_loop())
             asyncio.set_event_loop_policy(virtual_loop_policy())
             asyncio.run = asyncio.runners.run
@@ -449,6 +529,7 @@ class Measure:
         if memory:
             try:
                 import tracemalloc
+
                 tracemalloc.start()
             except Exception:  # not available: no memory figure
                 tracemalloc = None
@@ -479,12 +560,13 @@ class Measure:
 
 def _to_64_bit(n):
     """tracemalloc's bytes on a 32-bit Python (the browser's), roughly as a 64-bit one would use."""
-    return n * 2 if sys.maxsize < 2 ** 32 else n
+    return n * 2 if sys.maxsize < 2**32 else n
 
 
 def held_bytes(env):
     """What the program's variables hold, counting each object once (64-bit sizes)."""
     import types
+
     skip = (types.ModuleType, types.FunctionType, types.BuiltinFunctionType, types.MethodType, type, types.CodeType)
     seen = set()
     total = 0

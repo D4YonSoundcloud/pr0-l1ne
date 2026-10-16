@@ -19,16 +19,21 @@
     "test": "vitest run && npm run test:tracer && npm run test:pyodide",
     "instrument": "tsx src/js/cli.ts",
     "trace:js": "tsx src/js/cli.ts --trace",
-    "test:pyodide": "node scripts/test-pyodide.mjs"
+    "test:pyodide": "node scripts/test-pyodide.mjs",
+    "lint": "biome check . && npm run lint:py",
+    "lint:py": "ruff check && ruff format --check",
+    "format": "biome check --write . && ruff check --fix && ruff format"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "^22.20.5",
     "jsdom": "^30.1.2",
+    "lefthook": "2.2.2",
+    "pyodide": "0.27.8",
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "vite": "^6.4.4",
-    "vitest": "^5.0.3",
-    "pyodide": "0.27.8"
+    "vitest": "^5.0.3"
   },
   "dependencies": {
     "@babel/core": "^8.0.6",

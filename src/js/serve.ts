@@ -8,9 +8,18 @@ import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { Trace } from "../trace/types";
 import type { FromWorker, ToWorker } from "../worker/protocol";
 
-type Measure = (source: string, limitMs: number, report: (p: MeasureProgress) => void, overrides?: Record<string, number>) => Promise<Measurement>;
+type Measure = (
+  source: string,
+  limitMs: number,
+  report: (p: MeasureProgress) => void,
+  overrides?: Record<string, number>,
+) => Promise<Measurement>;
 
-export function serve(label: string, trace: (source: string, maxSteps: number, maxSeconds: number) => Promise<Trace>, measure: Measure): void {
+export function serve(
+  label: string,
+  trace: (source: string, maxSteps: number, maxSeconds: number) => Promise<Trace>,
+  measure: Measure,
+): void {
   const ctx = self as unknown as DedicatedWorkerGlobalScope;
   const post = (message: FromWorker) => ctx.postMessage(message);
 
@@ -18,7 +27,12 @@ export function serve(label: string, trace: (source: string, maxSteps: number, m
     if (event.data.type === "measure") {
       const { runId, source, limitMs, overrides } = event.data;
       try {
-        const result = await measure(source, limitMs, (progress) => post({ type: "measureProgress", runId, progress }), overrides);
+        const result = await measure(
+          source,
+          limitMs,
+          (progress) => post({ type: "measureProgress", runId, progress }),
+          overrides,
+        );
         post({ type: "measured", runId, result });
       } catch (error) {
         post({ type: "crash", runId, message: error instanceof Error ? error.message : String(error) });
@@ -28,7 +42,12 @@ export function serve(label: string, trace: (source: string, maxSteps: number, m
     const { runId, source, maxSteps, maxSeconds } = event.data;
     const started = performance.now();
     try {
-      post({ type: "result", runId, trace: await trace(source, maxSteps, maxSeconds), elapsedMs: performance.now() - started });
+      post({
+        type: "result",
+        runId,
+        trace: await trace(source, maxSteps, maxSeconds),
+        elapsedMs: performance.now() - started,
+      });
     } catch (error) {
       post({ type: "crash", runId, message: error instanceof Error ? error.message : String(error) });
     }

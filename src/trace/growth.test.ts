@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compareGrowth, findSizes, fitGrowth, ladder, modelLabel, staticGrowth, type Fit } from "./growth";
 import type { Estimate } from "./complexity";
+import { compareGrowth, type Fit, findSizes, fitGrowth, ladder, modelLabel, staticGrowth } from "./growth";
 
 describe("size hints", () => {
   it("finds hinted variables set to a number at the top level", () => {
@@ -26,7 +26,10 @@ describe("size hints", () => {
   it("builds a ladder of sizes, scaling the chosen variables only", () => {
     const vars = findSizes("# viz: size n, k\nn = 40000\nk = 10000\n").vars;
     expect(ladder(vars, ["n", "k"]).map((r) => r.sizes)).toEqual([
-      { n: 625, k: 156 }, { n: 2500, k: 625 }, { n: 10000, k: 2500 }, { n: 40000, k: 10000 },
+      { n: 625, k: 156 },
+      { n: 2500, k: 625 },
+      { n: 10000, k: 2500 },
+      { n: 40000, k: 10000 },
     ]);
     expect(ladder(vars, ["n"]).map((r) => r.sizes.k)).toEqual([10000, 10000, 10000, 10000]);
     // Too small to scale down: duplicate sizes are dropped.
@@ -69,7 +72,10 @@ describe("comparing with the code's estimate", () => {
   const vars = findSizes("# viz: size n = 40000, k = 10000\nn = 200\nk = 30\n").vars;
 
   it("ties the estimate's sizes to the scaled variables by name or value", () => {
-    expect(staticGrowth(estimate, vars, ["n", "k"])).toMatchObject({ model: { degree: 2, log: 0 }, letters: ["n", "k"] });
+    expect(staticGrowth(estimate, vars, ["n", "k"])).toMatchObject({
+      model: { degree: 2, log: 0 },
+      letters: ["n", "k"],
+    });
     expect(staticGrowth(estimate, vars, ["n"])).toMatchObject({ model: { degree: 1, log: 0 }, letters: ["n"] });
   });
 

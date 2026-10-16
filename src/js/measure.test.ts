@@ -45,14 +45,17 @@ nums.sort((a, b) => a - b);
   });
 
   it("stops at the time limit and says how far the outer loop got", async () => {
-    const r = await js(`function spin(k) {
+    const r = await js(
+      `function spin(k) {
   for (let r = 0; r < k; r++) {
     let x = 0;
     for (let j = 0; j < 100000; j++) x += j;
   }
 }
 spin(1e9);
-`, 400);
+`,
+      400,
+    );
     expect(r.status).toBe("limit");
     expect(r.stoppedAt?.loop).toMatchObject({ line: 2, total: 1e9 });
     expect(r.stoppedAt!.loop!.done).toBeGreaterThan(0);
@@ -100,7 +103,11 @@ rotate(nums, 100);
   });
 
   it("counts calls by the line each function starts on", async () => {
-    const r = await measureProgram(`function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2);\n}\nconst sq = (x) => x * x;\nfib(15);\n[1, 2, 3].map(sq);`, 10000, (s) => parseProgram(s));
+    const r = await measureProgram(
+      `function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2);\n}\nconst sq = (x) => x * x;\nfib(15);\n[1, 2, 3].map(sq);`,
+      10000,
+      (s) => parseProgram(s),
+    );
     expect(r.calls["1"]).toBe(1973);
     expect(r.calls["4"]).toBe(3);
   });

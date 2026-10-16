@@ -1,0 +1,7 @@
+# Commits that only reformatted code. `git blame` and GitHub's blame view
+# skip them, so blame shows who last really changed each line.
+# Locally, run once: git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Add the full hash of the formatting commit below (git log -1 --format=%H),
+# with a comment saying what it was.
+

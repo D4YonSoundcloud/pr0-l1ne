@@ -6,8 +6,9 @@
  * event serializes all frames and everything they reach into a Step, in
  * exactly the format the Python tracer produces.
  */
-import type { HeapObject, LoopContext, PrimValue, SequenceObject, Step, Value } from "../trace/types";
+
 import { sameData } from "../trace/delta";
+import type { HeapObject, LoopContext, PrimValue, SequenceObject, Step, Value } from "../trace/types";
 
 /** [name, () => value] for each visible variable, produced by the instrumenter. */
 export type Getter = () => [string, () => unknown][];
@@ -97,6 +98,7 @@ export class Runtime {
   private loopInstances = new Map<string, number>();
   private objectIds = new WeakMap<object, string>();
   private objectCounter = 0;
+  // biome-ignore lint/complexity/noBannedTypes: keys are the user's own functions and classes, of any shape
   private closures = new WeakMap<Function, { name: string; captured: Getter }>();
   private errorLines = new WeakMap<object, number>();
   private lastErrorLine: number | null = null;
@@ -114,11 +116,15 @@ export class Runtime {
   /** The last passes of a long loop whose length wasn't known, kept until it ends. */
   private tailBuffer: { state: LoopState; passes: TailPass[]; loose: number } | null = null;
   /** The function being called again and again from one line (a callback given to map, Array.from...). */
-  private callbacks: { caller: FrameState; line: number; func: string; defLine: number; state: LoopState } | null = null;
+  private callbacks: { caller: FrameState; line: number; func: string; defLine: number; state: LoopState } | null =
+    null;
   /** A callback call's place in its run. */
   private callbackOf = new Map<FrameState, LoopState>();
 
-  constructor(private readonly maxSteps: number, maxSeconds = TRACE_SECONDS) {
+  constructor(
+    private readonly maxSteps: number,
+    maxSeconds = TRACE_SECONDS,
+  ) {
     this.deadline = (typeof performance !== "undefined" ? performance.now() : Date.now()) + maxSeconds * 1000;
   }
 
@@ -244,16 +250,28 @@ export class Runtime {
   /** for (x of xs): note the loop's length as it starts. */
   loopLength<T>(frame: FrameState, id: string, iterable: T): T {
     const state = frame.loops.get(id);
-    const n = Array.isArray(iterable) || typeof iterable === "string" ? iterable.length
-      : iterable instanceof Map || iterable instanceof Set ? iterable.size : null;
+    const n =
+      Array.isArray(iterable) || typeof iterable === "string"
+        ? iterable.length
+        : iterable instanceof Map || iterable instanceof Set
+          ? iterable.size
+          : null;
     if (state && state.iteration === 0 && n !== null) state.total = n;
     return iterable;
   }
 
   /** for (let j = A; j < B; j++): the header with A and B's values, shown on the loop's rows. */
-  loopCall(frame: FrameState, id: string, name: string, op: string, update: string, start: unknown, bound: unknown): void {
+  loopCall(
+    frame: FrameState,
+    id: string,
+    name: string,
+    op: string,
+    update: string,
+    start: unknown,
+    bound: unknown,
+  ): void {
     const state = frame.loops.get(id);
-    if (!state || state.iteration !== 0) return;
+    if (state?.iteration !== 0) return;
     const show = (v: unknown) => (typeof v === "number" || typeof v === "bigint" ? String(v) : null);
     const a = show(start);
     const b = show(bound);
@@ -263,7 +281,8 @@ export class Runtime {
   /** for (let i = A; i < B; i++): B - A passes. */
   loopTotal(frame: FrameState, id: string, total: unknown): void {
     const state = frame.loops.get(id);
-    if (state && state.iteration === 0 && typeof total === "number" && Number.isFinite(total)) state.total = Math.max(0, total);
+    if (state && state.iteration === 0 && typeof total === "number" && Number.isFinite(total))
+      state.total = Math.max(0, total);
   }
 
   /** End of an iteration: a snapshot at the loop header, like Python's re-check. */
@@ -276,6 +295,7 @@ export class Runtime {
   }
 
   /** Remember which variables a closure captured, for the heap view. */
+  // biome-ignore lint/complexity/noBannedTypes: wraps any user function or class and returns it unchanged
   fn<F extends Function>(fn: F, name: string, captured: Getter): F {
     this.closures.set(fn, { name, captured });
     return fn;
@@ -320,9 +340,14 @@ export class Runtime {
    * work too, with each item awaited, as `for await` does.
    */
   asyncIter(frame: FrameState, iterable: unknown): AsyncIterable<unknown> {
-    const source = iterable as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown>; [Symbol.iterator]?: () => Iterator<unknown> };
+    const source = iterable as {
+      [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
+      [Symbol.iterator]?: () => Iterator<unknown>;
+    };
     const isAsync = typeof source?.[Symbol.asyncIterator] === "function";
-    const it: AsyncIterator<unknown> | Iterator<unknown> = isAsync ? source[Symbol.asyncIterator]!() : source[Symbol.iterator]!();
+    const it: AsyncIterator<unknown> | Iterator<unknown> = isAsync
+      ? source[Symbol.asyncIterator]!()
+      : source[Symbol.iterator]!();
     const runtime = this;
     return {
       [Symbol.asyncIterator]() {
@@ -330,7 +355,8 @@ export class Runtime {
           next(value?: unknown) {
             runtime.awaiting(frame, undefined);
             return Promise.resolve(it.next(value)).then((result) =>
-              result.done || isAsync ? result : Promise.resolve(result.value).then((v) => ({ value: v, done: false })));
+              result.done || isAsync ? result : Promise.resolve(result.value).then((v) => ({ value: v, done: false })),
+            );
           },
           return(value?: unknown) {
             return Promise.resolve(it.return ? it.return(value) : { value, done: true as const });
@@ -364,7 +390,9 @@ export class Runtime {
       this.timers.push({ id, at: this.clock + delay, seq: id, run: () => fn(...args), every });
       return id;
     };
-    const clear = (id: unknown) => { this.timers = this.timers.filter((t) => t.id !== id); };
+    const clear = (id: unknown) => {
+      this.timers = this.timers.filter((t) => t.id !== id);
+    };
     return {
       setTimeout: (fn: unknown, ms?: unknown, ...args: unknown[]) => add(fn, ms, args),
       setInterval: (fn: unknown, ms?: unknown, ...args: unknown[]) => add(fn, ms, args, Math.max(1, Number(ms) || 0)),
@@ -435,9 +463,10 @@ export class Runtime {
   /** A console that prints into the trace's stdout. */
   readonly console = (() => {
     const print = (...args: unknown[]) => {
-      this.stdout += args.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" ") + "\n";
+      this.stdout += `${args.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" ")}\n`;
       const pending = this.pendingOutput ?? { line: this.frames[this.frames.length - 1]?.line ?? 0, objects: [] };
-      for (const arg of args) if ((typeof arg === "object" && arg !== null) || typeof arg === "function") pending.objects.push(arg as object);
+      for (const arg of args)
+        if ((typeof arg === "object" && arg !== null) || typeof arg === "function") pending.objects.push(arg as object);
       this.pendingOutput = pending;
     };
     return { log: print, info: print, warn: print, error: print, debug: print, table: print };
@@ -526,7 +555,8 @@ export class Runtime {
    */
   private bufferFor(state: LoopState, pinned: boolean): Step[] | null {
     if (this.tailBuffer && this.tailBuffer.state !== state) this.settleTail([]);
-    const tail = (this.tailBuffer ??= { state, passes: [], loose: 0 });
+    this.tailBuffer ??= { state, passes: [], loose: 0 };
+    const tail = this.tailBuffer;
     const passes = tail.passes;
     if (!passes.length || passes[passes.length - 1].it !== state.iteration) {
       passes.push({ it: state.iteration, steps: [], pinned });
@@ -586,7 +616,12 @@ export class Runtime {
     }
     this.recording = true;
     try {
-      const serializer = new Serializer(this.objectIds, () => `o${++this.objectCounter}`, this.closures, this.focusOf());
+      const serializer = new Serializer(
+        this.objectIds,
+        () => `o${++this.objectCounter}`,
+        this.closures,
+        this.focusOf(),
+      );
       const describe = (frame: FrameState) => ({
         id: frame.id,
         func: frame.func,
@@ -598,8 +633,13 @@ export class Runtime {
       // Loops in paused frames stay active, so their history isn't cut short.
       const loops: LoopContext[] = [...this.frames, ...paused].flatMap((frame) =>
         [...frame.loops].map(([loop, state]) => ({
-          frame: frame.id, loop, instance: state.instance, iteration: state.iteration, ...(state.call ? { call: state.call } : {}),
-        })));
+          frame: frame.id,
+          loop,
+          instance: state.instance,
+          iteration: state.iteration,
+          ...(state.call ? { call: state.call } : {}),
+        })),
+      );
       const step: Step = {
         event,
         line: this.frames[this.frames.length - 1]?.line ?? 0,
@@ -693,6 +733,8 @@ export function parseParams(source: string): string[] {
   return params.map((p) => p.split("=")[0].trim()).filter(Boolean);
 }
 
+// biome-ignore lint/complexity/noBannedTypes: built-in constructors (Date, RegExp...) used with instanceof
+// biome-ignore lint/suspicious/noExplicitAny: each formatter takes its own constructor's instances
 const OPAQUE_TYPES: [Function, (v: any) => string][] = [
   [Date, (v: Date) => (Number.isNaN(v.getTime()) ? "Invalid Date" : v.toISOString())],
   [RegExp, (v: RegExp) => String(v)],
@@ -707,7 +749,21 @@ const OPAQUE_TYPES: [Function, (v: any) => string][] = [
 // MAX_ITEMS), and a strip of evenly spaced samples shows the whole list.
 const STRIP_SAMPLES = 256;
 /** Names that conventionally hold an index (as render/draw.ts's pointersFor). */
-const CONVENTIONAL_POINTERS = ["lo", "hi", "low", "high", "left", "right", "l", "r", "start", "end", "mid", "slow", "fast"];
+const CONVENTIONAL_POINTERS = [
+  "lo",
+  "hi",
+  "low",
+  "high",
+  "left",
+  "right",
+  "l",
+  "r",
+  "start",
+  "end",
+  "mid",
+  "slow",
+  "fast",
+];
 
 /** Where the window of MAX_ITEMS cells starts, to show these indices. Moves in steps of 10. */
 export function windowStart(indices: number[], length: number): number {
@@ -747,6 +803,7 @@ class Serializer {
   constructor(
     private readonly ids: WeakMap<object, string>,
     private readonly newId: () => string,
+    // biome-ignore lint/complexity/noBannedTypes: keys are the user's own functions and classes, of any shape
     private readonly closures: WeakMap<Function, { name: string; captured: Getter }>,
     /** Long lists' index variables' values (see windowStart). */
     private readonly focus: Map<object, number[]> = new Map(),
@@ -768,17 +825,22 @@ class Serializer {
 
   value(v: unknown): Value {
     switch (typeof v) {
-      case "number": return prim("number", Object.is(v, -0) ? "-0" : String(v));
+      case "number":
+        return prim("number", Object.is(v, -0) ? "-0" : String(v));
       case "string": {
         // A shortened string still knows its real length, for memory sizes.
         const value = prim("string", JSON.stringify(v));
         if (value.repr.endsWith("…")) value.length = v.length;
         return value;
       }
-      case "boolean": return prim("boolean", String(v));
-      case "undefined": return prim("undefined", "undefined");
-      case "bigint": return prim("bigint", `${v}n`);
-      case "symbol": return prim("symbol", v.toString());
+      case "boolean":
+        return prim("boolean", String(v));
+      case "undefined":
+        return prim("undefined", "undefined");
+      case "bigint":
+        return prim("bigint", `${v}n`);
+      case "symbol":
+        return prim("symbol", v.toString());
     }
     if (v === null) return prim("null", "null");
     return { kind: "ref", id: this.ref(v as object) };
@@ -825,7 +887,10 @@ class Serializer {
       const out: SequenceObject = { kind: "list", id, typeName: "Array", items, length: n };
       if (start) out.offset = start;
       if (n > MAX_ITEMS) {
-        const strip = stripOf((i) => { const r = readOwn(obj, i); return "getter" in r ? undefined : r.value; }, n);
+        const strip = stripOf((i) => {
+          const r = readOwn(obj, i);
+          return "getter" in r ? undefined : r.value;
+        }, n);
         if (strip) out.strip = strip;
       }
       return out;
@@ -874,7 +939,12 @@ class Serializer {
     // Generators and promises have no visible state in JavaScript; name them.
     const tag = Object.prototype.toString.call(obj).slice(8, -1);
     if (tag === "Generator" || tag === "AsyncGenerator") {
-      return { kind: "opaque", id, typeName: tag, repr: tag === "Generator" ? "generator object" : "async generator object" };
+      return {
+        kind: "opaque",
+        id,
+        typeName: tag,
+        repr: tag === "Generator" ? "generator object" : "async generator object",
+      };
     }
     for (const [type, show] of OPAQUE_TYPES) {
       if (obj instanceof type) return { kind: "opaque", id, typeName: constructorName(obj), repr: show(obj) };
@@ -902,16 +972,21 @@ class Serializer {
 
 export function inspect(value: unknown, depth = 0, seen = new Set<object>()): string {
   switch (typeof value) {
-    case "string": return depth === 0 ? value : `'${value}'`;
-    case "bigint": return `${value}n`;
-    case "symbol": return value.toString();
+    case "string":
+      return depth === 0 ? value : `'${value}'`;
+    case "bigint":
+      return `${value}n`;
+    case "symbol":
+      return value.toString();
     case "function": {
       const source = Function.prototype.toString.call(value);
       if (/^class[\s{]/.test(source)) return `[class ${value.name || "(anonymous)"}]`;
       return value.name ? `[Function: ${value.name}]` : "[Function (anonymous)]";
     }
-    case "object": break;
-    default: return String(value);
+    case "object":
+      break;
+    default:
+      return String(value);
   }
   if (value === null) return "null";
   const obj = value as object;

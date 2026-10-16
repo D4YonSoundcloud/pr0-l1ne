@@ -47,16 +47,26 @@ const member = (obj: t.Expression, prop: string) => t.memberExpression(obj, t.id
 const m = (prop: string) => member(t.identifier(M), prop);
 
 /** __m.c[__m.l = line]++ */
-const countLine = (line: number) => t.expressionStatement(t.updateExpression("++",
-  t.memberExpression(m("c"), t.assignmentExpression("=", m("l"), t.numericLiteral(line)), true), false));
+const countLine = (line: number) =>
+  t.expressionStatement(
+    t.updateExpression(
+      "++",
+      t.memberExpression(m("c"), t.assignmentExpression("=", m("l"), t.numericLiteral(line)), true),
+      false,
+    ),
+  );
 /** __m.p[line]++ */
-const countPass = (line: number) => t.expressionStatement(t.updateExpression("++", t.memberExpression(m("p"), t.numericLiteral(line), true), false));
+const countPass = (line: number) =>
+  t.expressionStatement(t.updateExpression("++", t.memberExpression(m("p"), t.numericLiteral(line), true), false));
 /** __m.f[line]++ */
-const countCall = (line: number) => t.expressionStatement(t.updateExpression("++", t.memberExpression(m("f"), t.numericLiteral(line), true), false));
+const countCall = (line: number) =>
+  t.expressionStatement(t.updateExpression("++", t.memberExpression(m("f"), t.numericLiteral(line), true), false));
 /** if (--__m.t < 0) __m.poll(); */
-const poll = () => t.ifStatement(
-  t.binaryExpression("<", t.updateExpression("--", m("t"), true), t.numericLiteral(0)),
-  t.expressionStatement(t.callExpression(m("poll"), [])));
+const poll = () =>
+  t.ifStatement(
+    t.binaryExpression("<", t.updateExpression("--", m("t"), true), t.numericLiteral(0)),
+    t.expressionStatement(t.callExpression(m("poll"), [])),
+  );
 
 const isCounter = (s: t.Statement) => !!(s as { _measure?: boolean })._measure;
 const mark = <T extends t.Statement>(s: T): T => Object.assign(s, { _measure: true });
@@ -82,7 +92,13 @@ export function instrumentForMeasure(ast: t.File): string {
       const list = t.isSwitchCase(node) ? node.consequent : node.body;
       const out: t.Statement[] = [];
       for (const s of list) {
-        if (!isCounter(s) && s.loc && !t.isFunctionDeclaration(s) && !t.isClassDeclaration(s) && !t.isEmptyStatement(s)) {
+        if (
+          !isCounter(s) &&
+          s.loc &&
+          !t.isFunctionDeclaration(s) &&
+          !t.isClassDeclaration(s) &&
+          !t.isEmptyStatement(s)
+        ) {
           out.push(mark(countLine(s.loc.start.line)));
         }
         out.push(s);
@@ -108,10 +124,25 @@ export function instrumentForMeasure(ast: t.File): string {
           const test = node.test;
           const update = node.update;
           const id = t.isIdentifier(decl.id) ? decl.id.name : null;
-          const steps = update && ((t.isUpdateExpression(update) && update.operator === "++" && t.isIdentifier(update.argument, { name: id ?? "" }))
-            || (t.isAssignmentExpression(update) && update.operator === "+=" && t.isIdentifier(update.left, { name: id ?? "" }) && t.isNumericLiteral(update.right, { value: 1 })));
-          if (id && steps && decl.init && pure(decl.init) && t.isBinaryExpression(test) && (test.operator === "<" || test.operator === "<=")
-            && t.isIdentifier(test.left, { name: id }) && pure(test.right)) {
+          const steps =
+            update &&
+            ((t.isUpdateExpression(update) &&
+              update.operator === "++" &&
+              t.isIdentifier(update.argument, { name: id ?? "" })) ||
+              (t.isAssignmentExpression(update) &&
+                update.operator === "+=" &&
+                t.isIdentifier(update.left, { name: id ?? "" }) &&
+                t.isNumericLiteral(update.right, { value: 1 })));
+          if (
+            id &&
+            steps &&
+            decl.init &&
+            pure(decl.init) &&
+            t.isBinaryExpression(test) &&
+            (test.operator === "<" || test.operator === "<=") &&
+            t.isIdentifier(test.left, { name: id }) &&
+            pure(test.right)
+          ) {
             const count = t.binaryExpression("-", t.cloneNode(test.right as t.Expression), t.cloneNode(decl.init));
             const total = test.operator === "<=" ? t.binaryExpression("+", count, t.numericLiteral(1)) : count;
             // Recorded when the loop starts: the init runs first, then this.
@@ -131,7 +162,12 @@ export function instrumentForMeasure(ast: t.File): string {
       if (!node.loc) return;
       if (t.isArrowFunctionExpression(node) && !t.isBlockStatement(node.body)) {
         const line = node.body.loc?.start.line ?? node.loc.start.line;
-        node.body = t.blockStatement([mark(countCall(node.loc.start.line)), mark(poll()), mark(countLine(line)), t.returnStatement(node.body)]);
+        node.body = t.blockStatement([
+          mark(countCall(node.loc.start.line)),
+          mark(poll()),
+          mark(countLine(line)),
+          t.returnStatement(node.body),
+        ]);
         return;
       }
       (node.body as t.BlockStatement).body.unshift(mark(countCall(node.loc.start.line)), mark(poll()));
@@ -145,7 +181,10 @@ export function instrumentForMeasure(ast: t.File): string {
 // ---------------------------------------------------------------------------
 
 /** Method -> what it costs and how to say it. */
-const ARRAY_WORK: Record<string, { kind: "m" | "s" | "c" | "o"; cost: (self: unknown[], args: unknown[], result: unknown) => number }> = {
+const ARRAY_WORK: Record<
+  string,
+  { kind: "m" | "s" | "c" | "o"; cost: (self: unknown[], args: unknown[], result: unknown) => number }
+> = {
   shift: { kind: "m", cost: (a) => a.length },
   unshift: { kind: "m", cost: (a) => a.length },
   splice: { kind: "m", cost: (a) => a.length },
@@ -222,7 +261,13 @@ class Timers {
     if (typeof fn !== "function") return 0;
     const id = this.nextId++;
     const delay = Math.max(0, Number(ms) || 0);
-    this.queue.push({ id, due: this.now + delay, seq: this.seq++, fn: () => (fn as (...a: unknown[]) => void)(...args), every: repeat ? Math.max(1, delay) : undefined });
+    this.queue.push({
+      id,
+      due: this.now + delay,
+      seq: this.seq++,
+      fn: () => (fn as (...a: unknown[]) => void)(...args),
+      every: repeat ? Math.max(1, delay) : undefined,
+    });
     return id;
   }
   private clear(id: number): void {
@@ -238,7 +283,11 @@ class Timers {
   }
 }
 
-function capture(state?: State): { console: Record<string, (...args: unknown[]) => void>; text: () => string; dropped: () => number } {
+function capture(state?: State): {
+  console: Record<string, (...args: unknown[]) => void>;
+  text: () => string;
+  dropped: () => number;
+} {
   let out = "";
   let dropped = 0;
   const print = (...args: unknown[]) => {
@@ -252,17 +301,24 @@ function capture(state?: State): { console: Record<string, (...args: unknown[]) 
     }
   };
   const write = (args: unknown[]) => {
-    const line = args.map((a) => (typeof a === "string" ? a : format(a))).join(" ") + "\n";
+    const line = `${args.map((a) => (typeof a === "string" ? a : format(a))).join(" ")}\n`;
     const room = MAX_OUTPUT - out.length;
     if (room > 0) out += line.slice(0, room);
     if (line.length > room) dropped += line.length - Math.max(room, 0);
   };
-  return { console: { log: print, info: print, warn: print, error: print, debug: print, table: print }, text: () => out, dropped: () => dropped };
+  return {
+    console: { log: print, info: print, warn: print, error: print, debug: print, table: print },
+    text: () => out,
+    dropped: () => dropped,
+  };
 }
 
 function format(value: unknown): string {
   try {
-    if (Array.isArray(value)) return value.length > 100 ? `[ ${value.slice(0, 100).map(format).join(", ")}, ... ${value.length - 100} more items ]` : `[ ${value.map(format).join(", ")} ]`;
+    if (Array.isArray(value))
+      return value.length > 100
+        ? `[ ${value.slice(0, 100).map(format).join(", ")}, ... ${value.length - 100} more items ]`
+        : `[ ${value.map(format).join(", ")} ]`;
     if (typeof value === "string") return `'${value}'`;
     if (typeof value === "object" && value !== null) return JSON.stringify(value) ?? String(value);
     return String(value);
@@ -274,7 +330,13 @@ function format(value: unknown): string {
 type Run = (env: Record<string, unknown>) => void;
 
 /** Run a script and its timers and async work; resolves with how it ended. */
-async function execute(run: Run, env: Record<string, unknown>, timers: Timers, deadline: () => boolean, idle: () => void = () => {}): Promise<{ status: "done" | "limit" | "error"; error: unknown }> {
+async function execute(
+  run: Run,
+  env: Record<string, unknown>,
+  timers: Timers,
+  deadline: () => boolean,
+  idle: () => void = () => {},
+): Promise<{ status: "done" | "limit" | "error"; error: unknown }> {
   let failure: unknown = null;
   let failed = false;
   const fail = (error: unknown) => {
@@ -319,14 +381,24 @@ function compile(code: string): Run {
 export function applyOverrides(ast: t.File, overrides?: Record<string, number>): t.File {
   if (!overrides || !Object.keys(overrides).length) return ast;
   const set = (id: t.Node, init: t.Node | null | undefined) => {
-    if (t.isIdentifier(id) && init && t.isNumericLiteral(init) && Number.isInteger(init.value) && id.name in overrides) {
+    if (
+      t.isIdentifier(id) &&
+      init &&
+      t.isNumericLiteral(init) &&
+      Number.isInteger(init.value) &&
+      id.name in overrides
+    ) {
       init.value = overrides[id.name];
       delete (init as { extra?: unknown }).extra; // so the new value is printed, not the old text
     }
   };
   for (const stmt of ast.program.body) {
     if (t.isVariableDeclaration(stmt)) for (const d of stmt.declarations) set(d.id, d.init);
-    else if (t.isExpressionStatement(stmt) && t.isAssignmentExpression(stmt.expression) && stmt.expression.operator === "=") {
+    else if (
+      t.isExpressionStatement(stmt) &&
+      t.isAssignmentExpression(stmt.expression) &&
+      stmt.expression.operator === "="
+    ) {
       set(stmt.expression.left, stmt.expression.right);
     }
   }
@@ -346,8 +418,20 @@ export async function measureProgram(
   overrides?: Record<string, number>,
 ): Promise<Measurement> {
   const result: Measurement = {
-    status: "done", error: null, lines: {}, passes: {}, calls: {}, work: {}, workKind: {}, totals: {}, ms: 0, plainMs: null,
-    peakBytes: null, heldBytes: null, stdout: "", droppedOutput: 0,
+    status: "done",
+    error: null,
+    lines: {},
+    passes: {},
+    calls: {},
+    work: {},
+    workKind: {},
+    totals: {},
+    ms: 0,
+    plainMs: null,
+    peakBytes: null,
+    heldBytes: null,
+    stdout: "",
+    droppedOutput: 0,
   };
   let counted: string;
   let plain: string;
@@ -377,7 +461,8 @@ export async function measureProgram(
     for (const [line, total] of Object.entries(totals)) {
       const at = entered.get(Number(line));
       const done = passes[Number(line)] - (at?.atEntry ?? 0);
-      if (total > 0 && done < total && (!best || (at?.order ?? 0) < best.order)) best = { line: Number(line), done, total, order: at?.order ?? 0 };
+      if (total > 0 && done < total && (!best || (at?.order ?? 0) < best.order))
+        best = { line: Number(line), done, total, order: at?.order ?? 0 };
     }
     const out: MeasureProgress = { elapsedMs: Math.round(performance.now() - started) };
     if (best) out.loop = { line: best.line, done: best.done, total: best.total };
@@ -405,8 +490,12 @@ export async function measureProgram(
       }
     },
     it(line: number, value: unknown) {
-      const length = Array.isArray(value) || typeof value === "string" ? value.length
-        : value instanceof Map || value instanceof Set ? value.size : null;
+      const length =
+        Array.isArray(value) || typeof value === "string"
+          ? value.length
+          : value instanceof Map || value instanceof Set
+            ? value.size
+            : null;
       if (length !== null) api.tot(line, length);
       return value;
     },
@@ -429,7 +518,15 @@ export async function measureProgram(
   state.counting = true;
   let ended: { status: "done" | "limit" | "error"; error: unknown };
   try {
-    ended = await execute(compile(counted), env, timers, () => overLimit, () => { api.l = 0; });
+    ended = await execute(
+      compile(counted),
+      env,
+      timers,
+      () => overLimit,
+      () => {
+        api.l = 0;
+      },
+    );
   } finally {
     state.counting = false;
     restore();
@@ -439,7 +536,11 @@ export async function measureProgram(
   if (ended.status === "limit") result.stoppedAt = progress();
   if (ended.status === "error") {
     const e = ended.error;
-    result.error = { type: e instanceof Error ? e.name : "Uncaught", message: e instanceof Error ? e.message : String(e), line: api.l || null };
+    result.error = {
+      type: e instanceof Error ? e.name : "Uncaught",
+      message: e instanceof Error ? e.message : String(e),
+      line: api.l || null,
+    };
   }
   const record = (from: ArrayLike<number>) => {
     const r: Record<string, number> = {};

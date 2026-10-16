@@ -1,21 +1,26 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { expandHeaps } from "./delta";
 import { JAVASCRIPT_EXAMPLES } from "../examples/javascript";
 import { PYTHON_EXAMPLES } from "../examples/python";
 import { TYPESCRIPT_EXAMPLES } from "../examples/typescript";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
 import { estimateComplexity } from "./complexity";
+import { expandHeaps } from "./delta";
 import { applyHints } from "./hints";
 import type { Measurement } from "./measurement";
 import type { Trace } from "./types";
 
 function tracePython(source: string): Trace | null {
   try {
-    const json = execFileSync("python3", ["-c",
-      "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
-    { input: source, encoding: "utf8" });
+    const json = execFileSync(
+      "python3",
+      [
+        "-c",
+        "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))",
+      ],
+      { input: source, encoding: "utf8" },
+    );
     return expandHeaps(JSON.parse(json) as Trace);
   } catch {
     return null; // Python not installed: those cases are skipped
@@ -35,17 +40,33 @@ const EXPECTED: Record<string, [string, string] | Record<string, [string, string
   "Binary search": ["O(log n)", "O(1)"],
   "Reverse a string": ["O(n)", "O(1)"],
   "Two sum": ["O(n)", "O(n)"],
-  "Sliding window": { python: ["O(k + n)", "O(k)"], javascript: ["O(k + n)", "O(1)"], typescript: ["O(k + n)", "O(1)"] },
+  "Sliding window": {
+    python: ["O(k + n)", "O(k)"],
+    javascript: ["O(k + n)", "O(1)"],
+    typescript: ["O(k + n)", "O(1)"],
+  },
   "Word frequency": ["O(n)", "O(n)"],
   "Reverse a linked list": ["O(n)", "O(1)"],
   "Find a cycle": ["O(n)", "O(1)"],
   "Binary search tree insert": ["O(n)", "O(1)"],
   "Tree traversal": ["O(n)", "O(n)"],
-  "Trie": ["O(n)", "O(n)"],
-  "Breadth-first search": { python: ["O(V + E)", "O(V)"], javascript: ["O(V² + E)", "O(V)"], typescript: ["O(V² + E)", "O(V)"] },
+  Trie: ["O(n)", "O(n)"],
+  "Breadth-first search": {
+    python: ["O(V + E)", "O(V)"],
+    javascript: ["O(V² + E)", "O(V)"],
+    typescript: ["O(V² + E)", "O(V)"],
+  },
   "Depth-first search": ["O(V + E)", "O(V)"],
-  "Dijkstra": { python: ["O(E log V + V)", "O(V)"], javascript: ["O(V·E log V)", "O(V)"], typescript: ["O(V·E log V)", "O(V)"] },
-  "Topological sort": { python: ["O(V + E)", "O(V)"], javascript: ["O(V² + E)", "O(V)"], typescript: ["O(V² + E)", "O(V)"] },
+  Dijkstra: {
+    python: ["O(E log V + V)", "O(V)"],
+    javascript: ["O(V·E log V)", "O(V)"],
+    typescript: ["O(V·E log V)", "O(V)"],
+  },
+  "Topological sort": {
+    python: ["O(V + E)", "O(V)"],
+    javascript: ["O(V² + E)", "O(V)"],
+    typescript: ["O(V² + E)", "O(V)"],
+  },
   "Graph of objects": ["O(V + E)", "O(V)"],
   "Grid paths": ["O(n·m)", "O(n·m)"],
   "Longest common subsequence": ["O(n·m)", "O(n·m)"],
@@ -168,14 +189,17 @@ search(data, 0, len(data) - 1, 31)
   });
 
   it("flags costly built-ins inside loops", async () => {
-    const e = await estimate(`
+    const e = await estimate(
+      `
 const items = [5, 3, 8, 1, 9, 2];
 const queue = [...items];
 while (queue.length > 0) {
   const x = queue.shift();
   if (items.includes(x)) {}
 }
-`, true);
+`,
+      true,
+    );
     if (!e) return;
     expect(e.time).toBe("O(n²)");
     expect(e.notes.some((n) => /queue\.shift\(\) costs n/.test(n))).toBe(true);
@@ -184,12 +208,30 @@ while (queue.length > 0) {
 
 describe("estimates from runs that were sampled or cut short", () => {
   const measurement = (extra: Partial<Measurement>): Measurement => ({
-    status: "done", error: null, lines: {}, passes: {}, calls: {}, work: {}, workKind: {}, totals: {},
-    ms: 1, plainMs: 1, peakBytes: null, heldBytes: null, stdout: "", droppedOutput: 0, ...extra,
+    status: "done",
+    error: null,
+    lines: {},
+    passes: {},
+    calls: {},
+    work: {},
+    workKind: {},
+    totals: {},
+    ms: 1,
+    plainMs: 1,
+    peakBytes: null,
+    heldBytes: null,
+    stdout: "",
+    droppedOutput: 0,
+    ...extra,
   });
 
   it("scales an inner loop's passes up to the outer passes a sampled run skipped", async () => {
-    const t = applyHints(await traceJavaScript(`const n = 3000;\nconst k = 50;\nlet t = 0;\nlet i = 0;\nwhile (i < n) {\n  let j = 0;\n  while (j < k) {\n    j++;\n    t++;\n  }\n  i++;\n}`, 3000));
+    const t = applyHints(
+      await traceJavaScript(
+        `const n = 3000;\nconst k = 50;\nlet t = 0;\nlet i = 0;\nwhile (i < n) {\n  let j = 0;\n  while (j < k) {\n    j++;\n    t++;\n  }\n  i++;\n}`,
+        3000,
+      ),
+    );
     expect(t.sampled).toBe(true);
     expect(t.truncated).toBe(false);
     expect(estimateComplexity(t)!.time).toBe("O(n·k)");

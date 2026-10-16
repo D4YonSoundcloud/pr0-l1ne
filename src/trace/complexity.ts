@@ -30,14 +30,36 @@
  * is kept for the explanation panel and the editor labels.
  */
 import {
-  add, evaluate, expOf, setCanBeZero, factOf, format, isOne, logOf, mul, ONE, power, rename, size, sizesIn, ZERO,
-  type BigO, type Term,
+  add,
+  type BigO,
+  evaluate,
+  expOf,
+  factOf,
+  format,
+  isOne,
+  logOf,
+  mul,
+  ONE,
+  power,
+  rename,
+  setCanBeZero,
+  size,
+  sizesIn,
+  type Term,
+  ZERO,
 } from "./bigO";
+import type { Measurement } from "./measurement";
 import {
-  liveFrames, type CostFunction, type CostNode, type Frame, type HeapObject, type SizeRef, type Step, type Trace,
+  type CostFunction,
+  type CostNode,
+  type Frame,
+  type HeapObject,
+  liveFrames,
+  type SizeRef,
+  type Step,
+  type Trace,
   type Value,
 } from "./types";
-import type { Measurement } from "./measurement";
 
 // ---------------------------------------------------------------------------
 // Results
@@ -162,7 +184,10 @@ class RunFacts {
   /** Full counts from Measure, for a trace that stopped early. */
   readonly measured: Measurement | null;
 
-  constructor(readonly trace: Trace, measurement: Measurement | null = null) {
+  constructor(
+    readonly trace: Trace,
+    measurement: Measurement | null = null,
+  ) {
     this.steps = trace.steps;
     this.partial = trace.truncated;
     this.measured = this.partial && measurement && measurement.status === "done" ? measurement : null;
@@ -171,7 +196,10 @@ class RunFacts {
       const step = this.steps[i];
       for (const frame of liveFrames(step)) {
         let list = this.framesOf.get(frame.func);
-        if (!list) this.framesOf.set(frame.func, (list = []));
+        if (!list) {
+          list = [];
+          this.framesOf.set(frame.func, list);
+        }
         list.push([step, frame]);
       }
     }
@@ -201,7 +229,8 @@ class RunFacts {
     // Runs still going when a cut-short trace stopped: their counts are partial.
     const unfinished = new Set<string>();
     const lastStep = this.steps[this.steps.length - 1];
-    if (this.partial && lastStep) for (const ctx of lastStep.loops) unfinished.add(`${ctx.frame}|${ctx.loop}|${ctx.instance}`);
+    if (this.partial && lastStep)
+      for (const ctx of lastStep.loops) unfinished.add(`${ctx.frame}|${ctx.loop}|${ctx.instance}`);
 
     // loop -> parent run -> total passes, and the parent's passes it was seen in
     const totals = new Map<string, Map<string, { total: number; seen: Set<number> }>>();
@@ -263,7 +292,10 @@ class RunFacts {
         .sort((a, b) => b.line - a.line)[0];
       const outerRuns = parent ? count(m.lines, parent.line) : 0;
       if (parent && outerRuns) {
-        stat.innerTotal = { outerPasses: Math.round(count(m.passes, parent.line) / outerRuns), total: Math.round(passes / outerRuns) };
+        stat.innerTotal = {
+          outerPasses: Math.round(count(m.passes, parent.line) / outerRuns),
+          total: Math.round(passes / outerRuns),
+        };
       }
       this.loops.set(info.id, stat);
     }
@@ -288,9 +320,11 @@ class RunFacts {
       if (!this.firstCallStep.has(top.func)) this.firstCallStep.set(top.func, index);
       const stat = this.calls.get(top.func) ?? { calls: 0, perOutsideCall: 0, depth: 1 };
       stat.calls++;
-      const fromOutside = !caller || caller.func !== top.func && !step.stack.slice(0, -1).some((f) => f.func === top.func);
+      const fromOutside =
+        !caller || (caller.func !== top.func && !step.stack.slice(0, -1).some((f) => f.func === top.func));
       if (fromOutside) {
-        if (current.has(top.func)) finished.set(top.func, Math.max(finished.get(top.func) ?? 0, current.get(top.func)!));
+        if (current.has(top.func))
+          finished.set(top.func, Math.max(finished.get(top.func) ?? 0, current.get(top.func)!));
         current.set(top.func, 0);
         outsideCalls.set(top.func, (outsideCalls.get(top.func) ?? 0) + 1);
       }
@@ -341,9 +375,9 @@ function lookup(step: Step, frame: Frame, name: string, global?: Frame): Value |
   const [base, ...rest] = name.split(".");
   let value = frame.locals.find(([n]) => n === base)?.[1] ?? global?.locals.find(([n]) => n === base)?.[1];
   for (const field of rest) {
-    if (!value || value.kind !== "ref") return undefined;
+    if (value?.kind !== "ref") return undefined;
     const obj = step.heap[value.id];
-    if (!obj || obj.kind !== "object") return undefined;
+    if (obj?.kind !== "object") return undefined;
     value = obj.fields.find(([n]) => n === field)?.[1];
   }
   return value;
@@ -371,7 +405,7 @@ function itemsOf(obj: HeapObject): Value[] {
 /** Objects of one class reachable from an object (a linked list's nodes, a tree's). */
 function structureOf(step: Step, start: string): { type: string; nodes: number; links: number } | null {
   const first = step.heap[start];
-  if (!first || first.kind !== "object") return null;
+  if (first?.kind !== "object") return null;
   const type = first.typeName;
   const seen = new Set<string>([start]);
   const queue = [start];
@@ -388,7 +422,10 @@ function structureOf(step: Step, start: string): { type: string; nodes: number; 
       if (!target) continue;
       if (target.kind === "object" && target.typeName === type) {
         links++;
-        if (!seen.has(v.id)) { seen.add(v.id); queue.push(v.id); }
+        if (!seen.has(v.id)) {
+          seen.add(v.id);
+          queue.push(v.id);
+        }
       } else if (target.kind !== "object" && target.kind !== "function" && target.kind !== "class" && !seen.has(v.id)) {
         seen.add(v.id);
         queue.unshift(v.id); // a list or dict of children: look inside it
@@ -406,7 +443,11 @@ class Symbols {
   /** Names the program grows (appends to, adds to, stores into). */
   private grown = new Set<string>();
 
-  constructor(private facts: RunFacts, private trace: Trace, functions: CostFunction[]) {
+  constructor(
+    private facts: RunFacts,
+    private trace: Trace,
+    functions: CostFunction[],
+  ) {
     const walk = (nodes: CostNode[]) => {
       for (const node of nodes) {
         if (node.kind === "loop") walk(node.body);
@@ -439,7 +480,10 @@ class Symbols {
     const scope = this.scopeOf(ref.name, fn);
     // What is it in the run? A structure of objects is named by its class.
     let probe: [Step, Value] | undefined;
-    for (const entry of this.values(scope, ref.name)) { probe = entry; if (entry[1].kind === "ref") break; }
+    for (const entry of this.values(scope, ref.name)) {
+      probe = entry;
+      if (entry[1].kind === "ref") break;
+    }
     const obj = probe && probe[1].kind === "ref" ? probe[0].heap[probe[1].id] : undefined;
     if (obj?.kind === "object") return this.structSym(obj.typeName, ref, scope);
     const isCollection = !!obj && obj.kind !== "function" && obj.kind !== "class" && obj.kind !== "opaque";
@@ -450,8 +494,14 @@ class Symbols {
     if (this.all.has(key)) return key;
     const base = ref.name.split(".")[0];
     const sym: Sym = {
-      key, kind, name: ref.name, scope, value: 0, graph: false,
-      meaning: kind === "value" ? `the value of ${ref.name}` : kind === "len" ? `len(${ref.name})` : `an item of ${ref.name}`,
+      key,
+      kind,
+      name: ref.name,
+      scope,
+      value: 0,
+      graph: false,
+      meaning:
+        kind === "value" ? `the value of ${ref.name}` : kind === "len" ? `len(${ref.name})` : `an item of ${ref.name}`,
       derived: kind !== "value" && this.grown.has(base) && !(scope !== "Global" && this.isParam(scope, base)),
     };
     this.all.set(key, sym);
@@ -492,7 +542,10 @@ class Symbols {
         let nested = 0;
         for (const item of items) {
           const len = lengthOf(step, item);
-          if (len !== null && item.kind === "ref") { t += len; nested++; }
+          if (len !== null && item.kind === "ref") {
+            t += len;
+            nested++;
+          }
         }
         if (nested && nested === items.length) {
           total = Math.max(total, t);
@@ -519,8 +572,16 @@ class Symbols {
     if (!this.all.has(key)) {
       const totalValue = (of as Sym & { totalValue?: number }).totalValue ?? 0;
       this.all.set(key, {
-        key, kind: "total", name: of.name, scope: of.scope, value: totalValue, graph: of.graph, derived: of.derived, of: of.key,
-        meaning: of.graph ? `edges in ${of.name}` : `items in all of ${of.name}`, struct: of.struct,
+        key,
+        kind: "total",
+        name: of.name,
+        scope: of.scope,
+        value: totalValue,
+        graph: of.graph,
+        derived: of.derived,
+        of: of.key,
+        meaning: of.graph ? `edges in ${of.name}` : `items in all of ${of.name}`,
+        struct: of.struct,
       });
     }
     // An item's typical length: total / count.
@@ -535,20 +596,46 @@ class Symbols {
       for (const [step, value] of this.values(scope, ref.name)) {
         if (value.kind !== "ref") continue;
         const s = structureOf(step, value.id);
-        if (s) { nodes = Math.max(nodes, s.nodes); links = Math.max(links, s.links); }
+        if (s) {
+          nodes = Math.max(nodes, s.nodes);
+          links = Math.max(links, s.links);
+        }
       }
       this.all.set(key, {
-        key, kind: "len", name: ref.name, scope, value: nodes, graph: false, derived: false, struct: type,
+        key,
+        kind: "len",
+        name: ref.name,
+        scope,
+        value: nodes,
+        graph: false,
+        derived: false,
+        struct: type,
         meaning: `${type} objects reachable from ${ref.name}`,
       });
       this.all.set(`${key}:total`, {
-        key: `${key}:total`, kind: "total", name: ref.name, scope, value: links, graph: true, derived: false, of: key,
-        struct: type, meaning: `links between ${type} objects`,
+        key: `${key}:total`,
+        kind: "total",
+        name: ref.name,
+        scope,
+        value: links,
+        graph: true,
+        derived: false,
+        of: key,
+        struct: type,
+        meaning: `links between ${type} objects`,
       });
       this.onCreate({ key: `${key}:inner`, kind: "inner", graph: true } as Sym);
       this.all.set(`${key}:inner`, {
-        key: `${key}:inner`, kind: "inner", name: ref.name, scope, value: nodes ? Math.round(links / nodes) : 0,
-        graph: true, derived: false, of: key, struct: type, meaning: `links from one ${type}`,
+        key: `${key}:inner`,
+        kind: "inner",
+        name: ref.name,
+        scope,
+        value: nodes ? Math.round(links / nodes) : 0,
+        graph: true,
+        derived: false,
+        of: key,
+        struct: type,
+        meaning: `links from one ${type}`,
       });
     }
     if (ref.inner) {
@@ -613,19 +700,28 @@ const KIND_ORDER: Record<SymKind, number> = { len: 0, value: 1, total: 2, inner:
 
 function match(count: number, candidates: Sym[], what: string): Match {
   if (count <= 1) return { cost: ONE, why: `${what} ${count === 1 ? "once" : "never"}` };
-  const sorted = [...candidates].sort((a, b) =>
-    Math.abs(a.value - count) - Math.abs(b.value - count) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
+  const sorted = [...candidates].sort(
+    (a, b) => Math.abs(a.value - count) - Math.abs(b.value - count) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind],
+  );
   const close = sorted.find((s) => Math.abs(s.value - count) <= Math.max(1, 0.15 * s.value));
   if (close) return { cost: size(close.key), why: `${what} ${count} times, about ${close.meaning} (${close.value})` };
   // log needs a big enough input to tell apart from "a few": log₂ 8 is 3.
-  const log = candidates.find((s) => s.value >= 16 && count < s.value / 3 && Math.abs(count - Math.log2(s.value)) <= 1.2);
+  const log = candidates.find(
+    (s) => s.value >= 16 && count < s.value / 3 && Math.abs(count - Math.log2(s.value)) <= 1.2,
+  );
   if (log) return { cost: logOf(log.key), why: `${what} ${count} times, about log₂ of ${log.meaning} (${log.value})` };
-  const square = candidates.find((s) => s.value >= 3 && Math.abs(count - s.value * s.value) <= 0.25 * s.value * s.value);
-  if (square) return { cost: power(square.key, 2), why: `${what} ${count} times, about ${square.meaning}² (${square.value}²)` };
-  const above = [...candidates].filter((s) => s.value >= count).sort((a, b) => a.value - b.value || KIND_ORDER[a.kind] - KIND_ORDER[b.kind])[0];
+  const square = candidates.find(
+    (s) => s.value >= 3 && Math.abs(count - s.value * s.value) <= 0.25 * s.value * s.value,
+  );
+  if (square)
+    return { cost: power(square.key, 2), why: `${what} ${count} times, about ${square.meaning}² (${square.value}²)` };
+  const above = [...candidates]
+    .filter((s) => s.value >= count)
+    .sort((a, b) => a.value - b.value || KIND_ORDER[a.kind] - KIND_ORDER[b.kind])[0];
   if (above) return { cost: size(above.key), why: `${what} ${count} times, at most ${above.meaning} (${above.value})` };
   const biggest = [...candidates].sort((a, b) => b.value - a.value)[0];
-  if (biggest) return { cost: size(biggest.key), why: `${what} ${count} times, more than ${biggest.meaning} (${biggest.value})` };
+  if (biggest)
+    return { cost: size(biggest.key), why: `${what} ${count} times, more than ${biggest.meaning} (${biggest.value})` };
   return { cost: ONE, why: `${what} ${count} times; no input size to compare with` };
 }
 
@@ -648,7 +744,6 @@ interface Cost {
   total: BigO;
 }
 
-
 interface FunctionResult {
   time: BigO;
   space: BigO;
@@ -667,7 +762,11 @@ class Estimator {
   readonly notes: string[] = [];
   private fns = new Map<string, CostFunction>();
 
-  constructor(private facts: RunFacts, private syms: Symbols, functions: CostFunction[]) {
+  constructor(
+    private facts: RunFacts,
+    private syms: Symbols,
+    functions: CostFunction[],
+  ) {
     for (const f of functions) this.fns.set(f.name, f);
     syms.functions = this.fns;
   }
@@ -687,7 +786,10 @@ class Estimator {
   private rematch(s: Sym, fn: CostFunction): string | null {
     if (this.rematched.has(s.key)) return this.rematched.get(s.key)!;
     this.rematched.set(s.key, null);
-    const when = s.scope === "Global" || fn.name === "Global" ? this.facts.firstGlobal(s.name) : this.facts.firstCallStep.get(fn.name) ?? 0;
+    const when =
+      s.scope === "Global" || fn.name === "Global"
+        ? this.facts.firstGlobal(s.name)
+        : (this.facts.firstCallStep.get(fn.name) ?? 0);
     const m = match(s.value, this.syms.candidates(fn, when, true), `${s.name} held up to`);
     const key = m.cost.length === 1 && Object.keys(m.cost[0].pow).length === 1 ? sizesIn(m.cost)[0] : null;
     this.rematched.set(s.key, key);
@@ -707,13 +809,25 @@ class Estimator {
   }
 
   /** How many times a loop runs per pass of what's around it, deciding per-pass vs amortized. */
-  private loopCost(node: Extract<CostNode, { kind: "loop" }>, fn: CostFunction, outer: BigO | null): { perPass: BigO; amortized: BigO | null; estimate: LoopEstimate } {
+  private loopCost(
+    node: Extract<CostNode, { kind: "loop" }>,
+    fn: CostFunction,
+    outer: BigO | null,
+  ): { perPass: BigO; amortized: BigO | null; estimate: LoopEstimate } {
     const stat = node.loop ? this.facts.loops.get(node.loop) : undefined;
     const b = node.bound;
-    const est: LoopEstimate = { line: node.line, func: fn.name, label: "", why: b.why, fromRun: false, sizedBy: "code" };
+    const est: LoopEstimate = {
+      line: node.line,
+      func: fn.name,
+      label: "",
+      why: b.why,
+      fromRun: false,
+      sizedBy: "code",
+    };
     let perPass: BigO = ONE;
     let amortized: BigO | null = null;
-    const when = (node.loop ? this.facts.firstLoopStep.get(node.loop) : undefined) ?? this.facts.firstCallStep.get(fn.name) ?? 0;
+    const when =
+      (node.loop ? this.facts.firstLoopStep.get(node.loop) : undefined) ?? this.facts.firstCallStep.get(fn.name) ?? 0;
     const candidates = (perItem = false) => this.syms.candidates(fn, when, !perItem);
 
     if (b.kind === "size") perPass = this.sizesCost(b.sizes, fn);
@@ -728,7 +842,9 @@ class Estimator {
       if (innerKind) {
         // Each item's list: over the whole outer loop, every list once?
         const innerKey = this.sym(b.sizes.find((r) => r.inner)!, fn);
-        const totalKey = innerKey ? this.syms.all.get(innerKey)?.of && `${this.syms.all.get(innerKey)!.of}:total` : null;
+        const totalKey = innerKey
+          ? this.syms.all.get(innerKey)?.of && `${this.syms.all.get(innerKey)!.of}:total`
+          : null;
         const totalSym = totalKey ? this.syms.all.get(totalKey) : undefined;
         if (totalSym && totalSym.value > 0 && total <= totalSym.value + 1 && outerPasses >= 2) {
           amortized = size(totalSym.key);
@@ -753,7 +869,9 @@ class Estimator {
         est.fromRun = true;
       } else if (stat?.cutShort) {
         est.checked = "the trace stopped before it finished, so it couldn't be sized";
-        this.notes.push(`The loop on line ${node.line} depends on the data, and the trace stopped before it finished: it's counted as O(1). Measure the program to size it from full counts.`);
+        this.notes.push(
+          `The loop on line ${node.line} depends on the data, and the trace stopped before it finished: it's counted as O(1). Measure the program to size it from full counts.`,
+        );
       } else {
         est.checked = "didn't run, so it couldn't be sized";
         this.notes.push(`The loop on line ${node.line} depends on the data and didn't run, so it's counted as O(1).`);
@@ -774,7 +892,8 @@ class Estimator {
     }
     if (est.fromRun) est.sizedBy = b.kind === "unknown" ? "run" : "both";
     if (stat?.measured && est.checked) est.checked += " (counted by Measure)";
-    else if (stat?.cutShort && stat.ran && est.checked && !/stopped/.test(est.checked)) est.checked += " (in the runs the trace finished)";
+    else if (stat?.cutShort && stat.ran && est.checked && !/stopped/.test(est.checked))
+      est.checked += " (in the runs the trace finished)";
     const sized = est as SizedLoop;
     sized.cost = amortized ?? perPass;
     sized.amortized = !!amortized;
@@ -783,7 +902,13 @@ class Estimator {
   }
 
   /** Time of a block of code, per run of it. */
-  private block(nodes: CostNode[], fn: CostFunction, outer: BigO | null, selfCalls: { mult: BigO; shrink: string; alt: boolean }[], mult: BigO): Cost {
+  private block(
+    nodes: CostNode[],
+    fn: CostFunction,
+    outer: BigO | null,
+    selfCalls: { mult: BigO; shrink: string; alt: boolean }[],
+    mult: BigO,
+  ): Cost {
     let each: BigO = ONE; // every block does some constant work
     let once: BigO = ZERO;
     let total: BigO = ZERO;
@@ -804,9 +929,15 @@ class Estimator {
           continue;
         }
         const callee = this.fns.get(node.callee);
-        if (!callee) { each = add(each, ONE); continue; }
+        if (!callee) {
+          each = add(each, ONE);
+          continue;
+        }
         const r = this.function(callee);
-        if (!r) { each = add(each, ONE); continue; }
+        if (!r) {
+          each = add(each, ONE);
+          continue;
+        }
         const renamed = this.renameInto(r.time, callee, node.args, fn);
         if (r.wholeRun) total = add(total, renamed);
         else each = add(each, renamed);
@@ -815,11 +946,18 @@ class Estimator {
         each = add(each, cost);
         // A costly built-in inside a loop is easy to miss: say so.
         if (!isOne(mult) && !isOne(cost) && node.cost !== "log") {
-          const shift = /\.shift\(\)/.test(node.what) ? " (it moves every item; a real queue, or an index into the array, makes it O(1))"
-            : /\.unshift\(\)/.test(node.what) ? " (it moves every item; pushing, then reversing once at the end, is cheaper)"
-            : /\.pop\(0\)/.test(node.what) ? " (it moves every item; collections.deque makes it O(1))"
-              : /^in /.test(node.what) ? " (searching a list; a set makes it O(1))" : "";
-          this.notes.push(`Line ${node.line}: ${node.what.replace(/ \(copies\)$/, "")} costs ${this.label(cost)} each time it runs${shift}.`);
+          const shift = /\.shift\(\)/.test(node.what)
+            ? " (it moves every item; a real queue, or an index into the array, makes it O(1))"
+            : /\.unshift\(\)/.test(node.what)
+              ? " (it moves every item; pushing, then reversing once at the end, is cheaper)"
+              : /\.pop\(0\)/.test(node.what)
+                ? " (it moves every item; collections.deque makes it O(1))"
+                : /^in /.test(node.what)
+                  ? " (searching a list; a set makes it O(1))"
+                  : "";
+          this.notes.push(
+            `Line ${node.line}: ${node.what.replace(/ \(copies\)$/, "")} costs ${this.label(cost)} each time it runs${shift}.`,
+          );
         }
       }
     }
@@ -857,7 +995,10 @@ class Estimator {
       for (const kind of ["value", "len", "inner"] as const) {
         const from = `${callee.name}:${param}:${kind}`;
         if (!this.syms.all.has(from)) continue;
-        const to = this.sym({ name: arg.name, len: kind !== "value" || arg.len, inner: kind === "inner" || arg.inner }, caller);
+        const to = this.sym(
+          { name: arg.name, len: kind !== "value" || arg.len, inner: kind === "inner" || arg.inner },
+          caller,
+        );
         if (to && to !== from) {
           map.set(from, to);
           const toSym = this.syms.all.get(to);
@@ -902,8 +1043,14 @@ class Estimator {
       const a = selfCalls.filter((c) => !c.alt).length + (selfCalls.some((c) => c.alt) ? 1 : 0);
       const inLoop = selfCalls.some((c) => !isOne(c.mult));
       const shrinks = new Set(selfCalls.map((c) => c.shrink));
-      const kind = shrinks.has("unknown") || shrinks.has("same") ? "unknown"
-        : shrinks.has("half") ? "half" : shrinks.has("child") ? "child" : "minus";
+      const kind =
+        shrinks.has("unknown") || shrinks.has("same")
+          ? "unknown"
+          : shrinks.has("half")
+            ? "half"
+            : shrinks.has("child")
+              ? "child"
+              : "minus";
       const pName = () => (p ? this.label(size(p)) : "n");
       const calls = stat?.perOutsideCall ?? 0;
       if (fn.memo && p) {
@@ -919,23 +1066,39 @@ class Estimator {
         else if (Math.abs(k - c) < 1e-9) time = mul(power(p, k), mulLogs(p, j + 1));
         else time = power(p, c);
         depth = logOf(p);
-        why.push(`calls itself ${a === 1 ? "once" : `${a} times`} on half of ${pName()}, with ${this.label(work)} work per call: ${this.label(time)} in all`);
+        why.push(
+          `calls itself ${a === 1 ? "once" : `${a} times`} on half of ${pName()}, with ${this.label(work)} work per call: ${this.label(time)} in all`,
+        );
       } else if (kind === "child" && p) {
         time = mul(size(p), work);
         depth = size(p);
-        why.push(`calls itself on each ${this.syms.all.get(p)?.struct ?? "child"} once, with ${this.label(work)} work per call`);
+        why.push(
+          `calls itself on each ${this.syms.all.get(p)?.struct ?? "child"} once, with ${this.label(work)} work per call`,
+        );
       } else if (kind === "minus" && p) {
-        if (inLoop) { time = mul(factOf(p), work); why.push(`calls itself in a loop on ${pName()} - 1: a permutation-style search`); }
-        else if (a === 1) { time = mul(size(p), work); why.push(`calls itself once on ${pName()} - 1, with ${this.label(work)} work per call`); }
-        else { time = mul(expOf(p, a), work); why.push(`calls itself ${a} times on ${pName()} - 1`); }
+        if (inLoop) {
+          time = mul(factOf(p), work);
+          why.push(`calls itself in a loop on ${pName()} - 1: a permutation-style search`);
+        } else if (a === 1) {
+          time = mul(size(p), work);
+          why.push(`calls itself once on ${pName()} - 1, with ${this.label(work)} work per call`);
+        } else {
+          time = mul(expOf(p, a), work);
+          why.push(`calls itself ${a} times on ${pName()} - 1`);
+        }
         depth = size(p);
         // Does the run agree? A check (visited, a memo) can prune it.
         const v = this.syms.all.get(p)?.value ?? 0;
         if (!inLoop && a >= 2 && calls && v >= 4) {
           const predictedExp = a ** Math.min(30, v);
-          if (Math.abs(Math.log(calls) - Math.log(v)) < Math.abs(Math.log(calls) - Math.log(predictedExp)) && calls <= (a + 1) * v) {
+          if (
+            Math.abs(Math.log(calls) - Math.log(v)) < Math.abs(Math.log(calls) - Math.log(predictedExp)) &&
+            calls <= (a + 1) * v
+          ) {
             time = mul(size(p), work);
-            why.push(`but the run made only ${calls} calls for ${pName()} = ${v}: something (a check or a cache) prunes it to about one call per value`);
+            why.push(
+              `but the run made only ${calls} calls for ${pName()} = ${v}: something (a check or a cache) prunes it to about one call per value`,
+            );
           }
         }
       } else {
@@ -949,7 +1112,8 @@ class Estimator {
         why.push(`${m.why} in all, with ${this.label(work)} work per call`);
         checked = `${all} calls in all, ${stat?.depth ?? 0} deep at most`;
       }
-      if (stat && !checked) checked = `${stat.calls} call${stat.calls === 1 ? "" : "s"} in all${stat.depth > 1 ? `, ${stat.depth} deep at most` : ""}`;
+      if (stat && !checked)
+        checked = `${stat.calls} call${stat.calls === 1 ? "" : "s"} in all${stat.depth > 1 ? `, ${stat.depth} deep at most` : ""}`;
     } else {
       if (stat && fn.name !== "Global") checked = `${stat.calls} call${stat.calls === 1 ? "" : "s"}`;
     }
@@ -991,8 +1155,15 @@ class Estimator {
           const est = this.loops.find((l) => l.line === node.line && l.func === fn.name) as SizedLoop | undefined;
           walk(node.body, mul(mult, est?.cost ?? ONE));
         } else if (node.kind === "alloc") {
-          const own = node.sizes.length ? mul(...node.sizes.map((r) => { const k = this.sym(r, fn); return k ? size(k) : ONE; })) : ONE;
-          if (node.into && node.into.includes(".")) {
+          const own = node.sizes.length
+            ? mul(
+                ...node.sizes.map((r) => {
+                  const k = this.sym(r, fn);
+                  return k ? size(k) : ONE;
+                }),
+              )
+            : ONE;
+          if (node.into?.includes(".")) {
             kept = add(kept, mul(mult, own)); // a field of an object: the structure grows
           } else if (node.into) {
             if (intoSeen.has(node.into)) continue;
@@ -1003,7 +1174,10 @@ class Estimator {
             const s = this.syms.all.get(key);
             let cost: BigO;
             if (s && s.value > 0) {
-              const when = scope.name === "Global" ? this.facts.firstGlobal(node.into) : this.facts.firstCallStep.get(fn.name) ?? 0;
+              const when =
+                scope.name === "Global"
+                  ? this.facts.firstGlobal(node.into)
+                  : (this.facts.firstCallStep.get(fn.name) ?? 0);
               const m = match(s.value, this.syms.candidates(fn, when, true), `${node.into} held up to`);
               cost = m.cost;
             } else cost = mul(mult, own);
@@ -1025,7 +1199,8 @@ class Estimator {
           if (r && callee) {
             local = add(local, this.renameInto(r.space, callee, node.args, fn));
             // What it keeps (a stack's push) builds up over every call.
-            if (!isOne(mult) && !r.wholeRun) kept = add(kept, mul(mult, this.renameInto(r.kept, callee, node.args, fn)));
+            if (!isOne(mult) && !r.wholeRun)
+              kept = add(kept, mul(mult, this.renameInto(r.kept, callee, node.args, fn)));
           }
         }
       }
@@ -1058,11 +1233,16 @@ function collapse(x: BigO, syms: Map<string, Sym>): BigO {
   for (const s of syms.values()) {
     if (s.kind !== "inner" || !s.of) continue;
     const total = syms.get(`${s.of}:total`);
-    if (!total || !total.graph) continue;
+    if (!total?.graph) continue;
     out = out.map((t) => {
       const k = Math.min(t.pow[s.of!] ?? 0, t.pow[s.key] ?? 0);
       if (!k) return t;
-      const pow = { ...t.pow, [s.of!]: t.pow[s.of!] - k, [s.key]: t.pow[s.key] - k, [total.key]: (t.pow[total.key] ?? 0) + k };
+      const pow = {
+        ...t.pow,
+        [s.of!]: t.pow[s.of!] - k,
+        [s.key]: t.pow[s.key] - k,
+        [total.key]: (t.pow[total.key] ?? 0) + k,
+      };
       for (const key of Object.keys(pow)) if (!pow[key]) delete pow[key];
       return { ...t, pow };
     });
@@ -1074,11 +1254,14 @@ function collapse(x: BigO, syms: Map<string, Sym>): BigO {
 function nameSizes(used: string[], syms: Map<string, Sym>): Map<string, string> {
   const names = new Map<string, string>();
   const taken = new Set<string>();
-  const take = (key: string, name: string) => { names.set(key, name); taken.add(name); };
+  const take = (key: string, name: string) => {
+    names.set(key, name);
+    taken.add(name);
+  };
   // Graphs first: V, E, d. A list of edges is E.
   for (const key of used) if (syms.get(key)?.edgeList && !taken.has("E")) take(key, "E");
   const graphs = used.map((k) => syms.get(k)).filter((s): s is Sym => !!s && s.graph && !names.has(s.key));
-  const roots = [...new Set(graphs.map((s) => (s.kind === "len" ? s.key : s.of ?? s.key)))];
+  const roots = [...new Set(graphs.map((s) => (s.kind === "len" ? s.key : (s.of ?? s.key))))];
   roots.forEach((root, i) => {
     const suffix = roots.length > 1 ? String(i + 1) : "";
     take(root, `V${suffix}`);
@@ -1093,12 +1276,18 @@ function nameSizes(used: string[], syms: Map<string, Sym>): Map<string, string> 
   }
   const letters = ["n", "m", "k", "p", "q", "r", "s", "t", "u", "w"];
   const byMeaning = new Map<string, string>();
-  for (const [key, name] of names) { const m = syms.get(key)?.meaning; if (m && name) byMeaning.set(m, name); }
+  for (const [key, name] of names) {
+    const m = syms.get(key)?.meaning;
+    if (m && name) byMeaning.set(m, name);
+  }
   for (const key of used) {
     if (names.has(key)) continue;
     const s = syms.get(key);
     const same = s && byMeaning.get(s.meaning);
-    if (same) { names.set(key, same); continue; }
+    if (same) {
+      names.set(key, same);
+      continue;
+    }
     // A grid's rows × columns reads better as n·m than as one symbol.
     const letter = letters.find((l) => !taken.has(l)) ?? `n${names.size}`;
     take(key, letter);
@@ -1151,12 +1340,19 @@ function compute(trace: Trace, measurement: Measurement | null): Estimate | null
   }
 }
 
-function computeWith(trace: Trace, functions: CostFunction[], measurement: Measurement | null, shareGraphs: (keys: Set<string>) => void): Estimate | null {
+function computeWith(
+  trace: Trace,
+  functions: CostFunction[],
+  measurement: Measurement | null,
+  shareGraphs: (keys: Set<string>) => void,
+): Estimate | null {
   const facts = new RunFacts(trace, measurement);
   const syms = new Symbols(facts, trace, functions);
   const graphInner = new Set<string>();
   shareGraphs(graphInner);
-  syms.onCreate = (sym) => { if (sym.kind === "inner" && sym.graph) graphInner.add(sym.key); };
+  syms.onCreate = (sym) => {
+    if (sym.kind === "inner" && sym.graph) graphInner.add(sym.key);
+  };
   const est = new Estimator(facts, syms, functions);
   const global = functions.find((f) => f.name === "Global") ?? functions[0];
 
@@ -1204,7 +1400,15 @@ function computeWith(trace: Trace, functions: CostFunction[], measurement: Measu
   const loops: LoopEstimate[] = (est.loops as SizedLoop[]).map((l, i) => {
     const text = inner(loopCosts[i]);
     const label = l.unsized ? "× ?" : l.amortized ? `${text} in total` : `× ${text}`;
-    return { line: l.line, func: l.func, label, why: l.why, checked: l.checked, fromRun: l.fromRun, sizedBy: l.sizedBy };
+    return {
+      line: l.line,
+      func: l.func,
+      label,
+      why: l.why,
+      checked: l.checked,
+      fromRun: l.fromRun,
+      sizedBy: l.sizedBy,
+    };
   });
 
   const legend: SizeLegend[] = [];
@@ -1222,13 +1426,17 @@ function computeWith(trace: Trace, functions: CostFunction[], measurement: Measu
       return { name, line: fn.line, time: fmt(t), space: fmt(s), why: r.why.map(fill), checked: r.checked };
     });
 
-  const run: string[] = [trace.counts && trace.counts.steps > trace.steps.length
-    ? `${trace.counts.steps.toLocaleString()} steps ran, ${trace.steps.length.toLocaleString()} recorded`
-    : `${trace.steps.length} steps`];
+  const run: string[] = [
+    trace.counts && trace.counts.steps > trace.steps.length
+      ? `${trace.counts.steps.toLocaleString()} steps ran, ${trace.steps.length.toLocaleString()} recorded`
+      : `${trace.steps.length} steps`,
+  ];
   if (trace.truncated) {
-    est.notes.push(facts.measured
-      ? "The trace stopped before the program finished, so what it didn't finish is sized from Measure's full counts."
-      : "The trace stopped before the program finished, so loops and calls it didn't finish are sized from the code alone. Measure the program to check them against full counts.");
+    est.notes.push(
+      facts.measured
+        ? "The trace stopped before the program finished, so what it didn't finish is sized from Measure's full counts."
+        : "The trace stopped before the program finished, so loops and calls it didn't finish are sized from the code alone. Measure the program to check them against full counts.",
+    );
   }
   const deepest = [...facts.calls.entries()].filter(([f]) => f !== "Global").sort((a, b) => b[1].depth - a[1].depth)[0];
   if (deepest && deepest[1].depth > 1) run.push(`${deepest[0]}() recursed ${deepest[1].depth} deep`);

@@ -1,0 +1,21 @@
+# Python tooling only: the app itself is built with npm (see package.json).
+# Ruff lints and formats the Python tracer in src/worker/.
+[tool.ruff]
+line-length = 120
+target-version = "py312" # Pyodide 0.27 ships CPython 3.12
+include = ["src/worker/**/*.py", "scripts/**/*.py"]
+
+[tool.ruff.lint]
+# Listed explicitly so a Ruff upgrade doesn't change what's checked:
+#   E4, E7, E9, F  real errors: undefined names, unused imports, syntax...
+#   B              likely bugs (mutable default arguments, loop variables in closures...)
+#   I              sorted imports
+#   UP             code that newer Python writes more simply
+select = ["E4", "E7", "E9", "F", "B", "I", "UP"]
+ignore = [
+  "B905",  # zip() without strict=: the tracer zips AST lists where stopping at the shorter one is intended
+  "UP031", # %-formatting: kept where it is; not worth churning working code
+]
+
+[tool.ruff.format]
+quote-style = "double"

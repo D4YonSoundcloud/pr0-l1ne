@@ -21,7 +21,12 @@ describe("values and the heap", () => {
 
   it("keeps object ids stable across steps", async () => {
     const t = await traceJavaScript(`const arr = [1];\narr.push(2);\narr.push(3);`);
-    const ids = new Set(t.steps.map((s) => localsOf(s).get("arr")).filter((v) => v?.kind === "ref").map((v) => (v as { id: string }).id));
+    const ids = new Set(
+      t.steps
+        .map((s) => localsOf(s).get("arr"))
+        .filter((v) => v?.kind === "ref")
+        .map((v) => (v as { id: string }).id),
+    );
     expect(ids.size).toBe(1);
   });
 
@@ -36,7 +41,11 @@ describe("values and the heap", () => {
     const locals = localsOf(step);
     expect(heapOf(step, locals.get("counts"))).toMatchObject({ kind: "dict", typeName: "Object" });
     expect(heapOf(step, locals.get("m"))).toMatchObject({ kind: "dict", typeName: "Map" });
-    expect(heapOf(step, locals.get("p"))).toMatchObject({ kind: "object", typeName: "Point", fields: [["x", { repr: "5" }]] });
+    expect(heapOf(step, locals.get("p"))).toMatchObject({
+      kind: "object",
+      typeName: "Point",
+      fields: [["x", { repr: "5" }]],
+    });
     expect(heapOf(step, locals.get("Point"))).toMatchObject({ kind: "class", name: "Point" });
   });
 
@@ -93,7 +102,9 @@ describe("loops", () => {
     expect(t.error).toBeNull();
     expect(localsOf(last(t)).get("hits")).toMatchObject({ repr: "3" });
     const outer = t.loops[0].id;
-    expect(Math.max(...t.steps.flatMap((s) => s.loops.filter((l) => l.loop === outer).map((l) => l.iteration)))).toBe(3);
+    expect(Math.max(...t.steps.flatMap((s) => s.loops.filter((l) => l.loop === outer).map((l) => l.iteration)))).toBe(
+      3,
+    );
   });
 
   it("records nested indexing per level", async () => {
@@ -116,7 +127,9 @@ describe("functions and scope", () => {
       fact(3);
     `);
     expect(Math.max(...t.steps.map((s) => s.stack.length))).toBe(4);
-    expect(t.steps.some((s) => s.event === "return" && s.returnValue?.kind === "prim" && s.returnValue.repr === "6")).toBe(true);
+    expect(
+      t.steps.some((s) => s.event === "return" && s.returnValue?.kind === "prim" && s.returnValue.repr === "6"),
+    ).toBe(true);
   });
 
   it("names arrow functions, methods and constructors", async () => {
@@ -222,7 +235,7 @@ describe("errors, limits and output", () => {
   });
 
   it("stops at the step limit when nothing can be sampled", async () => {
-    const t = await traceJavaScript(`let a = 0;\n` + Array.from({ length: 300 }, () => "a++;").join("\n"), 200);
+    const t = await traceJavaScript(`let a = 0;\n${Array.from({ length: 300 }, () => "a++;").join("\n")}`, 200);
     expect(t.truncated).toBe(true);
     expect(t.stoppedBy).toBe("steps");
     expect(t.steps.length).toBe(200);
@@ -230,13 +243,17 @@ describe("errors, limits and output", () => {
 
   it("doesn't let user code catch the step limit", async () => {
     // Without the catch rewrite, this catch block would run and print.
-    const t = await traceJavaScript(`
+    const t = await traceJavaScript(
+      `
       try {
         while (true) {}
       } catch (e) {
         console.log("caught", e);
       }
-    `, 150, 0.3);
+    `,
+      150,
+      0.3,
+    );
     expect(t.truncated).toBe(true);
     expect(t.stdout).toBe("");
   });
@@ -302,7 +319,10 @@ describe("sampling long loops", () => {
   });
 
   it("keeps a long loop's first, round-numbered and last passes, and counts the rest", async () => {
-    const t = await traceJavaScript(`let s = 0;\nfor (let i = 0; i < 40000; i++) {\n  s += i;\n}\nconsole.log(s);`, 3000);
+    const t = await traceJavaScript(
+      `let s = 0;\nfor (let i = 0; i < 40000; i++) {\n  s += i;\n}\nconsole.log(s);`,
+      3000,
+    );
     expect(t.truncated).toBe(false);
     expect(t.sampled).toBe(true);
     expect(t.stdout).toBe("799980000\n");
@@ -322,7 +342,10 @@ describe("sampling long loops", () => {
   });
 
   it("samples a callback called again and again (Array.from, map)", async () => {
-    const t = await traceJavaScript(`const nums = Array.from({ length: 40000 }, (_, i) => i);\nconst d = nums.map((x) => x * 2);`, 3000);
+    const t = await traceJavaScript(
+      `const nums = Array.from({ length: 40000 }, (_, i) => i);\nconst d = nums.map((x) => x * 2);`,
+      3000,
+    );
     expect(t.truncated).toBe(false);
     expect(t.sampled).toBe(true);
     expect(t.steps.length).toBeLessThan(1500);
@@ -345,7 +368,10 @@ describe("sampling long loops", () => {
 describe("long lists", () => {
   const listAt = (step: Step) => Object.values(step.heap).find((o) => o.kind === "list") as SequenceObject;
   it("shows a window of cells that follows the index variables", async () => {
-    const t = await traceJavaScript(`const nums = Array.from({ length: 1000 }, (_, i) => i);\nfor (let j = 990; j > 400; j--) {\n  nums[j] = nums[j - 1];\n}`, 3000);
+    const t = await traceJavaScript(
+      `const nums = Array.from({ length: 1000 }, (_, i) => i);\nfor (let j = 990; j > 400; j--) {\n  nums[j] = nums[j - 1];\n}`,
+      3000,
+    );
     const offsets = new Set(t.steps.map((s) => listAt(s)?.offset ?? 0));
     expect(offsets.has(940)).toBe(true);
     const step = t.steps.find((s) => listAt(s)?.offset === 940)!;

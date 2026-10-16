@@ -91,7 +91,9 @@ export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): 
   // detection: it says exactly which fields are the links.
   for (const hint of hints) {
     if (!rows.some((row) => Object.values(row.heap).some((obj) => typeOf(obj) === hint.typeName))) continue;
-    const fields = [...new Set(rows.flatMap((row) => nodesOfType(row, hint.typeName).flatMap(([, f]) => f.map(([n]) => n))))];
+    const fields = [
+      ...new Set(rows.flatMap((row) => nodesOfType(row, hint.typeName).flatMap(([, f]) => f.map(([n]) => n)))),
+    ];
     const others = fields.filter((f) => !hint.links.includes(f));
     const valueField = others.find((f) => isMostlyPrimitive(rows, hint.typeName, f)) ?? null;
     const track: LinkedTrack = { typeName: hint.typeName, links: hint.links, valueField, order: [], shape: hint.shape };
@@ -134,7 +136,11 @@ export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): 
   if (!best) return null;
 
   const fields = fieldOrder.get(best)!;
-  const links = fields.filter((f) => linkFields.get(best!)!.includes(f) || (LINK_NAMES.has(f) && linkFields.get(best!)!.length > 0 && isAlwaysNullOrNode(rows, best!, f)));
+  const links = fields.filter(
+    (f) =>
+      linkFields.get(best!)!.includes(f) ||
+      (LINK_NAMES.has(f) && linkFields.get(best!)!.length > 0 && isAlwaysNullOrNode(rows, best!, f)),
+  );
   const valueField = fields.find((f) => !links.includes(f) && isMostlyPrimitive(rows, best!, f)) ?? null;
   const track: LinkedTrack = { typeName: best, links, valueField, order: [], shape: "list" };
   if (links.length === 2 && rows.every((row) => maxIndegree(row, best!, links) <= 1)) track.shape = "tree";
@@ -161,10 +167,15 @@ function nodesOfType(row: RowSnapshot, type: string): [string, [string, Value][]
 }
 
 function isAlwaysNullOrNode(rows: RowSnapshot[], type: string, field: string): boolean {
-  return rows.every((row) => nodesOfType(row, type).every(([, fields]) => {
-    const value = fields.find(([n]) => n === field)?.[1];
-    return !value || (value.kind === "prim" ? /^(null|None|undefined)$/.test(value.repr) : typeOf(row.heap[value.id]) === type);
-  }));
+  return rows.every((row) =>
+    nodesOfType(row, type).every(([, fields]) => {
+      const value = fields.find(([n]) => n === field)?.[1];
+      return (
+        !value ||
+        (value.kind === "prim" ? /^(null|None|undefined)$/.test(value.repr) : typeOf(row.heap[value.id]) === type)
+      );
+    }),
+  );
 }
 
 function isMostlyPrimitive(rows: RowSnapshot[], type: string, field: string): boolean {
@@ -241,16 +252,15 @@ export function linkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
   for (const root of named) walk(root.id);
   for (const id of [...nodes.keys()]) if (!reachable.has(id)) nodes.delete(id);
 
-  const pointers = named
-    .map(({ name, id }) => ({ name, index: track.order.indexOf(id) }))
-    .filter((p) => p.index >= 0);
+  const pointers = named.map(({ name, id }) => ({ name, index: track.order.indexOf(id) })).filter((p) => p.index >= 0);
   return { nodes, pointers };
 }
 
 /** A string that changes whenever anything visible in the row changes. */
 export function linkedSignature(state: LinkedRow): string {
-  return [...state.nodes].map(([id, node]) =>
-    `${id}=${node.value ? valueKey(node.value) : ""}>${node.links.join(",")}`).join("|");
+  return [...state.nodes]
+    .map(([id, node]) => `${id}=${node.value ? valueKey(node.value) : ""}>${node.links.join(",")}`)
+    .join("|");
 }
 
 /** Depth of each node in one row of a tree: roots (nothing links to them) are 0. */

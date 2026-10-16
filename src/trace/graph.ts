@@ -96,7 +96,7 @@ export function primNodeKey(value: Value): string | null {
 const labelOf = (key: string) => key.slice(2);
 
 function primText(value: Value | undefined): string | undefined {
-  if (!value || value.kind !== "prim") return undefined;
+  if (value?.kind !== "prim") return undefined;
   return value.type === "str" || value.type === "string" ? unquote(value.repr) : value.repr;
 }
 
@@ -138,7 +138,11 @@ interface Built {
 }
 
 /** A dict's value as a list of neighbors, or null if it isn't one. */
-function neighborsOf(value: Value, heap: Record<string, HeapObject>, members: Set<string>): { to: string; label?: string }[] | null {
+function neighborsOf(
+  value: Value,
+  heap: Record<string, HeapObject>,
+  members: Set<string>,
+): { to: string; label?: string }[] | null {
   if (value.kind !== "ref") return isNullish(value) ? [] : null;
   const inner = heap[value.id];
   if (isSeq(inner)) {
@@ -151,7 +155,8 @@ function neighborsOf(value: Value, heap: Record<string, HeapObject>, members: Se
       }
       // (neighbor, weight) pairs
       const pair = item.kind === "ref" ? heap[item.id] : undefined;
-      if ((pair?.kind !== "list" && pair?.kind !== "tuple") || pair.items.length < 2 || pair.items.length > 3) return null;
+      if ((pair?.kind !== "list" && pair?.kind !== "tuple") || pair.items.length < 2 || pair.items.length > 3)
+        return null;
       const to = primNodeKey(pair.items[0]);
       if (!to) return null;
       members.add(pair.id);
@@ -173,7 +178,11 @@ function neighborsOf(value: Value, heap: Record<string, HeapObject>, members: Se
   return null;
 }
 
-function fromDict(obj: Extract<HeapObject, { kind: "dict" }>, heap: Record<string, HeapObject>, strict: boolean): Built | null {
+function fromDict(
+  obj: Extract<HeapObject, { kind: "dict" }>,
+  heap: Record<string, HeapObject>,
+  strict: boolean,
+): Built | null {
   const nodes = new Map<string, string>();
   const edges: GraphEdge[] = [];
   const members = new Set<string>();
@@ -194,7 +203,8 @@ function fromDict(obj: Extract<HeapObject, { kind: "dict" }>, heap: Record<strin
   }
   // Automatically, a dict only counts when most neighbors are its own keys,
   // so {"fruit": ["apple"]} isn't mistaken for a graph.
-  if (strict && (nodes.size < 2 || !edges.length || known * 2 < edges.length || nodes.size > MAX_AUTO_NODES)) return null;
+  if (strict && (nodes.size < 2 || !edges.length || known * 2 < edges.length || nodes.size > MAX_AUTO_NODES))
+    return null;
   for (const edge of edges) if (!nodes.has(edge.to)) nodes.set(edge.to, labelOf(edge.to));
   return { nodes, edges, members };
 }
@@ -214,7 +224,8 @@ function fromList(
   const edges: GraphEdge[] = [];
   const members = new Set<string>(rows.map((row) => row.id));
   const n = rows.length;
-  const isTuples = rows.length > 0 && rows.every((row) => row.kind === "tuple" && row.items.length >= 2 && row.items.length <= 3);
+  const isTuples =
+    rows.length > 0 && rows.every((row) => row.kind === "tuple" && row.items.length >= 2 && row.items.length <= 3);
   const square = n >= 2 && rows.every((row) => row.items.length === n && row.items.every((v) => v.kind === "prim"));
 
   if (options.includes("edgelist") || (!options.includes("matrix") && isTuples)) {
@@ -234,11 +245,14 @@ function fromList(
   if (options.includes("matrix") || square) {
     const weights = rows.flatMap((row) => row.items.map((v) => primText(v) ?? ""));
     const plain = weights.every((w) => /^(0|1|True|False|true|false|None|null|inf|Infinity|-1)$/.test(w));
-    rows.forEach((row, i) => row.items.forEach((v, j) => {
-      const text = primText(v) ?? "";
-      if (/^(0|False|false|None|null|undefined|inf|Infinity|-inf|-Infinity|NaN|-1)$/.test(text) || text === "") return;
-      edges.push(plain ? { from: `n:${i}`, to: `n:${j}` } : { from: `n:${i}`, to: `n:${j}`, label: text });
-    }));
+    rows.forEach((row, i) => {
+      row.items.forEach((v, j) => {
+        const text = primText(v) ?? "";
+        if (/^(0|False|false|None|null|undefined|inf|Infinity|-inf|-Infinity|NaN|-1)$/.test(text) || text === "")
+          return;
+        edges.push(plain ? { from: `n:${i}`, to: `n:${j}` } : { from: `n:${i}`, to: `n:${j}`, label: text });
+      });
+    });
     return { nodes, edges, members, kind: "matrix" };
   }
 
@@ -266,7 +280,9 @@ function linkClasses(heap: Record<string, HeapObject>): Map<string, string[]> {
       if (isSeq(inner) && inner.items.length) {
         links = inner.items.every((item) => item.kind === "ref" && typeOf(heap[item.id]) === obj.typeName);
       } else if (inner?.kind === "dict" && inner.entries.length) {
-        links = inner.entries.every(([k, v]) => k.kind === "prim" && v.kind === "ref" && typeOf(heap[v.id]) === obj.typeName);
+        links = inner.entries.every(
+          ([k, v]) => k.kind === "prim" && v.kind === "ref" && typeOf(heap[v.id]) === obj.typeName,
+        );
       }
       if (!links) continue;
       const fields = found.get(obj.typeName) ?? [];
@@ -298,7 +314,9 @@ function objectGraph(
   const flags = new Map<string, string[]>();
 
   // The label is the first field that's usually a plain value (not a flag).
-  const allFields = [...new Set(kept.flatMap((obj) => fieldsOf(obj)!.map(([name]) => name)))].filter((f) => !fields.includes(f));
+  const allFields = [...new Set(kept.flatMap((obj) => fieldsOf(obj)!.map(([name]) => name)))].filter(
+    (f) => !fields.includes(f),
+  );
   const valueField = allFields.find((field) => {
     let prims = 0;
     let total = 0;
@@ -327,7 +345,8 @@ function objectGraph(
       const inner = heap[value.id];
       if (isSeq(inner) || inner?.kind === "dict") members.add(inner.id); // drawn as edges
       if (isSeq(inner)) {
-        for (const item of inner.items) if (item.kind === "ref" && ids.has(item.id)) edges.push({ from: obj.id, to: item.id });
+        for (const item of inner.items)
+          if (item.kind === "ref" && ids.has(item.id)) edges.push({ from: obj.id, to: item.id });
       } else if (inner?.kind === "dict") {
         for (const [k, v] of inner.entries) {
           if (v.kind === "ref" && ids.has(v.id)) edges.push({ from: obj.id, to: v.id, label: primText(k) });
@@ -359,7 +378,13 @@ function isDirected(edges: GraphEdge[], options: GraphOption[]): boolean {
 }
 
 function layoutOption(options: GraphOption[]): GraphData["layout"] {
-  return options.includes("circle") ? "circle" : options.includes("layered") ? "layered" : options.includes("force") ? "force" : "auto";
+  return options.includes("circle")
+    ? "circle"
+    : options.includes("layered")
+      ? "layered"
+      : options.includes("force")
+        ? "force"
+        : "auto";
 }
 
 function containerGraph(
@@ -478,14 +503,52 @@ export interface GraphOverlay {
 
 /** Names that hold "the current node" in graph code. */
 const POINTER_NAMES = new Set([
-  "node", "u", "v", "cur", "curr", "current", "start", "src", "source", "target", "dst", "dest", "goal", "end",
-  "nb", "nbr", "nei", "next", "neighbor", "neighbour", "nxt", "next_node", "nextNode", "vertex", "vert", "at", "here",
-  "root", "child", "parent", "word", "city", "room", "first", "last", "item", "task", "course", "job",
+  "node",
+  "u",
+  "v",
+  "cur",
+  "curr",
+  "current",
+  "start",
+  "src",
+  "source",
+  "target",
+  "dst",
+  "dest",
+  "goal",
+  "end",
+  "nb",
+  "nbr",
+  "nei",
+  "next",
+  "neighbor",
+  "neighbour",
+  "nxt",
+  "next_node",
+  "nextNode",
+  "vertex",
+  "vert",
+  "at",
+  "here",
+  "root",
+  "child",
+  "parent",
+  "word",
+  "city",
+  "room",
+  "first",
+  "last",
+  "item",
+  "task",
+  "course",
+  "job",
 ]);
-const VISITED_NAMES = /visit|seen|done|explored|closed|finished|order|result|topo|sorted|output|^out$|^res$|marked|reached|removed/i;
+const VISITED_NAMES =
+  /visit|seen|done|explored|closed|finished|order|result|topo|sorted|output|^out$|^res$|marked|reached|removed/i;
 const PATH_NAMES = /path|route|trail|walk|cycle|trip|tour/i;
 const PARENT_NAMES = /parent|prev|pred|came|^from|via|back|^up$/i;
-const LABEL_NAMES = /dist|depth|cost|level|^low|disc|^tin|^tout|indeg|in_deg|inDeg|degree|colou?r|time|rank|comp|group|size|count|score|^d$|^h$|^g$|^f$/i;
+const LABEL_NAMES =
+  /dist|depth|cost|level|^low|disc|^tin|^tout|indeg|in_deg|inDeg|degree|colou?r|time|rank|comp|group|size|count|score|^d$|^h$|^g$|^f$/i;
 const STACK_NAMES = /stack|stk|dfs|todo/i;
 const HEAP_NAMES = /heap|pq|prio|frontier|open/i;
 const QUEUE_NAMES = /queue|^q$|bfs|deque|ready|waiting/i;
@@ -493,13 +556,29 @@ const EDGE_NAMES = /mst|tree|span|chosen|picked|used|edge|matching|cut|bridges/i
 
 export function emptyOverlay(): GraphOverlay {
   return {
-    visited: new Map(), visitedNames: [], frontier: new Map(), frontierName: null,
-    labels: new Map(), labelNames: [], treeEdges: new Set(), treeName: null, chosenEdges: new Set(), chosenName: null,
-    pathEdges: new Set(), pathNodes: new Set(), pathName: null, pointers: new Map(),
+    visited: new Map(),
+    visitedNames: [],
+    frontier: new Map(),
+    frontierName: null,
+    labels: new Map(),
+    labelNames: [],
+    treeEdges: new Set(),
+    treeName: null,
+    chosenEdges: new Set(),
+    chosenName: null,
+    pathEdges: new Set(),
+    pathNodes: new Set(),
+    pathName: null,
+    pointers: new Map(),
   };
 }
 
-export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], heap: Record<string, HeapObject>): GraphOverlay {
+export function graphOverlay(
+  trace: Trace,
+  graph: GraphData,
+  scopes: Scope[],
+  heap: Record<string, HeapObject>,
+): GraphOverlay {
   const overlay = emptyOverlay();
   const named = namedValues(scopes, heap);
   const explicit = new Set(graph.names);
@@ -514,7 +593,13 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
     const direct = nodeOf(value);
     if (direct || value.kind !== "ref") return direct;
     const pair = heap[value.id];
-    if ((pair?.kind !== "list" && pair?.kind !== "tuple") || pair.items.length < 2 || pair.items.length > 3 || graph.members.has(pair.id)) return null;
+    if (
+      (pair?.kind !== "list" && pair?.kind !== "tuple") ||
+      pair.items.length < 2 ||
+      pair.items.length > 3 ||
+      graph.members.has(pair.id)
+    )
+      return null;
     for (let i = pair.items.length - 1; i >= 0; i--) {
       const node = nodeOf(pair.items[i]);
       if (node) return node;
@@ -522,11 +607,15 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
     return null;
   };
   const pointerNames = new Set([
-    ...POINTER_NAMES, ...explicit,
-    ...(trace.indexNames[graph.name] ?? []), ...(trace.indexNames[lastSegment(graph.name)] ?? []),
-    ...(trace.viz?.pointers[graph.name] ?? []), ...(trace.viz?.pointers[lastSegment(graph.name)] ?? []),
+    ...POINTER_NAMES,
+    ...explicit,
+    ...(trace.indexNames[graph.name] ?? []),
+    ...(trace.indexNames[lastSegment(graph.name)] ?? []),
+    ...(trace.viz?.pointers[graph.name] ?? []),
+    ...(trace.viz?.pointers[lastSegment(graph.name)] ?? []),
   ]);
-  const addPointer = (node: string, name: string) => overlay.pointers.set(node, [...(overlay.pointers.get(node) ?? []), name]);
+  const addPointer = (node: string, name: string) =>
+    overlay.pointers.set(node, [...(overlay.pointers.get(node) ?? []), name]);
   const markVisited = (nodes: string[], name: string) => {
     if (!nodes.length) return;
     for (const node of nodes) if (!overlay.visited.has(node)) overlay.visited.set(node, name);
@@ -547,25 +636,40 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
   };
   // Nodes 0..n-1: arrays of length n can hold one value per node.
   const keys = [...graph.nodes.keys()];
-  const byIndex = !graph.objectNodes && keys.every((k) => k.startsWith("n:")) &&
-    keys.map((k) => Number(k.slice(2))).sort((a, b) => a - b).every((n, i) => n === i);
+  const byIndex =
+    !graph.objectNodes &&
+    keys.every((k) => k.startsWith("n:")) &&
+    keys
+      .map((k) => Number(k.slice(2)))
+      .sort((a, b) => a - b)
+      .every((n, i) => n === i);
 
   /** An array with one entry per node (index graphs): true if it was used. */
   const perNode = (name: string, items: Value[]): boolean => {
     const base = lastSegment(name);
     if (items.every(isBool)) {
-      markVisited(items.flatMap((v, i) => (isTrue(v) ? [`n:${i}`] : [])), name);
+      markVisited(
+        items.flatMap((v, i) => (isTrue(v) ? [`n:${i}`] : [])),
+        name,
+      );
       return true;
     }
     if (PARENT_NAMES.test(base) && items.every((v) => nodeOf(v) || isNullish(v) || primText(v) === "-1")) {
-      addTree(items.flatMap((v, i) => {
-        const parent = nodeOf(v);
-        return parent && primText(v) !== "-1" && parent !== `n:${i}` ? [[parent, `n:${i}`] as [string, string]] : [];
-      }), name);
+      addTree(
+        items.flatMap((v, i) => {
+          const parent = nodeOf(v);
+          return parent && primText(v) !== "-1" && parent !== `n:${i}` ? [[parent, `n:${i}`] as [string, string]] : [];
+        }),
+        name,
+      );
       return true;
     }
     if (LABEL_NAMES.test(base) || items.some((v) => v.kind !== "prim" || !nodeOf(v))) {
-      if (items.every((v) => v.kind === "prim")) addLabels(items.map((v, i) => [`n:${i}`, primText(v) ?? ""]), name);
+      if (items.every((v) => v.kind === "prim"))
+        addLabels(
+          items.map((v, i) => [`n:${i}`, primText(v) ?? ""]),
+          name,
+        );
       return true;
     }
     return false;
@@ -630,21 +734,26 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
           return (pair?.kind === "list" || pair?.kind === "tuple") && Number.isFinite(Number(primText(pair.items[0])));
         });
         const isQueue = QUEUE_NAMES.test(base) || obj.typeName === "deque";
-        if (STACK_NAMES.test(base) && !HEAP_NAMES.test(base)) order = list.map((node, i) => ({ node, rank: list.length - 1 - i }));
+        if (STACK_NAMES.test(base) && !HEAP_NAMES.test(base))
+          order = list.map((node, i) => ({ node, rank: list.length - 1 - i }));
         else if (HEAP_NAMES.test(base) || (prioritized && !isQueue)) {
           const priority = (v: Value) => {
             const pair = v.kind === "ref" ? heap[v.id] : undefined;
             return pair && (pair.kind === "list" || pair.kind === "tuple") ? Number(primText(pair.items[0])) : 0;
           };
-          order = obj.items.map((v, i) => ({ node: list[i], rank: priority(v) + i * 1e-9 }))
-            .sort((a, b) => a.rank - b.rank).map((entry, i) => ({ node: entry.node, rank: i }));
+          order = obj.items
+            .map((v, i) => ({ node: list[i], rank: priority(v) + i * 1e-9 }))
+            .sort((a, b) => a.rank - b.rank)
+            .map((entry, i) => ({ node: entry.node, rank: i }));
         }
         for (const { node, rank } of order) {
           if (!overlay.frontier.has(node) || overlay.frontier.get(node)! > rank) overlay.frontier.set(node, rank);
         }
         // Positions, counting from 0, with no gaps from duplicates.
         const ranked = [...overlay.frontier].sort((a, b) => a[1] - b[1]);
-        ranked.forEach(([node], i) => overlay.frontier.set(node, i));
+        ranked.forEach(([node], i) => {
+          overlay.frontier.set(node, i);
+        });
       }
       continue;
     }
@@ -654,14 +763,23 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
       if (nodes.some((n) => !n)) continue;
       const values = obj.entries.map(([, v]) => v);
       if (values.every(isBool)) {
-        markVisited(obj.entries.flatMap(([, v], i) => (isTrue(v) ? [nodes[i]!] : [])), name);
+        markVisited(
+          obj.entries.flatMap(([, v], i) => (isTrue(v) ? [nodes[i]!] : [])),
+          name,
+        );
       } else if (PARENT_NAMES.test(base) && values.every((v) => nodeOf(v) || isNullish(v))) {
-        addTree(values.flatMap((v, i) => {
-          const parent = nodeOf(v);
-          return parent && parent !== nodes[i] ? [[parent, nodes[i]!] as [string, string]] : [];
-        }), name);
+        addTree(
+          values.flatMap((v, i) => {
+            const parent = nodeOf(v);
+            return parent && parent !== nodes[i] ? [[parent, nodes[i]!] as [string, string]] : [];
+          }),
+          name,
+        );
       } else if (values.every((v) => v.kind === "prim")) {
-        addLabels(values.map((v, i) => [nodes[i]!, primText(v) ?? ""]), name);
+        addLabels(
+          values.map((v, i) => [nodes[i]!, primText(v) ?? ""]),
+          name,
+        );
       }
     }
   }
@@ -675,14 +793,20 @@ export function graphOverlay(trace: Trace, graph: GraphData, scopes: Scope[], he
 
 /** What a node looks like in an overlay, for "did this node change?". */
 export function nodeSignature(overlay: GraphOverlay, node: string): string {
-  return [overlay.visited.has(node) ? "v" : "", overlay.frontier.get(node) ?? "", overlay.labels.get(node) ?? "",
-    overlay.pathNodes.has(node) ? "p" : ""].join("|");
+  return [
+    overlay.visited.has(node) ? "v" : "",
+    overlay.frontier.get(node) ?? "",
+    overlay.labels.get(node) ?? "",
+    overlay.pathNodes.has(node) ? "p" : "",
+  ].join("|");
 }
 
 /** Changes whenever anything drawn for the graph changes. */
 export function graphSignature(graph: GraphData | undefined, overlay: GraphOverlay | undefined): string {
   if (!graph) return "";
-  const nodes = [...graph.nodes.keys()].map((node) => `${node}=${overlay ? nodeSignature(overlay, node) : ""}`).join(",");
+  const nodes = [...graph.nodes.keys()]
+    .map((node) => `${node}=${overlay ? nodeSignature(overlay, node) : ""}`)
+    .join(",");
   const edges = graph.edges.map((e) => `${e.from}>${e.to}:${e.label ?? ""}`).join(",");
   const extra = overlay ? [...overlay.treeEdges, ...overlay.pathEdges, ...overlay.chosenEdges].join(",") : "";
   return `${nodes}#${edges}#${extra}`;
@@ -758,7 +882,11 @@ function forestLayers(nodes: string[], edges: GraphEdge[]): Map<string, number> 
   return unique.size === nodes.length - components ? depth : null;
 }
 
-function layered(nodes: string[], edges: GraphEdge[], depth: Map<string, number>): Map<string, { x: number; y: number }> {
+function layered(
+  nodes: string[],
+  edges: GraphEdge[],
+  depth: Map<string, number>,
+): Map<string, { x: number; y: number }> {
   const adj = undirectedNeighbors(nodes, edges);
   const levels: string[][] = [];
   // Initial order within a level: depth-first discovery, so subtrees stay together.
@@ -766,27 +894,37 @@ function layered(nodes: string[], edges: GraphEdge[], depth: Map<string, number>
   const visit = (n: string) => {
     if (seen.has(n)) return;
     seen.add(n);
-    (levels[depth.get(n)!] ??= []).push(n);
+    const d = depth.get(n)!;
+    levels[d] ??= [];
+    levels[d].push(n);
     for (const m of adj.get(n)!) if (depth.get(m)! > depth.get(n)!) visit(m);
   };
   for (const n of nodes) if (depth.get(n) === 0) visit(n);
   for (const n of nodes) visit(n);
 
   const x = new Map<string, number>();
-  for (const level of levels) level?.forEach((n, i) => x.set(n, i));
+  for (const level of levels) {
+    level?.forEach((n, i) => {
+      x.set(n, i);
+    });
+  }
   const neighborsIn = (n: string, level: number) => [...adj.get(n)!].filter((m) => depth.get(m) === level);
   const place = (level: string[], toward: number) => {
     // Order by the average position of neighbors in the level `toward`...
-    const want = new Map(level.map((n) => {
-      const ns = neighborsIn(n, toward);
-      return [n, ns.length ? ns.reduce((sum, m) => sum + x.get(m)!, 0) / ns.length : x.get(n)!];
-    }));
+    const want = new Map(
+      level.map((n) => {
+        const ns = neighborsIn(n, toward);
+        return [n, ns.length ? ns.reduce((sum, m) => sum + x.get(m)!, 0) / ns.length : x.get(n)!];
+      }),
+    );
     level.sort((a, b) => want.get(a)! - want.get(b)! || x.get(a)! - x.get(b)!);
     // ...then sit as close to that as a gap of 1 allows, centered on it.
     let cursor = -Infinity;
     const placed = level.map((n) => (cursor = Math.max(want.get(n)!, cursor + 1)));
     const shift = level.reduce((sum, n, i) => sum + placed[i] - want.get(n)!, 0) / Math.max(1, level.length);
-    level.forEach((n, i) => x.set(n, placed[i] - shift));
+    level.forEach((n, i) => {
+      x.set(n, placed[i] - shift);
+    });
   };
   for (let round = 0; round < 4; round++) {
     for (let d = 1; d < levels.length; d++) if (levels[d]) place(levels[d], d - 1);
@@ -799,10 +937,12 @@ function layered(nodes: string[], edges: GraphEdge[], depth: Map<string, number>
 function circle(nodes: string[]): Map<string, { x: number; y: number }> {
   if (nodes.length <= 2) return new Map(nodes.map((n, i) => [n, { x: i * 1.4, y: 0 }]));
   const r = Math.max(0.9, (nodes.length * 1.25) / (2 * Math.PI));
-  return new Map(nodes.map((n, i) => {
-    const a = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
-    return [n, { x: r + r * Math.cos(a), y: r + r * Math.sin(a) }];
-  }));
+  return new Map(
+    nodes.map((n, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
+      return [n, { x: r + r * Math.cos(a), y: r + r * Math.sin(a) }];
+    }),
+  );
 }
 
 /** Fruchterman-Reingold, started from a circle so it's the same every run. */
@@ -824,10 +964,16 @@ function force(nodes: string[], edges: GraphEdge[]): Map<string, { x: number; y:
         let dx = p[i].x - p[j].x;
         let dy = p[i].y - p[j].y;
         let dist = Math.hypot(dx, dy);
-        if (dist < 1e-6) { dx = 0.01 * (i - j); dy = 0.01; dist = Math.hypot(dx, dy); }
+        if (dist < 1e-6) {
+          dx = 0.01 * (i - j);
+          dy = 0.01;
+          dist = Math.hypot(dx, dy);
+        }
         const f = (k * k) / dist;
-        d[i].x += (dx / dist) * f; d[i].y += (dy / dist) * f;
-        d[j].x -= (dx / dist) * f; d[j].y -= (dy / dist) * f;
+        d[i].x += (dx / dist) * f;
+        d[i].y += (dy / dist) * f;
+        d[j].x -= (dx / dist) * f;
+        d[j].y -= (dy / dist) * f;
       }
     }
     for (const [i, j] of pairs) {
@@ -835,8 +981,10 @@ function force(nodes: string[], edges: GraphEdge[]): Map<string, { x: number; y:
       const dy = p[i].y - p[j].y;
       const dist = Math.max(1e-6, Math.hypot(dx, dy));
       const f = (dist * dist) / k;
-      d[i].x -= (dx / dist) * f; d[i].y -= (dy / dist) * f;
-      d[j].x += (dx / dist) * f; d[j].y += (dy / dist) * f;
+      d[i].x -= (dx / dist) * f;
+      d[i].y -= (dy / dist) * f;
+      d[j].x += (dx / dist) * f;
+      d[j].y += (dy / dist) * f;
     }
     // A little gravity keeps separate pieces from drifting apart.
     const cx = p.reduce((s, q) => s + q.x, 0) / n;
@@ -855,19 +1003,30 @@ function force(nodes: string[], edges: GraphEdge[]): Map<string, { x: number; y:
   // Turn the picture so its long side is horizontal.
   const cx = p.reduce((s, q) => s + q.x, 0) / n;
   const cy = p.reduce((s, q) => s + q.y, 0) / n;
-  let sxx = 0, syy = 0, sxy = 0;
-  for (const q of p) { sxx += (q.x - cx) ** 2; syy += (q.y - cy) ** 2; sxy += (q.x - cx) * (q.y - cy); }
-  const angle = -0.5 * Math.atan2(2 * sxy, sxx - syy);
-  const cos = Math.cos(angle), sin = Math.sin(angle);
+  let sxx = 0,
+    syy = 0,
+    sxy = 0;
   for (const q of p) {
-    const x = q.x - cx, y = q.y - cy;
+    sxx += (q.x - cx) ** 2;
+    syy += (q.y - cy) ** 2;
+    sxy += (q.x - cx) * (q.y - cy);
+  }
+  const angle = -0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const cos = Math.cos(angle),
+    sin = Math.sin(angle);
+  for (const q of p) {
+    const x = q.x - cx,
+      y = q.y - cy;
     q.x = x * cos - y * sin;
     q.y = x * sin + y * cos;
   }
   // One edge is about one unit long, and no two nodes sit closer than 0.9.
   const lengths = pairs.map(([i, j]) => Math.hypot(p[i].x - p[j].x, p[i].y - p[j].y));
   const scale = lengths.length ? 1.15 / (lengths.reduce((a, b) => a + b, 0) / lengths.length) : 1;
-  for (const q of p) { q.x *= scale; q.y *= scale; }
+  for (const q of p) {
+    q.x *= scale;
+    q.y *= scale;
+  }
   for (let round = 0; round < 60; round++) {
     let moved = false;
     for (let i = 0; i < n; i++) {
@@ -879,8 +1038,10 @@ function force(nodes: string[], edges: GraphEdge[]): Map<string, { x: number; y:
         const push = (0.9 - dist) / 2 + 0.001;
         const ux = dist > 1e-6 ? dx / dist : 1;
         const uy = dist > 1e-6 ? dy / dist : 0;
-        p[i].x -= ux * push; p[i].y -= uy * push;
-        p[j].x += ux * push; p[j].y += uy * push;
+        p[i].x -= ux * push;
+        p[i].y -= uy * push;
+        p[j].x += ux * push;
+        p[j].y += uy * push;
         moved = true;
       }
     }
@@ -892,7 +1053,12 @@ function force(nodes: string[], edges: GraphEdge[]): Map<string, { x: number; y:
 }
 
 /** Lay out a graph. Trees and DAGs get layers; everything else is force-directed. */
-export function computeLayout(nodes: string[], edges: GraphEdge[], directed: boolean, mode: GraphData["layout"] = "auto"): GraphLayout {
+export function computeLayout(
+  nodes: string[],
+  edges: GraphEdge[],
+  directed: boolean,
+  mode: GraphData["layout"] = "auto",
+): GraphLayout {
   if (nodes.length === 0) return { pos: new Map(), mode: "circle" };
   if (mode === "circle") return { pos: circle(nodes), mode: "circle" };
   const layers = directed ? dagLayers(nodes, edges) : forestLayers(nodes, edges);
@@ -915,7 +1081,11 @@ function bfsDepths(nodes: string[], edges: GraphEdge[]): Map<string, number> {
     const queue = [root];
     while (queue.length) {
       const n = queue.shift()!;
-      for (const m of adj.get(n)!) if (!depth.has(m)) { depth.set(m, depth.get(n)! + 1); queue.push(m); }
+      for (const m of adj.get(n)!)
+        if (!depth.has(m)) {
+          depth.set(m, depth.get(n)! + 1);
+          queue.push(m);
+        }
     }
   }
   return depth;
@@ -946,14 +1116,34 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
     byId = new Map();
     layouts.set(trace, byId);
     const legendById = new Map<string, Map<string, GraphOverlay>>();
-    const union = new Map<string, { nodes: Map<string, true>; edges: Map<string, GraphEdge>; directed: boolean; layout: GraphData["layout"] }>();
+    const union = new Map<
+      string,
+      { nodes: Map<string, true>; edges: Map<string, GraphEdge>; directed: boolean; layout: GraphData["layout"] }
+    >();
     for (const step of trace.steps) {
       for (const g of findGraphs(trace, stepScopes(step), step.heap)) {
         const o = graphOverlay(trace, g, stepScopes(step), step.heap);
-        const names = { ...emptyOverlay(), visitedNames: o.visitedNames, frontierName: o.frontierName, labelNames: o.labelNames,
-          treeName: o.treeName, pathName: o.pathName, chosenName: o.chosenName };
+        const names = {
+          ...emptyOverlay(),
+          visitedNames: o.visitedNames,
+          frontierName: o.frontierName,
+          labelNames: o.labelNames,
+          treeName: o.treeName,
+          pathName: o.pathName,
+          chosenName: o.chosenName,
+        };
         const seen = legendById.get(g.id) ?? new Map<string, GraphOverlay>();
-        seen.set(JSON.stringify([names.visitedNames, names.frontierName, names.labelNames, names.treeName, names.pathName, names.chosenName]), names);
+        seen.set(
+          JSON.stringify([
+            names.visitedNames,
+            names.frontierName,
+            names.labelNames,
+            names.treeName,
+            names.pathName,
+            names.chosenName,
+          ]),
+          names,
+        );
         legendById.set(g.id, seen);
         const entry = union.get(g.id) ?? { nodes: new Map(), edges: new Map(), directed: false, layout: g.layout };
         for (const node of g.nodes.keys()) entry.nodes.set(node, true);
@@ -979,4 +1169,3 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
 export function graphsAt(trace: Trace, step: Step): GraphData[] {
   return findGraphs(trace, stepScopes(step), step.heap);
 }
-

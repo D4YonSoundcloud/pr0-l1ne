@@ -7,15 +7,17 @@
  *
  *   npm run test:pyodide
  */
-import { loadPyodide } from "pyodide";
+
 import { readFileSync } from "node:fs";
+import { loadPyodide } from "pyodide";
 
 const dir = new URL("../src/worker/", import.meta.url);
 const pyodide = await loadPyodide();
 for (const file of ["tracer.py", "test_tracer.py", "measure.py", "test_measure.py"]) {
   pyodide.FS.writeFile(`/home/pyodide/${file}`, readFileSync(new URL(file, dir), "utf8"));
 }
-const [ok, report] = pyodide.runPython(`
+const [ok, report] = pyodide
+  .runPython(`
 import sys, io, unittest
 sys.path.insert(0, "/home/pyodide")
 import test_tracer, test_measure
@@ -23,6 +25,7 @@ stream = io.StringIO()
 suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromModule(m) for m in (test_tracer, test_measure)])
 result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
 (result.wasSuccessful(), f"Python {sys.version.split()[0]} in Pyodide\\n" + stream.getvalue())
-`).toJs();
+`)
+  .toJs();
 console.log(report);
 process.exit(ok ? 0 : 1);

@@ -13,9 +13,12 @@
  * the content, so the paper and the drawing feel like one sheet.
  */
 
-import { snapshot, transition as transition_, type Enter } from "./animate";
+import { type Enter, snapshot, transition as transition_ } from "./animate";
 
-export interface Point { x: number; y: number }
+export interface Point {
+  x: number;
+  y: number;
+}
 
 export interface ViewportOptions {
   /** Accessible description, e.g. "Memory diagram". */
@@ -36,13 +39,16 @@ export interface ViewportOptions {
  *   "both"  zooms in again when the diagram gets smaller: always a snug fit.
  */
 export type AutoFitMode = "out" | "both";
-export interface AutoFit { on: boolean; mode: AutoFitMode }
+export interface AutoFit {
+  on: boolean;
+  mode: AutoFitMode;
+}
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
-const GRID = 24;            // default graph-paper square size at 100%
-const DRAG_THRESHOLD = 3;   // px before a press becomes a drag
-const KEEP_VISIBLE = 60;    // px of content always left on screen when panning
+const GRID = 24; // default graph-paper square size at 100%
+const DRAG_THRESHOLD = 3; // px before a press becomes a drag
+const KEEP_VISIBLE = 60; // px of content always left on screen when panning
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -77,7 +83,10 @@ export class Viewport {
   /** How a refit animates: the window's step animation (see setZoomAnimation). */
   private zoomAnimation = { duration: 260, easing: "ease" };
 
-  constructor(readonly el: HTMLElement, private readonly options: ViewportOptions) {
+  constructor(
+    readonly el: HTMLElement,
+    private readonly options: ViewportOptions,
+  ) {
     el.classList.add("viewport");
     el.tabIndex = 0;
     el.setAttribute("role", "region");
@@ -94,7 +103,9 @@ export class Viewport {
     this.zoomLabel = this.button("100%", "Reset zoom (0)", () => this.manual(() => this.reset()));
     this.zoomLabel.classList.add("zoom-label");
     // Auto-fit: a toggle, and a menu for how it zooms.
-    this.autoFitButton = this.button("Auto-fit", "Auto-fit: keep the whole diagram in view on every step", () => this.setAutoFit({ ...this.autoFit, on: !this.autoFit.on }));
+    this.autoFitButton = this.button("Auto-fit", "Auto-fit: keep the whole diagram in view on every step", () =>
+      this.setAutoFit({ ...this.autoFit, on: !this.autoFit.on }),
+    );
     this.autoFitButton.classList.add("auto-fit");
     this.autoFitButton.setAttribute("aria-pressed", "false");
     const modeButton = this.button("▾", "How Auto-fit zooms", () => this.toggleAutoFitMenu());
@@ -115,7 +126,10 @@ export class Viewport {
       item.className = "auto-fit-choice";
       item.setAttribute("role", "menuitemradio");
       item.dataset.mode = mode;
-      item.append(Object.assign(document.createElement("strong"), { textContent: label }), Object.assign(document.createElement("span"), { textContent: detail }));
+      item.append(
+        Object.assign(document.createElement("strong"), { textContent: label }),
+        Object.assign(document.createElement("span"), { textContent: detail }),
+      );
       item.addEventListener("click", () => {
         this.setAutoFit({ on: true, mode });
         this.toggleAutoFitMenu(false);
@@ -133,9 +147,13 @@ export class Viewport {
       this.button("Fit", "Fit the whole diagram in view once", () => this.fit()),
     );
     el.append(this.layer, this.empty, this.controls);
-    el.addEventListener("pointerdown", (e) => {
-      if (!(e.target as Element).closest(".auto-fit-group")) this.toggleAutoFitMenu(false);
-    }, true);
+    el.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!(e.target as Element).closest(".auto-fit-group")) this.toggleAutoFitMenu(false);
+      },
+      true,
+    );
 
     el.addEventListener("pointerdown", (e) => this.onPointerDown(e));
     el.addEventListener("pointermove", (e) => this.onPointerMove(e));
@@ -282,16 +300,22 @@ export class Viewport {
   private glide(from: { x: number; y: number; z: number }, duration: number, easing: string): void {
     const grid = (z: number) => `${this.gridSize * z}px ${this.gridSize * z}px`;
     if (typeof this.layer.animate !== "function") return;
-    this.glides = [this.layer.animate(
-      [{ transform: `translate(${from.x}px, ${from.y}px) scale(${from.z})` }, { transform: this.layer.style.transform }],
-      { duration, easing },
-    ), this.el.animate(
-      [
-        { backgroundSize: grid(from.z), backgroundPosition: `${from.x}px ${from.y}px` },
-        { backgroundSize: this.el.style.backgroundSize, backgroundPosition: this.el.style.backgroundPosition },
-      ],
-      { duration, easing },
-    )];
+    this.glides = [
+      this.layer.animate(
+        [
+          { transform: `translate(${from.x}px, ${from.y}px) scale(${from.z})` },
+          { transform: this.layer.style.transform },
+        ],
+        { duration, easing },
+      ),
+      this.el.animate(
+        [
+          { backgroundSize: grid(from.z), backgroundPosition: `${from.x}px ${from.y}px` },
+          { backgroundSize: this.el.style.backgroundSize, backgroundPosition: this.el.style.backgroundPosition },
+        ],
+        { duration, easing },
+      ),
+    ];
   }
 
   /**
@@ -466,9 +490,10 @@ export class Viewport {
     this.el.classList.remove("is-panning", "is-dragging-node");
     // Lifting one finger of a pinch carries on as a pan with the other.
     const remaining = [...this.pointers.values()][0];
-    this.gesture = remaining && g?.kind === "pinch"
-      ? { kind: "pan", startX: remaining.x, startY: remaining.y, panX: this.x, panY: this.y }
-      : null;
+    this.gesture =
+      remaining && g?.kind === "pinch"
+        ? { kind: "pan", startX: remaining.x, startY: remaining.y, panX: this.x, panY: this.y }
+        : null;
   }
 
   private nodePosition(g: Extract<Gesture, { kind: "node" }>, dx: number, dy: number): Point {

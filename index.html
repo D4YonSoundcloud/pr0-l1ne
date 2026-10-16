@@ -24,7 +24,7 @@
           <span class="visually-hidden">Open a program</span>
           <select id="programs" aria-label="Open a saved program or an example"></select>
         </label>
-        <div class="program" aria-label="Current program">
+        <div class="program" role="group" aria-label="Current program">
           <span id="program-name" class="program-name">Untitled</span>
           <span id="program-dirty" class="program-dirty" title="Unsaved changes" hidden>●</span>
           <span class="visually-hidden" id="program-dirty-label"></span>
@@ -60,7 +60,7 @@
             <span style="--w: 30%"></span>
           </div>
           <noscript><p class="boot-noscript">PR0L1NE runs your code in the browser, so it needs JavaScript turned on.</p></noscript>
-          <div class="console" aria-label="Program output">
+          <div class="console" role="region" aria-label="Program output">
             <div class="pane-title">Output</div>
             <pre id="output" class="output"></pre>
           </div>
@@ -113,7 +113,7 @@
         </section>
       </main>
 
-      <footer class="timeline" aria-label="Step through execution">
+      <footer class="timeline" role="region" aria-label="Step through execution">
         <button id="first" class="button icon" type="button" aria-label="First step" title="First step (Home)">⏮</button>
         <button id="prev" class="button icon step" type="button" aria-label="Previous step" title="Previous step (←, Shift + F10)">‹</button>
         <button id="play" class="button play" type="button" aria-pressed="false" title="Play through the steps (Space). Ctrl/Cmd + Enter plays from here; press it again to go back to where it started.">Play</button>

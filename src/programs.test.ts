@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProgramStore, StorageFullError, type ProgramStorage } from "./programs";
+import { type ProgramStorage, ProgramStore, StorageFullError } from "./programs";
 
 function fakeStorage(): ProgramStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -55,7 +55,10 @@ describe("ProgramStore", () => {
     const storage = fakeStorage();
     storage.data.set("algoviz:programs", "{not json");
     expect(new ProgramStore(storage).list("python")).toEqual([]);
-    storage.data.set("algoviz:programs", JSON.stringify([{ id: 1 }, { id: "a", name: "ok", language: "python", code: "", updatedAt: 1 }]));
+    storage.data.set(
+      "algoviz:programs",
+      JSON.stringify([{ id: 1 }, { id: "a", name: "ok", language: "python", code: "", updatedAt: 1 }]),
+    );
     expect(new ProgramStore(storage).list("python").map((p) => p.name)).toEqual(["ok"]);
   });
 
@@ -66,7 +69,12 @@ describe("ProgramStore", () => {
   });
 
   it("reports a full storage clearly", () => {
-    const store = new ProgramStore({ getItem: () => null, setItem: () => { throw new Error("QuotaExceededError"); } });
+    const store = new ProgramStore({
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    });
     expect(() => store.save({ name: "Big", language: "python", code: "" })).toThrow(StorageFullError);
   });
 });

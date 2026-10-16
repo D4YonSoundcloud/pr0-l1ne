@@ -53,11 +53,11 @@ class MeasureTests(unittest.TestCase):
         # before its pop(), so it reads 1,000 rather than 999
         self.assertEqual(r["work"]["4"], 10 * 1000)
         self.assertEqual(r["workKind"]["4"], "m")
-        self.assertEqual(r["work"]["5"], 1000)              # `in` on a list scans it
-        self.assertNotIn("7", r["work"])                    # `in` on a set doesn't
-        self.assertEqual(r["work"]["8"], 100)               # a slice copies what it takes
-        self.assertEqual(r["workKind"]["9"], "o")           # sorting
-        self.assertNotIn("11", r["work"])                   # dict.pop is a hash lookup
+        self.assertEqual(r["work"]["5"], 1000)  # `in` on a list scans it
+        self.assertNotIn("7", r["work"])  # `in` on a set doesn't
+        self.assertEqual(r["work"]["8"], 100)  # a slice copies what it takes
+        self.assertEqual(r["workKind"]["9"], "o")  # sorting
+        self.assertNotIn("11", r["work"])  # dict.pop is a hash lookup
 
     def test_comprehensions_count_their_passes(self):
         r = measure("""
@@ -66,14 +66,17 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(r["passes"]["2"], 30)
 
     def test_the_time_limit_stops_the_run_and_says_how_far_it_got(self):
-        r = measure("""
+        r = measure(
+            """
             def spin(k):
                 for _ in range(k):
                     x = 0
                     for j in range(100000):
                         x += j
             spin(1000000)
-        """, limit_ms=600)
+        """,
+            limit_ms=600,
+        )
         self.assertEqual(r["status"], "limit")
         loop = r["stoppedAt"]["loop"]
         self.assertEqual((loop["line"], loop["total"]), (3, 1000000))
@@ -81,21 +84,27 @@ class MeasureTests(unittest.TestCase):
         self.assertLess(r["ms"], 3000)
 
     def test_recursion_without_loops_can_still_be_stopped(self):
-        r = measure("""
+        r = measure(
+            """
             def fib(n):
                 return n if n < 2 else fib(n - 1) + fib(n - 2)
             fib(60)
-        """, limit_ms=500)
+        """,
+            limit_ms=500,
+        )
         self.assertEqual(r["status"], "limit")
 
     def test_except_exception_cannot_swallow_the_limit(self):
-        r = measure("""
+        r = measure(
+            """
             while True:
                 try:
                     pass
                 except Exception:
                     pass
-        """, limit_ms=300)
+        """,
+            limit_ms=300,
+        )
         self.assertEqual(r["status"], "limit")
 
     def test_errors_point_at_the_users_line(self):

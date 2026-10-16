@@ -2,7 +2,7 @@
  * Compares two consecutive snapshots and reports what changed. The renderer
  * uses this to highlight cells and variables; it never inspects code.
  */
-import { liveFrames, type HeapObject, type Step, type Value } from "./types";
+import { type HeapObject, liveFrames, type Step, type Value } from "./types";
 
 /** A string that is equal for equal values, used for comparison and as map keys. */
 export function valueKey(value: Value): string {
@@ -24,11 +24,13 @@ export function slotsOf(obj: HeapObject): Map<string, Value> {
     case "list":
     case "tuple":
     case "set":
-    {
-      // A long list's items are a window of it: keys are real indices.
-      const offset = obj.offset ?? 0;
-      obj.items.forEach((item, index) => slots.set(String(offset + index), item));
-    }
+      {
+        // A long list's items are a window of it: keys are real indices.
+        const offset = obj.offset ?? 0;
+        obj.items.forEach((item, index) => {
+          slots.set(String(offset + index), item);
+        });
+      }
       break;
     case "dict":
       for (const [key, val] of obj.entries) slots.set(valueKey(key), val);

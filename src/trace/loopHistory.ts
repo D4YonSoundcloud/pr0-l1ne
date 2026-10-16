@@ -5,7 +5,15 @@
  * on every pass of the outer loop). Its rows are the state at the end of each
  * iteration, plus a "before" row for the state when the loop was entered.
  */
-import { liveFrames, type Frame, type HeapObject, type LoopContext, type LoopInfo, type Step, type Trace } from "./types";
+import {
+  type Frame,
+  type HeapObject,
+  type LoopContext,
+  type LoopInfo,
+  liveFrames,
+  type Step,
+  type Trace,
+} from "./types";
 
 export interface LoopRow {
   /** 0 is the "before" row. */
@@ -59,19 +67,14 @@ export function availableLoops(trace: Trace, stepIndex: number): { contexts: Loo
   return { contexts: [], running: false };
 }
 
-export function buildLoopHistory(
-  trace: Trace,
-  stepIndex: number,
-  preferredLoopId: string | null,
-): LoopHistory | null {
+export function buildLoopHistory(trace: Trace, stepIndex: number, preferredLoopId: string | null): LoopHistory | null {
   const { contexts, running } = availableLoops(trace, stepIndex);
   if (!contexts.length) return null;
 
   // Prefer the loop the person picked; otherwise the innermost one if it's
   // running, or the outermost one once everything has finished.
   const picked =
-    contexts.find((ctx) => ctx.loop === preferredLoopId) ??
-    (running ? contexts[contexts.length - 1] : contexts[0]);
+    contexts.find((ctx) => ctx.loop === preferredLoopId) ?? (running ? contexts[contexts.length - 1] : contexts[0]);
   const info = trace.loops.find((loop) => loop.id === picked.loop);
   if (!info) return null;
 
@@ -100,7 +103,10 @@ export function buildLoopHistory(
   const calls = new Map<string, string>();
   for (let i = first; i <= last; i++) {
     const ctx = contextIn(trace.steps[i], picked);
-    if (ctx?.call) { calls.set(runKey(ctx.loop, ctx.instance), ctx.call); break; }
+    if (ctx?.call) {
+      calls.set(runKey(ctx.loop, ctx.instance), ctx.call);
+      break;
+    }
   }
   return { info, context: latest, rows, running: running && last === stepIndex, calls };
 }
@@ -169,7 +175,16 @@ export function buildNestedHistory(trace: Trace, stepIndex: number): LoopHistory
   for (const { index, ctx, depth } of entries) {
     const step = trace.steps[index];
     const frame = liveFrames(step).find((f) => f.id === root.frame);
-    if (frame) rows.push({ iteration: ctx.iteration, stepIndex: index, frame, heap: step.heap, loop: ctx.loop, instance: ctx.instance, depth });
+    if (frame)
+      rows.push({
+        iteration: ctx.iteration,
+        stepIndex: index,
+        frame,
+        heap: step.heap,
+        loop: ctx.loop,
+        instance: ctx.instance,
+        depth,
+      });
   }
   const latest = contextIn(trace.steps[last], root) ?? root;
   return { info, context: latest, rows, running: running && last === stepIndex, nested: true, calls };

@@ -34,17 +34,17 @@ export function s<K extends keyof SVGElementTagNameMap>(
 // Metrics
 // ---------------------------------------------------------------------------
 
-export const FONT = 13;            // value text size, px
-export const SMALL = 11;           // index numbers and labels
+export const FONT = 13; // value text size, px
+export const SMALL = 11; // index numbers and labels
 export const CELL_H = 30;
 export const CELL_MIN_W = 34;
-export const REF_W = 34;           // a cell that holds a reference dot
-export const ROW_H = 32;           // a row in a frame or object table
-export const HEADER_H = 26;        // title bar of a frame or object
-export const LABEL_H = 18;         // small label above a list
-export const INDEX_H = 14;         // index numbers above list cells
-export const POINTER_H = 24;       // room under a list for i / j markers
-export const STRIP_H = 22;         // a long list's color strip, above its cells
+export const REF_W = 34; // a cell that holds a reference dot
+export const ROW_H = 32; // a row in a frame or object table
+export const HEADER_H = 26; // title bar of a frame or object
+export const LABEL_H = 18; // small label above a list
+export const INDEX_H = 14; // index numbers above list cells
+export const POINTER_H = 24; // room under a list for i / j markers
+export const STRIP_H = 22; // a long list's color strip, above its cells
 export const STRIP_MAX_W = 480;
 
 /** Width of monospace text. */
@@ -64,9 +64,9 @@ export function cellWidth(value: Value): number {
 
 function primClass(value: PrimValue): string {
   switch (value.type) {
-    case "str":     // Python
+    case "str": // Python
     case "bytes":
-    case "string":  // JavaScript
+    case "string": // JavaScript
       return "v-str";
     case "int":
     case "float":
@@ -81,7 +81,7 @@ function primClass(value: PrimValue): string {
     case "null":
     case "undefined":
       return "v-none";
-    default:        // "key" (unquoted object keys), "getter", "symbol", ...
+    default: // "key" (unquoted object keys), "getter", "symbol", ...
       return "v-other";
   }
 }
@@ -110,7 +110,13 @@ export function valueCell(value: Value, opts: CellOptions): { el: SVGGElement; d
     g.append(s("circle", { class: "ref-dot", cx, cy, r: 4 }));
     return { el: g, dot: { x: cx, y: cy } };
   }
-  g.append(s("text", { class: `value ${primClass(value)}`, x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central" }, value.repr));
+  g.append(
+    s(
+      "text",
+      { class: `value ${primClass(value)}`, x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central" },
+      value.repr,
+    ),
+  );
   return { el: g };
 }
 
@@ -120,32 +126,65 @@ export function valueCell(value: Value, opts: CellOptions): { el: SVGGElement; d
 
 export function arrowMarkers(): SVGDefsElement {
   const marker = (id: string, cls: string) =>
-    s("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
-      s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }));
+    s(
+      "marker",
+      { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
+      s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }),
+    );
   // Graph edges come in several thicknesses: their arrowheads are sized in
   // diagram units so a thick edge doesn't get a huge one.
   const fixed = (id: string, cls: string) =>
-    s("marker", { id, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 11, markerHeight: 11, markerUnits: "userSpaceOnUse", orient: "auto-start-reverse" },
-      s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }));
-  return s("defs", {}, marker("arrow-ref", "arrowhead-ref"), marker("arrow-change", "arrowhead-change"),
-    fixed("arrow-graph", "arrowhead-graph"), fixed("arrow-tree", "arrowhead-tree"), fixed("arrow-path", "arrowhead-path"));
+    s(
+      "marker",
+      {
+        id,
+        viewBox: "0 0 10 10",
+        refX: 8,
+        refY: 5,
+        markerWidth: 11,
+        markerHeight: 11,
+        markerUnits: "userSpaceOnUse",
+        orient: "auto-start-reverse",
+      },
+      s("path", { d: "M0,1 L10,5 L0,9 z", class: cls }),
+    );
+  return s(
+    "defs",
+    {},
+    marker("arrow-ref", "arrowhead-ref"),
+    marker("arrow-change", "arrowhead-change"),
+    fixed("arrow-graph", "arrowhead-graph"),
+    fixed("arrow-tree", "arrowhead-tree"),
+    fixed("arrow-path", "arrowhead-path"),
+  );
 }
 
 /** A "this changed" arrow between two stacked rows of the loop view. */
 export function changeArrow(from: { x: number; y: number }, to: { x: number; y: number }): SVGPathElement {
   const dy = to.y - from.y;
-  const d = from.x === to.x
-    ? `M${from.x},${from.y} L${to.x},${to.y}`
-    : `M${from.x},${from.y} C${from.x},${from.y + dy * 0.6} ${to.x},${to.y - dy * 0.6} ${to.x},${to.y}`;
+  const d =
+    from.x === to.x
+      ? `M${from.x},${from.y} L${to.x},${to.y}`
+      : `M${from.x},${from.y} C${from.x},${from.y + dy * 0.6} ${to.x},${to.y - dy * 0.6} ${to.x},${to.y}`;
   return s("path", { d, class: "change-arrow", "marker-end": "url(#arrow-change)" });
 }
 
 /** Little upward markers under list cells for index variables like i and j. */
 /** For animation (render/animate.ts): a key prefix, and the origin positions are relative to. */
-export interface FlipInfo { key: string; originX: number; originY: number }
+export interface FlipInfo {
+  key: string;
+  originX: number;
+  originY: number;
+}
 
 const flipAttrs = (flip: FlipInfo | undefined, name: string, x: number, y: number) =>
-  flip ? { "data-flip": `${flip.key}:${name}`, "data-x": Math.round(x - flip.originX), "data-y": Math.round(y - flip.originY) } : {};
+  flip
+    ? {
+        "data-flip": `${flip.key}:${name}`,
+        "data-x": Math.round(x - flip.originX),
+        "data-y": Math.round(y - flip.originY),
+      }
+    : {};
 
 export function pointerMarkers(
   pointers: { name: string; index: number; changed: boolean }[],
@@ -167,9 +206,14 @@ export function pointerMarkers(
     const changed = names.some((n) => n.changed);
     const cls = ["pointer", outOfRange && "is-out", changed && "is-changed"].filter(Boolean).join(" ");
     const label = names.map((n) => n.name).join(", ");
-    g.append(s("g", { class: cls, ...flipAttrs(flip, label, cx, y) },
-      s("path", { d: `M${cx - 5},${y + 9} L${cx},${y + 3} L${cx + 5},${y + 9} z` }),
-      s("text", { x: cx, y: y + 20, "text-anchor": "middle" }, names.map((n) => n.name).join(", "))));
+    g.append(
+      s(
+        "g",
+        { class: cls, ...flipAttrs(flip, label, cx, y) },
+        s("path", { d: `M${cx - 5},${y + 9} L${cx},${y + 3} L${cx + 5},${y + 9} z` }),
+        s("text", { x: cx, y: y + 20, "text-anchor": "middle" }, names.map((n) => n.name).join(", ")),
+      ),
+    );
   }
   return g;
 }
@@ -179,7 +223,21 @@ export function pointerMarkers(
  * container the code indexes, even when they aren't used as a subscript
  * themselves (binary search uses lo and hi, but only indexes nums[mid]).
  */
-const CONVENTIONAL_POINTERS = ["lo", "hi", "low", "high", "left", "right", "l", "r", "start", "end", "mid", "slow", "fast"];
+const CONVENTIONAL_POINTERS = [
+  "lo",
+  "hi",
+  "low",
+  "high",
+  "left",
+  "right",
+  "l",
+  "r",
+  "start",
+  "end",
+  "mid",
+  "slow",
+  "fast",
+];
 
 /** Resolve index variables for a container: names that hold an int. */
 export function pointersFor(
@@ -195,12 +253,15 @@ export function pointersFor(
   // dimension (matrix[row][left]: left picks a column) isn't this one's.
   const otherKey = containerName.endsWith("[]") ? containerName.slice(0, -2) : `${containerName}[]`;
   const other = indexNames[otherKey] ?? [];
-  const conventional = CONVENTIONAL_POINTERS.filter((n) => locals.has(n) && !(other.includes(n) && !subscripts.includes(n)));
+  const conventional = CONVENTIONAL_POINTERS.filter(
+    (n) => locals.has(n) && !(other.includes(n) && !subscripts.includes(n)),
+  );
   const names = new Set([...subscripts, ...conventional]);
   for (const name of names) {
     const value = locals.get(name);
     // Python reports "int"; JavaScript reports "number", which may not be whole.
-    const isIndex = value?.kind === "prim" &&
+    const isIndex =
+      value?.kind === "prim" &&
       (value.type === "int" || (value.type === "number" && Number.isInteger(Number(value.repr))));
     if (isIndex) out.push({ name, index: Number(value.repr), changed: changedNames.has(name) });
   }
@@ -228,9 +289,14 @@ export function rowPointerMarkers(
     const y = rowMid(index);
     const cls = ["pointer", names.some((n) => n.changed) && "is-changed"].filter(Boolean).join(" ");
     const label = names.map((n) => n.name).join(", ");
-    g.append(s("g", { class: cls, ...flipAttrs(flip, `row:${label}`, x, y) },
-      s("path", { d: `M${x + 3},${y} L${x + 9},${y - 5} L${x + 9},${y + 5} z` }),
-      s("text", { x: x + 12, y, "dominant-baseline": "central" }, names.map((n) => n.name).join(", "))));
+    g.append(
+      s(
+        "g",
+        { class: cls, ...flipAttrs(flip, `row:${label}`, x, y) },
+        s("path", { d: `M${x + 3},${y} L${x + 9},${y - 5} L${x + 9},${y + 5} z` }),
+        s("text", { x: x + 12, y, "dominant-baseline": "central" }, names.map((n) => n.name).join(", ")),
+      ),
+    );
   }
   return g;
 }
@@ -248,7 +314,13 @@ export function rowPointersWidth(pointers: { name: string; index: number }[]): n
 // ---------------------------------------------------------------------------
 
 /** Viridis: dark purple (smallest) to yellow (largest), distinct in grayscale too. */
-const RAMP = [[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]];
+const RAMP = [
+  [68, 1, 84],
+  [59, 82, 139],
+  [33, 145, 140],
+  [94, 201, 98],
+  [253, 231, 37],
+];
 
 export function rampColor(t: number): string {
   const x = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
@@ -282,17 +354,30 @@ export function stripBar(info: StripInfo, x: number, y: number, room: number, ke
   const barY = y + 3;
   const barH = 9;
   const span = max - min || 1;
-  const g = s("g", { class: "strip", "data-key": key },
-    s("title", {}, `All ${length.toLocaleString()} items as colors: darkest is the smallest (${min}), yellow the largest (${max}). The bracket marks the ${info.window.count} cells drawn below.`));
+  const g = s(
+    "g",
+    { class: "strip", "data-key": key },
+    s(
+      "title",
+      {},
+      `All ${length.toLocaleString()} items as colors: darkest is the smallest (${min}), yellow the largest (${max}). The bracket marks the ${info.window.count} cells drawn below.`,
+    ),
+  );
   const sliceW = w / values.length;
   // Neighbors of the same color share one rectangle.
   let runStart = 0;
   for (let i = 1; i <= values.length; i++) {
     if (i < values.length && values[i] === values[runStart]) continue;
-    g.append(s("rect", {
-      class: "strip-slice", x: x + runStart * sliceW, y: barY, width: (i - runStart) * sliceW + 0.4, height: barH,
-      fill: rampColor((values[runStart] - min) / span),
-    }));
+    g.append(
+      s("rect", {
+        class: "strip-slice",
+        x: x + runStart * sliceW,
+        y: barY,
+        width: (i - runStart) * sliceW + 0.4,
+        height: barH,
+        fill: rampColor((values[runStart] - min) / span),
+      }),
+    );
     runStart = i;
   }
   g.append(s("rect", { class: "strip-frame", x, y: barY, width: w, height: barH }));
@@ -304,9 +389,16 @@ export function stripBar(info: StripInfo, x: number, y: number, room: number, ke
   for (const p of info.pointers) {
     if (p.index < 0 || p.index > length) continue;
     const px = x + ((p.index + 0.5) / length) * w;
-    g.append(s("path", { class: "strip-pointer", d: `M${px - 3.5},${barY + barH + 7} L${px},${barY + barH + 2} L${px + 3.5},${barY + barH + 7} z` },
-      s("title", {}, `${p.name} = ${p.index}`)));
+    g.append(
+      s(
+        "path",
+        {
+          class: "strip-pointer",
+          d: `M${px - 3.5},${barY + barH + 7} L${px},${barY + barH + 2} L${px + 3.5},${barY + barH + 7} z`,
+        },
+        s("title", {}, `${p.name} = ${p.index}`),
+      ),
+    );
   }
   return g;
 }
-

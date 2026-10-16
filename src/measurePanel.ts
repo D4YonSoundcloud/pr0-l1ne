@@ -7,7 +7,7 @@
  * The run itself is trace/measurement.ts's Measurement, from a worker.
  */
 import { h } from "./stylePanel";
-import { compact, duration, projectedMs, totals, workWord, type Measurement } from "./trace/measurement";
+import { compact, duration, type Measurement, projectedMs, totals, workWord } from "./trace/measurement";
 import { formatBytes } from "./trace/memory";
 
 export interface MeasureLabel {
@@ -53,14 +53,30 @@ export class MeasurePanel {
 
   constructor(private readonly options: MeasurePanelOptions) {
     this.body = h("div", { class: "cx-body ms-body" });
-    const close = h("button", { type: "button", class: "style-close", "aria-label": "Close measurements", title: "Close (Esc)" }, "×");
+    const close = h(
+      "button",
+      { type: "button", class: "style-close", "aria-label": "Close measurements", title: "Close (Esc)" },
+      "×",
+    );
     close.addEventListener("click", () => this.toggle(false));
-    this.el = h("section", { class: "style-panel cx-panel ms-panel", id: "measure-panel", role: "dialog", "aria-label": "Measurements", hidden: true },
-      h("header", { class: "style-head" },
+    this.el = h(
+      "section",
+      {
+        class: "style-panel cx-panel ms-panel",
+        id: "measure-panel",
+        role: "dialog",
+        "aria-label": "Measurements",
+        hidden: true,
+      },
+      h(
+        "header",
+        { class: "style-head" },
         h("h2", { class: "style-title" }, "Measure"),
         h("span", { class: "style-note" }, "The whole program, at full size, counted"),
-        close),
-      this.body);
+        close,
+      ),
+      this.body,
+    );
     this.el.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -104,7 +120,13 @@ export class MeasurePanel {
     const r = this.result;
     this.body.replaceChildren();
     if (!r) {
-      this.body.append(h("p", { class: "cx-empty" }, "Measure runs the whole program at full size, counting how many times every line runs instead of tracing it, so it works for inputs far too big to step through."));
+      this.body.append(
+        h(
+          "p",
+          { class: "cx-empty" },
+          "Measure runs the whole program at full size, counting how many times every line runs instead of tracing it, so it works for inputs far too big to step through.",
+        ),
+      );
       this.body.append(this.controls());
       this.options.renderGrowth();
       this.body.append(this.options.growth);
@@ -118,28 +140,67 @@ export class MeasurePanel {
     if (r.status === "done") {
       const time = r.plainMs ?? r.ms;
       summary.append(
-        h("div", { class: "cx-big" }, h("span", { class: "cx-big-label" }, r.plainMs !== null ? "Time" : "Time, while counting"), h("span", { class: "ms-time" }, duration(time))),
+        h(
+          "div",
+          { class: "cx-big" },
+          h("span", { class: "cx-big-label" }, r.plainMs !== null ? "Time" : "Time, while counting"),
+          h("span", { class: "ms-time" }, duration(time)),
+        ),
       );
-      if (r.plainMs !== null) summary.append(h("p", { class: "ms-note" }, `${duration(r.ms)} with the counters added. Times depend on this computer and browser.`));
-      else summary.append(h("p", { class: "ms-note" }, "Too long to run a second time without the counters, which usually make a program 2 to 4 times slower."));
+      if (r.plainMs !== null)
+        summary.append(
+          h(
+            "p",
+            { class: "ms-note" },
+            `${duration(r.ms)} with the counters added. Times depend on this computer and browser.`,
+          ),
+        );
+      else
+        summary.append(
+          h(
+            "p",
+            { class: "ms-note" },
+            "Too long to run a second time without the counters, which usually make a program 2 to 4 times slower.",
+          ),
+        );
     } else if (r.status === "limit") {
       const projected = projectedMs(r);
       const loop = r.stoppedAt?.loop;
       summary.append(
-        h("div", { class: "cx-big" }, h("span", { class: "cx-big-label" }, "Stopped at the time limit"), h("span", { class: "ms-time is-limit" }, duration(r.ms))),
-        h("p", { class: "ms-note" }, loop
-          ? `${plural(loop.done, "pass")} of ${loop.total.toLocaleString()} through the loop on line ${loop.line} (${pct(loop.done / loop.total)}).`
-          : "No loop with a known length was running, so how far it got can't be said."),
+        h(
+          "div",
+          { class: "cx-big" },
+          h("span", { class: "cx-big-label" }, "Stopped at the time limit"),
+          h("span", { class: "ms-time is-limit" }, duration(r.ms)),
+        ),
+        h(
+          "p",
+          { class: "ms-note" },
+          loop
+            ? `${plural(loop.done, "pass")} of ${loop.total.toLocaleString()} through the loop on line ${loop.line} (${pct(loop.done / loop.total)}).`
+            : "No loop with a known length was running, so how far it got can't be said.",
+        ),
       );
       if (projected !== null) {
-        summary.append(h("p", { class: "ms-projection" },
-          "At that rate the whole run would take about ", h("strong", {}, duration(projected)),
-          " while counting; without the counters, usually 2 to 4 times less. (That assumes every pass takes about as long as the ones so far.)"));
+        summary.append(
+          h(
+            "p",
+            { class: "ms-projection" },
+            "At that rate the whole run would take about ",
+            h("strong", {}, duration(projected)),
+            " while counting; without the counters, usually 2 to 4 times less. (That assumes every pass takes about as long as the ones so far.)",
+          ),
+        );
       }
     } else {
       const e = r.error!;
       summary.append(
-        h("div", { class: "cx-big" }, h("span", { class: "cx-big-label" }, "Stopped by an error"), h("span", { class: "ms-time is-error" }, e.type)),
+        h(
+          "div",
+          { class: "cx-big" },
+          h("span", { class: "cx-big-label" }, "Stopped by an error"),
+          h("span", { class: "ms-time is-error" }, e.type),
+        ),
         h("p", { class: "ms-note" }, `${e.line ? `Line ${e.line}: ` : ""}${e.message}`),
       );
     }
@@ -148,11 +209,23 @@ export class MeasurePanel {
     // Totals.
     const t = totals(r);
     const stats = h("dl", { class: "ms-stats" });
-    const stat = (label: string, value: string, title = "") => stats.append(h("dt", { title }, label), h("dd", { title }, value));
+    const stat = (label: string, value: string, title = "") =>
+      stats.append(h("dt", { title }, label), h("dd", { title }, value));
     stat("Lines run", t.lines.toLocaleString(), "Every statement that ran, counted once each time it ran");
-    if (t.work) stat("Inside built-ins", `${t.work.toLocaleString()} items`, "Items moved, scanned, copied or sorted inside built-in operations like insert(0, x), shift(), x in list, slices and sorting");
-    if (r.peakBytes !== null) stat("Peak memory", formatBytes(r.peakBytes, false), "The most memory the program used at once (64-bit Python)");
-    if (r.heldBytes !== null) stat("Held at the end", formatBytes(r.heldBytes, false), "What the program's variables hold when it ends (64-bit Python sizes)");
+    if (t.work)
+      stat(
+        "Inside built-ins",
+        `${t.work.toLocaleString()} items`,
+        "Items moved, scanned, copied or sorted inside built-in operations like insert(0, x), shift(), x in list, slices and sorting",
+      );
+    if (r.peakBytes !== null)
+      stat("Peak memory", formatBytes(r.peakBytes, false), "The most memory the program used at once (64-bit Python)");
+    if (r.heldBytes !== null)
+      stat(
+        "Held at the end",
+        formatBytes(r.heldBytes, false),
+        "What the program's variables hold when it ends (64-bit Python sizes)",
+      );
     const estimate = this.options.estimate();
     if (estimate) stat("Estimated", estimate, "The time complexity estimated from the code and the small, traced run");
     this.body.append(stats);
@@ -163,10 +236,13 @@ export class MeasurePanel {
       this.body.append(h("h3", { class: "style-subhead" }, "Hottest lines"));
       const max = rows[0].weight || 1;
       for (const row of rows) {
-        const button = h("button", { type: "button", class: "cx-row-head ms-row", title: `Go to line ${row.line}` },
+        const button = h(
+          "button",
+          { type: "button", class: "cx-row-head ms-row", title: `Go to line ${row.line}` },
           h("span", { class: "cx-line" }, String(row.line)),
           h("span", { class: "cx-name" }, h("code", {}, sourceLine(row.line) || " ")),
-          h("span", { class: "ms-count" }, row.text));
+          h("span", { class: "ms-count" }, row.text),
+        );
         button.addEventListener("click", () => this.options.reveal(row.line));
         const bar = h("span", { class: "ms-bar" });
         bar.style.setProperty("--share", `${Math.max(2, (100 * Math.log1p(row.weight)) / Math.log1p(max))}%`);
@@ -179,21 +255,36 @@ export class MeasurePanel {
       const lines = r.stdout.replace(/\n$/, "").split("\n");
       const shown = lines.slice(-10);
       const more = lines.length - shown.length;
-      this.body.append(h("h3", { class: "style-subhead" }, "Output"),
-        h("pre", { class: "ms-output" }, (more > 0 ? `… ${plural(more, "earlier line")}\n` : "") + shown.join("\n")));
-      if (r.droppedOutput) this.body.append(h("p", { class: "ms-note" }, `${r.droppedOutput.toLocaleString()} more characters of output weren't kept.`));
+      this.body.append(
+        h("h3", { class: "style-subhead" }, "Output"),
+        h("pre", { class: "ms-output" }, (more > 0 ? `… ${plural(more, "earlier line")}\n` : "") + shown.join("\n")),
+      );
+      if (r.droppedOutput)
+        this.body.append(
+          h("p", { class: "ms-note" }, `${r.droppedOutput.toLocaleString()} more characters of output weren't kept.`),
+        );
     }
 
     this.body.append(this.controls());
     this.options.renderGrowth();
     this.body.append(this.options.growth);
-    this.body.append(h("p", { class: "cx-footer" },
-      "Measure runs the whole program with counters instead of a trace: how many times each line ran is exact. Times are this browser's",
-      r.plainMs !== null ? "" : ", with counting", ". Python here is WebAssembly, a few times slower than Python on a desktop."));
+    this.body.append(
+      h(
+        "p",
+        { class: "cx-footer" },
+        "Measure runs the whole program with counters instead of a trace: how many times each line ran is exact. Times are this browser's",
+        r.plainMs !== null ? "" : ", with counting",
+        ". Python here is WebAssembly, a few times slower than Python on a desktop.",
+      ),
+    );
   }
 
   private controls(): HTMLElement {
-    const limit = h("select", { class: "style-select", id: "ms-limit", "aria-label": "Time limit" }) as HTMLSelectElement;
+    const limit = h("select", {
+      class: "style-select",
+      id: "ms-limit",
+      "aria-label": "Time limit",
+    }) as HTMLSelectElement;
     for (const l of MEASURE_LIMITS) limit.append(new Option(l.label, String(l.ms)));
     limit.value = String(this.options.limit());
     limit.addEventListener("change", () => this.options.setLimit(Number(limit.value)));
@@ -202,10 +293,13 @@ export class MeasurePanel {
     labels.addEventListener("change", () => this.options.setLabelsShown(labels.checked));
     const again = h("button", { type: "button", class: "button small" }, this.result ? "Measure again" : "Measure");
     again.addEventListener("click", () => this.options.measureAgain());
-    return h("div", { class: "ms-controls" },
+    return h(
+      "div",
+      { class: "ms-controls" },
       h("div", { class: "style-row" }, h("label", { for: "ms-limit" }, "Time limit"), limit),
       h("label", { class: "cx-toggle", for: "ms-labels" }, labels, " Show counts on the lines in the editor"),
-      h("div", { class: "style-row style-actions" }, again));
+      h("div", { class: "style-row style-actions" }, again),
+    );
   }
 }
 
@@ -233,7 +327,8 @@ function hotLines(r: Measurement): Hot[] {
       parts.push(`${compact(passes)} passes`);
       hover.push(`The loop's body ran **${passes.toLocaleString()}** times`);
       const total = r.totals[line];
-      if (total !== undefined && r.status === "limit") hover.push(`(of ${total.toLocaleString()} it was going to make, the last time it started)`);
+      if (total !== undefined && r.status === "limit")
+        hover.push(`(of ${total.toLocaleString()} it was going to make, the last time it started)`);
     } else if (count) {
       parts.push(`${compact(count)}×`);
       hover.push(`Ran **${count.toLocaleString()}** time${count === 1 ? "" : "s"}`);

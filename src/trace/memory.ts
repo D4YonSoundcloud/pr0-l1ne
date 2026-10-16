@@ -19,7 +19,7 @@
  * header and slots) and its total (own plus everything it holds, with
  * anything reachable twice counted once).
  */
-import { liveFrames, type Frame, type HeapObject, type PrimValue, type Step, type Trace, type Value } from "./types";
+import { type Frame, type HeapObject, liveFrames, type PrimValue, type Step, type Trace, type Value } from "./types";
 
 export type SizeModel = "python" | "textbook" | "v8";
 
@@ -129,8 +129,17 @@ function v8Extra(v: PrimValue, inDoubleArray: boolean): number {
 // ---------------------------------------------------------------------------
 
 const TYPED_ARRAY_BYTES: Record<string, number> = {
-  Int8Array: 1, Uint8Array: 1, Uint8ClampedArray: 1, Int16Array: 2, Uint16Array: 2,
-  Int32Array: 4, Uint32Array: 4, Float32Array: 4, Float64Array: 8, BigInt64Array: 8, BigUint64Array: 8,
+  Int8Array: 1,
+  Uint8Array: 1,
+  Uint8ClampedArray: 1,
+  Int16Array: 2,
+  Uint16Array: 2,
+  Int32Array: 4,
+  Uint32Array: 4,
+  Float32Array: 4,
+  Float64Array: 8,
+  BigInt64Array: 8,
+  BigUint64Array: 8,
 };
 
 /** V8 arrays of only numbers, some not small integers, store unboxed doubles. */
@@ -221,7 +230,10 @@ export function defaultModel(trace: Trace): SizeModel {
 
 export function stepSizes(step: Step, model: SizeModel): StepSizes {
   let byModel = cache.get(step);
-  if (!byModel) cache.set(step, (byModel = new Map()));
+  if (!byModel) {
+    byModel = new Map();
+    cache.set(step, byModel);
+  }
   const known = byModel.get(model);
   if (known) return known;
 
@@ -272,7 +284,12 @@ export function stepSizes(step: Step, model: SizeModel): StepSizes {
     return slot(container) + extra(value, container);
   };
 
-  const frame = (f: Frame) => sum(f.locals.map(([, v]) => v), undefined, new Set());
+  const frame = (f: Frame) =>
+    sum(
+      f.locals.map(([, v]) => v),
+      undefined,
+      new Set(),
+    );
 
   // Everything at this step, each object once.
   const everything = new Set<string>();

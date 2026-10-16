@@ -4,4 +4,6 @@ import { measureProgram } from "./measure";
 import { serve } from "./serve";
 import { traceJavaScript } from "./trace";
 
-serve("JavaScript", traceJavaScript, (source, limitMs, report, overrides) => measureProgram(source, limitMs, (s) => parseProgram(s), report, overrides));
+serve("JavaScript", traceJavaScript, (source, limitMs, report, overrides) =>
+  measureProgram(source, limitMs, (s) => parseProgram(s), report, overrides),
+);

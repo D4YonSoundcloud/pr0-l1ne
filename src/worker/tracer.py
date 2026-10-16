@@ -12,22 +12,22 @@ also run it directly with `python3 tracer.py some_file.py` to inspect a trace.
 import ast
 import builtins
 import dis
-import re
-import tokenize
 import inspect
 import io
 import json
+import re
 import struct
 import sys
 import time
+import tokenize
 import types
 import weakref
 from collections import deque
 
 USER_FILENAME = "<user>"
-MAX_ITEMS = 60          # items shown per container before truncating
-MAX_REPR = 48           # characters shown for a primitive before truncating
-MAX_OBJECTS = 400       # heap objects serialized per step
+MAX_ITEMS = 60  # items shown per container before truncating
+MAX_REPR = 48  # characters shown for a primitive before truncating
+MAX_OBJECTS = 400  # heap objects serialized per step
 
 
 # Code flags for functions that can pause: generators, coroutines (async def)
@@ -49,10 +49,10 @@ AWAIT_PLUMBING = {dis.opmap[name] for name in ("SEND", "END_SEND", "CLEANUP_THRO
 # use more than its share of the step budget keeps its first passes, passes
 # at round numbers (10, 20 ... 90, 100, 200 ... 900, 1000 ...), and its last
 # passes; the passes in between run, and are counted, but aren't recorded.
-SAMPLE_FIRST = 5          # passes always recorded at the start
-SAMPLE_LAST = 5           # passes always recorded at the end
-TRACE_SECONDS = 6.0       # stop tracing after this long, even within the step budget
-                          # (the page passes less for live runs while typing)
+SAMPLE_FIRST = 5  # passes always recorded at the start
+SAMPLE_LAST = 5  # passes always recorded at the end
+TRACE_SECONDS = 6.0  # stop tracing after this long, even within the step budget
+# (the page passes less for live runs while typing)
 
 
 def round_pass(n):
@@ -110,14 +110,16 @@ def analyze(source):
             body_start = min(stmt.lineno for stmt in node.body)
             body_end = max(getattr(stmt, "end_lineno", stmt.lineno) for stmt in node.body)
             header = lines[node.lineno - 1].strip() if node.lineno - 1 < len(lines) else ""
-            loops.append({
-                "id": "L%d" % node.lineno,
-                "kind": "while" if isinstance(node, ast.While) else "for",
-                "line": node.lineno,
-                "bodyStart": body_start,
-                "bodyEnd": body_end,
-                "header": header.rstrip(":"),
-            })
+            loops.append(
+                {
+                    "id": "L%d" % node.lineno,
+                    "kind": "while" if isinstance(node, ast.While) else "for",
+                    "line": node.lineno,
+                    "bodyStart": body_start,
+                    "bodyEnd": body_end,
+                    "header": header.rstrip(":"),
+                }
+            )
         if isinstance(node, ast.Subscript):
             # grid[i] records "i" under "grid". grid[i][j] also records "j"
             # under "grid[]": a name that indexes the rows of grid.
@@ -128,7 +130,12 @@ def analyze(source):
                 # grid[a][b]: which cell this line touches (see trace/gridFocus.ts).
                 row = ast.get_source_segment(source, node.value.slice)
                 col = ast.get_source_segment(source, node.slice)
-                if row and col and not isinstance(node.slice, ast.Slice) and not isinstance(node.value.slice, ast.Slice):
+                if (
+                    row
+                    and col
+                    and not isinstance(node.slice, ast.Slice)
+                    and not isinstance(node.value.slice, ast.Slice)
+                ):
                     accesses.append({"name": node.value.value.id, "line": node.lineno, "row": row, "col": col})
             else:
                 continue
@@ -154,14 +161,45 @@ def analyze(source):
 # code is usually written; anything it can't size is marked "unknown" and
 # sized from the run instead.
 
-EMPTY_CONTAINERS = {"list": "list", "dict": "dict", "set": "set", "deque": "list", "defaultdict": "dict",
-                    "Counter": "dict", "OrderedDict": "dict", "frozenset": "set"}
+EMPTY_CONTAINERS = {
+    "list": "list",
+    "dict": "dict",
+    "set": "set",
+    "deque": "list",
+    "defaultdict": "dict",
+    "Counter": "dict",
+    "OrderedDict": "dict",
+    "frozenset": "set",
+}
 # Built-ins that walk a whole iterable they're given.
-LINEAR_BUILTINS = {"sum", "min", "max", "any", "all", "list", "tuple", "set", "frozenset", "dict", "sorted",
-                   "Counter", "deque"}
+LINEAR_BUILTINS = {
+    "sum",
+    "min",
+    "max",
+    "any",
+    "all",
+    "list",
+    "tuple",
+    "set",
+    "frozenset",
+    "dict",
+    "sorted",
+    "Counter",
+    "deque",
+}
 LINEAR_METHODS = {"index", "count", "remove", "copy", "reverse", "insert", "join", "split"}
-LOG_FUNCTIONS = {"heappush", "heappop", "heappushpop", "heapreplace", "bisect", "bisect_left", "bisect_right",
-                 "insort", "insort_left", "insort_right"}
+LOG_FUNCTIONS = {
+    "heappush",
+    "heappop",
+    "heappushpop",
+    "heapreplace",
+    "bisect",
+    "bisect_left",
+    "bisect_right",
+    "insort",
+    "insort_left",
+    "insort_right",
+}
 GROW_METHODS = {"append", "appendleft", "add", "extend", "extendleft", "insert", "setdefault", "update"}
 MEMO_DECORATORS = {"cache", "lru_cache"}
 
@@ -191,8 +229,12 @@ def _is_const(node):
 
 def _halves(node):
     """x // 2, x >> 1, x / 2."""
-    return (isinstance(node, ast.BinOp) and isinstance(node.op, (ast.FloorDiv, ast.RShift, ast.Div))
-            and isinstance(node.right, ast.Constant) and node.right.value in (2, 1 if isinstance(node.op, ast.RShift) else 2))
+    return (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, (ast.FloorDiv, ast.RShift, ast.Div))
+        and isinstance(node.right, ast.Constant)
+        and node.right.value in (2, 1 if isinstance(node.op, ast.RShift) else 2)
+    )
 
 
 def _walk_shallow(node):
@@ -215,14 +257,14 @@ class FunctionShape:
         self.body = body
         self.user_functions = user_functions
         self.is_global = is_global
-        self.aliases = {}       # name -> SizeRef: n = len(nums)
-        self.index_vars = {}    # i -> SizeRef list of the loop it counts through
-        self.elements = {}      # x -> SizeRef of the collection it's an item of
-        self.mids = set()       # names holding a midpoint: mid = (lo + hi) // 2
-        self.containers = {}    # name -> "list" | "dict" | "set", for names made empty
-        self.inits = {}         # name -> first expression assigned to it
+        self.aliases = {}  # name -> SizeRef: n = len(nums)
+        self.index_vars = {}  # i -> SizeRef list of the loop it counts through
+        self.elements = {}  # x -> SizeRef of the collection it's an item of
+        self.mids = set()  # names holding a midpoint: mid = (lo + hi) // 2
+        self.containers = {}  # name -> "list" | "dict" | "set", for names made empty
+        self.inits = {}  # name -> first expression assigned to it
         self.recursive_args = []
-        self.returned = set()   # ids of calls that are a whole `return f(...)`
+        self.returned = set()  # ids of calls that are a whole `return f(...)`
         self.collect()
 
     # -- what the names mean ------------------------------------------------
@@ -256,8 +298,11 @@ class FunctionShape:
             yield from _walk_shallow(stmt)
 
     def learn(self, target, value):
-        if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)) \
-                and len(target.elts) == len(value.elts):
+        if (
+            isinstance(target, (ast.Tuple, ast.List))
+            and isinstance(value, (ast.Tuple, ast.List))
+            and len(target.elts) == len(value.elts)
+        ):
             for t, v in zip(target.elts, value.elts):
                 self.learn(t, v)
             return
@@ -267,7 +312,8 @@ class FunctionShape:
         self.inits.setdefault(name, value)
         # mid = (lo + hi) // 2, mid = len(items) // 2; but not n = n // 2
         if any(_halves(sub) for sub in ast.walk(value)) and name not in {
-                n.id for n in ast.walk(value) if isinstance(n, ast.Name)}:
+            n.id for n in ast.walk(value) if isinstance(n, ast.Name)
+        }:
             self.mids.add(name)
         kind = self.container_kind(value)
         if kind and name not in self.containers:
@@ -335,8 +381,11 @@ class FunctionShape:
             refs = [r for r in found if r and r != "const"]
             if refs:
                 # Prefer a real size over a loop counter: len(arr) - i - 1 is len(arr).
-                plain = [r for r, side in zip(found, (node.left, node.right))
-                         if r and r != "const" and not (isinstance(side, ast.Name) and side.id in self.index_vars)]
+                plain = [
+                    r
+                    for r, side in zip(found, (node.left, node.right))
+                    if r and r != "const" and not (isinstance(side, ast.Name) and side.id in self.index_vars)
+                ]
                 return (plain or refs)[0]
             return "const" if all(r == "const" for r in found) else None
         if isinstance(node, ast.UnaryOp):
@@ -360,8 +409,11 @@ class FunctionShape:
                 sl = node.slice
                 if sl.lower is None and sl.upper is not None and sl.step is None:
                     ref = self.size_of(sl.upper, allow_value=True)
-                    if ref == "const" or (ref and not (isinstance(sl.upper, ast.Name) and sl.upper.id in self.mids)
-                                          and not _halves(sl.upper)):
+                    if ref == "const" or (
+                        ref
+                        and not (isinstance(sl.upper, ast.Name) and sl.upper.id in self.mids)
+                        and not _halves(sl.upper)
+                    ):
                         return ref
                 return self.length_of(node.value)
             base = _dotted(node.value)
@@ -378,7 +430,16 @@ class FunctionShape:
             return {"name": dotted, "len": True} if dotted else None
         if isinstance(node, ast.Call):
             fname = _call_name(node)
-            if isinstance(node.func, ast.Attribute) and fname in ("items", "keys", "values", "split", "copy", "strip", "lower", "upper"):
+            if isinstance(node.func, ast.Attribute) and fname in (
+                "items",
+                "keys",
+                "values",
+                "split",
+                "copy",
+                "strip",
+                "lower",
+                "upper",
+            ):
                 return self.length_of(node.func.value)
             if fname in ("enumerate", "reversed", "sorted", "list", "set", "tuple", "iter") and node.args:
                 return self.length_of(node.args[0])
@@ -423,18 +484,30 @@ class FunctionShape:
         if isinstance(arg, ast.Subscript) and isinstance(arg.slice, ast.Slice):
             return True
         if isinstance(arg, ast.Name):
-            return arg.id in self.containers or arg.id in self.elements or (
-                arg.id in self.params and self.used_as_collection(arg.id))
+            return (
+                arg.id in self.containers
+                or arg.id in self.elements
+                or (arg.id in self.params and self.used_as_collection(arg.id))
+            )
         return False
 
     def used_as_collection(self, name):
         for node in self.walk():
-            if isinstance(node, ast.Call) and _call_name(node) == "len" and node.args \
-                    and isinstance(node.args[0], ast.Name) and node.args[0].id == name:
+            if (
+                isinstance(node, ast.Call)
+                and _call_name(node) == "len"
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == name
+            ):
                 return True
             if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == name:
                 return True
-            if isinstance(node, (ast.For, ast.comprehension)) and isinstance(node.iter, ast.Name) and node.iter.id == name:
+            if (
+                isinstance(node, (ast.For, ast.comprehension))
+                and isinstance(node.iter, ast.Name)
+                and node.iter.id == name
+            ):
                 return True
         return False
 
@@ -468,8 +541,7 @@ class FunctionShape:
         header = ast.unparse(it)
         target = node.target
         # Remember what the loop variable counts through, or is an item of.
-        names = [target] if isinstance(target, ast.Name) else [
-            t for t in ast.walk(target) if isinstance(t, ast.Name)]
+        names = [target] if isinstance(target, ast.Name) else [t for t in ast.walk(target) if isinstance(t, ast.Name)]
         is_range = isinstance(it, ast.Call) and _call_name(it) == "range"
         for t in names:
             if is_range or (isinstance(it, ast.Call) and _call_name(it) == "enumerate" and t is names[0]):
@@ -486,9 +558,17 @@ class FunctionShape:
 
     def collection_of(self, it):
         """The SizeRef of the collection a for loop walks, for its items."""
-        if isinstance(it, ast.Call) and _call_name(it) in ("enumerate", "reversed", "sorted", "zip", "list") and it.args:
+        if (
+            isinstance(it, ast.Call)
+            and _call_name(it) in ("enumerate", "reversed", "sorted", "zip", "list")
+            and it.args
+        ):
             return self.collection_of(it.args[0])
-        if isinstance(it, ast.Call) and isinstance(it.func, ast.Attribute) and _call_name(it) in ("items", "values", "keys"):
+        if (
+            isinstance(it, ast.Call)
+            and isinstance(it.func, ast.Attribute)
+            and _call_name(it) in ("items", "values", "keys")
+        ):
             return self.collection_of(it.func.value)
         if isinstance(it, ast.Name):
             alias = self.aliases.get(it.id)
@@ -503,8 +583,11 @@ class FunctionShape:
         for sub in _walk_shallow(ast.Module(body=node.body, type_ignores=[])):
             if isinstance(sub, ast.AugAssign) and isinstance(sub.target, ast.Name):
                 op = sub.op
-                if isinstance(op, (ast.FloorDiv, ast.RShift, ast.Div)) or (isinstance(op, ast.Mult) and _is_const(sub.value)) \
-                        or (isinstance(op, ast.LShift)):
+                if (
+                    isinstance(op, (ast.FloorDiv, ast.RShift, ast.Div))
+                    or (isinstance(op, ast.Mult) and _is_const(sub.value))
+                    or (isinstance(op, ast.LShift))
+                ):
                     changes[sub.target.id] = "log"
                 elif isinstance(op, (ast.Add, ast.Sub)):
                     changes.setdefault(sub.target.id, "step")
@@ -515,13 +598,21 @@ class FunctionShape:
                             continue
                         if _halves(v) or self.uses_mid(v):
                             changes[t.id] = "log"
-                        elif isinstance(v, ast.Attribute) and isinstance(v.value, (ast.Name, ast.Attribute)) \
-                                and self.root_name(v) == t.id:
+                        elif (
+                            isinstance(v, ast.Attribute)
+                            and isinstance(v.value, (ast.Name, ast.Attribute))
+                            and self.root_name(v) == t.id
+                        ):
                             changes[t.id] = "follow"
                         elif isinstance(v, ast.Name) and self.follows(v.id, t.id, node.body):
                             changes[t.id] = "follow"
-                        elif isinstance(v, ast.BinOp) and isinstance(v.left, ast.Name) and v.left.id == t.id \
-                                and isinstance(v.op, (ast.Add, ast.Sub)) and _is_const(v.right):
+                        elif (
+                            isinstance(v, ast.BinOp)
+                            and isinstance(v.left, ast.Name)
+                            and v.left.id == t.id
+                            and isinstance(v.op, (ast.Add, ast.Sub))
+                            and _is_const(v.right)
+                        ):
                             changes.setdefault(t.id, "step")
 
         # Halving: binary search, n //= 2
@@ -535,8 +626,11 @@ class FunctionShape:
         if follows:
             root = self.structure_root(follows[0])
             if root:
-                return {"kind": "size", "sizes": [{"name": root, "len": True}],
-                        "why": header + " (follows ." + self.follow_attr(follows[0], node.body) + ")"}
+                return {
+                    "kind": "size",
+                    "sizes": [{"name": root, "len": True}],
+                    "why": header + " (follows ." + self.follow_attr(follows[0], node.body) + ")",
+                }
         # Counting: while i < n: i += 1
         steps = [n for n in changes if changes[n] == "step" and n in test_names]
         if steps:
@@ -563,8 +657,11 @@ class FunctionShape:
 
     @staticmethod
     def pairs(target, value):
-        if isinstance(target, (ast.Tuple, ast.List)) and isinstance(value, (ast.Tuple, ast.List)) \
-                and len(target.elts) == len(value.elts):
+        if (
+            isinstance(target, (ast.Tuple, ast.List))
+            and isinstance(value, (ast.Tuple, ast.List))
+            and len(target.elts) == len(value.elts)
+        ):
             return list(zip(target.elts, value.elts))
         return [(target, value)]
 
@@ -629,8 +726,7 @@ class FunctionShape:
 
     def build(self):
         body = self.block(self.body)
-        return {"name": self.name, "line": self.line, "params": self.params,
-                "memo": self.is_memoized(), "body": body}
+        return {"name": self.name, "line": self.line, "params": self.params, "memo": self.is_memoized(), "body": body}
 
     def block(self, stmts, in_loop=False):
         out = []
@@ -640,13 +736,21 @@ class FunctionShape:
             if isinstance(stmt, (ast.For, ast.AsyncFor)):
                 out.extend(self.expr(stmt.iter, in_loop))
                 bound = self.for_bound(stmt)
-                out.append({"kind": "loop", "loop": "L%d" % stmt.lineno, "line": stmt.lineno, "bound": bound,
-                            "body": self.block(stmt.body + stmt.orelse, True)})
+                out.append(
+                    {
+                        "kind": "loop",
+                        "loop": "L%d" % stmt.lineno,
+                        "line": stmt.lineno,
+                        "bound": bound,
+                        "body": self.block(stmt.body + stmt.orelse, True),
+                    }
+                )
             elif isinstance(stmt, ast.While):
                 bound = self.while_bound(stmt)
                 body = self.expr(stmt.test, True) + self.block(stmt.body + stmt.orelse, True)
-                out.append({"kind": "loop", "loop": "L%d" % stmt.lineno, "line": stmt.lineno, "bound": bound,
-                            "body": body})
+                out.append(
+                    {"kind": "loop", "loop": "L%d" % stmt.lineno, "line": stmt.lineno, "bound": bound, "body": body}
+                )
             elif isinstance(stmt, ast.If):
                 out.extend(self.expr(stmt.test, in_loop))
                 out.extend(self.block(stmt.body, in_loop))
@@ -682,25 +786,58 @@ class FunctionShape:
             sizes = self.alloc_sizes(value)
             simple = len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
             if sizes:
-                out.append({"kind": "alloc", "line": stmt.lineno, "what": ast.unparse(value)[:40], "sizes": sizes,
-                            **({"name": stmt.targets[0].id} if simple else {})})
+                out.append(
+                    {
+                        "kind": "alloc",
+                        "line": stmt.lineno,
+                        "what": ast.unparse(value)[:40],
+                        "sizes": sizes,
+                        **({"name": stmt.targets[0].id} if simple else {}),
+                    }
+                )
             for target in stmt.targets:
                 # node.children[ch] = TrieNode(): a structure growing by a new object
-                if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Attribute) \
-                        and isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id[:1].isupper():
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Attribute)
+                    and isinstance(value, ast.Call)
+                    and isinstance(value.func, ast.Name)
+                    and value.func.id[:1].isupper()
+                ):
                     base = _dotted(target.value)
                     if base:
-                        out.append({"kind": "alloc", "line": stmt.lineno, "what": base + "[...] = " + value.func.id + "()",
-                                    "sizes": [], "into": base})
-                if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name) \
-                        and self.containers.get(target.value.id) == "dict":
-                    out.append({"kind": "alloc", "line": stmt.lineno, "what": target.value.id + "[...] = ...", "sizes": [],
-                                "into": target.value.id})
+                        out.append(
+                            {
+                                "kind": "alloc",
+                                "line": stmt.lineno,
+                                "what": base + "[...] = " + value.func.id + "()",
+                                "sizes": [],
+                                "into": base,
+                            }
+                        )
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Name)
+                    and self.containers.get(target.value.id) == "dict"
+                ):
+                    out.append(
+                        {
+                            "kind": "alloc",
+                            "line": stmt.lineno,
+                            "what": target.value.id + "[...] = ...",
+                            "sizes": [],
+                            "into": target.value.id,
+                        }
+                    )
         return out
 
     def alloc_sizes(self, value):
         """Sizes multiplied together if value makes a new collection sized by them, else None."""
-        if isinstance(value, ast.BinOp) and isinstance(value.op, ast.Mult) and isinstance(value.left, (ast.List, ast.Tuple)):
+        if (
+            isinstance(value, ast.BinOp)
+            and isinstance(value.op, ast.Mult)
+            and isinstance(value.left, (ast.List, ast.Tuple))
+        ):
             ref = self.size_of(value.right, allow_value=True)
             return [ref] if ref and ref != "const" else None
         if isinstance(value, ast.BinOp) and isinstance(value.op, ast.Add):
@@ -722,7 +859,10 @@ class FunctionShape:
             return [ref] if ref and ref != "const" else None
         if isinstance(value, ast.Call):
             name = _call_name(value)
-            if name in ("list", "sorted", "set", "dict", "tuple", "deque", "Counter", "copy", "frozenset") and value.args:
+            if (
+                name in ("list", "sorted", "set", "dict", "tuple", "deque", "Counter", "copy", "frozenset")
+                and value.args
+            ):
                 ref = self.length_of(value.args[0])
                 return [ref] if ref and ref != "const" else None
             if name == "copy" and isinstance(value.func, ast.Attribute):
@@ -757,15 +897,30 @@ class FunctionShape:
                         continue
                     ref = self.length_of(right)
                     if ref and ref != "const":
-                        out.append({"kind": "op", "line": node.lineno, "what": "in " + ast.unparse(right)[:30],
-                                    "cost": "linear", "size": ref, **({"container": container} if container else {})})
+                        out.append(
+                            {
+                                "kind": "op",
+                                "line": node.lineno,
+                                "what": "in " + ast.unparse(right)[:30],
+                                "cost": "linear",
+                                "size": ref,
+                                **({"container": container} if container else {}),
+                            }
+                        )
             return out
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice) and isinstance(node.ctx, ast.Load):
             out.extend(self.expr(node.value, in_loop))
             ref = self.length_of(node)
             if ref and ref != "const":
-                out.append({"kind": "op", "line": node.lineno, "what": ast.unparse(node)[:30] + " (copies)",
-                            "cost": "linear", "size": ref})
+                out.append(
+                    {
+                        "kind": "op",
+                        "line": node.lineno,
+                        "what": ast.unparse(node)[:30] + " (copies)",
+                        "cost": "linear",
+                        "size": ref,
+                    }
+                )
             return out
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.expr):
@@ -799,29 +954,70 @@ class FunctionShape:
         if name in self.user_functions and own_method:
             args = [self.arg_ref(a) for a in node.args]
             shrink = self.shrink(node) if name == self.name else "same"
-            out.append({"kind": "call", "line": line, "callee": name, "args": args, "shrink": shrink,
-                        **({"alt": True} if id(node) in self.returned else {})})
+            out.append(
+                {
+                    "kind": "call",
+                    "line": line,
+                    "callee": name,
+                    "args": args,
+                    "shrink": shrink,
+                    **({"alt": True} if id(node) in self.returned else {}),
+                }
+            )
             return out
         if name in LOG_FUNCTIONS and node.args:
             ref = self.length_of(node.args[0])
-            out.append({"kind": "op", "line": line, "what": name + "()", "cost": "log",
-                        "size": ref if ref != "const" else None})
+            out.append(
+                {
+                    "kind": "op",
+                    "line": line,
+                    "what": name + "()",
+                    "cost": "log",
+                    "size": ref if ref != "const" else None,
+                }
+            )
             if name in ("heappush", "insort", "insort_left", "insort_right"):
                 into = _dotted(node.args[0])
-                out.append({"kind": "alloc", "line": line, "what": name + "()", "sizes": [], **({"into": into} if into else {})})
+                out.append(
+                    {
+                        "kind": "alloc",
+                        "line": line,
+                        "what": name + "()",
+                        "sizes": [],
+                        **({"into": into} if into else {}),
+                    }
+                )
             return out
         if not is_method and name in LINEAR_BUILTINS and len(node.args) == 1:
             ref = self.length_of(node.args[0])
             if ref and ref != "const":
-                copies = " (copies)" if name in ("sorted", "list", "tuple", "set", "frozenset", "dict", "deque", "Counter") else ""
-                out.append({"kind": "op", "line": line, "what": name + "()" + copies, "size": ref,
-                            "cost": "nlogn" if name == "sorted" else "linear"})
+                copies = (
+                    " (copies)"
+                    if name in ("sorted", "list", "tuple", "set", "frozenset", "dict", "deque", "Counter")
+                    else ""
+                )
+                out.append(
+                    {
+                        "kind": "op",
+                        "line": line,
+                        "what": name + "()" + copies,
+                        "size": ref,
+                        "cost": "nlogn" if name == "sorted" else "linear",
+                    }
+                )
             return out
         if is_method and receiver:
             kind = self.containers.get(receiver)
             if name == "sort":
-                out.append({"kind": "op", "line": line, "what": receiver + ".sort()", "cost": "nlogn",
-                            "size": self.length_of(node.func.value)})
+                out.append(
+                    {
+                        "kind": "op",
+                        "line": line,
+                        "what": receiver + ".sort()",
+                        "cost": "nlogn",
+                        "size": self.length_of(node.func.value),
+                    }
+                )
             elif name == "join" and node.args:
                 ref = self.length_of(node.args[0])
                 if ref and ref != "const":
@@ -829,20 +1025,48 @@ class FunctionShape:
             elif name in ("index", "count", "remove", "reverse", "copy") or (name == "insert" and kind != "dict"):
                 ref = self.length_of(node.func.value)
                 if ref and ref != "const":
-                    out.append({"kind": "op", "line": line, "what": receiver + "." + name + "()", "cost": "linear",
-                                "size": ref, "container": receiver})
+                    out.append(
+                        {
+                            "kind": "op",
+                            "line": line,
+                            "what": receiver + "." + name + "()",
+                            "cost": "linear",
+                            "size": ref,
+                            "container": receiver,
+                        }
+                    )
             elif name == "pop" and node.args and _is_const(node.args[0]) and getattr(node.args[0], "value", None) == 0:
                 ref = self.length_of(node.func.value)
                 if ref and ref != "const":
-                    out.append({"kind": "op", "line": line, "what": receiver + ".pop(0)", "cost": "linear",
-                                "size": ref, "container": receiver})
+                    out.append(
+                        {
+                            "kind": "op",
+                            "line": line,
+                            "what": receiver + ".pop(0)",
+                            "cost": "linear",
+                            "size": ref,
+                            "container": receiver,
+                        }
+                    )
             elif name == "extend" and node.args:
                 ref = self.length_of(node.args[0])
                 if ref and ref != "const":
-                    out.append({"kind": "op", "line": line, "what": receiver + ".extend()", "cost": "linear", "size": ref})
-                    out.append({"kind": "alloc", "line": line, "what": receiver + ".extend()", "sizes": [ref], "into": receiver})
+                    out.append(
+                        {"kind": "op", "line": line, "what": receiver + ".extend()", "cost": "linear", "size": ref}
+                    )
+                    out.append(
+                        {
+                            "kind": "alloc",
+                            "line": line,
+                            "what": receiver + ".extend()",
+                            "sizes": [ref],
+                            "into": receiver,
+                        }
+                    )
             if name in GROW_METHODS and name != "extend":
-                out.append({"kind": "alloc", "line": line, "what": receiver + "." + name + "()", "sizes": [], "into": receiver})
+                out.append(
+                    {"kind": "alloc", "line": line, "what": receiver + "." + name + "()", "sizes": [], "into": receiver}
+                )
         return out
 
     def shrink(self, call):
@@ -884,8 +1108,13 @@ class FunctionShape:
             if any(_halves(b) or ({n.id for n in ast.walk(b) if isinstance(n, ast.Name)} & self.mids) for b in bounds):
                 return "half"
             return "minus"
-        if isinstance(arg, ast.BinOp) and isinstance(arg.op, (ast.Add, ast.Sub)) and _is_const(arg.right) \
-                and isinstance(arg.left, ast.Name) and arg.left.id in self.params:
+        if (
+            isinstance(arg, ast.BinOp)
+            and isinstance(arg.op, (ast.Add, ast.Sub))
+            and _is_const(arg.right)
+            and isinstance(arg.left, ast.Name)
+            and arg.left.id in self.params
+        ):
             return "minus"
         return "unknown"
 
@@ -897,9 +1126,12 @@ class FunctionShape:
         # if n in memo: return memo[n] ... memo[n] = ...
         checked, stored = set(), set()
         for node in self.walk():
-            if isinstance(node, ast.If) and isinstance(node.test, ast.Compare) \
-                    and any(isinstance(op, ast.In) for op in node.test.ops) \
-                    and any(isinstance(s, ast.Return) for s in node.body):
+            if (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Compare)
+                and any(isinstance(op, ast.In) for op in node.test.ops)
+                and any(isinstance(s, ast.Return) for s in node.body)
+            ):
                 container = _dotted(node.test.comparators[0])
                 if container:
                     checked.add(container)
@@ -919,7 +1151,12 @@ def explorations(shape):
     moves = {}
     for args in shape.recursive_args:
         for param, arg in args:
-            if isinstance(arg, ast.BinOp) and isinstance(arg.left, ast.Name) and arg.left.id == param and _is_const(arg.right):
+            if (
+                isinstance(arg, ast.BinOp)
+                and isinstance(arg.left, ast.Name)
+                and arg.left.id == param
+                and _is_const(arg.right)
+            ):
                 moves.setdefault(param, set()).add(type(arg.op).__name__)
     return any(len(ops) > 1 for ops in moves.values())
 
@@ -936,8 +1173,14 @@ def cost_analysis(tree):
     for name, node in user_functions.items():
         params = [a.arg for a in node.args.posonlyargs + node.args.args if a.arg not in ("self", "cls")]
         shape = FunctionShape(name, node.lineno, params, node.body, user_functions, False)
-        shape.decorators = [(_call_name(d) if isinstance(d, ast.Call) else (d.attr if isinstance(d, ast.Attribute) else getattr(d, "id", "")))
-                            for d in node.decorator_list]
+        shape.decorators = [
+            (
+                _call_name(d)
+                if isinstance(d, ast.Call)
+                else (d.attr if isinstance(d, ast.Attribute) else getattr(d, "id", ""))
+            )
+            for d in node.decorator_list
+        ]
         built = shape.build()
         if explorations(shape):
             for call in iter_calls(built["body"]):
@@ -1020,6 +1263,8 @@ def size64(v):
 def list_capacity(v):
     """How many items a list has room for before it has to grow."""
     return (sys.getsizeof(v) - EMPTY_LIST) // POINTER
+
+
 SEQUENCE_TYPES = (list, tuple, set, frozenset, deque)
 
 
@@ -1089,7 +1334,7 @@ def strip_of(seq):
         if type(x) is bool:
             x = int(x)
         elif type(x) is int:
-            if abs(x) > 2 ** 53:
+            if abs(x) > 2**53:
                 return None
         elif type(x) is float:
             if x != x or x in (float("inf"), float("-inf")):
@@ -1139,6 +1384,7 @@ class Serializer:
                 def forget(ids=self.ids, key=key):
                     ids.pop(key, None)
                     ids["__retired__"] = ids.get("__retired__", 0) + 1
+
                 weakref.finalize(v, forget)
             else:
                 # Keep every other object we have ever seen alive for the
@@ -1176,16 +1422,28 @@ class Serializer:
             if kind != "set" and n > MAX_ITEMS:
                 indices = self.focus.get(id(v))
                 start = window_start(indices, n) if indices else 0
-                out = {"kind": kind, "id": oid, "typeName": type_name,
-                       "items": self.items(v[start:start + MAX_ITEMS]), "length": n, "size": size64(v)}
+                out = {
+                    "kind": kind,
+                    "id": oid,
+                    "typeName": type_name,
+                    "items": self.items(v[start : start + MAX_ITEMS]),
+                    "length": n,
+                    "size": size64(v),
+                }
                 if start:
                     out["offset"] = start
                 strip = strip_of(v)
                 if strip is not None:
                     out["strip"] = strip
             else:
-                out = {"kind": kind, "id": oid, "typeName": type_name,
-                       "items": self.items(v), "length": n, "size": size64(v)}
+                out = {
+                    "kind": kind,
+                    "id": oid,
+                    "typeName": type_name,
+                    "items": self.items(v),
+                    "length": n,
+                    "size": size64(v),
+                }
             if type(v) is list:
                 out["capacity"] = list_capacity(v)
             return out
@@ -1196,8 +1454,14 @@ class Serializer:
                 if index >= MAX_ITEMS:
                     break
                 entries.append([self.value(key), self.value(val)])
-            return {"kind": "dict", "id": oid, "typeName": type_name,
-                    "entries": entries, "length": len(v), "size": size64(v)}
+            return {
+                "kind": "dict",
+                "id": oid,
+                "typeName": type_name,
+                "entries": entries,
+                "length": len(v),
+                "size": size64(v),
+            }
 
         if isinstance(v, PAUSABLE_OBJECTS):
             return {"kind": "opaque", "id": oid, "typeName": type_name, "repr": pausable_state(v)}
@@ -1212,13 +1476,27 @@ class Serializer:
                         fields.append([name, self.value(cell.cell_contents)])
                     except ValueError:  # empty cell
                         fields.append([name, {"kind": "prim", "type": "unbound", "repr": "?"}])
-            return {"kind": "function", "id": oid, "typeName": type_name,
-                    "name": v.__name__, "params": params, "fields": fields, "builtin": False,
-                    "size": size64(v)}
+            return {
+                "kind": "function",
+                "id": oid,
+                "typeName": type_name,
+                "name": v.__name__,
+                "params": params,
+                "fields": fields,
+                "builtin": False,
+                "size": size64(v),
+            }
 
         if isinstance(v, (types.BuiltinFunctionType, types.BuiltinMethodType)):
-            return {"kind": "function", "id": oid, "typeName": type_name,
-                    "name": getattr(v, "__name__", "?"), "params": [], "fields": [], "builtin": True}
+            return {
+                "kind": "function",
+                "id": oid,
+                "typeName": type_name,
+                "name": getattr(v, "__name__", "?"),
+                "params": [],
+                "fields": [],
+                "builtin": True,
+            }
 
         if isinstance(v, type):
             return {"kind": "class", "id": oid, "typeName": "type", "name": v.__name__, "size": size64(v)}
@@ -1246,13 +1524,17 @@ class Serializer:
                 attrs = {name: getattr(v, name) for name in slots if hasattr(v, name)}
         if attrs is None:
             return None
-        return [[name, self.value(val)] for name, val in attrs.items()
-                if not (name.startswith("__") and name.endswith("__"))]
+        return [
+            [name, self.value(val)]
+            for name, val in attrs.items()
+            if not (name.startswith("__") and name.endswith("__"))
+        ]
 
 
 # ---------------------------------------------------------------------------
 # The tracer
 # ---------------------------------------------------------------------------
+
 
 class Tracer:
     def __init__(self, source, max_steps, max_seconds=TRACE_SECONDS):
@@ -1269,7 +1551,7 @@ class Tracer:
         self.frame_counter = 0
         self.loops = []
         self.index_names = {}
-        self.prev_heap = {}       # the last committed step's full heap (see commit)
+        self.prev_heap = {}  # the last committed step's full heap (see commit)
         # Loop bookkeeping, keyed by frame id
         self.last_line = {}
         self.active_loops = {}
@@ -1282,8 +1564,8 @@ class Tracer:
         self.unwinding = set()
         # Everything that happens is counted, recorded or not.
         self.counts = {"steps": 0, "calls": {}, "depth": {}}
-        self.skipped = 0          # events not recorded since the last recorded step
-        self.considered = 0       # steps recorded or buffered (for a loop's share of the budget)
+        self.skipped = 0  # events not recorded since the last recorded step
+        self.considered = 0  # steps recorded or buffered (for a loop's share of the budget)
         self.sampled = False
         self.stopped_by = None
         self.deadline = None
@@ -1295,9 +1577,9 @@ class Tracer:
         # a line running again and again (a comprehension, a one-line loop
         # body), and a function called again and again from one line (a
         # callback that map(), sorted() or a generator expression calls).
-        self.repeats = {}         # frame id -> {"line", "state"}
-        self.callbacks = None     # {"key", "state"}: the current run of repeated calls
-        self.callback_of = {}     # callee frame id -> that run's state
+        self.repeats = {}  # frame id -> {"line", "state"}
+        self.callbacks = None  # {"key", "state"}: the current run of repeated calls
+        self.callback_of = {}  # callee frame id -> that run's state
 
     # -- identity ----------------------------------------------------------
 
@@ -1329,13 +1611,12 @@ class Tracer:
             state = active.get(lid)
 
             if state is not None and not (in_body or on_header):
-                del active[lid]          # left the loop
+                del active[lid]  # left the loop
                 continue
             if state is None and on_header:
                 count = self.loop_instances.get((fid, lid), 0) + 1
                 self.loop_instances[(fid, lid)] = count
-                active[lid] = {"instance": count, "iteration": 0, "total": None, "mode": None,
-                               "start": self.considered}
+                active[lid] = {"instance": count, "iteration": 0, "total": None, "mode": None, "start": self.considered}
             elif state is not None and in_body and not on_header and prev == loop["line"]:
                 state["iteration"] += 1
                 self.new_pass(state)
@@ -1405,7 +1686,12 @@ class Tracer:
             key = (caller_id, caller.f_lineno, frame.f_code)
             run = self.callbacks
             if run is None or run["key"] != key:
-                run = self.callbacks = {"key": key, "caller": caller_id, "line": caller.f_lineno, "state": self.pseudo_state()}
+                run = self.callbacks = {
+                    "key": key,
+                    "caller": caller_id,
+                    "line": caller.f_lineno,
+                    "state": self.pseudo_state(),
+                }
             run["state"]["iteration"] += 1
             self.new_pass(run["state"])
             self.callback_of[fid] = run["state"]
@@ -1434,9 +1720,12 @@ class Tracer:
             for loop in self.loops:
                 state = active.get(loop["id"])
                 if state is not None:
-                    ctx = {"frame": fid, "loop": loop["id"],
-                           "instance": state["instance"],
-                           "iteration": state["iteration"]}
+                    ctx = {
+                        "frame": fid,
+                        "loop": loop["id"],
+                        "instance": state["instance"],
+                        "iteration": state["iteration"],
+                    }
                     if "call" in state:
                         ctx["call"] = state["call"]
                     context.append(ctx)
@@ -1479,8 +1768,7 @@ class Tracer:
 
         stack = [describe(fr) for fr in frames]
         on_stack = {s["id"] for s in stack}
-        suspended = [dict(describe(fr), state="suspended")
-                     for fid, fr in self.suspended.items() if fid not in on_stack]
+        suspended = [dict(describe(fr), state="suspended") for fid, fr in self.suspended.items() if fid not in on_stack]
 
         step = {
             "event": event,
@@ -1619,8 +1907,12 @@ class Tracer:
             self.suspended.pop(fid, None)
         elif event == "exception":
             exc_type = arg[0]
-            if pausable and issubclass(exc_type, (StopIteration, StopAsyncIteration)) and frame.f_lasti >= 0 \
-                    and code.co_code[frame.f_lasti] in AWAIT_PLUMBING:
+            if (
+                pausable
+                and issubclass(exc_type, (StopIteration, StopAsyncIteration))
+                and frame.f_lasti >= 0
+                and code.co_code[frame.f_lasti] in AWAIT_PLUMBING
+            ):
                 return self.trace
             self.unwinding.add(fid)
         if event in ("call", "line", "return", "exception", "resume", "yield", "await"):
@@ -1706,8 +1998,17 @@ class Tracer:
         return print
 
     def run(self):
-        result = {"version": 1, "language": "python", "steps": self.steps, "loops": [], "indexNames": {}, "heapDelta": True,
-                  "stdout": "", "error": None, "truncated": False}
+        result = {
+            "version": 1,
+            "language": "python",
+            "steps": self.steps,
+            "loops": [],
+            "indexNames": {},
+            "heapDelta": True,
+            "stdout": "",
+            "error": None,
+            "truncated": False,
+        }
         try:
             self.loops, result["indexNames"], accesses = analyze(self.source)
             if accesses:
@@ -1730,15 +2031,18 @@ class Tracer:
             tree = LoopLengths().visit(ast.parse(self.source, USER_FILENAME))
             code = compile(ast.fix_missing_locations(tree), USER_FILENAME, "exec")
         except SyntaxError as exc:
-            result["error"] = {"type": "SyntaxError", "message": exc.msg or str(exc),
-                               "line": exc.lineno}
+            result["error"] = {"type": "SyntaxError", "message": exc.msg or str(exc), "line": exc.lineno}
             return result
 
         def no_input(*_args):
             raise RuntimeError("input() isn't supported. Hard-code your test data instead.")
 
-        user_globals = {"__name__": "__main__", "input": no_input, "print": self.make_print(),
-                        "__viz_len__": self.loop_length}
+        user_globals = {
+            "__name__": "__main__",
+            "input": no_input,
+            "print": self.make_print(),
+            "__viz_len__": self.loop_length,
+        }
         # Only programs that mention asyncio pay for importing it.
         uses_asyncio = "asyncio" in self.source
         if uses_asyncio:
@@ -1747,6 +2051,7 @@ class Tracer:
             # standard asyncio.run and no running loop while tracing, then put
             # Pyodide's back.
             import asyncio
+
             saved_asyncio = (asyncio.events._event_loop_policy, asyncio.run, asyncio.events._get_running_loop())
             asyncio.set_event_loop_policy(virtual_loop_policy())
             asyncio.run = asyncio.runners.run
@@ -1762,8 +2067,11 @@ class Tracer:
             result["truncated"] = True
             result["stoppedBy"] = self.stopped_by or "steps"
         except BaseException as exc:  # report every user error, including SystemExit
-            result["error"] = {"type": type(exc).__name__, "message": str(exc),
-                               "line": last_user_line(exc.__traceback__)}
+            result["error"] = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "line": last_user_line(exc.__traceback__),
+            }
         finally:
             sys.settrace(None)
             sys.stdout = old_stdout
@@ -1786,14 +2094,21 @@ class LoopLengths(ast.NodeTransformer):
 
     def visit_For(self, node):
         self.generic_visit(node)
-        node.iter = ast.copy_location(ast.Call(func=ast.Name(id="__viz_len__", ctx=ast.Load()),
-                                               args=[ast.Constant(node.lineno), node.iter], keywords=[]), node.iter)
+        node.iter = ast.copy_location(
+            ast.Call(
+                func=ast.Name(id="__viz_len__", ctx=ast.Load()),
+                args=[ast.Constant(node.lineno), node.iter],
+                keywords=[],
+            ),
+            node.iter,
+        )
         return node
 
 
 # ---------------------------------------------------------------------------
 # asyncio: an event loop with a virtual clock
 # ---------------------------------------------------------------------------
+
 
 def virtual_loop_policy():
     """An event loop policy whose loops run on a virtual clock.

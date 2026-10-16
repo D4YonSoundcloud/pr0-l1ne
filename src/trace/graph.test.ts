@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { expandHeaps } from "./delta";
 import { traceJavaScript } from "../js/trace";
+import { expandHeaps } from "./delta";
 import { computeLayout, findGraphs, graphOverlay, layoutFor, primNodeKey, stepScopes } from "./graph";
 import { applyHints, parseHints } from "./hints";
 import type { Trace } from "./types";
@@ -10,8 +10,14 @@ const js = async (code: string) => applyHints(await traceJavaScript(code));
 
 function py(code: string): Trace | null {
   try {
-    const json = execFileSync("python3", ["-c", "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))"],
-      { input: code, encoding: "utf8" });
+    const json = execFileSync(
+      "python3",
+      [
+        "-c",
+        "import sys; sys.path.insert(0, 'src/worker'); from tracer import run_trace; print(run_trace(sys.stdin.read(), 3000))",
+      ],
+      { input: code, encoding: "utf8" },
+    );
     return applyHints(expandHeaps(JSON.parse(json) as Trace));
   } catch {
     return null;
@@ -24,8 +30,12 @@ const labels = (keys: Iterable<string>) => [...keys].map((k) => k.slice(2)).sort
 
 describe("node keys", () => {
   it("treats a dict key and a list item naming the same node as equal", () => {
-    expect(primNodeKey({ kind: "prim", type: "key", repr: "A" })).toBe(primNodeKey({ kind: "prim", type: "string", repr: '"A"' }));
-    expect(primNodeKey({ kind: "prim", type: "key", repr: "3" })).toBe(primNodeKey({ kind: "prim", type: "number", repr: "3" }));
+    expect(primNodeKey({ kind: "prim", type: "key", repr: "A" })).toBe(
+      primNodeKey({ kind: "prim", type: "string", repr: '"A"' }),
+    );
+    expect(primNodeKey({ kind: "prim", type: "key", repr: "3" })).toBe(
+      primNodeKey({ kind: "prim", type: "number", repr: "3" }),
+    );
     expect(primNodeKey({ kind: "prim", type: "str", repr: "'A'" })).toBe("s:A");
     expect(primNodeKey({ kind: "prim", type: "bool", repr: "True" })).toBeNull();
   });
@@ -40,7 +50,9 @@ describe("finding graphs", () => {
   });
 
   it("finds a directed, weighted Map", async () => {
-    const t = await js(`const g = new Map([["a", new Map([["b", 4]])], ["b", new Map([["c", 1]])], ["c", new Map()]]);`);
+    const t = await js(
+      `const g = new Map([["a", new Map([["b", 4]])], ["b", new Map([["c", 1]])], ["c", new Map()]]);`,
+    );
     const [graph] = graphsAtEnd(t);
     expect(graph.directed).toBe(true);
     expect(graph.edges).toContainEqual({ from: "s:a", to: "s:b", label: "4" });
@@ -101,7 +113,10 @@ const node = "B";`);
     const [g] = graphsAtEnd(t);
     const o = graphOverlay(t, g, stepScopes(last(t)), last(t).heap);
     expect(labels(o.visited.keys())).toEqual(["A", "B"]);
-    expect([...o.frontier]).toEqual([["s:C", 0], ["s:D", 1]]);
+    expect([...o.frontier]).toEqual([
+      ["s:C", 0],
+      ["s:D", 1],
+    ]);
     expect(o.labels.get("s:B")).toBe("1");
     expect([...o.treeEdges]).toEqual(["s:A>s:B"]);
     expect(o.pointers.get("s:B")).toEqual(["node"]);
@@ -112,12 +127,18 @@ const node = "B";`);
 const graph = { a: ["b"], b: ["c"], c: ["a"] };
 const stack = ["a", "b"];`);
     const [g] = graphsAtEnd(t);
-    expect(Object.fromEntries(graphOverlay(t, g, stepScopes(last(t)), last(t).heap).frontier)).toEqual({ "s:b": 0, "s:a": 1 });
+    expect(Object.fromEntries(graphOverlay(t, g, stepScopes(last(t)), last(t).heap).frontier)).toEqual({
+      "s:b": 0,
+      "s:a": 1,
+    });
     const h = await js(`
 const graph = { a: ["b"], b: ["c"], c: ["a"] };
 const heap = [[5, "a"], [1, "c"]];`);
     const [g2] = graphsAtEnd(h);
-    expect(Object.fromEntries(graphOverlay(h, g2, stepScopes(last(h)), last(h).heap).frontier)).toEqual({ "s:c": 0, "s:a": 1 });
+    expect(Object.fromEntries(graphOverlay(h, g2, stepScopes(last(h)), last(h).heap).frontier)).toEqual({
+      "s:c": 0,
+      "s:a": 1,
+    });
   });
 
   it("reads per-node arrays for graphs numbered 0..n-1", async () => {
@@ -159,7 +180,11 @@ u = "A"
 
 describe("layout", () => {
   it("puts a tree in layers, parents above children", () => {
-    const edges = [{ from: "r", to: "a" }, { from: "r", to: "b" }, { from: "a", to: "c" }];
+    const edges = [
+      { from: "r", to: "a" },
+      { from: "r", to: "b" },
+      { from: "a", to: "c" },
+    ];
     const { pos, mode } = computeLayout(["r", "a", "b", "c"], edges, true);
     expect(mode).toBe("layered");
     expect(pos.get("r")!.y).toBe(0);

@@ -4,8 +4,15 @@
  * canvas stays in view and keeps working while you adjust it.
  */
 import {
-  COLOR_FIELDS, EASINGS, FONTS, PRESETS, clone, isEasing,
-  type Appearance, type GridStyle, type PaneStyle,
+  type Appearance,
+  COLOR_FIELDS,
+  clone,
+  EASINGS,
+  FONTS,
+  type GridStyle,
+  isEasing,
+  type PaneStyle,
+  PRESETS,
 } from "./appearance";
 
 export interface StylePanelOptions {
@@ -24,7 +31,11 @@ export interface StylePanelOptions {
 
 type Child = Node | string | null | undefined | false;
 
-export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string | boolean | number> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | boolean | number> = {},
+  ...children: Child[]
+): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [name, value] of Object.entries(attrs)) {
     if (value === false) continue;
@@ -46,14 +57,24 @@ export class StylePanel {
 
   constructor(private readonly options: StylePanelOptions) {
     this.body = h("div", { class: "style-body" });
-    const close = h("button", { type: "button", class: "style-close", "aria-label": "Close style settings", title: "Close (Esc)" }, "×");
+    const close = h(
+      "button",
+      { type: "button", class: "style-close", "aria-label": "Close style settings", title: "Close (Esc)" },
+      "×",
+    );
     close.addEventListener("click", () => this.toggle(false));
-    this.el = h("section", { class: "style-panel", id: "style-panel", role: "dialog", "aria-label": "Canvas style", hidden: true },
-      h("header", { class: "style-head" },
+    this.el = h(
+      "section",
+      { class: "style-panel", id: "style-panel", role: "dialog", "aria-label": "Canvas style", hidden: true },
+      h(
+        "header",
+        { class: "style-head" },
         h("h2", { class: "style-title" }, "Canvas style"),
         h("span", { class: "style-note" }, "Changes apply as you make them"),
-        close),
-      this.body);
+        close,
+      ),
+      this.body,
+    );
     this.el.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -113,7 +134,12 @@ export class StylePanel {
   }
 
   private section(key: string, title: string, content: Node): HTMLElement {
-    const details = h("details", { class: "style-section", open: this.open.has(key) }, h("summary", {}, title), content);
+    const details = h(
+      "details",
+      { class: "style-section", open: this.open.has(key) },
+      h("summary", {}, title),
+      content,
+    );
     details.addEventListener("toggle", () => {
       if (details.open) this.open.add(key);
       else this.open.delete(key);
@@ -139,8 +165,7 @@ export class StylePanel {
       this.options.set(clone(PRESETS[0]));
       this.sync();
     });
-    return h("div", { class: "style-row style-theme" },
-      h("label", { for: id }, "Theme"), this.themeSelect, reset);
+    return h("div", { class: "style-row style-theme" }, h("label", { for: id }, "Theme"), this.themeSelect, reset);
   }
 
   // ---------------------------------------------------------- controls
@@ -157,10 +182,24 @@ export class StylePanel {
       input.value = read();
       hex.textContent = read();
     });
-    return h("div", { class: "style-row" }, h("label", { for: id }, label), h("span", { class: "style-color-wrap" }, input, hex));
+    return h(
+      "div",
+      { class: "style-row" },
+      h("label", { for: id }, label),
+      h("span", { class: "style-color-wrap" }, input, hex),
+    );
   }
 
-  private range(label: string, min: number, max: number, step: number, unit: string, read: () => number, write: (value: number) => void, format = (v: number) => `${v}${unit}`): HTMLElement {
+  private range(
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    unit: string,
+    read: () => number,
+    write: (value: number) => void,
+    format = (v: number) => `${v}${unit}`,
+  ): HTMLElement {
     const id = nextId("range");
     const input = h("input", { id, type: "range", min, max, step, class: "style-range" });
     const out = h("output", { for: id, class: "style-value" });
@@ -175,7 +214,12 @@ export class StylePanel {
     return h("div", { class: "style-row" }, h("label", { for: id }, label), input, out);
   }
 
-  private choice<T extends string>(label: string, choices: { label: string; value: T }[], read: () => T, write: (value: T) => void): HTMLElement {
+  private choice<T extends string>(
+    label: string,
+    choices: { label: string; value: T }[],
+    read: () => T,
+    write: (value: T) => void,
+  ): HTMLElement {
     const group = h("div", { class: "segmented style-segmented", role: "group", "aria-label": label });
     const buttons = choices.map((choice) => {
       const button = h("button", { type: "button", class: "segment", "data-value": choice.value }, choice.label);
@@ -186,7 +230,9 @@ export class StylePanel {
       group.append(button);
       return button;
     });
-    const sync = () => buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === read())));
+    const sync = () => {
+      for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.value === read()));
+    };
     this.syncs.push(sync);
     return h("div", { class: "style-row" }, h("span", { class: "style-label" }, label), group);
   }
@@ -198,24 +244,87 @@ export class StylePanel {
 
     box.append(
       h("h3", { class: "style-subhead" }, "Background"),
-      this.color("Color", () => p().background, (v) => set((s) => { s.background = v; })),
-      this.choice<GridStyle>("Grid", [{ label: "Lines", value: "lines" }, { label: "Dots", value: "dots" }, { label: "None", value: "none" }],
-        () => p().grid, (v) => set((s) => { s.grid = v; })),
-      this.color("Grid color", () => p().gridColor, (v) => set((s) => { s.gridColor = v; })),
-      this.range("Grid size", 8, 64, 2, " px", () => p().gridSize, (v) => set((s) => { s.gridSize = v; })),
+      this.color(
+        "Color",
+        () => p().background,
+        (v) =>
+          set((s) => {
+            s.background = v;
+          }),
+      ),
+      this.choice<GridStyle>(
+        "Grid",
+        [
+          { label: "Lines", value: "lines" },
+          { label: "Dots", value: "dots" },
+          { label: "None", value: "none" },
+        ],
+        () => p().grid,
+        (v) =>
+          set((s) => {
+            s.grid = v;
+          }),
+      ),
+      this.color(
+        "Grid color",
+        () => p().gridColor,
+        (v) =>
+          set((s) => {
+            s.gridColor = v;
+          }),
+      ),
+      this.range(
+        "Grid size",
+        8,
+        64,
+        2,
+        " px",
+        () => p().gridSize,
+        (v) =>
+          set((s) => {
+            s.gridSize = v;
+          }),
+      ),
       h("h3", { class: "style-subhead" }, "Animation between steps"),
       this.easingControls(pane),
-      this.range("Duration", 0, 1000, 10, " ms", () => p().duration, (v) => set((s) => { s.duration = v; }),
-        (v) => (v === 0 ? "off" : `${v} ms`)),
-      this.checkbox("Fade in", () => p().enterFade, (v) => set((s) => { s.enterFade = v; }),
-        "Boxes and values that weren't there a step ago fade in"),
-      this.checkbox("Slide in", () => p().enterSlide, (v) => set((s) => { s.enterSlide = v; }),
-        "Boxes and values that weren't there a step ago slide in from the left, with this window's easing and duration"),
+      this.range(
+        "Duration",
+        0,
+        1000,
+        10,
+        " ms",
+        () => p().duration,
+        (v) =>
+          set((s) => {
+            s.duration = v;
+          }),
+        (v) => (v === 0 ? "off" : `${v} ms`),
+      ),
+      this.checkbox(
+        "Fade in",
+        () => p().enterFade,
+        (v) =>
+          set((s) => {
+            s.enterFade = v;
+          }),
+        "Boxes and values that weren't there a step ago fade in",
+      ),
+      this.checkbox(
+        "Slide in",
+        () => p().enterSlide,
+        (v) =>
+          set((s) => {
+            s.enterSlide = v;
+          }),
+        "Boxes and values that weren't there a step ago slide in from the left, with this window's easing and duration",
+      ),
     );
     if (pane === "loop") {
       const copy = h("button", { type: "button", class: "button quiet small" }, "Same as the memory window");
       copy.addEventListener("click", () => {
-        this.update((a) => { a.loop = { ...a.memory }; });
+        this.update((a) => {
+          a.loop = { ...a.memory };
+        });
         this.sync();
       });
       box.append(h("div", { class: "style-row style-actions" }, copy));
@@ -230,25 +339,55 @@ export class StylePanel {
     const select = h("select", { id, class: "style-select" });
     for (const easing of EASINGS) select.append(new Option(easing.label, easing.value));
     select.append(new Option("Custom…", "custom"));
-    const custom = h("input", { type: "text", class: "style-text", spellcheck: false, "aria-label": "Custom easing", placeholder: "cubic-bezier(0.2, 0.7, 0.2, 1)" });
-    const curve = svg("svg", { class: "easing-curve", viewBox: "-0.1 -0.45 1.2 1.9", width: 58, height: 92, "aria-hidden": "true" });
+    const custom = h("input", {
+      type: "text",
+      class: "style-text",
+      spellcheck: false,
+      "aria-label": "Custom easing",
+      placeholder: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+    });
+    const curve = svg("svg", {
+      class: "easing-curve",
+      viewBox: "-0.1 -0.45 1.2 1.9",
+      width: 58,
+      height: 92,
+      "aria-hidden": "true",
+    });
     const ball = h("span", { class: "easing-ball" });
     const hint = h("span", { class: "easing-hint" }, "▶ Click to preview");
-    const track = h("button", { type: "button", class: "easing-track", title: "Play: the dot moves once with the easing and duration you've chosen" }, hint, ball);
+    const track = h(
+      "button",
+      {
+        type: "button",
+        class: "easing-track",
+        title: "Play: the dot moves once with the easing and duration you've chosen",
+      },
+      hint,
+      ball,
+    );
     // One run across the track, with this window's easing and duration, then back to the start.
     let playing: Animation | null = null;
     track.addEventListener("click", () => {
       const { easing, duration } = read();
       playing?.cancel();
       track.classList.add("is-playing");
-      const run = ball.animate([{ left: "4px" }, { left: "calc(100% - 20px)" }], { duration: Math.max(duration, 1), easing, fill: "forwards" });
+      const run = ball.animate([{ left: "4px" }, { left: "calc(100% - 20px)" }], {
+        duration: Math.max(duration, 1),
+        easing,
+        fill: "forwards",
+      });
       playing = run;
-      run.finished.then(() => new Promise((r) => setTimeout(r, 450))).then(() => {
-        if (playing !== run) return;
-        run.cancel();
-        playing = null;
-        track.classList.remove("is-playing");
-      }).catch(() => { /* cancelled by a newer click */ });
+      run.finished
+        .then(() => new Promise((r) => setTimeout(r, 450)))
+        .then(() => {
+          if (playing !== run) return;
+          run.cancel();
+          playing = null;
+          track.classList.remove("is-playing");
+        })
+        .catch(() => {
+          /* cancelled by a newer click */
+        });
     });
 
     const draw = () => {
@@ -273,21 +412,28 @@ export class StylePanel {
         custom.select();
         return;
       }
-      this.update((a) => { a[pane].easing = select.value; });
+      this.update((a) => {
+        a[pane].easing = select.value;
+      });
       draw();
     });
     custom.addEventListener("input", () => {
       const value = custom.value.trim();
       custom.classList.toggle("is-invalid", !isEasing(value));
       if (!isEasing(value)) return;
-      this.update((a) => { a[pane].easing = value; });
+      this.update((a) => {
+        a[pane].easing = value;
+      });
       draw();
     });
     this.syncs.push(draw);
-    return h("div", { class: "style-easing" },
+    return h(
+      "div",
+      { class: "style-easing" },
       h("div", { class: "style-row" }, h("label", { for: id }, "Easing"), select),
       h("div", { class: "style-row" }, h("span", { class: "style-label" }), custom),
-      h("div", { class: "easing-preview" }, curve, track));
+      h("div", { class: "easing-preview" }, curve, track),
+    );
   }
 
   private colorControls(): HTMLElement {
@@ -298,7 +444,16 @@ export class StylePanel {
         group = field.group;
         box.append(h("h3", { class: "style-subhead" }, group));
       }
-      box.append(this.color(field.label, () => this.options.get().colors[field.key], (v) => this.update((a) => { a.colors[field.key] = v; })));
+      box.append(
+        this.color(
+          field.label,
+          () => this.options.get().colors[field.key],
+          (v) =>
+            this.update((a) => {
+              a.colors[field.key] = v;
+            }),
+        ),
+      );
     }
     return box;
   }
@@ -308,16 +463,64 @@ export class StylePanel {
     const id = nextId("font");
     const font = h("select", { id, class: "style-select" });
     for (const f of FONTS) font.append(new Option(f.label, f.value));
-    font.addEventListener("change", () => this.update((a) => { a.font = font.value; }));
-    this.syncs.push(() => { font.value = get().font; });
+    font.addEventListener("change", () =>
+      this.update((a) => {
+        a.font = font.value;
+      }),
+    );
+    this.syncs.push(() => {
+      font.value = get().font;
+    });
     const flashId = nextId("flash");
     const flash = h("input", { id: flashId, type: "checkbox" });
-    flash.addEventListener("change", () => this.update((a) => { a.flash = flash.checked; }));
-    this.syncs.push(() => { flash.checked = get().flash; });
-    return h("div", { class: "style-group" },
-      this.range("Arrow thickness", 0.5, 3, 0.1, "×", () => get().arrowWidth, (v) => this.update((a) => { a.arrowWidth = v; }), (v) => `${v.toFixed(1)}×`),
-      this.range("Box outlines", 0.5, 3, 0.25, " px", () => get().borderWidth, (v) => this.update((a) => { a.borderWidth = v; })),
-      this.range("Cell corners", 0, 12, 1, " px", () => get().cellRadius, (v) => this.update((a) => { a.cellRadius = v; })),
+    flash.addEventListener("change", () =>
+      this.update((a) => {
+        a.flash = flash.checked;
+      }),
+    );
+    this.syncs.push(() => {
+      flash.checked = get().flash;
+    });
+    return h(
+      "div",
+      { class: "style-group" },
+      this.range(
+        "Arrow thickness",
+        0.5,
+        3,
+        0.1,
+        "×",
+        () => get().arrowWidth,
+        (v) =>
+          this.update((a) => {
+            a.arrowWidth = v;
+          }),
+        (v) => `${v.toFixed(1)}×`,
+      ),
+      this.range(
+        "Box outlines",
+        0.5,
+        3,
+        0.25,
+        " px",
+        () => get().borderWidth,
+        (v) =>
+          this.update((a) => {
+            a.borderWidth = v;
+          }),
+      ),
+      this.range(
+        "Cell corners",
+        0,
+        12,
+        1,
+        " px",
+        () => get().cellRadius,
+        (v) =>
+          this.update((a) => {
+            a.cellRadius = v;
+          }),
+      ),
       h("div", { class: "style-row" }, h("label", { for: id }, "Code font"), font),
       h("div", { class: "style-row" }, h("label", { for: flashId }, "Flash changed cells"), flash),
     );
@@ -328,7 +531,9 @@ export class StylePanel {
     const id = nextId("check");
     const box = h("input", { id, type: "checkbox" });
     box.addEventListener("change", () => write(box.checked));
-    this.syncs.push(() => { box.checked = read(); });
+    this.syncs.push(() => {
+      box.checked = read();
+    });
     return h("div", { class: "style-row", title }, h("label", { for: id }, label), box);
   }
 
@@ -336,12 +541,38 @@ export class StylePanel {
   private outputControls(): HTMLElement {
     const get = () => this.options.get().output;
     const toggle = (label: string, key: "fade" | "slide" | "dimFade", title: string) =>
-      this.checkbox(label, () => get()[key], (v) => this.update((a) => { a.output[key] = v; }), title);
-    return h("div", { class: "style-group" },
+      this.checkbox(
+        label,
+        () => get()[key],
+        (v) =>
+          this.update((a) => {
+            a.output[key] = v;
+          }),
+        title,
+      );
+    return h(
+      "div",
+      { class: "style-group" },
       toggle("Fade in", "fade", "The card fades in on a step that prints"),
       toggle("Slide in", "slide", "The card slides in from the left"),
-      toggle("Fade the dimming", "dimFade", "With Dim others on, the rest fades down and back up, instead of switching at once"),
-      this.range("Duration", 0, 1000, 20, " ms", () => get().duration, (v) => this.update((a) => { a.output.duration = v; }), (v) => `${v} ms`),
+      toggle(
+        "Fade the dimming",
+        "dimFade",
+        "With Dim others on, the rest fades down and back up, instead of switching at once",
+      ),
+      this.range(
+        "Duration",
+        0,
+        1000,
+        20,
+        " ms",
+        () => get().duration,
+        (v) =>
+          this.update((a) => {
+            a.output.duration = v;
+          }),
+        (v) => `${v} ms`,
+      ),
       h("p", { class: "style-note style-hint" }, "Turn both Fade in and Slide in off for a card that just appears."),
     );
   }
@@ -350,8 +581,7 @@ export class StylePanel {
     const replay = h("button", { type: "button", class: "button small" }, "▶ Replay this step");
     replay.title = "Animate from the previous step to this one, to see the easing";
     replay.addEventListener("click", () => this.options.replay());
-    return h("footer", { class: "style-foot" }, replay,
-      h("span", { class: "style-note" }, "Saved in this browser."));
+    return h("footer", { class: "style-foot" }, replay, h("span", { class: "style-note" }, "Saved in this browser."));
   }
 }
 
@@ -365,7 +595,11 @@ function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
 /** Control points of an easing, for drawing its curve. */
 export function bezierPoints(easing: string): [number, number, number, number] {
   const named: Record<string, [number, number, number, number]> = {
-    linear: [0, 0, 1, 1], ease: [0.25, 0.1, 0.25, 1], "ease-in": [0.42, 0, 1, 1], "ease-out": [0, 0, 0.58, 1], "ease-in-out": [0.42, 0, 0.58, 1],
+    linear: [0, 0, 1, 1],
+    ease: [0.25, 0.1, 0.25, 1],
+    "ease-in": [0.42, 0, 1, 1],
+    "ease-out": [0, 0, 0.58, 1],
+    "ease-in-out": [0.42, 0, 0.58, 1],
   };
   if (named[easing]) return named[easing];
   const m = /cubic-bezier\(([^)]*)\)/.exec(easing);

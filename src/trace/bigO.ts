@@ -111,22 +111,30 @@ export function equal(a: BigO, b: BigO): boolean {
 
 /** Rename sizes (a callee's parameter to the caller's argument). Merges terms that become equal. */
 export function rename(x: BigO, map: (sym: string) => string): BigO {
-  return simplify(x.map((t) => {
-    const out = term();
-    for (const [s, p] of Object.entries(t.pow)) out.pow[map(s)] = (out.pow[map(s)] ?? 0) + p;
-    for (const [s, p] of Object.entries(t.log)) out.log[map(s)] = (out.log[map(s)] ?? 0) + p;
-    for (const [s, b] of Object.entries(t.exp)) out.exp[map(s)] = (out.exp[map(s)] ?? 1) * b;
-    for (const [s, k] of Object.entries(t.fact)) out.fact[map(s)] = (out.fact[map(s)] ?? 0) + k;
-    return out;
-  }));
+  return simplify(
+    x.map((t) => {
+      const out = term();
+      for (const [s, p] of Object.entries(t.pow)) out.pow[map(s)] = (out.pow[map(s)] ?? 0) + p;
+      for (const [s, p] of Object.entries(t.log)) out.log[map(s)] = (out.log[map(s)] ?? 0) + p;
+      for (const [s, b] of Object.entries(t.exp)) out.exp[map(s)] = (out.exp[map(s)] ?? 1) * b;
+      for (const [s, k] of Object.entries(t.fact)) out.fact[map(s)] = (out.fact[map(s)] ?? 0) + k;
+      return out;
+    }),
+  );
 }
 
 /** Replace one size with an expression: n → V·d becomes E when d is E/V. */
 export function substitute(x: BigO, sym: string, by: BigO): BigO {
   const out: Term[] = [];
   for (const t of x) {
-    if (!symbols(t).has(sym)) { out.push(t); continue; }
-    if (t.exp[sym] || t.fact[sym] || t.log[sym]) { out.push(t); continue; } // only plain powers are rewritten
+    if (!symbols(t).has(sym)) {
+      out.push(t);
+      continue;
+    }
+    if (t.exp[sym] || t.fact[sym] || t.log[sym]) {
+      out.push(t);
+      continue;
+    } // only plain powers are rewritten
     const p = t.pow[sym];
     const rest = term({ pow: { ...t.pow }, log: { ...t.log }, exp: { ...t.exp }, fact: { ...t.fact } });
     delete rest.pow[sym];
@@ -174,10 +182,61 @@ function factorial(n: number): number {
 // ---------------------------------------------------------------------------
 
 const SUPERSCRIPT: Record<string, string> = {
-  "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", ".": "·",
-  a: "ᵃ", b: "ᵇ", c: "ᶜ", d: "ᵈ", e: "ᵉ", f: "ᶠ", g: "ᵍ", h: "ʰ", i: "ⁱ", j: "ʲ", k: "ᵏ", l: "ˡ", m: "ᵐ", n: "ⁿ",
-  o: "ᵒ", p: "ᵖ", r: "ʳ", s: "ˢ", t: "ᵗ", u: "ᵘ", v: "ᵛ", w: "ʷ", x: "ˣ", y: "ʸ", z: "ᶻ",
-  A: "ᴬ", B: "ᴮ", D: "ᴰ", E: "ᴱ", G: "ᴳ", H: "ᴴ", I: "ᴵ", J: "ᴶ", K: "ᴷ", L: "ᴸ", M: "ᴹ", N: "ᴺ", O: "ᴼ", P: "ᴾ", R: "ᴿ", T: "ᵀ", U: "ᵁ", V: "ⱽ", W: "ᵂ",
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  ".": "·",
+  a: "ᵃ",
+  b: "ᵇ",
+  c: "ᶜ",
+  d: "ᵈ",
+  e: "ᵉ",
+  f: "ᶠ",
+  g: "ᵍ",
+  h: "ʰ",
+  i: "ⁱ",
+  j: "ʲ",
+  k: "ᵏ",
+  l: "ˡ",
+  m: "ᵐ",
+  n: "ⁿ",
+  o: "ᵒ",
+  p: "ᵖ",
+  r: "ʳ",
+  s: "ˢ",
+  t: "ᵗ",
+  u: "ᵘ",
+  v: "ᵛ",
+  w: "ʷ",
+  x: "ˣ",
+  y: "ʸ",
+  z: "ᶻ",
+  A: "ᴬ",
+  B: "ᴮ",
+  D: "ᴰ",
+  E: "ᴱ",
+  G: "ᴳ",
+  H: "ᴴ",
+  I: "ᴵ",
+  J: "ᴶ",
+  K: "ᴷ",
+  L: "ᴸ",
+  M: "ᴹ",
+  N: "ᴺ",
+  O: "ᴼ",
+  P: "ᴾ",
+  R: "ᴿ",
+  T: "ᵀ",
+  U: "ᵁ",
+  V: "ⱽ",
+  W: "ᵂ",
 };
 
 function superscript(text: string): string | null {
@@ -211,7 +270,11 @@ function termText(t: Term, name: (sym: string) => string, order: string[]): stri
   }
   for (const s of Object.keys(t.pow).sort(byOrder)) parts.push(powerText(wrap(name(s)), t.pow[s]));
   let text = parts.join("·");
-  const logs = Object.keys(t.log).sort(byOrder).map((s) => (t.log[s] === 1 ? `log ${name(s)}` : `log${superscript(String(t.log[s])) ?? `^${t.log[s]}`} ${name(s)}`));
+  const logs = Object.keys(t.log)
+    .sort(byOrder)
+    .map((s) =>
+      t.log[s] === 1 ? `log ${name(s)}` : `log${superscript(String(t.log[s])) ?? `^${t.log[s]}`} ${name(s)}`,
+    );
   if (logs.length) text = text ? `${text} ${logs.join(" · ")}` : logs.join(" · ");
   return text || "1";
 }
@@ -229,6 +292,9 @@ function weight(t: Term): number[] {
 export function format(x: BigO, name: (sym: string) => string = (s) => s, order: string[] = []): string {
   if (!x.length) return "O(1)";
   const ord = [...order, ...sizesIn(x).filter((s) => !order.includes(s))];
-  const terms = [...x].sort((a, b) => compareTuple(weight(b), weight(a)) || ord.indexOf(sizesIn([a])[0] ?? "") - ord.indexOf(sizesIn([b])[0] ?? ""));
+  const terms = [...x].sort(
+    (a, b) =>
+      compareTuple(weight(b), weight(a)) || ord.indexOf(sizesIn([a])[0] ?? "") - ord.indexOf(sizesIn([b])[0] ?? ""),
+  );
   return `O(${terms.map((t) => termText(t, name, ord)).join(" + ")})`;
 }

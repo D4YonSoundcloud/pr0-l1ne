@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { add, equal, evaluate, expOf, factOf, format, logOf, mul, ONE, power, rename, size, substitute, ZERO } from "./bigO";
+import {
+  add,
+  equal,
+  evaluate,
+  expOf,
+  factOf,
+  format,
+  logOf,
+  mul,
+  ONE,
+  power,
+  rename,
+  size,
+  substitute,
+  ZERO,
+} from "./bigO";
 
 const f = (x: Parameters<typeof format>[0]) => format(x);
 

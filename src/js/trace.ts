@@ -3,7 +3,7 @@
  * Trace, the same format tracer.py produces. Pure functions only, so it works in the worker and in tests.
  */
 import type { Trace } from "../trace/types";
-import { RUNTIME, InstrumentError, instrument, type Instrumented } from "./instrument";
+import { InstrumentError, type Instrumented, instrument, RUNTIME } from "./instrument";
 import { Runtime } from "./runtime";
 
 export function traceJavaScript(source: string, maxSteps = 2000, maxSeconds?: number): Promise<Trace> {
@@ -39,6 +39,7 @@ export function macrotask(): Promise<void> {
  * event, Node through its process object.
  */
 export function onUnhandledRejection(handler: (reason: unknown) => void): () => void {
+  // biome-ignore lint/complexity/noBannedTypes: Node's process.on/off, only looked up to detach its handlers
   const proc = (globalThis as { process?: { on?: Function; off?: Function } }).process;
   if (proc?.on && proc.off) {
     const listener = (reason: unknown) => handler(reason);
@@ -116,7 +117,15 @@ export async function traceProgram(
     // The program sees our runtime, a console that prints into the trace,
     // and virtual timers.
     const { setTimeout, setInterval, clearTimeout, clearInterval } = runtime.timerApi;
-    const run = new Function(RUNTIME, "console", "setTimeout", "setInterval", "clearTimeout", "clearInterval", program.code);
+    const run = new Function(
+      RUNTIME,
+      "console",
+      "setTimeout",
+      "setInterval",
+      "clearTimeout",
+      "clearInterval",
+      program.code,
+    );
     try {
       run(runtime, runtime.console, setTimeout, setInterval, clearTimeout, clearInterval);
     } catch (error) {
@@ -151,7 +160,8 @@ export async function traceProgram(
   trace.counts = runtime.counts;
   if (runtime.sampled) trace.sampled = true;
   if (trace.truncated) trace.stoppedBy = runtime.stoppedBy ?? "steps";
-  if (runtime.skippedAtEnd && trace.steps.length) trace.steps[trace.steps.length - 1].skippedAfter = runtime.skippedAtEnd;
+  if (runtime.skippedAtEnd && trace.steps.length)
+    trace.steps[trace.steps.length - 1].skippedAfter = runtime.skippedAtEnd;
   return trace;
 }
 
@@ -161,7 +171,10 @@ function withPointerHints(indexNames: Record<string, string[]>, hints: { text: s
   for (const hint of hints) {
     const m = /^pointers\s+([\w.]+(?:\[\])?)\s*:\s*(.+)$/.exec(hint.text);
     if (!m) continue;
-    const extra = m[2].split(",").map((n) => n.trim()).filter(Boolean);
+    const extra = m[2]
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
     out[m[1]] = [...new Set([...(out[m[1]] ?? []), ...extra])].sort();
   }
   return out;

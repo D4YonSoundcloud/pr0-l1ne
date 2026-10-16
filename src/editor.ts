@@ -87,7 +87,7 @@ monaco.editor.defineTheme("algoviz", {
     "editorStickyScroll.background": "#1f2537",
     "scrollbarSlider.background": "#ffffff18",
     "scrollbarSlider.hoverBackground": "#ffffff28",
-    "focusBorder": "#f6d74380",
+    focusBorder: "#f6d74380",
   },
 });
 
@@ -139,11 +139,26 @@ export function createEditor(
   const CTRL = IS_MAC ? KeyMod.WinCtrl : KeyMod.CtrlCmd;
   const actions: [string, string, number[], () => void][] = [
     ["algoviz.run", "AlgoViz: Run", [CTRL | KeyCode.Quote], callbacks.commands.run],
-    ["algoviz.measure", "AlgoViz: Measure at Full Size", [CTRL | KeyMod.Shift | KeyCode.Quote], callbacks.commands.measure],
+    [
+      "algoviz.measure",
+      "AlgoViz: Measure at Full Size",
+      [CTRL | KeyMod.Shift | KeyCode.Quote],
+      callbacks.commands.measure,
+    ],
     ["algoviz.measureGrowth", "AlgoViz: Measure Growth (at n/64, n/16, n/4, n)", [], callbacks.commands.measureGrowth],
-    ["algoviz.playOrRewind", "AlgoViz: Play From Here / Back to Where Play Started", [KeyMod.CtrlCmd | KeyCode.Enter], callbacks.commands.playOrRewind],
+    [
+      "algoviz.playOrRewind",
+      "AlgoViz: Play From Here / Back to Where Play Started",
+      [KeyMod.CtrlCmd | KeyCode.Enter],
+      callbacks.commands.playOrRewind,
+    ],
     ["algoviz.save", "AlgoViz: Save Program", [KeyMod.CtrlCmd | KeyCode.KeyS], callbacks.commands.save],
-    ["algoviz.saveAs", "AlgoViz: Save Program As…", [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS], callbacks.commands.saveAs],
+    [
+      "algoviz.saveAs",
+      "AlgoViz: Save Program As…",
+      [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS],
+      callbacks.commands.saveAs,
+    ],
     ["algoviz.nextStep", "AlgoViz: Next Step", [KeyCode.F10], callbacks.commands.nextStep],
     ["algoviz.prevStep", "AlgoViz: Previous Step", [KeyMod.Shift | KeyCode.F10], callbacks.commands.prevStep],
     ["algoviz.firstStep", "AlgoViz: First Step", [], callbacks.commands.firstStep],
@@ -200,16 +215,20 @@ export function createEditor(
     setHintWarnings(warnings) {
       const model = editor.getModel();
       if (!model) return;
-      monaco.editor.setModelMarkers(model, HINT_OWNER, warnings
-        .filter((w) => w.line >= 1 && w.line <= model.getLineCount())
-        .map((w) => ({
-          severity: monaco.MarkerSeverity.Warning,
-          message: w.message,
-          startLineNumber: w.line,
-          startColumn: model.getLineFirstNonWhitespaceColumn(w.line) || 1,
-          endLineNumber: w.line,
-          endColumn: model.getLineMaxColumn(w.line),
-        })));
+      monaco.editor.setModelMarkers(
+        model,
+        HINT_OWNER,
+        warnings
+          .filter((w) => w.line >= 1 && w.line <= model.getLineCount())
+          .map((w) => ({
+            severity: monaco.MarkerSeverity.Warning,
+            message: w.message,
+            startLineNumber: w.line,
+            startColumn: model.getLineFirstNonWhitespaceColumn(w.line) || 1,
+            endLineNumber: w.line,
+            endColumn: model.getLineMaxColumn(w.line),
+          })),
+      );
     },
     setCostLabels(labels) {
       const model = editor.getModel();
@@ -219,39 +238,50 @@ export function createEditor(
       // stylesheet. (Monaco's injected text would be simpler, but this
       // trimmed-down build doesn't draw it.)
       const shown = labels.filter((l) => l.line >= 1 && l.line <= lines);
-      costStyle.textContent = shown.map((l, i) => `.monaco-editor .cost-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`).join("\n");
-      costDecorations.set(shown.map((l, i) => {
-        const end = model.getLineMaxColumn(l.line);
-        return {
-          range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
-          options: {
-            afterContentClassName: `cost-label cost-label-${l.kind} cost-label-${i}`,
-            hoverMessage: { value: l.hover },
-            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-          },
-        };
-      }));
+      costStyle.textContent = shown
+        .map((l, i) => `.monaco-editor .cost-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`)
+        .join("\n");
+      costDecorations.set(
+        shown.map((l, i) => {
+          const end = model.getLineMaxColumn(l.line);
+          return {
+            range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
+            options: {
+              afterContentClassName: `cost-label cost-label-${l.kind} cost-label-${i}`,
+              hoverMessage: { value: l.hover },
+              stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+            },
+          };
+        }),
+      );
     },
     setMeasureLabels(labels) {
       const model = editor.getModel();
       if (!model) return;
       const lines = model.getLineCount();
       const shown = labels.filter((l) => l.line >= 1 && l.line <= lines);
-      measureStyle.textContent = shown.map((l, i) => `.monaco-editor .measure-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`).join("\n");
-      measureDecorations.set(shown.flatMap((l, i) => {
-        const end = model.getLineMaxColumn(l.line);
-        return [
-          { range: new monaco.Range(l.line, 1, l.line, 1), options: { isWholeLine: true, className: `heat-line heat-${l.heat}` } },
-          {
-            range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
-            options: {
-              afterContentClassName: `measure-label measure-label-${i}`,
-              hoverMessage: { value: l.hover },
-              stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+      measureStyle.textContent = shown
+        .map((l, i) => `.monaco-editor .measure-label-${i}::after { content: ${cssString(`  ${l.text}`)}; }`)
+        .join("\n");
+      measureDecorations.set(
+        shown.flatMap((l, i) => {
+          const end = model.getLineMaxColumn(l.line);
+          return [
+            {
+              range: new monaco.Range(l.line, 1, l.line, 1),
+              options: { isWholeLine: true, className: `heat-line heat-${l.heat}` },
             },
-          },
-        ];
-      }));
+            {
+              range: new monaco.Range(l.line, Math.max(1, end - 1), l.line, end),
+              options: {
+                afterContentClassName: `measure-label measure-label-${i}`,
+                hoverMessage: { value: l.hover },
+                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+              },
+            },
+          ];
+        }),
+      );
     },
     revealLine(line) {
       editor.revealLineInCenter(line);
@@ -275,14 +305,22 @@ export function createEditor(
 
       // Errors also become a real diagnostic: a squiggle with a hover message,
       // reachable with F8 like any VS Code problem.
-      monaco.editor.setModelMarkers(model, MARKER_OWNER, error && valid(error.line) ? [{
-        severity: monaco.MarkerSeverity.Error,
-        message: error.message,
-        startLineNumber: error.line,
-        startColumn: model.getLineFirstNonWhitespaceColumn(error.line) || 1,
-        endLineNumber: error.line,
-        endColumn: model.getLineMaxColumn(error.line),
-      }] : []);
+      monaco.editor.setModelMarkers(
+        model,
+        MARKER_OWNER,
+        error && valid(error.line)
+          ? [
+              {
+                severity: monaco.MarkerSeverity.Error,
+                message: error.message,
+                startLineNumber: error.line,
+                startColumn: model.getLineFirstNonWhitespaceColumn(error.line) || 1,
+                endLineNumber: error.line,
+                endColumn: model.getLineMaxColumn(error.line),
+              },
+            ]
+          : [],
+      );
 
       // Follow execution, but don't move the view while someone is typing.
       const follow = valid(prev) ? prev : next;

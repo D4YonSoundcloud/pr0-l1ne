@@ -21,7 +21,10 @@
  * because fading every arrow on every step is more distracting than helpful.
  */
 
-interface Spot { x: number; y: number }
+interface Spot {
+  x: number;
+  y: number;
+}
 
 export interface Snapshot {
   flips: Map<string, Spot>;
@@ -67,19 +70,30 @@ export interface Enter {
 /** How far new things slide in from, in pixels. */
 const ENTER_SLIDE = 10;
 
-export function transition(before: Snapshot | null, root: ParentNode | null, duration: number, easing = DEFAULT_EASING, enter: Enter = { fade: true, slide: false }): void {
+export function transition(
+  before: Snapshot | null,
+  root: ParentNode | null,
+  duration: number,
+  easing = DEFAULT_EASING,
+  enter: Enter = { fade: true, slide: false },
+): void {
   if (!before || !root || duration <= 0) return;
   const slide = (el: Element, dx: number, dy: number) => {
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-    el.animate(
-      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0px, 0px)" }],
-      { duration, easing },
-    );
+    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0px, 0px)" }], {
+      duration,
+      easing,
+    });
   };
   const arrive = (el: Element) => {
-    if (enter.fade) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration * 0.6, easing: "ease-out", fill: "backwards" });
+    if (enter.fade)
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration * 0.6, easing: "ease-out", fill: "backwards" });
     if (enter.slide) {
-      el.animate([{ transform: `translate(${-ENTER_SLIDE}px, 0px)` }, { transform: "translate(0px, 0px)" }], { duration, easing, fill: "backwards" });
+      el.animate([{ transform: `translate(${-ENTER_SLIDE}px, 0px)` }, { transform: "translate(0px, 0px)" }], {
+        duration,
+        easing,
+        fill: "backwards",
+      });
     }
   };
 
@@ -112,7 +126,6 @@ export function transition(before: Snapshot | null, root: ParentNode | null, dur
     // A slot the list didn't have a step ago (it grew): arrive like a new box.
     if (!moved && !old.has(slot)) arrive(el);
   }
-
 }
 
 /** True when the person has asked for less motion. */

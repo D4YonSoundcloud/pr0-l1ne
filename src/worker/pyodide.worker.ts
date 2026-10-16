@@ -6,10 +6,10 @@
  * loads tracer.py into it, then answers "run" messages with a Trace.
  */
 import { expandHeaps } from "../trace/delta";
-import tracerSource from "./tracer.py?raw";
+import type { Trace } from "../trace/types";
 import measureSource from "./measure.py?raw";
 import type { FromWorker, ToWorker } from "./protocol";
-import type { Trace } from "../trace/types";
+import tracerSource from "./tracer.py?raw";
 
 // Pyodide 0.27.x ships CPython 3.12. The npm package on jsDelivr contains the
 // core interpreter and standard library, which is all the tracer needs.
@@ -59,7 +59,12 @@ function handle(message: ToWorker): void {
     try {
       const runId = message.runId;
       const report = (json: string) => post({ type: "measureProgress", runId, progress: JSON.parse(json) });
-      const json = runMeasure!(message.source, message.limitMs, report, message.overrides ? JSON.stringify(message.overrides) : undefined);
+      const json = runMeasure!(
+        message.source,
+        message.limitMs,
+        report,
+        message.overrides ? JSON.stringify(message.overrides) : undefined,
+      );
       post({ type: "measured", runId, result: JSON.parse(json) });
     } catch (error) {
       post({ type: "crash", runId: message.runId, message: error instanceof Error ? error.message : String(error) });

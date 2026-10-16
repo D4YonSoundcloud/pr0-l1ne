@@ -182,7 +182,11 @@ setTimeout(() => order.push("timer"), 3000);
     const last = t.steps[t.steps.length - 1];
     const order = new Map(last.stack[0].locals).get("order");
     const heap = order?.kind === "ref" ? last.heap[order.id] : null;
-    expect(heap && "items" in heap ? heap.items.map((v) => (v.kind === "prim" ? v.repr : "")) : []).toEqual(['"fast"', '"timer"', '"slow"']);
+    expect(heap && "items" in heap ? heap.items.map((v) => (v.kind === "prim" ? v.repr : "")) : []).toEqual([
+      '"fast"',
+      '"timer"',
+      '"slow"',
+    ]);
     expect(Date.now() - started).toBeLessThan(2000); // 5 virtual seconds, not real ones
   });
 
@@ -245,7 +249,11 @@ main();
   });
 
   it("stops an endless async loop at the step limit", async () => {
-    const t = await traceJavaScript(`async function spin() {\n  while (true) {\n    await null;\n  }\n}\nspin();`, 300, 0.3);
+    const t = await traceJavaScript(
+      `async function spin() {\n  while (true) {\n    await null;\n  }\n}\nspin();`,
+      300,
+      0.3,
+    );
     expect(t.truncated).toBe(true);
     expect(t.error).toBeNull();
   });

@@ -8,9 +8,10 @@
  * fresh one. Restarting is slower than an interrupt, but needs no special
  * server headers. See the README's "Limitations" section.
  */
-import type { FromWorker, ToWorker } from "./protocol";
+
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { Trace } from "../trace/types";
+import type { FromWorker, ToWorker } from "./protocol";
 
 export type RunOutcome =
   | { kind: "trace"; trace: Trace; elapsedMs: number }
@@ -131,7 +132,12 @@ export class Runner {
    * `limitMs`; the runner only steps in (restarting the worker) if it
    * doesn't, or when the person presses Stop.
    */
-  measure(source: string, limitMs: number, progress: (p: MeasureProgress) => void, overrides?: Record<string, number>): Promise<MeasureOutcome> {
+  measure(
+    source: string,
+    limitMs: number,
+    progress: (p: MeasureProgress) => void,
+    overrides?: Record<string, number>,
+  ): Promise<MeasureOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
     const runId = this.nextRunId++;
     return new Promise((resolve) => {

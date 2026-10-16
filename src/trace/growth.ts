@@ -13,7 +13,7 @@
 import type { BigO } from "./bigO";
 import type { Estimate } from "./complexity";
 import { parseHints } from "./hints";
-import { totals, type Measurement } from "./measurement";
+import { type Measurement, totals } from "./measurement";
 import type { RawHint } from "./types";
 
 /** A size variable: what the code sets it to, and the full size to scale from. */
@@ -40,7 +40,7 @@ export function hintComments(code: string): RawHint[] {
   return out;
 }
 
-const escape = (s: string) => s.replace(/[$]/g, "\\$");
+const escapeDollars = (s: string) => s.replace(/[$]/g, "\\$");
 
 /** The size variables a program's `viz: size` hints name, with problems to show. */
 export function findSizes(code: string): { vars: SizeVar[]; problems: string[] } {
@@ -50,11 +50,15 @@ export function findSizes(code: string): { vars: SizeVar[]; problems: string[] }
   const vars: SizeVar[] = [];
   for (const hint of hints.sizes) {
     // At the top level: no indentation. `n = 40000`, `const n = 40_000;`, `k: int = 10`, `let n: number = 5`.
-    const assign = new RegExp(`^(?:(?:const|let|var)\\s+)?${escape(hint.name)}\\s*(?::\\s*[\\w<>\\[\\]|. ]+?\\s*)?=\\s*([0-9][0-9_]*)\\s*;?\\s*(?:(?:#|//).*)?$`);
+    const assign = new RegExp(
+      `^(?:(?:const|let|var)\\s+)?${escapeDollars(hint.name)}\\s*(?::\\s*[\\w<>\\[\\]|. ]+?\\s*)?=\\s*([0-9][0-9_]*)\\s*;?\\s*(?:(?:#|//).*)?$`,
+    );
     const index = lines.findIndex((line) => assign.test(line));
     const codeValue = index >= 0 ? Number(assign.exec(lines[index])![1].replace(/_/g, "")) : null;
     if (codeValue === null) {
-      problems.push(`${hint.name}: there's no "${hint.name} = <number>" at the top level of the program for growth runs to change.`);
+      problems.push(
+        `${hint.name}: there's no "${hint.name} = <number>" at the top level of the program for growth runs to change.`,
+      );
       continue;
     }
     const base = hint.value ?? codeValue;
@@ -121,8 +125,13 @@ export interface Model {
 }
 
 export const MODELS: Model[] = [
-  { degree: 0, log: 0 }, { degree: 0, log: 1 }, { degree: 1, log: 0 }, { degree: 1, log: 1 },
-  { degree: 2, log: 0 }, { degree: 2, log: 1 }, { degree: 3, log: 0 },
+  { degree: 0, log: 0 },
+  { degree: 0, log: 1 },
+  { degree: 1, log: 0 },
+  { degree: 1, log: 1 },
+  { degree: 2, log: 0 },
+  { degree: 2, log: 1 },
+  { degree: 3, log: 0 },
 ];
 
 const SUPERSCRIPT: Record<number, string> = { 2: "²", 3: "³" };
@@ -196,14 +205,15 @@ export interface StaticGrowth {
  */
 export function staticGrowth(estimate: Estimate, vars: SizeVar[], scaled: string[]): StaticGrowth | null {
   const values = new Set(vars.filter((v) => scaled.includes(v.name) && v.codeValue !== null).map((v) => v.codeValue!));
-  const grows = new Set(estimate.symbols
-    .filter((s) => scaled.includes(s.name) || (values.has(s.value) && s.value > 1))
-    .map((s) => s.key));
+  const grows = new Set(
+    estimate.symbols.filter((s) => scaled.includes(s.name) || (values.has(s.value) && s.value > 1)).map((s) => s.key),
+  );
   if (!grows.size) return null;
   let model: Model = { degree: 0, log: 0 };
   let explosive = false;
   for (const term of estimate.raw.time as BigO) {
-    if (Object.keys(term.exp).some((k) => grows.has(k)) || Object.keys(term.fact).some((k) => grows.has(k))) explosive = true;
+    if (Object.keys(term.exp).some((k) => grows.has(k)) || Object.keys(term.fact).some((k) => grows.has(k)))
+      explosive = true;
     let degree = 0;
     let log = 0;
     for (const [k, p] of Object.entries(term.pow)) if (grows.has(k)) degree += p;
@@ -226,16 +236,31 @@ export function compareGrowth(fit: Fit, est: StaticGrowth, x: string): Verdict {
   if (est.explosive) {
     return fit.model.degree >= 3
       ? { kind: "agree", text: `The code's shape says ${est.label}, and the work grows very fast.` }
-      : { kind: "lower", text: `The code's shape says ${est.label} (exponential), but measured, the work grows like ${measured}. Something prunes the recursion: a cache, or a check that skips repeated work.` };
+      : {
+          kind: "lower",
+          text: `The code's shape says ${est.label} (exponential), but measured, the work grows like ${measured}. Something prunes the recursion: a cache, or a check that skips repeated work.`,
+        };
   }
   if (fit.model.degree === est.model.degree && fit.model.log === est.model.log) {
-    return { kind: "agree", text: `Measured, the work grows like ${measured}, as the code's shape (${est.label}) predicts.` };
+    return {
+      kind: "agree",
+      text: `Measured, the work grows like ${measured}, as the code's shape (${est.label}) predicts.`,
+    };
   }
   if (fit.model.degree === est.model.degree) {
-    return { kind: "close", text: `Measured, the work grows like ${measured}; the code's shape says ${est.label} (like ${expected}). A log factor is hard to see at these sizes.` };
+    return {
+      kind: "close",
+      text: `Measured, the work grows like ${measured}; the code's shape says ${est.label} (like ${expected}). A log factor is hard to see at these sizes.`,
+    };
   }
   if (fit.model.degree < est.model.degree) {
-    return { kind: "lower", text: `The code's shape says ${est.label} (like ${expected} as ${x} grows), but measured, the work grows like ${measured}. Something keeps the work down: a loop that stops early, a check that skips work, or a size that's reduced first (like k % n).` };
+    return {
+      kind: "lower",
+      text: `The code's shape says ${est.label} (like ${expected} as ${x} grows), but measured, the work grows like ${measured}. Something keeps the work down: a loop that stops early, a check that skips work, or a size that's reduced first (like k % n).`,
+    };
   }
-  return { kind: "higher", text: `The code's shape says ${est.label} (like ${expected} as ${x} grows), but measured, the work grows like ${measured}. Something costs more than the loops show: a built-in that walks the data (insert at the front, x in list, slicing, shift), or a loop that runs more than its bound suggests.` };
+  return {
+    kind: "higher",
+    text: `The code's shape says ${est.label} (like ${expected} as ${x} grows), but measured, the work grows like ${measured}. Something costs more than the loops show: a built-in that walks the data (insert at the front, x in list, slicing, shift), or a loop that runs more than its bound suggests.`,
+  };
 }

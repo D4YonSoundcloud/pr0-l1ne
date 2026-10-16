@@ -29,8 +29,14 @@ export class StorageFullError extends Error {
 
 function isProgram(value: unknown): value is Program {
   const p = value as Program;
-  return !!p && typeof p.id === "string" && typeof p.name === "string" && typeof p.code === "string" &&
-    isLanguageId(p.language) && typeof p.updatedAt === "number";
+  return (
+    !!p &&
+    typeof p.id === "string" &&
+    typeof p.name === "string" &&
+    typeof p.code === "string" &&
+    isLanguageId(p.language) &&
+    typeof p.updatedAt === "number"
+  );
 }
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -42,7 +48,10 @@ export class ProgramStore {
   /** Used when localStorage is unavailable: programs last for this session only. */
   private memory: Program[] = [];
 
-  constructor(private readonly storage: ProgramStorage | null, private readonly now = () => Date.now()) {}
+  constructor(
+    private readonly storage: ProgramStorage | null,
+    private readonly now = () => Date.now(),
+  ) {}
 
   /** Programs for one language, most recently saved first. */
   list(language: LanguageId): Program[] {

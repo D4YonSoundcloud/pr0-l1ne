@@ -68,7 +68,10 @@ function collectHints(ast: t.File): RawHint[] {
 
 /** A parse error, with the line it happened on. */
 export class InstrumentError extends Error {
-  constructor(message: string, readonly line: number | null) {
+  constructor(
+    message: string,
+    readonly line: number | null,
+  ) {
     super(message);
     this.name = "SyntaxError";
   }
@@ -100,7 +103,7 @@ interface Analysis {
 }
 
 /** Parse options shared by JavaScript and TypeScript. */
-export function parseProgram(source: string, plugins: ("typescript")[] = []): t.File {
+export function parseProgram(source: string, plugins: "typescript"[] = []): t.File {
   let ast: t.File;
   try {
     // allowImportExportEverywhere lets TypeScript namespaces contain `export`.
@@ -112,8 +115,16 @@ export function parseProgram(source: string, plugins: ("typescript")[] = []): t.
     throw new InstrumentError(friendlyParseError(err.message, source, err.loc?.line), err.loc?.line ?? null);
   }
   for (const node of ast.program.body) {
-    if (t.isImportDeclaration(node) || t.isExportDeclaration(node) || t.isTSImportEqualsDeclaration(node) || t.isTSExportAssignment(node)) {
-      throw new InstrumentError("import and export aren't supported. AlgoViz runs your code as a single script.", node.loc?.start.line ?? null);
+    if (
+      t.isImportDeclaration(node) ||
+      t.isExportDeclaration(node) ||
+      t.isTSImportEqualsDeclaration(node) ||
+      t.isTSExportAssignment(node)
+    ) {
+      throw new InstrumentError(
+        "import and export aren't supported. AlgoViz runs your code as a single script.",
+        node.loc?.start.line ?? null,
+      );
     }
   }
   return ast;
@@ -126,8 +137,9 @@ function friendlyParseError(message: string, source: string, line?: number): str
   if (/parser plugin\(s\): "jsx"/.test(text)) return "JSX isn't supported.";
   // JSX in TypeScript mode usually fails with an odd message about type
   // assertions or regular expressions. If the line looks like JSX, say so.
-  const sourceLine = line ? source.split("\n")[line - 1] ?? "" : "";
-  if (/<[A-Za-z][\w.]*(\s[^<>]*)?>[^<]*<\/|<[A-Za-z][\w.]*[^<>]*\/>/.test(sourceLine)) return `${text} (JSX isn't supported.)`;
+  const sourceLine = line ? (source.split("\n")[line - 1] ?? "") : "";
+  if (/<[A-Za-z][\w.]*(\s[^<>]*)?>[^<]*<\/|<[A-Za-z][\w.]*[^<>]*\/>/.test(sourceLine))
+    return `${text} (JSX isn't supported.)`;
   return text;
 }
 
@@ -240,7 +252,8 @@ function className(path: NodePath): string | null {
   const cls = path.findParent((p) => p.isClass()) as NodePath<t.Class> | null;
   if (!cls) return null;
   if (cls.node.id) return cls.node.id.name;
-  if (cls.parentPath?.isVariableDeclarator() && t.isIdentifier(cls.parentPath.node.id)) return cls.parentPath.node.id.name;
+  if (cls.parentPath?.isVariableDeclarator() && t.isIdentifier(cls.parentPath.node.id))
+    return cls.parentPath.node.id.name;
   return null;
 }
 
@@ -329,7 +342,8 @@ function analyze(ast: t.File, source: string): Analysis {
     Statement(path) {
       const node = path.node;
       if (!path.inList || !LIST_PARENTS.has(path.parent.type) || !node.loc) return;
-      if (t.isFunctionDeclaration(node) || t.isEmptyStatement(node) || t.isBlockStatement(node) || t.isLoop(node)) return;
+      if (t.isFunctionDeclaration(node) || t.isEmptyStatement(node) || t.isBlockStatement(node) || t.isLoop(node))
+        return;
       if (t.isLabeledStatement(node) && t.isLoop(node.body)) return;
       analysis.lines.set(node, { line: node.loc?.start.line ?? 0, vars: snapshotVars(path) });
     },
@@ -365,7 +379,11 @@ function analyze(ast: t.File, source: string): Analysis {
     ContinueStatement(path) {
       const label = path.node.label?.name;
       const target = label
-        ? (path.findParent((p) => p.isLabeledStatement() && p.node.label.name === label) as NodePath<t.LabeledStatement> | null)?.node.body
+        ? (
+            path.findParent(
+              (p) => p.isLabeledStatement() && p.node.label.name === label,
+            ) as NodePath<t.LabeledStatement> | null
+          )?.node.body
         : path.findParent((p) => p.isLoop() || p.isFunction())?.node;
       if (target && t.isLoop(target)) {
         analysis.continues.set(path.node, { loop: target, vars: snapshotVars(path) });
@@ -382,9 +400,15 @@ function analyze(ast: t.File, source: string): Analysis {
       else if (t.isMemberExpression(node.object) && node.object.computed && t.isIdentifier(node.object.object)) {
         key = `${node.object.object.name}[]`;
         // grid[a][b]: which cell this line touches (see trace/gridFocus.ts).
-        const text = (n: t.Node) => (n.start != null && n.end != null ? source.slice(n.start, n.end) : generate(n).code);
+        const text = (n: t.Node) =>
+          n.start != null && n.end != null ? source.slice(n.start, n.end) : generate(n).code;
         if (node.loc) {
-          analysis.gridAccesses.push({ name: node.object.object.name, line: node.loc.start.line, row: text(node.object.property), col: text(node.property) });
+          analysis.gridAccesses.push({
+            name: node.object.object.name,
+            line: node.loc.start.line,
+            row: text(node.object.property),
+            col: text(node.property),
+          });
         }
       } else return;
       const names = analysis.indexNames.get(key) ?? new Set<string>();
@@ -410,7 +434,8 @@ function analyze(ast: t.File, source: string): Analysis {
 function pureExpression(n: t.Node): boolean {
   if (t.isIdentifier(n) || t.isNumericLiteral(n)) return true;
   if (t.isMemberExpression(n) && !n.computed) return pureExpression(n.object);
-  if (t.isBinaryExpression(n) && /^[-+*/%]$/.test(n.operator)) return pureExpression(n.left as t.Node) && pureExpression(n.right);
+  if (t.isBinaryExpression(n) && /^[-+*/%]$/.test(n.operator))
+    return pureExpression(n.left as t.Node) && pureExpression(n.right);
   if (t.isUnaryExpression(n) && n.operator === "-") return pureExpression(n.argument);
   return false;
 }
@@ -423,10 +448,20 @@ function countedLoopTotal(node: t.ForStatement): t.Expression | null {
   const id = decl.id.name;
   const test = node.test;
   const update = node.update;
-  const steps = (t.isUpdateExpression(update) && update.operator === "++" && t.isIdentifier(update.argument, { name: id }))
-    || (t.isAssignmentExpression(update) && update.operator === "+=" && t.isIdentifier(update.left, { name: id }) && t.isNumericLiteral(update.right, { value: 1 }));
-  if (!steps || !t.isBinaryExpression(test) || (test.operator !== "<" && test.operator !== "<=")
-    || !t.isIdentifier(test.left, { name: id }) || !pureExpression(test.right)) return null;
+  const steps =
+    (t.isUpdateExpression(update) && update.operator === "++" && t.isIdentifier(update.argument, { name: id })) ||
+    (t.isAssignmentExpression(update) &&
+      update.operator === "+=" &&
+      t.isIdentifier(update.left, { name: id }) &&
+      t.isNumericLiteral(update.right, { value: 1 }));
+  if (
+    !steps ||
+    !t.isBinaryExpression(test) ||
+    (test.operator !== "<" && test.operator !== "<=") ||
+    !t.isIdentifier(test.left, { name: id }) ||
+    !pureExpression(test.right)
+  )
+    return null;
   const count = t.binaryExpression("-", t.cloneNode(test.right as t.Expression), t.cloneNode(decl.init));
   return test.operator === "<=" ? t.binaryExpression("+", count, t.numericLiteral(1)) : count;
 }
@@ -442,15 +477,32 @@ function countedLoopCall(node: t.ForStatement): t.Expression[] | null {
   if (!t.isIdentifier(decl.id) || !decl.init || !pureExpression(decl.init)) return null;
   const name = decl.id.name;
   const test = node.test;
-  if (!t.isBinaryExpression(test) || !["<", "<=", ">", ">=", "!=="].includes(test.operator)
-    || !t.isIdentifier(test.left, { name }) || !pureExpression(test.right)) return null;
+  if (
+    !t.isBinaryExpression(test) ||
+    !["<", "<=", ">", ">=", "!=="].includes(test.operator) ||
+    !t.isIdentifier(test.left, { name }) ||
+    !pureExpression(test.right)
+  )
+    return null;
   const update = node.update;
   let updateText: string | null = null;
-  if (t.isUpdateExpression(update) && t.isIdentifier(update.argument, { name })) updateText = `${name}${update.operator}`;
-  else if (t.isAssignmentExpression(update) && (update.operator === "+=" || update.operator === "-=" || update.operator === "*=")
-    && t.isIdentifier(update.left, { name }) && t.isNumericLiteral(update.right)) updateText = `${name} ${update.operator} ${update.right.value}`;
+  if (t.isUpdateExpression(update) && t.isIdentifier(update.argument, { name }))
+    updateText = `${name}${update.operator}`;
+  else if (
+    t.isAssignmentExpression(update) &&
+    (update.operator === "+=" || update.operator === "-=" || update.operator === "*=") &&
+    t.isIdentifier(update.left, { name }) &&
+    t.isNumericLiteral(update.right)
+  )
+    updateText = `${name} ${update.operator} ${update.right.value}`;
   if (!updateText) return null;
-  return [t.stringLiteral(name), t.stringLiteral(test.operator), t.stringLiteral(updateText), t.cloneNode(decl.init), t.cloneNode(test.right as t.Expression)];
+  return [
+    t.stringLiteral(name),
+    t.stringLiteral(test.operator),
+    t.stringLiteral(updateText),
+    t.cloneNode(decl.init),
+    t.cloneNode(test.right as t.Expression),
+  ];
 }
 
 const runtimeCall = (method: string, args: t.Expression[]) =>
@@ -491,10 +543,16 @@ function transform(ast: t.File, a: Analysis): void {
       if (loop) {
         // Wrap the loop (with its label, if any, so `continue label` still works).
         const { id, line } = loop.info;
-        out.push(t.blockStatement([
-          frameStatement("loopEnter", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.outerVars)]),
-          t.tryStatement(t.blockStatement([node]), null, t.blockStatement([frameStatement("loopExit", [t.stringLiteral(id)])])),
-        ]));
+        out.push(
+          t.blockStatement([
+            frameStatement("loopEnter", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.outerVars)]),
+            t.tryStatement(
+              t.blockStatement([node]),
+              null,
+              t.blockStatement([frameStatement("loopExit", [t.stringLiteral(id)])]),
+            ),
+          ]),
+        );
         continue;
       }
       const info = a.lines.get(node);
@@ -504,32 +562,52 @@ function transform(ast: t.File, a: Analysis): void {
       if (cont && contLoop) {
         // `continue` ends the iteration early, so record the end-of-iteration
         // snapshot here too.
-        out.push(frameStatement("tail", [t.stringLiteral(contLoop.info.id), t.numericLiteral(contLoop.info.line), getter(cont.vars)]));
+        out.push(
+          frameStatement("tail", [
+            t.stringLiteral(contLoop.info.id),
+            t.numericLiteral(contLoop.info.line),
+            getter(cont.vars),
+          ]),
+        );
       }
       out.push(node);
       const fn = t.isFunctionDeclaration(node) ? a.functions.get(node) : undefined;
       if (fn?.captured.length && t.isFunctionDeclaration(node) && node.id) {
         // Declarations are hoisted, so register them at the top of the block.
-        registrations.push(statement("fn", [t.identifier(node.id.name), t.stringLiteral(fn.name), getter(fn.captured)]));
+        registrations.push(
+          statement("fn", [t.identifier(node.id.name), t.stringLiteral(fn.name), getter(fn.captured)]),
+        );
       }
     }
     return [...registrations, ...out];
   }
 
   /** Wrap a function body in enter / try / catch / finally exit. */
-  function wrapBody(body: t.BlockStatement, name: string, line: number, vars: string[], withThis: boolean): t.BlockStatement {
+  function wrapBody(
+    body: t.BlockStatement,
+    name: string,
+    line: number,
+    vars: string[],
+    withThis: boolean,
+  ): t.BlockStatement {
     const frame = t.identifier(FRAME);
     const error = t.identifier(ERROR);
-    return t.blockStatement([
-      t.variableDeclaration("const", [
-        t.variableDeclarator(frame, runtimeCall("enter", [t.stringLiteral(name), t.numericLiteral(line), getter(vars, withThis)])),
-      ]),
-      t.tryStatement(
-        t.blockStatement([...body.body, frameStatement("ret", [VOID(), getter(vars, withThis)])]),
-        t.catchClause(error, t.blockStatement([frameStatement("raise", [error]), t.throwStatement(error)])),
-        t.blockStatement([statement("exit", [frame])]),
-      ),
-    ], body.directives);
+    return t.blockStatement(
+      [
+        t.variableDeclaration("const", [
+          t.variableDeclarator(
+            frame,
+            runtimeCall("enter", [t.stringLiteral(name), t.numericLiteral(line), getter(vars, withThis)]),
+          ),
+        ]),
+        t.tryStatement(
+          t.blockStatement([...body.body, frameStatement("ret", [VOID(), getter(vars, withThis)])]),
+          t.catchClause(error, t.blockStatement([frameStatement("raise", [error]), t.throwStatement(error)])),
+          t.blockStatement([statement("exit", [frame])]),
+        ),
+      ],
+      body.directives,
+    );
   }
 
   /**
@@ -542,7 +620,10 @@ function transform(ast: t.File, a: Analysis): void {
     const error = t.identifier(ERROR);
     return [
       t.variableDeclaration("const", [
-        t.variableDeclarator(frame, runtimeCall("enter", [t.stringLiteral("Global"), t.numericLiteral(0), getter(vars)])),
+        t.variableDeclarator(
+          frame,
+          runtimeCall("enter", [t.stringLiteral("Global"), t.numericLiteral(0), getter(vars)]),
+        ),
       ]),
       t.tryStatement(
         t.blockStatement([...body, frameStatement("mainDone", [getter(vars)])]),
@@ -600,7 +681,9 @@ function transform(ast: t.File, a: Analysis): void {
       if (loop && t.isLoop(node) && t.isBlockStatement(node.body)) {
         const { id, line } = loop.info;
         node.body.body.unshift(frameStatement("loopIter", [t.stringLiteral(id)]));
-        node.body.body.push(frameStatement("tail", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.bodyVars)]));
+        node.body.body.push(
+          frameStatement("tail", [t.stringLiteral(id), t.numericLiteral(line), getter(loop.bodyVars)]),
+        );
         // `for await` pauses before every item without an await of its own,
         // so the runtime wraps the iterable to see those pauses.
         if (t.isForOfStatement(node) && node.await) node.right = frameCall("asyncIter", [node.right]);

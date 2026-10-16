@@ -22,7 +22,7 @@ import { transformFromAstSync } from "@babel/core";
 import transformTypeScript from "@babel/plugin-transform-typescript";
 import * as t from "@babel/types";
 import type { Trace } from "../trace/types";
-import { InstrumentError, instrumentAst, parseProgram, type Instrumented } from "./instrument";
+import { InstrumentError, type Instrumented, instrumentAst, parseProgram } from "./instrument";
 import { traceProgram } from "./trace";
 
 export function stripTypes(ast: t.File, source: string): t.File {
@@ -34,7 +34,7 @@ export function stripTypes(ast: t.File, source: string): t.File {
     }
   });
 
-  let result;
+  let result: ReturnType<typeof transformFromAstSync>;
   try {
     result = transformFromAstSync(ast, source, {
       ast: true,

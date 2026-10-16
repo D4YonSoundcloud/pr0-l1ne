@@ -14,17 +14,17 @@
  * a run, so the picture never reshuffles while the algorithm runs: only the
  * marks on it change.
  */
-import { nodeSignature, type GraphData, type GraphLayout, type GraphOverlay } from "../trace/graph";
+import { type GraphData, type GraphLayout, type GraphOverlay, nodeSignature } from "../trace/graph";
 import { s, textWidth, uiTextWidth } from "./draw";
 
 const NODE_H = 30;
-const DOT = 18;               // an object node with nothing to show
+const DOT = 18; // an object node with nothing to show
 const LABEL_SIZE = 12.5;
 const MIN_UNIT = 80;
 const LEGEND_H = 24;
 const BADGE_R = 8;
-const POINTER_ROOM = 26;      // under a node: ▲ and a name
-const TOP_ROOM = 16;          // above a node: badges, dist labels
+const POINTER_ROOM = 26; // under a node: ▲ and a name
+const TOP_ROOM = 16; // above a node: badges, dist labels
 
 export interface GraphPicture {
   w: number;
@@ -59,7 +59,10 @@ function exitDistance(size: { w: number; h: number }, dx: number, dy: number): n
   return Math.min(ux > 1e-6 ? hw / ux : Infinity, uy > 1e-6 ? hh / uy : Infinity);
 }
 
-interface Legend { cls: string; text: string }
+interface Legend {
+  cls: string;
+  text: string;
+}
 
 function legendItems(overlays: GraphOverlay[]): Legend[] {
   const union = <T>(pick: (o: GraphOverlay) => T[]) => [...new Set(overlays.flatMap(pick))];
@@ -77,7 +80,12 @@ function legendItems(overlays: GraphOverlay[]): Legend[] {
   return items;
 }
 
-export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: GraphOverlay, options: GraphPictureOptions): GraphPicture {
+export function graphPicture(
+  graph: GraphData,
+  layout: GraphLayout,
+  overlay: GraphOverlay,
+  options: GraphPictureOptions,
+): GraphPicture {
   // Size the grid from every node the graph ever has (the layout), so the
   // picture keeps its size while the graph grows.
   const labelFor = (key: string) => graph.nodes.get(key) ?? (graph.objectNodes ? "" : key.slice(2));
@@ -106,7 +114,9 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
   }
 
   return {
-    w, h, centers,
+    w,
+    h,
+    centers,
     draw(x, y, layer) {
       const g = s("g", { class: ["graph", graph.directed && "is-directed"].filter(Boolean).join(" ") });
       const at = (key: string) => {
@@ -123,9 +133,12 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         let lx = x + 6;
         const ly = y + 11;
         for (const item of legend) {
-          if (item.cls === "visited") lg.append(s("rect", { class: "swatch is-visited", x: lx, y: ly - 6, width: 14, height: 12, rx: 6 }));
-          else if (item.cls === "frontier") lg.append(s("rect", { class: "swatch is-frontier", x: lx, y: ly - 6, width: 14, height: 12, rx: 6 }));
-          else if (item.cls === "label") lg.append(s("rect", { class: "swatch is-label", x: lx, y: ly - 6, width: 14, height: 12, rx: 3 }));
+          if (item.cls === "visited")
+            lg.append(s("rect", { class: "swatch is-visited", x: lx, y: ly - 6, width: 14, height: 12, rx: 6 }));
+          else if (item.cls === "frontier")
+            lg.append(s("rect", { class: "swatch is-frontier", x: lx, y: ly - 6, width: 14, height: 12, rx: 6 }));
+          else if (item.cls === "label")
+            lg.append(s("rect", { class: "swatch is-label", x: lx, y: ly - 6, width: 14, height: 12, rx: 3 }));
           else lg.append(s("line", { class: `swatch is-${item.cls}`, x1: lx, x2: lx + 14, y1: ly, y2: ly }));
           lg.append(s("text", { x: lx + 19, y: ly, "dominant-baseline": "central" }, item.text));
           lx += uiTextWidth(item.text, 11.5) + 34;
@@ -147,7 +160,13 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         }
       }
       for (const edge of edgeList) {
-        if (!centers.has(edge.from) || !centers.has(edge.to) || !graph.nodes.has(edge.from) || !graph.nodes.has(edge.to)) continue;
+        if (
+          !centers.has(edge.from) ||
+          !centers.has(edge.to) ||
+          !graph.nodes.has(edge.from) ||
+          !graph.nodes.has(edge.to)
+        )
+          continue;
         const pair = edge.from < edge.to ? `${edge.from}|${edge.to}` : `${edge.to}|${edge.from}`;
         const id = graph.directed ? `${edge.from}>${edge.to}` : pair;
         if (drawn.has(id)) continue;
@@ -158,16 +177,35 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         const onPath = overlay.pathEdges.has(forward) || (!graph.directed && overlay.pathEdges.has(backward));
         const chosen = overlay.chosenEdges.has(forward) || (!graph.directed && overlay.chosenEdges.has(backward));
         // In an undirected graph, a tree or path edge points the way it was taken.
-        const flip = !graph.directed && (overlay.treeEdges.has(backward) || overlay.pathEdges.has(backward)) && !overlay.treeEdges.has(forward) && !overlay.pathEdges.has(forward);
+        const flip =
+          !graph.directed &&
+          (overlay.treeEdges.has(backward) || overlay.pathEdges.has(backward)) &&
+          !overlay.treeEdges.has(forward) &&
+          !overlay.pathEdges.has(forward);
         const from = flip ? edge.to : edge.from;
         const to = flip ? edge.from : edge.to;
         const a = at(from);
         const b = at(to);
-        const isNew = !!prevEdges && !prevEdges.has(forward) && !(!graph.directed && prevEdges.has(backward)) && !edge.tree;
+        const isNew =
+          !!prevEdges && !prevEdges.has(forward) && !(!graph.directed && prevEdges.has(backward)) && !edge.tree;
         const arrow = graph.directed || inTree || onPath;
         // Links that aren't edges of the graph (a union-find forest) are dashed.
-        const cls = ["graph-edge", inTree && "is-tree", (onPath || chosen) && "is-path", isNew && "is-new", edge.tree && "is-extra"].filter(Boolean).join(" ");
-        const marker = onPath ? "url(#arrow-path)" : inTree ? "url(#arrow-tree)" : graph.directed ? "url(#arrow-graph)" : null;
+        const cls = [
+          "graph-edge",
+          inTree && "is-tree",
+          (onPath || chosen) && "is-path",
+          isNew && "is-new",
+          edge.tree && "is-extra",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const marker = onPath
+          ? "url(#arrow-path)"
+          : inTree
+            ? "url(#arrow-tree)"
+            : graph.directed
+              ? "url(#arrow-graph)"
+              : null;
         let d: string;
         let mid: { x: number; y: number };
         if (from === to) {
@@ -200,7 +238,19 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         }
         edgesG.append(s("path", { d, class: cls, "marker-end": arrow ? marker : null }));
         if (edge.label !== undefined && edge.label !== "") {
-          labelsG.append(s("text", { class: ["edge-label", isNew && "is-new"].filter(Boolean).join(" "), x: mid.x, y: mid.y, "text-anchor": "middle", "dominant-baseline": "central" }, edge.label));
+          labelsG.append(
+            s(
+              "text",
+              {
+                class: ["edge-label", isNew && "is-new"].filter(Boolean).join(" "),
+                x: mid.x,
+                y: mid.y,
+                "text-anchor": "middle",
+                "dominant-baseline": "central",
+              },
+              edge.label,
+            ),
+          );
         }
       }
       g.append(edgesG, labelsG);
@@ -213,34 +263,62 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         const size = sizes.get(key) ?? nodeSize(label, graph.objectNodes);
         const isNew = !!prevGraph && !prevGraph.nodes.has(key);
         const changed = !isNew && !!prevOverlay && nodeSignature(prevOverlay, key) !== nodeSignature(overlay, key);
-        const cls = ["graph-node",
+        const cls = [
+          "graph-node",
           overlay.visited.has(key) && "is-visited",
           overlay.frontier.has(key) && "is-frontier",
           overlay.pathNodes.has(key) && "is-path",
           changed && "is-changed",
-          isNew && "is-new"].filter(Boolean).join(" ");
+          isNew && "is-new",
+        ]
+          .filter(Boolean)
+          .join(" ");
         const ng = s("g", { class: cls });
         const left = c.x - size.w / 2;
         const top = c.y - size.h / 2;
-        if (changed) ng.append(s("rect", { class: "node-halo", x: left - 4, y: top - 4, width: size.w + 8, height: size.h + 8, rx: size.h / 2 + 4 }));
+        if (changed)
+          ng.append(
+            s("rect", {
+              class: "node-halo",
+              x: left - 4,
+              y: top - 4,
+              width: size.w + 8,
+              height: size.h + 8,
+              rx: size.h / 2 + 4,
+            }),
+          );
         ng.append(s("rect", { class: "node-body", x: left, y: top, width: size.w, height: size.h, rx: size.h / 2 }));
         if (label) {
-          ng.append(s("text", { class: "node-text", x: c.x, y: c.y, "text-anchor": "middle", "dominant-baseline": "central" }, label));
+          ng.append(
+            s(
+              "text",
+              { class: "node-text", x: c.x, y: c.y, "text-anchor": "middle", "dominant-baseline": "central" },
+              label,
+            ),
+          );
         }
         const rank = overlay.frontier.get(key);
         if (rank !== undefined) {
           const bx = left + 2;
           const by = top - 1;
-          ng.append(s("circle", { class: "frontier-badge", cx: bx, cy: by, r: BADGE_R }),
-            s("text", { class: "frontier-badge-text", x: bx, y: by, "text-anchor": "middle", "dominant-baseline": "central" }, String(rank + 1)));
+          ng.append(
+            s("circle", { class: "frontier-badge", cx: bx, cy: by, r: BADGE_R }),
+            s(
+              "text",
+              { class: "frontier-badge-text", x: bx, y: by, "text-anchor": "middle", "dominant-baseline": "central" },
+              String(rank + 1),
+            ),
+          );
         }
         const text = overlay.labels.get(key);
         if (text !== undefined) {
           const tx = left + size.w - 2;
           const ty = top - 6;
           const tw = uiTextWidth(text, 11.5) + 8;
-          ng.append(s("rect", { class: "node-label-bg", x: tx, y: ty - 8, width: tw, height: 16, rx: 3 }),
-            s("text", { class: "node-label", x: tx + 4, y: ty, "dominant-baseline": "central" }, text));
+          ng.append(
+            s("rect", { class: "node-label-bg", x: tx, y: ty - 8, width: tw, height: 16, rx: 3 }),
+            s("text", { class: "node-label", x: tx + 4, y: ty, "dominant-baseline": "central" }, text),
+          );
         }
         nodesG.append(ng);
       }
@@ -258,12 +336,19 @@ export function graphPicture(graph: GraphData, layout: GraphLayout, overlay: Gra
         const label = names.join(", ");
         const changed = !!prevOverlay && names.some((name) => prevPointer.get(name) !== key);
         const local = centers.get(key)!;
-        pointersG.append(s("g", {
-          class: ["pointer", changed && "is-changed"].filter(Boolean).join(" "),
-          "data-flip": `${options.flipKey}:${label}`, "data-x": Math.round(local.x), "data-y": Math.round(local.y),
-        },
-        s("path", { d: `M${c.x - 5},${py + 7} L${c.x},${py + 1} L${c.x + 5},${py + 7} z` }),
-        s("text", { x: c.x, y: py + 18, "text-anchor": "middle" }, label)));
+        pointersG.append(
+          s(
+            "g",
+            {
+              class: ["pointer", changed && "is-changed"].filter(Boolean).join(" "),
+              "data-flip": `${options.flipKey}:${label}`,
+              "data-x": Math.round(local.x),
+              "data-y": Math.round(local.y),
+            },
+            s("path", { d: `M${c.x - 5},${py + 7} L${c.x},${py + 1} L${c.x + 5},${py + 7} z` }),
+            s("text", { x: c.x, y: py + 18, "text-anchor": "middle" }, label),
+          ),
+        );
       }
       g.append(pointersG);
       layer.append(g);

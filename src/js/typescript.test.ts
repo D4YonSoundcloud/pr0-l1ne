@@ -34,7 +34,9 @@ describe("TypeScript", () => {
   });
 
   it("keeps line numbers when type-only declarations are removed", async () => {
-    const t = await traceTypeScript(`interface P {\n  x: number;\n}\ntype Id = string;\nconst a: P = { x: 1 };\nconst b: Id = "z";`);
+    const t = await traceTypeScript(
+      `interface P {\n  x: number;\n}\ntype Id = string;\nconst a: P = { x: 1 };\nconst b: Id = "z";`,
+    );
     expect(globalLines(t)).toEqual([5, 6]);
   });
 
@@ -60,7 +62,10 @@ describe("TypeScript", () => {
     expect(heapOf(last(t), localsOf(last(t)).get("p"))).toMatchObject({
       kind: "object",
       typeName: "Pt",
-      fields: [["x", { repr: "1" }], ["y", { repr: "2" }]],
+      fields: [
+        ["x", { repr: "1" }],
+        ["y", { repr: "2" }],
+      ],
     });
     // The generated `this.x = x` lines are not steps of their own.
     const inCtor = t.steps.filter((s) => s.stack[s.stack.length - 1].func === "Pt.constructor");
@@ -113,8 +118,14 @@ describe("TypeScript", () => {
   });
 
   it("explains unsupported JSX and decorators", async () => {
-    expect((await traceTypeScript(`const a = 1;\nconst el = <div>hi</div>;`)).error).toMatchObject({ line: 2, message: expect.stringContaining("JSX isn't supported") });
-    expect((await traceTypeScript(`function log(t: any) {}\n@log\nclass A {}`)).error).toMatchObject({ line: 2, message: "Decorators aren't supported." });
+    expect((await traceTypeScript(`const a = 1;\nconst el = <div>hi</div>;`)).error).toMatchObject({
+      line: 2,
+      message: expect.stringContaining("JSX isn't supported"),
+    });
+    expect((await traceTypeScript(`function log(t: any) {}\n@log\nclass A {}`)).error).toMatchObject({
+      line: 2,
+      message: "Decorators aren't supported.",
+    });
     expect((await traceJavaScript(`const el = <p/>;`)).error?.message).toContain("JSX isn't supported");
   });
 

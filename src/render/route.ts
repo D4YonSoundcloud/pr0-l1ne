@@ -22,8 +22,16 @@
  * reduce crossings.
  */
 
-export interface Point { x: number; y: number }
-export interface Rect { x: number; y: number; w: number; h: number }
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export interface EdgeInput {
   /** Where the arrow starts (a reference dot inside the source box). */
@@ -46,12 +54,12 @@ export interface EdgeInput {
   entryY: number;
 }
 
-const LANE = 7;           // space between parallel lanes
-const GAP_PAD = 14;       // distance from a box edge to the first lane
-const MIN_GAP = 20;       // a target must be this far right to count as "forward"
-const CORRIDOR_PAD = 12;  // distance from boxes to a corridor
-const SPREAD = 6;         // space between arrowheads arriving at the same side
-const TOP_GAP = 14;       // how far above a tree node an arrow from outside turns in
+const LANE = 7; // space between parallel lanes
+const GAP_PAD = 14; // distance from a box edge to the first lane
+const MIN_GAP = 20; // a target must be this far right to count as "forward"
+const CORRIDOR_PAD = 12; // distance from boxes to a corridor
+const SPREAD = 6; // space between arrowheads arriving at the same side
+const TOP_GAP = 14; // how far above a tree node an arrow from outside turns in
 
 const right = (r: Rect) => r.x + r.w;
 const bottom = (r: Rect) => r.y + r.h;
@@ -67,7 +75,10 @@ export function overlaps(a: Rect, b: Rect, pad = 0): boolean {
 
 /** Does an axis-aligned segment pass through the inside of a box? */
 export function crosses(a: Point, b: Point, box: Rect, inset = 2): boolean {
-  const x1 = box.x + inset, x2 = right(box) - inset, y1 = box.y + inset, y2 = bottom(box) - inset;
+  const x1 = box.x + inset,
+    x2 = right(box) - inset,
+    y1 = box.y + inset,
+    y2 = bottom(box) - inset;
   if (x1 >= x2 || y1 >= y2) return false;
   const [lx, hx] = a.x < b.x ? [a.x, b.x] : [b.x, a.x];
   const [ly, hy] = a.y < b.y ? [a.y, b.y] : [b.y, a.y];
@@ -183,14 +194,16 @@ function spreadEntries(plans: Plan[]): void {
     // Keep an already-level arrow straight by shifting everything.
     const level = group.findIndex((p) => Math.abs(p.edge.from.y - base) < 1.5);
     const shift = level >= 0 && Math.abs(offsets[level]) <= room / 2 ? -offsets[level] : 0;
-    group.forEach((p, i) => { p.entryY = base + offsets[i] + shift; });
+    group.forEach((p, i) => {
+      p.entryY = base + offsets[i] + shift;
+    });
   }
 }
 
 /** Vertical extent of the segment an edge runs along a lane. */
 function laneSpan(p: Plan): [number, number] {
   const a = p.edge.from.y;
-  const b = p.kind === "corridor" ? p.corridor?.y ?? p.entryY : p.entryY;
+  const b = p.kind === "corridor" ? (p.corridor?.y ?? p.entryY) : p.entryY;
   return a < b ? [a, b] : [b, a];
 }
 
@@ -218,7 +231,9 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
     const first = targetX - GAP_PAD;
     const spacing = group.length > 1 ? Math.max(2, Math.min(LANE, (first - leftLimit) / (group.length - 1))) : 0;
     // group[0] is leftmost.
-    group.forEach((p, i) => { p.inLane!.x = Math.max(leftLimit, first - (group.length - 1 - i) * spacing); });
+    group.forEach((p, i) => {
+      p.inLane!.x = Math.max(leftLimit, first - (group.length - 1 - i) * spacing);
+    });
   }
 
   // Lanes in the gap right of a column: u-turns leaving it, and corridor
@@ -319,14 +334,28 @@ function buildPoints(p: Plan): Point[] {
       const out = p.outLane!.x!;
       const inX = p.inLane!.x!;
       const cy = p.corridor!.y!;
-      return [from, { x: out, y: from.y }, { x: out, y: cy }, { x: inX, y: cy }, { x: inX, y: p.entryY }, { x: right(T), y: p.entryY }];
+      return [
+        from,
+        { x: out, y: from.y },
+        { x: out, y: cy },
+        { x: inX, y: cy },
+        { x: inX, y: p.entryY },
+        { x: right(T), y: p.entryY },
+      ];
     }
     case "around": {
       // Rare (only with dragged boxes): leave right, pass under, enter left.
       const out = p.outLane!.x!;
       const cy = p.corridor!.y!;
       const inX = T.x - GAP_PAD;
-      return [from, { x: out, y: from.y }, { x: out, y: cy }, { x: inX, y: cy }, { x: inX, y: p.entryY }, { x: T.x, y: p.entryY }];
+      return [
+        from,
+        { x: out, y: from.y },
+        { x: out, y: cy },
+        { x: inX, y: cy },
+        { x: inX, y: p.entryY },
+        { x: T.x, y: p.entryY },
+      ];
     }
   }
 }

@@ -1,13 +1,27 @@
 import { describe, expect, it } from "vitest";
 import type { HeapObject, Step, Value } from "../trace/types";
-import { MAX_NEST_DEPTH, chooseNested } from "./memory";
+import { chooseNested, MAX_NEST_DEPTH } from "./memory";
 
 const ref = (id: string): Value => ({ kind: "ref", id });
 const num = (n: number): Value => ({ kind: "prim", type: "int", repr: String(n) });
 const none: Value = { kind: "prim", type: "none", repr: "None" };
 
-const list = (id: string, items: Value[]): HeapObject => ({ kind: "list", id, typeName: "list", items, length: items.length });
-const node = (id: string, next: Value): HeapObject => ({ kind: "object", id, typeName: "Node", fields: [["val", num(1)], ["next", next]] });
+const list = (id: string, items: Value[]): HeapObject => ({
+  kind: "list",
+  id,
+  typeName: "list",
+  items,
+  length: items.length,
+});
+const node = (id: string, next: Value): HeapObject => ({
+  kind: "object",
+  id,
+  typeName: "Node",
+  fields: [
+    ["val", num(1)],
+    ["next", next],
+  ],
+});
 
 function step(locals: [string, Value][], objects: HeapObject[]): Step {
   return {
@@ -26,14 +40,23 @@ describe("chooseNested", () => {
   });
 
   it("keeps a shared object separate, so arrows can show the sharing", () => {
-    const s = step([["a", ref("o1")], ["b", ref("o1")]], [list("o1", [])]);
+    const s = step(
+      [
+        ["a", ref("o1")],
+        ["b", ref("o1")],
+      ],
+      [list("o1", [])],
+    );
     expect(chooseNested(s)).toEqual(new Set());
   });
 
   it("nests a chain until it reaches a shared node", () => {
     // head -> o1 -> o2 -> o3, and curr also points at o2
     const s = step(
-      [["head", ref("o1")], ["curr", ref("o2")]],
+      [
+        ["head", ref("o1")],
+        ["curr", ref("o2")],
+      ],
       [node("o1", ref("o2")), node("o2", ref("o3")), node("o3", none)],
     );
     expect(chooseNested(s)).toEqual(new Set(["o1", "o3"]));
@@ -56,7 +79,13 @@ describe("chooseNested", () => {
 
   it("nests inside a shared object", () => {
     // Two variables share o1, which alone holds o2.
-    const s = step([["a", ref("o1")], ["b", ref("o1")]], [list("o1", [ref("o2")]), list("o2", [])]);
+    const s = step(
+      [
+        ["a", ref("o1")],
+        ["b", ref("o1")],
+      ],
+      [list("o1", [ref("o2")]), list("o2", [])],
+    );
     expect(chooseNested(s)).toEqual(new Set(["o2"]));
   });
 

@@ -36,7 +36,10 @@ const DOTTED = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
 const GRAPH = /^([A-Za-z_$][\w$.]*)\s*(?:\(([^)]*)\))?\s*([A-Za-z\s]*?)\s*(?::\s*(.*))?$/;
 
 function names(text: string): string[] {
-  return text.split(",").map((n) => n.trim()).filter(Boolean);
+  return text
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
 }
 
 export function emptyHints(): VizHints {
@@ -84,12 +87,18 @@ export function parseHints(raw: RawHint[]): VizHints {
     if (keyword === "size") {
       const parts = names(rest).map((part) => SIZE.exec(part));
       if (!parts.length || parts.some((m) => !m)) {
-        warn(line, `"size" looks like: viz: size n  or  viz: size n = 40000, k  (variables set to a number at the top of the program)`);
+        warn(
+          line,
+          `"size" looks like: viz: size n  or  viz: size n = 40000, k  (variables set to a number at the top of the program)`,
+        );
         continue;
       }
       for (const m of parts as RegExpExecArray[]) {
         const value = m[2] !== undefined ? Number(m[2].replace(/_/g, "")) : undefined;
-        hints.sizes = [...hints.sizes.filter((s) => s.name !== m[1]), { name: m[1], ...(value !== undefined ? { value } : {}), line }];
+        hints.sizes = [
+          ...hints.sizes.filter((s) => s.name !== m[1]),
+          { name: m[1], ...(value !== undefined ? { value } : {}), line },
+        ];
       }
       continue;
     }
@@ -107,10 +116,21 @@ export function parseHints(raw: RawHint[]): VizHints {
     if (keyword === "graph") {
       const match = GRAPH.exec(rest);
       const fields = match?.[2] !== undefined ? names(match[2]) : undefined;
-      const options = (match?.[3] ?? "").split(/\s+/).filter(Boolean).map((o) => o.toLowerCase());
+      const options = (match?.[3] ?? "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((o) => o.toLowerCase());
       const drawn = names(match?.[4] ?? "");
-      if (!match || !DOTTED.test(match[1]) || (fields && (!fields.length || fields.some((n) => !NAME.test(n)))) || drawn.some((n) => !DOTTED.test(n))) {
-        warn(line, `"graph" looks like: viz: graph adj  (a variable), or viz: graph Node(neighbors)  (a class and its neighbor field), optionally followed by options and ": names to draw on it"`);
+      if (
+        !match ||
+        !DOTTED.test(match[1]) ||
+        (fields && (!fields.length || fields.some((n) => !NAME.test(n)))) ||
+        drawn.some((n) => !DOTTED.test(n))
+      ) {
+        warn(
+          line,
+          `"graph" looks like: viz: graph adj  (a variable), or viz: graph Node(neighbors)  (a class and its neighbor field), optionally followed by options and ": names to draw on it"`,
+        );
         continue;
       }
       const unknown = options.filter((o) => !(GRAPH_OPTIONS as readonly string[]).includes(o));
@@ -118,9 +138,16 @@ export function parseHints(raw: RawHint[]): VizHints {
         warn(line, `Unknown graph option "${unknown[0]}". Options are: ${GRAPH_OPTIONS.join(", ")}.`);
         continue;
       }
-      hints.graphs = [...hints.graphs.filter((g) => g.target !== match[1]), {
-        target: match[1], ...(fields ? { fields } : {}), options: options as GraphOption[], names: drawn, line,
-      }];
+      hints.graphs = [
+        ...hints.graphs.filter((g) => g.target !== match[1]),
+        {
+          target: match[1],
+          ...(fields ? { fields } : {}),
+          options: options as GraphOption[],
+          names: drawn,
+          line,
+        },
+      ];
       continue;
     }
 
@@ -129,9 +156,12 @@ export function parseHints(raw: RawHint[]): VizHints {
     const links = shape ? names(shape[2]) : [];
     const want = keyword === "tree" ? 2 : 1;
     if (!shape || links.length !== want || links.some((n) => !NAME.test(n))) {
-      warn(line, keyword === "tree"
-        ? `"tree" looks like: viz: tree Node(left, right)  (a class and its two child fields)`
-        : `"list" looks like: viz: list Node(next)  (a class and its link field)`);
+      warn(
+        line,
+        keyword === "tree"
+          ? `"tree" looks like: viz: tree Node(left, right)  (a class and its two child fields)`
+          : `"list" looks like: viz: list Node(next)  (a class and its link field)`,
+      );
       continue;
     }
     const linked: LinkedHint = { shape: keyword as "tree" | "list", typeName: shape[1], links, line };
@@ -152,10 +182,13 @@ export function applyHints(trace: Trace): Trace {
   const hidden = new Set(viz.hide);
   const steps = hidden.size
     ? trace.steps.map((step) => ({
-      ...step,
-      stack: step.stack.map((frame) => ({ ...frame, locals: frame.locals.filter(([name]) => !hidden.has(name)) })),
-      suspended: step.suspended?.map((frame) => ({ ...frame, locals: frame.locals.filter(([name]) => !hidden.has(name)) })),
-    }))
+        ...step,
+        stack: step.stack.map((frame) => ({ ...frame, locals: frame.locals.filter(([name]) => !hidden.has(name)) })),
+        suspended: step.suspended?.map((frame) => ({
+          ...frame,
+          locals: frame.locals.filter(([name]) => !hidden.has(name)),
+        })),
+      }))
     : trace.steps;
 
   const indexNames = { ...trace.indexNames };

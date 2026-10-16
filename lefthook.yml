@@ -1,0 +1,31 @@
+# Git hooks, installed automatically by `npm ci` / `npm install` (Lefthook's
+# postinstall). Skip once with `git commit --no-verify`; the same checks
+# run again in CI, so skipping here only delays finding out.
+# Docs: https://lefthook.dev/configuration/
+
+# Before each commit: format and lint only the files being committed, fix
+# what can be fixed, and add the fixes to the commit.
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "*.{ts,js,mjs,cjs,json,jsonc,css,html}"
+      run: npx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+    ruff:
+      glob: "*.py"
+      # Ruff is a Python tool (pip install ruff). Without it, the commit goes
+      # ahead and CI checks the Python files instead.
+      run: |
+        if command -v ruff >/dev/null 2>&1; then
+          ruff check --fix {staged_files} && ruff format {staged_files}
+        else
+          echo "ruff isn't installed (pip install ruff); skipping Python checks"
+        fi
+      stage_fixed: true
+
+# Before each push: the whole project still type-checks.
+pre-push:
+  commands:
+    typecheck:
+      run: npm run typecheck
