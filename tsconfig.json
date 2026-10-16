@@ -25,6 +25,7 @@
     "src/trace/memory.test.ts",
     "src/trace/complexity.test.ts",
     "src/trace/bigO.test.ts",
-    "src/trace/gridFocus.test.ts"
+    "src/trace/gridFocus.test.ts",
+    "src/examples/golden.test.ts"
   ]
 }

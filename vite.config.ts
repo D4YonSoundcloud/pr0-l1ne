@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
@@ -28,6 +29,16 @@ export default defineConfig({
   worker: {
     // The Pyodide worker is an ES module worker (it uses dynamic import()).
     format: "es",
+  },
+  test: {
+    coverage: {
+      // npm run test:coverage. A map of untested code, not a score to chase.
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.test.ts", "src/examples/*.ts", "src/**/*.worker.ts", "src/js/cli.ts", "src/js/serve.ts"],
+      reporter: ["text-summary", "html", "json-summary"],
+      reportsDirectory: "coverage/js",
+    },
   },
   build: {
     // Monaco alone is about 4 MB, so silence the generic 500 kB warning.

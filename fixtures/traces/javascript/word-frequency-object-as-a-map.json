@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "javascript",
+    "loops": [
+      {
+        "id": "L4",
+        "kind": "for",
+        "line": 4,
+        "bodyStart": 5,
+        "bodyEnd": 5,
+        "header": "for (const word of words)"
+      }
+    ],
+    "indexNames": {
+      "counts": [
+        "word"
+      ]
+    },
+    "stdout": "{ the: 3, cat: 1, and: 2, hat: 1, bat: 1 }\n",
+    "error": null,
+    "truncated": false,
+    "cost": {
+      "functions": [
+        {
+          "name": "Global",
+          "line": 1,
+          "params": [],
+          "memo": false,
+          "body": [
+            {
+              "kind": "loop",
+              "loop": "L4",
+              "line": 4,
+              "bound": {
+                "kind": "size",
+                "sizes": [
+                  {
+                    "name": "words",
+                    "len": true
+                  }
+                ],
+                "why": "words"
+              },
+              "body": [
+                {
+                  "kind": "alloc",
+                  "line": 5,
+                  "what": "counts[...] = ...",
+                  "sizes": [],
+                  "into": "counts"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "counts": {
+      "steps": 22,
+      "calls": {
+        "Global": 1
+      },
+      "depth": {
+        "Global": 1
+      }
+    }
+  },
+  "steps": [
+    {"event":"call","line":0,"stack":[{"id":"f1","func":"Global","line":0,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":1,"stack":[{"id":"f1","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":2,"stack":[{"id":"f1","func":"Global","line":2,"locals":[["words",{"kind":"ref","id":"o1"}]]}],"stdoutLength":0,"loops":[],"heap":{"o1":{"kind":"list","id":"o1","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"the\""},{"kind":"prim","type":"string","repr":"\"cat\""},{"kind":"prim","type":"string","repr":"\"and\""},{"kind":"prim","type":"string","repr":"\"the\""},{"kind":"prim","type":"string","repr":"\"hat\""},{"kind":"prim","type":"string","repr":"\"and\""},{"kind":"prim","type":"string","repr":"\"the\""},{"kind":"prim","type":"string","repr":"\"bat\""}],"length":8}}},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":0}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[],"length":0}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"1"}]],"length":1}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"cat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"cat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}]],"length":2}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"and\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"and\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"1"}]],"length":3}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":4}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":4}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"1"}]],"length":3}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"hat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":5}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"hat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":5}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"hat"},{"kind":"prim","type":"number","repr":"1"}]],"length":4}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"and\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":6}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"and\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":6}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"hat"},{"kind":"prim","type":"number","repr":"1"}]],"length":4}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":7}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"the\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":7}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"3"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"hat"},{"kind":"prim","type":"number","repr":"1"}]],"length":4}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"bat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":8}]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}],["word",{"kind":"prim","type":"string","repr":"\"bat\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":8}],"heap":{"o2":{"kind":"dict","id":"o2","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"the"},{"kind":"prim","type":"number","repr":"3"}],[{"kind":"prim","type":"key","repr":"cat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"and"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"hat"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"bat"},{"kind":"prim","type":"number","repr":"1"}]],"length":5}}},
+    {"event":"line","line":8,"stack":[{"id":"f1","func":"Global","line":8,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":8,"stack":[{"id":"f1","func":"Global","line":8,"locals":[["words",{"kind":"ref","id":"o1"}],["counts",{"kind":"ref","id":"o2"}]]}],"stdoutLength":43,"loops":[],"output":{"line":8,"refs":["o2"]},"returnValue":{"kind":"prim","type":"undefined","repr":"undefined"}}
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "javascript",
+    "loops": [
+      {
+        "id": "L18",
+        "kind": "while",
+        "line": 18,
+        "bodyStart": 19,
+        "bodyEnd": 25,
+        "header": "while (frontier.length > 0)"
+      },
+      {
+        "id": "L20",
+        "kind": "for",
+        "line": 20,
+        "bodyStart": 21,
+        "bodyEnd": 24,
+        "header": "for (let next = 0; next < n; next++)"
+      }
+    ],
+    "indexNames": {
+      "flights[]": [
+        "next"
+      ],
+      "flights": [
+        "city"
+      ]
+    },
+    "stdout": "[ 0, 1, 2, 3 ]\n",
+    "error": null,
+    "truncated": false,
+    "gridAccesses": [
+      {
+        "name": "flights",
+        "line": 21,
+        "row": "city",
+        "col": "next"
+      }
+    ],
+    "hints": [
+      {
+        "line": 1,
+        "text": "graph flights matrix directed circle: reach, frontier, city, next"
+      }
+    ],
+    "cost": {
+      "functions": [
+        {
+          "name": "Global",
+          "line": 1,
+          "params": [],
+          "memo": false,
+          "body": [
+            {
+              "kind": "loop",
+              "loop": "L18",
+              "line": 18,
+              "bound": {
+                "kind": "unknown",
+                "why": "while (frontier.length > 0)"
+              },
+              "body": [
+                {
+                  "kind": "op",
+                  "line": 19,
+                  "what": "frontier.shift()",
+                  "cost": "linear",
+                  "size": {
+                    "name": "frontier",
+                    "len": true
+                  },
+                  "container": "frontier"
+                },
+                {
+                  "kind": "loop",
+                  "loop": "L20",
+                  "line": 20,
+                  "bound": {
+                    "kind": "size",
+                    "sizes": [
+                      {
+                        "name": "flights",
+                        "len": true
+                      }
+                    ],
+                    "why": "for (let next = 0; next < n; next++)"
+                  },
+                  "body": [
+                    {
+                      "kind": "alloc",
+                      "line": 22,
+                      "what": "reach.add()",
+                      "sizes": [],
+                      "into": "reach"
+                    },
+                    {
+                      "kind": "alloc",
+                      "line": 23,
+                      "what": "frontier.push()",
+                      "sizes": [],
+                      "into": "frontier"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "op",
+              "line": 28,
+              "what": "...reach (copies)",
+              "cost": "linear",
+              "size": {
+                "name": "reach",
+                "len": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "counts": {
+      "steps": 58,
+      "calls": {
+        "Global": 1
+      },
+      "depth": {
+        "Global": 1
+      }
+    }
+  },
+  "steps": [
+    {"event":"call","line":0,"stack":[{"id":"f1","func":"Global","line":0,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f1","func":"Global","line":8,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["flights",{"kind":"ref","id":"o1"}]]}],"stdoutLength":0,"loops":[],"heap":{"o1":{"kind":"list","id":"o1","typeName":"Array","items":[{"kind":"ref","id":"o2"},{"kind":"ref","id":"o3"},{"kind":"ref","id":"o4"},{"kind":"ref","id":"o5"}],"length":4},"o2":{"kind":"list","id":"o2","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"1"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"}],"length":4},"o3":{"kind":"list","id":"o3","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"1"},{"kind":"prim","type":"number","repr":"1"}],"length":4},"o4":{"kind":"list","id":"o4","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"1"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"}],"length":4},"o5":{"kind":"list","id":"o5","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"0"}],"length":4}}},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}]]}],"stdoutLength":0,"loops":[],"heap":{"o6":{"kind":"set","id":"o6","typeName":"Set","items":[{"kind":"prim","type":"number","repr":"0"}],"length":1}}},
+    {"event":"line","line":18,"stack":[{"id":"f1","func":"Global","line":18,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":0}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"0"}],"length":1}}},
+    {"event":"line","line":19,"stack":[{"id":"f1","func":"Global","line":19,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":0}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":22,"stack":[{"id":"f1","func":"Global","line":22,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":2,"call":"next = 0; next < 4; next++"}],"heap":{"o6":{"kind":"set","id":"o6","typeName":"Set","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"1"}],"length":2}}},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":2,"call":"next = 0; next < 4; next++"}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"1"}],"length":1}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1},{"frame":"f1","loop":"L20","instance":1,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":18,"stack":[{"id":"f1","func":"Global","line":18,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":1}]},
+    {"event":"line","line":19,"stack":[{"id":"f1","func":"Global","line":19,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":0}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":22,"stack":[{"id":"f1","func":"Global","line":22,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":3,"call":"next = 0; next < 4; next++"}],"heap":{"o6":{"kind":"set","id":"o6","typeName":"Set","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"1"},{"kind":"prim","type":"number","repr":"2"}],"length":3}}},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":3,"call":"next = 0; next < 4; next++"}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"2"}],"length":1}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":22,"stack":[{"id":"f1","func":"Global","line":22,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":4,"call":"next = 0; next < 4; next++"}],"heap":{"o6":{"kind":"set","id":"o6","typeName":"Set","items":[{"kind":"prim","type":"number","repr":"0"},{"kind":"prim","type":"number","repr":"1"},{"kind":"prim","type":"number","repr":"2"},{"kind":"prim","type":"number","repr":"3"}],"length":4}}},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2},{"frame":"f1","loop":"L20","instance":2,"iteration":4,"call":"next = 0; next < 4; next++"}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"2"},{"kind":"prim","type":"number","repr":"3"}],"length":2}}},
+    {"event":"line","line":18,"stack":[{"id":"f1","func":"Global","line":18,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":2}]},
+    {"event":"line","line":19,"stack":[{"id":"f1","func":"Global","line":19,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":0}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[{"kind":"prim","type":"number","repr":"3"}],"length":1}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3},{"frame":"f1","loop":"L20","instance":3,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":18,"stack":[{"id":"f1","func":"Global","line":18,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":3}]},
+    {"event":"line","line":19,"stack":[{"id":"f1","func":"Global","line":19,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":0}],"heap":{"o7":{"kind":"list","id":"o7","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":1,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":2,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":3,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":20,"stack":[{"id":"f1","func":"Global","line":20,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}],["next",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4},{"frame":"f1","loop":"L20","instance":4,"iteration":4,"call":"next = 0; next < 4; next++"}]},
+    {"event":"line","line":18,"stack":[{"id":"f1","func":"Global","line":18,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}],["city",{"kind":"prim","type":"number","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L18","instance":1,"iteration":4}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["flights",{"kind":"ref","id":"o1"}],["n",{"kind":"prim","type":"number","repr":"4"}],["reach",{"kind":"ref","id":"o6"}],["frontier",{"kind":"ref","id":"o7"}]]}],"stdoutLength":15,"loops":[],"output":{"line":28,"refs":[]},"returnValue":{"kind":"prim","type":"undefined","repr":"undefined"}}
+  ]
+}

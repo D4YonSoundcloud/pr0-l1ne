@@ -14,14 +14,9 @@ pre-commit:
       stage_fixed: true
     ruff:
       glob: "*.py"
-      # Ruff is a Python tool (pip install ruff). Without it, the commit goes
-      # ahead and CI checks the Python files instead.
-      run: |
-        if command -v ruff >/dev/null 2>&1; then
-          ruff check --fix {staged_files} && ruff format {staged_files}
-        else
-          echo "ruff isn't installed (pip install ruff); skipping Python checks"
-        fi
+      # Without Ruff installed (pip install ruff), the commit goes ahead
+      # with a note; see scripts/ruff-staged.mjs.
+      run: node scripts/ruff-staged.mjs {staged_files}
       stage_fixed: true
 
 # Before each push: the whole project still type-checks.

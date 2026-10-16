@@ -1,0 +1,202 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "python",
+    "loops": [
+      {
+        "id": "L4",
+        "kind": "for",
+        "line": 4,
+        "bodyStart": 5,
+        "bodyEnd": 9,
+        "header": "for i in range(rows)"
+      },
+      {
+        "id": "L5",
+        "kind": "for",
+        "line": 5,
+        "bodyStart": 6,
+        "bodyEnd": 9,
+        "header": "for j in range(cols)"
+      }
+    ],
+    "indexNames": {
+      "grid[]": [
+        "cols",
+        "j"
+      ],
+      "grid": [
+        "i",
+        "rows"
+      ]
+    },
+    "stdout": "10 paths\n",
+    "error": null,
+    "truncated": false,
+    "gridAccesses": [
+      {
+        "name": "grid",
+        "line": 7,
+        "row": "i",
+        "col": "j"
+      },
+      {
+        "name": "grid",
+        "line": 9,
+        "row": "i",
+        "col": "j"
+      },
+      {
+        "name": "grid",
+        "line": 9,
+        "row": "i - 1",
+        "col": "j"
+      },
+      {
+        "name": "grid",
+        "line": 9,
+        "row": "i",
+        "col": "j - 1"
+      },
+      {
+        "name": "grid",
+        "line": 11,
+        "row": "rows - 1",
+        "col": "cols - 1"
+      }
+    ],
+    "cost": {
+      "functions": [
+        {
+          "name": "Global",
+          "line": 1,
+          "params": [],
+          "memo": false,
+          "body": [
+            {
+              "kind": "loop",
+              "line": 2,
+              "bound": {
+                "kind": "size",
+                "sizes": [
+                  {
+                    "name": "rows"
+                  }
+                ],
+                "why": "range(rows)"
+              },
+              "body": []
+            },
+            {
+              "kind": "alloc",
+              "line": 2,
+              "what": "[[0] * cols for _ in range(rows)]",
+              "sizes": [
+                {
+                  "name": "rows"
+                },
+                {
+                  "name": "cols"
+                }
+              ],
+              "name": "grid"
+            },
+            {
+              "kind": "loop",
+              "loop": "L4",
+              "line": 4,
+              "bound": {
+                "kind": "size",
+                "sizes": [
+                  {
+                    "name": "rows"
+                  }
+                ],
+                "why": "range(rows)"
+              },
+              "body": [
+                {
+                  "kind": "loop",
+                  "loop": "L5",
+                  "line": 5,
+                  "bound": {
+                    "kind": "size",
+                    "sizes": [
+                      {
+                        "name": "cols"
+                      }
+                    ],
+                    "why": "range(cols)"
+                  },
+                  "body": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "counts": {
+      "steps": 51,
+      "calls": {
+        "<module>": 1
+      },
+      "depth": {
+        "<module>": 1
+      }
+    }
+  },
+  "steps": [
+    {"event":"call","line":0,"stack":[{"id":"f1","func":"Global","line":0,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":1,"stack":[{"id":"f1","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":2,"stack":[{"id":"f1","func":"Global","line":2,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":2,"stack":[{"id":"f1","func":"Global","line":2,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["_",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":2,"stack":[{"id":"f1","func":"Global","line":2,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["_",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":2,"stack":[{"id":"f1","func":"Global","line":2,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["_",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":0}],"heap":{"o1":{"kind":"list","id":"o1","typeName":"list","items":[{"kind":"ref","id":"o2"},{"kind":"ref","id":"o3"},{"kind":"ref","id":"o4"}],"length":3,"size":88,"capacity":4},"o2":{"kind":"list","id":"o2","typeName":"list","items":[{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4},"o3":{"kind":"list","id":"o3","typeName":"list","items":[{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4},"o4":{"kind":"list","id":"o4","typeName":"list","items":[{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":0}]},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":1,"call":"range(0, 4)"}],"heap":{"o2":{"kind":"list","id":"o2","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":2,"call":"range(0, 4)"}],"heap":{"o2":{"kind":"list","id":"o2","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":3,"call":"range(0, 4)"}],"heap":{"o2":{"kind":"list","id":"o2","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":1,"iteration":4,"call":"range(0, 4)"}],"heap":{"o2":{"kind":"list","id":"o2","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"1"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"0"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":1,"call":"range(0, 3)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":0}]},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":1,"call":"range(0, 4)"}],"heap":{"o3":{"kind":"list","id":"o3","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":2,"call":"range(0, 4)"}],"heap":{"o3":{"kind":"list","id":"o3","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"2"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":3,"call":"range(0, 4)"}],"heap":{"o3":{"kind":"list","id":"o3","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"2"},{"kind":"prim","type":"int","repr":"3"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":2,"iteration":4,"call":"range(0, 4)"}],"heap":{"o3":{"kind":"list","id":"o3","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"2"},{"kind":"prim","type":"int","repr":"3"},{"kind":"prim","type":"int","repr":"4"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"1"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":2,"call":"range(0, 3)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":0}]},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":7,"stack":[{"id":"f1","func":"Global","line":7,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":1,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"0"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":1,"call":"range(0, 4)"}],"heap":{"o4":{"kind":"list","id":"o4","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":2,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"1"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":2,"call":"range(0, 4)"}],"heap":{"o4":{"kind":"list","id":"o4","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"3"},{"kind":"prim","type":"int","repr":"0"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":3,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"2"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":3,"call":"range(0, 4)"}],"heap":{"o4":{"kind":"list","id":"o4","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"3"},{"kind":"prim","type":"int","repr":"6"},{"kind":"prim","type":"int","repr":"0"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":6,"stack":[{"id":"f1","func":"Global","line":6,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":9,"stack":[{"id":"f1","func":"Global","line":9,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":4,"call":"range(0, 4)"}]},
+    {"event":"line","line":5,"stack":[{"id":"f1","func":"Global","line":5,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"},{"frame":"f1","loop":"L5","instance":3,"iteration":4,"call":"range(0, 4)"}],"heap":{"o4":{"kind":"list","id":"o4","typeName":"list","items":[{"kind":"prim","type":"int","repr":"1"},{"kind":"prim","type":"int","repr":"3"},{"kind":"prim","type":"int","repr":"6"},{"kind":"prim","type":"int","repr":"10"}],"length":4,"size":88,"capacity":4}}},
+    {"event":"line","line":4,"stack":[{"id":"f1","func":"Global","line":4,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L4","instance":1,"iteration":3,"call":"range(0, 3)"}]},
+    {"event":"line","line":11,"stack":[{"id":"f1","func":"Global","line":11,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":11,"stack":[{"id":"f1","func":"Global","line":11,"locals":[["rows",{"kind":"prim","type":"int","repr":"3"}],["cols",{"kind":"prim","type":"int","repr":"4"}],["grid",{"kind":"ref","id":"o1"}],["i",{"kind":"prim","type":"int","repr":"2"}],["j",{"kind":"prim","type":"int","repr":"3"}]]}],"stdoutLength":9,"loops":[],"output":{"line":11,"refs":[]},"returnValue":{"kind":"prim","type":"none","repr":"None"}}
+  ]
+}

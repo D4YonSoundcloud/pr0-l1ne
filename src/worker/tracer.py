@@ -21,6 +21,7 @@ import sys
 import time
 import tokenize
 import types
+import warnings
 import weakref
 from collections import deque
 
@@ -49,6 +50,12 @@ AWAIT_PLUMBING = {dis.opmap[name] for name in ("SEND", "END_SEND", "CLEANUP_THRO
 # use more than its share of the step budget keeps its first passes, passes
 # at round numbers (10, 20 ... 90, 100, 200 ... 900, 1000 ...), and its last
 # passes; the passes in between run, and are counted, but aren't recorded.
+# Python 3.12 inlines list comprehensions into the enclosing frame. Reading
+# that frame's locals from a trace function while a comprehension runs makes
+# CPython warn "assigning None to unbound local" for the comprehension's
+# variable. It's harmless (the trace is correct) but floods the console.
+warnings.filterwarnings("ignore", message="assigning None to unbound local", category=RuntimeWarning)
+
 SAMPLE_FIRST = 5  # passes always recorded at the start
 SAMPLE_LAST = 5  # passes always recorded at the end
 TRACE_SECONDS = 6.0  # stop tracing after this long, even within the step budget
@@ -1401,6 +1408,26 @@ class Serializer:
         self.heap[oid] = self.describe(v, oid)
         return oid
 
+    def stable_order(self, s):
+        """A set's items in an order that's the same on every run.
+
+        Python iterates a set of objects in memory-address order, which changes
+        from run to run (and strings by a random hash seed, unless
+        PYTHONHASHSEED is fixed, as the app does). Objects the trace has
+        already seen come first, in the order they were first seen; the rest
+        keep Python's order. Very large sets aren't reordered.
+        """
+        items = list(s)
+        if len(items) > 1000:
+            return items
+
+        def key(pair):
+            index, item = pair
+            oid = self.ids.get(id(item))
+            return (0, int(oid[1:])) if oid else (1, index)
+
+        return [item for _, item in sorted(enumerate(items), key=key)]
+
     def items(self, iterable):
         out = []
         for index, item in enumerate(iterable):
@@ -1440,7 +1467,7 @@ class Serializer:
                     "kind": kind,
                     "id": oid,
                     "typeName": type_name,
-                    "items": self.items(v),
+                    "items": self.items(self.stable_order(v) if kind == "set" else v),
                     "length": n,
                     "size": size64(v),
                 }

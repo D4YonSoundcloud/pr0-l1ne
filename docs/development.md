@@ -35,11 +35,33 @@ Open the URL Vite prints (usually http://localhost:5173). The bubble sort exampl
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
 | `npm run instrument -- file.js` | Prints the instrumented version of a JavaScript or TypeScript file. |
+| `npm run test:golden` | Traces every example in all three languages and compares with `fixtures/traces/`. Add `-- -u` to accept intended changes. |
+| `npm run test:coverage` | Runs the TypeScript tests with coverage (report in `coverage/js/index.html`), then the Python tests with coverage (`coverage/python/index.html`). Python coverage needs `pip install coverage`. |
 | `npm run lint` | Checks formatting and lint rules: Biome for TypeScript, JavaScript, JSON, CSS and HTML, then Ruff for Python. Changes nothing. |
 | `npm run format` | Fixes what can be fixed automatically: formats every file and applies safe lint fixes. |
 
 The output of `npm run build` is plain static files. You can host `dist/` anywhere that serves static content (GitHub Pages, Netlify, an S3 bucket, `python3 -m http.server`).
 
+
+
+## Testing
+
+`npm test` runs every test: Vitest for TypeScript and JavaScript (including the golden traces), then the Python tests under your Python and under Pyodide.
+
+### Golden traces
+
+`src/examples/golden.test.ts` traces every example (38 Python, 39 JavaScript and 37 TypeScript) and compares each trace with a saved copy in `fixtures/traces/<language>/<example>.json`. Python runs in Pyodide, the same Python the browser uses.
+
+- **A failing golden test means a tracer records something differently.** The diff shows which steps changed. If the change is a bug, fix it. If it's intended, accept it with `npm run test:golden -- -u` and commit the updated fixtures in the same pull request, so reviewers see exactly what moved.
+- **The files are made for diffs.** The top of each file holds the trace's summary (loops, hints, output). Then each step takes one line and lists only the heap objects that changed since the step before.
+- **They're repeatable.** Traces stop on the 20,000-step budget, never the clock. Python runs with `PYTHONHASHSEED=0` (as the app does), and sets of objects are listed in the order the tracer first saw them, so traces come out the same on every machine and every run.
+- **A new example** gets its golden file the first time the test runs locally. In CI a missing file fails the test, so commit it with the example.
+
+### Coverage
+
+`npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
+
+Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer (the code-shape analysis, the `Serializer` and the helpers) is tested directly in `test_analysis.py` and `test_serializer.py`.
 
 ## Code style
 

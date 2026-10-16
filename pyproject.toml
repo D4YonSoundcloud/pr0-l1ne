@@ -19,3 +19,20 @@ ignore = [
 
 [tool.ruff.format]
 quote-style = "double"
+
+# Python coverage: npm run test:coverage:py (needs `pip install coverage`).
+[tool.coverage.run]
+# sys.monitoring, not sys.settrace: the tracer under test installs its own
+# settrace hook, which would otherwise switch coverage off while it runs.
+core = "sysmon"
+source = ["src/worker"]
+omit = ["src/worker/test_*.py"]
+data_file = "coverage/.coverage"
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 0
+
+[tool.coverage.html]
+directory = "coverage/python"

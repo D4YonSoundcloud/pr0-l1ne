@@ -10,6 +10,8 @@ playwright-report/
 # Python
 __pycache__/
 *.pyc
+.ruff_cache/
+.coverage
 
 # Local environment files (never commit secrets)
 .env

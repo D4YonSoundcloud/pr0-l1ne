@@ -36,7 +36,10 @@ const queue: ToWorker[] = [];
 async function boot(): Promise<void> {
   try {
     const module = await import(/* @vite-ignore */ `${INDEX_URL}pyodide.mjs`);
-    const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL });
+    // A fixed hash seed: sets of strings come out in the same order on every
+    // run and every page load (Python randomizes it by default), so a
+    // program's output and drawing are repeatable.
+    const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL, env: { PYTHONHASHSEED: "0" } });
     pyodide.runPython(tracerSource);
     pyodide.runPython(measureSource); // uses the tracer's helpers, from the same namespace
     runTrace = pyodide.globals.get("run_trace") as RunTrace;

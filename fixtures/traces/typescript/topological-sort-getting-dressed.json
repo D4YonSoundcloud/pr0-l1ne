@@ -1,0 +1,325 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "typescript",
+    "loops": [
+      {
+        "id": "L14",
+        "kind": "for",
+        "line": 14,
+        "bodyStart": 15,
+        "bodyEnd": 18,
+        "header": "for (const item in needs)"
+      },
+      {
+        "id": "L16",
+        "kind": "for",
+        "line": 16,
+        "bodyStart": 17,
+        "bodyEnd": 17,
+        "header": "for (const after of needs[item])"
+      },
+      {
+        "id": "L23",
+        "kind": "while",
+        "line": 23,
+        "bodyStart": 24,
+        "bodyEnd": 31,
+        "header": "while (ready.length > 0)"
+      },
+      {
+        "id": "L26",
+        "kind": "for",
+        "line": 26,
+        "bodyStart": 27,
+        "bodyEnd": 30,
+        "header": "for (const after of needs[item])"
+      }
+    ],
+    "indexNames": {
+      "indegree": [
+        "after",
+        "item"
+      ],
+      "needs": [
+        "item"
+      ]
+    },
+    "stdout": "[ 'socks', 'pants', 'shirt', 'shoes', 'belt', 'tie', 'jacket' ]\n",
+    "error": null,
+    "truncated": false,
+    "cost": {
+      "functions": [
+        {
+          "name": "Global",
+          "line": 1,
+          "params": [],
+          "memo": false,
+          "body": [
+            {
+              "kind": "loop",
+              "loop": "L14",
+              "line": 14,
+              "bound": {
+                "kind": "size",
+                "sizes": [
+                  {
+                    "name": "needs",
+                    "len": true
+                  }
+                ],
+                "why": "needs"
+              },
+              "body": [
+                {
+                  "kind": "alloc",
+                  "line": 15,
+                  "what": "indegree[...] = ...",
+                  "sizes": [],
+                  "into": "indegree"
+                },
+                {
+                  "kind": "loop",
+                  "loop": "L16",
+                  "line": 16,
+                  "bound": {
+                    "kind": "size",
+                    "sizes": [
+                      {
+                        "name": "needs",
+                        "len": true,
+                        "inner": true
+                      }
+                    ],
+                    "why": "needs[item]"
+                  },
+                  "body": [
+                    {
+                      "kind": "alloc",
+                      "line": 17,
+                      "what": "indegree[...] = ...",
+                      "sizes": [],
+                      "into": "indegree"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "loop",
+              "line": 21,
+              "bound": {
+                "kind": "size",
+                "sizes": [
+                  {
+                    "name": "needs",
+                    "len": true
+                  }
+                ],
+                "why": "Object.keys(needs).filter(...)"
+              },
+              "body": []
+            },
+            {
+              "kind": "alloc",
+              "line": 21,
+              "what": "Object.keys(needs).filter((item) => inde",
+              "sizes": [
+                {
+                  "name": "needs",
+                  "len": true
+                }
+              ],
+              "name": "ready"
+            },
+            {
+              "kind": "loop",
+              "loop": "L23",
+              "line": 23,
+              "bound": {
+                "kind": "unknown",
+                "why": "while (ready.length > 0)"
+              },
+              "body": [
+                {
+                  "kind": "op",
+                  "line": 24,
+                  "what": "ready.shift()",
+                  "cost": "linear",
+                  "size": {
+                    "name": "needs",
+                    "len": true
+                  },
+                  "container": "ready"
+                },
+                {
+                  "kind": "alloc",
+                  "line": 25,
+                  "what": "order.push()",
+                  "sizes": [],
+                  "into": "order"
+                },
+                {
+                  "kind": "loop",
+                  "loop": "L26",
+                  "line": 26,
+                  "bound": {
+                    "kind": "size",
+                    "sizes": [
+                      {
+                        "name": "needs",
+                        "len": true,
+                        "inner": true
+                      }
+                    ],
+                    "why": "needs[item]"
+                  },
+                  "body": [
+                    {
+                      "kind": "alloc",
+                      "line": 29,
+                      "what": "ready.push()",
+                      "sizes": [],
+                      "into": "ready"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "counts": {
+      "steps": 118,
+      "calls": {
+        "Global": 1,
+        "anonymous": 7
+      },
+      "depth": {
+        "Global": 1,
+        "anonymous": 1
+      }
+    }
+  },
+  "steps": [
+    {"event":"call","line":0,"stack":[{"id":"f1","func":"Global","line":0,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":3,"stack":[{"id":"f1","func":"Global","line":3,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":13,"stack":[{"id":"f1","func":"Global","line":13,"locals":[["needs",{"kind":"ref","id":"o1"}]]}],"stdoutLength":0,"loops":[],"heap":{"o1":{"kind":"dict","id":"o1","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"ref","id":"o2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"ref","id":"o3"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"ref","id":"o4"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"ref","id":"o5"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"ref","id":"o6"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"ref","id":"o7"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"ref","id":"o8"}]],"length":7},"o2":{"kind":"list","id":"o2","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shoes\""}],"length":1},"o3":{"kind":"list","id":"o3","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""}],"length":2},"o4":{"kind":"list","id":"o4","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"belt\""},{"kind":"prim","type":"string","repr":"\"tie\""}],"length":2},"o5":{"kind":"list","id":"o5","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"jacket\""}],"length":1},"o6":{"kind":"list","id":"o6","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"jacket\""}],"length":1},"o7":{"kind":"list","id":"o7","typeName":"Array","items":[],"length":0},"o8":{"kind":"list","id":"o8","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":0}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[],"length":0}}},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":1},{"frame":"f1","loop":"L16","instance":1,"iteration":0}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}]],"length":1}}},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":1},{"frame":"f1","loop":"L16","instance":1,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":1},{"frame":"f1","loop":"L16","instance":1,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"1"}]],"length":2}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":1}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2},{"frame":"f1","loop":"L16","instance":2,"iteration":0}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}]],"length":3}}},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2},{"frame":"f1","loop":"L16","instance":2,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2},{"frame":"f1","loop":"L16","instance":2,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}]],"length":3}}},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2},{"frame":"f1","loop":"L16","instance":2,"iteration":2}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2},{"frame":"f1","loop":"L16","instance":2,"iteration":2}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"1"}]],"length":4}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":2}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3},{"frame":"f1","loop":"L16","instance":3,"iteration":0}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}]],"length":5}}},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3},{"frame":"f1","loop":"L16","instance":3,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3},{"frame":"f1","loop":"L16","instance":3,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}]],"length":5}}},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3},{"frame":"f1","loop":"L16","instance":3,"iteration":2}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3},{"frame":"f1","loop":"L16","instance":3,"iteration":2}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}]],"length":6}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":3}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":4}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":4},{"frame":"f1","loop":"L16","instance":4,"iteration":0}]},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":4},{"frame":"f1","loop":"L16","instance":4,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":4},{"frame":"f1","loop":"L16","instance":4,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"1"}]],"length":7}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":4}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":5}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":5},{"frame":"f1","loop":"L16","instance":5,"iteration":0}]},
+    {"event":"line","line":17,"stack":[{"id":"f1","func":"Global","line":17,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":5},{"frame":"f1","loop":"L16","instance":5,"iteration":1}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":5},{"frame":"f1","loop":"L16","instance":5,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":5}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":6}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":6},{"frame":"f1","loop":"L16","instance":6,"iteration":0}]},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":6}]},
+    {"event":"line","line":15,"stack":[{"id":"f1","func":"Global","line":15,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":7}]},
+    {"event":"line","line":16,"stack":[{"id":"f1","func":"Global","line":16,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":7},{"frame":"f1","loop":"L16","instance":7,"iteration":0}]},
+    {"event":"line","line":14,"stack":[{"id":"f1","func":"Global","line":14,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L14","instance":1,"iteration":7}]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f2","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f2","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f2","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"true"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f3","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f3","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f3","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"true"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f4","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f4","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f4","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"true"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f5","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f5","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f5","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"false"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f6","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f6","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f6","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"false"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f7","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f7","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f7","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"false"}},
+    {"event":"call","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f8","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f8","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":21,"stack":[{"id":"f1","func":"Global","line":21,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}]]},{"id":"f8","func":"anonymous","line":21,"locals":[["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[],"returnValue":{"kind":"prim","type":"boolean","repr":"false"}},
+    {"event":"line","line":22,"stack":[{"id":"f1","func":"Global","line":22,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}]]}],"stdoutLength":0,"loops":[],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""}],"length":3}}},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""}],"length":2}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1},{"frame":"f1","loop":"L26","instance":1,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""}],"length":1}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1},{"frame":"f1","loop":"L26","instance":1,"iteration":1}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1},{"frame":"f1","loop":"L26","instance":1,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1},{"frame":"f1","loop":"L26","instance":1,"iteration":1}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"socks\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":1}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shirt\""}],"length":1}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""}],"length":2}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":1}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"2"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":29,"stack":[{"id":"f1","func":"Global","line":29,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":1}]},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":1}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shirt\""},{"kind":"prim","type":"string","repr":"\"shoes\""}],"length":2}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":2}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":2}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2},{"frame":"f1","loop":"L26","instance":2,"iteration":2}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"pants\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":2}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shoes\""}],"length":1}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""}],"length":3}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":1}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"1"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":29,"stack":[{"id":"f1","func":"Global","line":29,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":1}]},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":1}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""}],"length":2}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":2}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":2}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"2"}]],"length":7}}},
+    {"event":"line","line":29,"stack":[{"id":"f1","func":"Global","line":29,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":2}]},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}],["after",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3},{"frame":"f1","loop":"L26","instance":3,"iteration":2}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""},{"kind":"prim","type":"string","repr":"\"tie\""}],"length":3}}},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shirt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":3}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":4}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":4}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"belt\""},{"kind":"prim","type":"string","repr":"\"tie\""}],"length":2}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":4},{"frame":"f1","loop":"L26","instance":4,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""},{"kind":"prim","type":"string","repr":"\"shoes\""}],"length":4}}},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"shoes\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":4}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"tie\""}],"length":1}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5},{"frame":"f1","loop":"L26","instance":5,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""},{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""}],"length":5}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5},{"frame":"f1","loop":"L26","instance":5,"iteration":1}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5},{"frame":"f1","loop":"L26","instance":5,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"1"}]],"length":7}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5},{"frame":"f1","loop":"L26","instance":5,"iteration":1}]},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"belt\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":5}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6},{"frame":"f1","loop":"L26","instance":6,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""},{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""},{"kind":"prim","type":"string","repr":"\"tie\""}],"length":6}}},
+    {"event":"line","line":27,"stack":[{"id":"f1","func":"Global","line":27,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6},{"frame":"f1","loop":"L26","instance":6,"iteration":1}]},
+    {"event":"line","line":28,"stack":[{"id":"f1","func":"Global","line":28,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6},{"frame":"f1","loop":"L26","instance":6,"iteration":1}],"heap":{"o9":{"kind":"dict","id":"o9","typeName":"Object","entries":[[{"kind":"prim","type":"key","repr":"socks"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shoes"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"pants"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"belt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"shirt"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"tie"},{"kind":"prim","type":"number","repr":"0"}],[{"kind":"prim","type":"key","repr":"jacket"},{"kind":"prim","type":"number","repr":"0"}]],"length":7}}},
+    {"event":"line","line":29,"stack":[{"id":"f1","func":"Global","line":29,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6},{"frame":"f1","loop":"L26","instance":6,"iteration":1}]},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}],["after",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6},{"frame":"f1","loop":"L26","instance":6,"iteration":1}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"jacket\""}],"length":1}}},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"tie\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":6}]},
+    {"event":"line","line":24,"stack":[{"id":"f1","func":"Global","line":24,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":7}]},
+    {"event":"line","line":25,"stack":[{"id":"f1","func":"Global","line":25,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":7}],"heap":{"o10":{"kind":"list","id":"o10","typeName":"Array","items":[],"length":0}}},
+    {"event":"line","line":26,"stack":[{"id":"f1","func":"Global","line":26,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":7},{"frame":"f1","loop":"L26","instance":7,"iteration":0}],"heap":{"o11":{"kind":"list","id":"o11","typeName":"Array","items":[{"kind":"prim","type":"string","repr":"\"socks\""},{"kind":"prim","type":"string","repr":"\"pants\""},{"kind":"prim","type":"string","repr":"\"shirt\""},{"kind":"prim","type":"string","repr":"\"shoes\""},{"kind":"prim","type":"string","repr":"\"belt\""},{"kind":"prim","type":"string","repr":"\"tie\""},{"kind":"prim","type":"string","repr":"\"jacket\""}],"length":7}}},
+    {"event":"line","line":23,"stack":[{"id":"f1","func":"Global","line":23,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}],["item",{"kind":"prim","type":"string","repr":"\"jacket\""}]]}],"stdoutLength":0,"loops":[{"frame":"f1","loop":"L23","instance":1,"iteration":7}]},
+    {"event":"line","line":34,"stack":[{"id":"f1","func":"Global","line":34,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":0,"loops":[]},
+    {"event":"return","line":34,"stack":[{"id":"f1","func":"Global","line":34,"locals":[["needs",{"kind":"ref","id":"o1"}],["indegree",{"kind":"ref","id":"o9"}],["ready",{"kind":"ref","id":"o10"}],["order",{"kind":"ref","id":"o11"}]]}],"stdoutLength":64,"loops":[],"output":{"line":34,"refs":["o11"]},"returnValue":{"kind":"prim","type":"undefined","repr":"undefined"}}
+  ]
+}
