@@ -75,7 +75,7 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
 
-Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_tracer.py`, `HookTests`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py` and `test_virtual_asyncio.py`.
+Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_hooks.py`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. `test_tracer.py` traces whole programs end to end. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py`, `test_virtual_asyncio.py` and `test_measure.py`.
 
 
 
@@ -146,7 +146,7 @@ The style: 2-space indents (4 in Python), double quotes, semicolons, trailing co
 - `noNonNullAssertion` is off: the code uses `!` deliberately where TypeScript can't see that a value exists.
 - In CSS, `noDescendingSpecificity` and `noImportantStyles` are off: some rules must override the Monaco editor's own styles.
 
-Ruff checks errors (`E4`, `E7`, `E9`, `F`), likely bugs (`B`), import order (`I`), modern syntax (`UP`) and complexity (`C90`: a function with more than 10 branches is split into named steps); `pyproject.toml` lists the two rules it skips and why. The functions over that limit when the check was turned on are marked `# noqa: C901 (W4 splits it)`, and the marks go as the code health plan's W4 splits them.
+Ruff checks errors (`E4`, `E7`, `E9`, `F`), likely bugs (`B`), import order (`I`), modern syntax (`UP`) and complexity (`C90`: a function with more than 10 branches is split into named steps); `pyproject.toml` lists the two rules it skips and why. No function is over it; to keep it that way, split a growing function into named steps rather than silencing the check.
 
 Pyright checks Python types in basic mode. Where it can't follow the code (asyncio's private event loop slots, which the tracer sets on purpose), the line says so with `# pyright: ignore[rule]` and a comment above it.
 
@@ -283,7 +283,8 @@ pr0-l1ne/
         ├── serialize.py        Python values -> trace values and heap objects
         ├── sizes.py            Memory sizes, as a 64-bit Python reports them
         ├── test_*.py           Python tests, one file per module
-        └── measure.py          Measure for Python: run at full size with counters
+        ├── measure.py          Measure for Python: run at full size with counters
+        └── counters.py         ...the counters, added by rewriting the syntax tree
 ```
 
 The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every color, line weight and corner radius there is a CSS custom property. The Style panel sets them (see [Styling](how-it-works.md#14-styling)), and the defaults on `:root` match the Graph paper theme. To add a theme, add an entry to `PRESETS` in `appearance.ts`.

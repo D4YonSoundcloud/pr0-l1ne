@@ -3,7 +3,9 @@
 import json
 import textwrap
 import unittest
+from unittest import mock
 
+import measure as M
 from measure import run_measure
 
 
@@ -150,6 +152,123 @@ class MeasureTests(unittest.TestCase):
         self.assertEqual(r["status"], "done")
         self.assertEqual(r["stdout"], "[3, 1]\n")
         self.assertLess(r["ms"], 1000)
+
+
+class MoreMeasureTests(unittest.TestCase):
+    def test_every_block_of_an_if_and_a_class_is_counted(self):
+        r = measure("""
+            for i in range(6):
+                if i % 2:
+                    a = 1
+                elif i % 3:
+                    b = 2
+                else:
+                    c = 3
+            class Box:
+                size = 4
+        """)
+        self.assertEqual((r["lines"]["4"], r["lines"]["6"], r["lines"]["8"]), (3, 2, 1))
+        self.assertEqual(r["lines"]["10"], 1)
+
+    def test_future_imports_stay_first(self):
+        r = measure("""
+            from __future__ import annotations
+            x: list[int] = [1]
+        """)
+        self.assertEqual(r["status"], "done")
+        self.assertNotIn("2", r["lines"])  # not counted: it must stay first in the file
+
+    def test_more_work_inside_built_ins(self):
+        r = measure("""
+            class Stack:
+                def __init__(self):
+                    self.items = list(range(300))
+            s = Stack()
+            s.items.insert(0, -1)
+            words = ["a"] * 50
+            sep = ", "
+            text = sep.join(words)
+            more = []
+            more.extend(words)
+            s.items.sort()
+            k = 10
+            tail = s.items[-k:]
+            n = sum(s.items)
+        """)
+        self.assertEqual(r["work"]["6"], 300)  # insert on an attribute's list
+        self.assertEqual((r["work"]["9"], r["workKind"]["9"]), (50, "c"))  # join copies
+        self.assertEqual(r["work"]["11"], 50)  # extend copies
+        self.assertEqual(r["workKind"]["12"], "o")  # sort
+        self.assertEqual(r["work"]["14"], 10)  # a slice with a computed bound
+        self.assertEqual((r["work"]["15"], r["workKind"]["15"]), (301, "s"))  # sum scans
+
+    def test_loops_over_things_without_a_length_still_count_their_passes(self):
+        r = measure("""
+            def gen():
+                yield from range(5)
+            for v in gen():
+                pass
+            squares = [x * x for x in gen()]
+            async def f(xs):
+                async for x in xs:
+                    pass
+        """)
+        self.assertEqual(r["passes"]["4"], 5)
+        self.assertNotIn("4", r["totals"])  # its length wasn't known as it started
+
+    def test_growth_runs_set_the_sizes_at_the_top(self):
+        source = """
+            n = 1000
+            k: int = 3
+            name = "x"
+            for i in range(n * k):
+                pass
+        """
+        r = json.loads(run_measure(textwrap.dedent(source), 10000, None, json.dumps({"n": 10, "k": 2, "name": 5})))
+        self.assertEqual(r["passes"]["5"], 20)  # n = 10, k = 2; name isn't a number, so it stays
+
+    def test_progress_is_reported_while_it_runs(self):
+        reports = []
+        with mock.patch.object(M, "PROGRESS_EVERY", 0), mock.patch.object(M, "POLL_EVERY", 10):
+            run_measure("for i in range(200):\n    pass\n", 10000, reports.append)
+        self.assertTrue(reports)
+        last = json.loads(reports[-1])
+        self.assertIn("elapsedMs", last)
+        self.assertEqual(last["loop"]["line"], 1)
+
+    def test_input_explains_itself(self):
+        r = measure("name = input()")
+        self.assertEqual(r["error"]["type"], "RuntimeError")
+        self.assertIn("input() isn't supported", r["error"]["message"])
+
+    def test_memory_held_walks_objects_and_skips_what_it_cant_size(self):
+        class Unsizable:
+            def __sizeof__(self):
+                raise TypeError("no size")
+
+        class Point:
+            def __init__(self):
+                self.coords = [1, 2, 3]
+
+        held = M.held_bytes(
+            {"p": Point(), "s": {1, 2}, "d": {"k": [1]}, "u": Unsizable(), "_mc": [0] * 1000, "input": None}
+        )
+        self.assertGreater(held, 0)
+        self.assertLess(held, M.held_bytes({"big": [0] * 1000}))  # the counters aren't the program's
+
+    def test_a_program_that_fails_on_its_second_run_has_no_plain_time(self):
+        import sys
+
+        self.addCleanup(sys.modules.pop, "measure_runs", None)
+        r = measure("""
+            import sys
+            runs = sys.modules.setdefault("measure_runs", type(sys)("measure_runs"))
+            runs.n = getattr(runs, "n", 0) + 1
+            if runs.n % 2 == 0:
+                raise ValueError("second time")
+        """)
+        self.assertEqual(r["status"], "done")
+        self.assertIsNone(r["plainMs"])
 
 
 if __name__ == "__main__":

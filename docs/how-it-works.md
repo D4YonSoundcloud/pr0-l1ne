@@ -488,7 +488,7 @@ Explanations are written with placeholders for any Big-O they mention, filled in
 
 [`worker/measure.py`](../src/worker/measure.py) and [`js/measure.ts`](../src/js/measure.ts) run a program at full size and return a `Measurement` ([`trace/measurement.ts`](../src/trace/measurement.ts)): counts per line, passes per loop, work per line inside built-ins, the length of each loop as it started, times, memory and the output.
 
-**Counting without tracing.** Tracing calls a function on every line, about 100 times slower than the program itself, so it couldn't run 400 million lines. Instead, each language's syntax tree is rewritten with counters:
+**Counting without tracing.** Tracing calls a function on every line, about 100 times slower than the program itself, so it couldn't run 400 million lines. Instead, each language's syntax tree is rewritten with counters ([`worker/counters.py`](../src/worker/counters.py) for Python):
 
 - before every statement, `_mc[12] += 1` (Python) or `__m.c[__m.l = 12]++` (JavaScript, which also remembers the line running);
 - first in every function, a call `_mf[3] += 1` (`__m.f[3]++`), by the line the function starts on;

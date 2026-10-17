@@ -13,11 +13,23 @@ import ast
 import io
 import re
 import tokenize
+from types import TracebackType
 from typing import Any
 
 # The filename user code is parsed and compiled under. The tracer and Measure
 # tell the program's own frames and tracebacks apart from theirs by it.
 USER_FILENAME = "<user>"
+
+
+def last_user_line(tb: TracebackType | None) -> int | None:
+    """The line in the program's own code an exception came from (the deepest one)."""
+    line = None
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == USER_FILENAME:
+            line = tb.tb_lineno
+        tb = tb.tb_next
+    return line
+
 
 HINT = re.compile(r"^#\s*viz\s*:(.*)$")
 

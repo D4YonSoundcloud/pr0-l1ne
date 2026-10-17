@@ -25,10 +25,10 @@ import re
 import sys
 import time
 import warnings
-from types import CodeType, FrameType, TracebackType
+from types import CodeType, FrameType
 from typing import Any
 
-from analysis import USER_FILENAME, analyze, collect_hints
+from analysis import USER_FILENAME, analyze, collect_hints, last_user_line
 from sampling import RECORD, LoopLengths, Sampler, user_frames
 from serialize import CONVENTIONAL_POINTERS, MAX_ITEMS, PRIMITIVE_TYPES, Serializer, is_hidden_name
 from shape import cost_analysis
@@ -412,16 +412,6 @@ def with_pointer_hints(index_names: dict[str, list[str]], hints: list[dict[str, 
             extra = [n.strip() for n in m.group(2).split(",") if n.strip()]
             out[m.group(1)] = sorted(set(out.get(m.group(1), [])) | set(extra))
     return out
-
-
-def last_user_line(tb: TracebackType | None) -> int | None:
-    """The line in the program's own code an exception came from (the deepest one)."""
-    line = None
-    while tb is not None:
-        if tb.tb_frame.f_code.co_filename == USER_FILENAME:
-            line = tb.tb_lineno
-        tb = tb.tb_next
-    return line
 
 
 def run_trace(source: str, max_steps: int = 2000, max_seconds: float = TRACE_SECONDS) -> str:
