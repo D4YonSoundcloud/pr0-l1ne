@@ -7,7 +7,7 @@
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
-import type { FromWorker, ToWorker } from "../worker/protocol";
+import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "../worker/protocol";
 
 type Measure = (
   source: string,
@@ -55,5 +55,5 @@ export function serve(
   };
 
   // No interpreter to download: the browser already runs JavaScript.
-  post({ type: "ready", label });
+  post({ type: "ready", label, protocolVersion: PROTOCOL_VERSION });
 }

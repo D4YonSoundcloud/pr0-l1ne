@@ -5,7 +5,7 @@
  * put together".
  */
 import "./styles.css";
-import { Banner } from "./app/banner";
+import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
 import { findElements } from "./app/elements";
 import { escapeHtml } from "./app/html";
@@ -36,8 +36,12 @@ const app = new AppStore(settings, programs);
 const currentLanguage = () => app.get().language;
 const els = findElements();
 
-const banner = new Banner(els.banner, { run: () => runNow(), measure: () => void measure.measure() });
-const setBanner = (html: string | null) => banner.show(html);
+const banner = new Banner(els.banner, {
+  run: () => runNow(),
+  measure: () => void measure.measure(),
+  reload: () => window.location.reload(),
+});
+const setBanner = (html: string | null, tone?: BannerTone) => banner.show(html, tone);
 
 // ---------------------------------------------------------------- the editor
 

@@ -291,7 +291,8 @@ pr0-l1ne/
     │   └── measure.test.ts     Measure tests
     └── worker/
         ├── protocol.ts         Message types between page and workers
-        ├── runner.ts           Starts a worker, runs code, watchdog
+        ├── runner.ts           Starts a worker, runs code, watchdog; the four ways a run can fail
+        ├── runner.test.ts      The runner against a fake worker
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
         ├── pythonModules.ts    Writes the Python modules into Pyodide and imports them
         ├── tracer.py           The Python tracer: the settrace hook and the run

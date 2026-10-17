@@ -12,18 +12,49 @@
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
-import type { FromWorker, ToWorker } from "./protocol";
+import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
+
+/*
+ * How a run can end. Each kind means something different to the person, and
+ * the app shows each its own way (app/runController.ts):
+ *
+ * - trace        The program ran. It may have raised an error (trace.error)
+ *                or used up its steps or time (trace.truncated): those are
+ *                the program's own story, shown as normal output.
+ * - timeout      It ran out of time without the tracer noticing (stuck in
+ *                one long built-in call), so the worker was restarted.
+ * - crash        The tracer itself failed: a bug in PR0L1NE, not in the
+ *                program. The only kind worth reporting.
+ * - unavailable  The language runtime couldn't load (usually the network),
+ *                or the worker speaks another protocol version than the page
+ *                (one cached from before a deploy). Nothing ran.
+ */
+
+/** The runtime couldn't run anything. "load": it didn't load (try again); "version": reload the page. */
+export type Unavailable = {
+  kind: "unavailable";
+  reason: "load" | "version";
+  /** For the status bar: says what failed. */
+  message: string;
+  /** Why, as the browser or the worker put it ("Failed to fetch…"). */
+  detail?: string;
+};
 
 export type RunOutcome =
   | { kind: "trace"; trace: Trace; elapsedMs: number }
   | { kind: "timeout"; seconds: number }
-  | { kind: "crash"; message: string };
+  | { kind: "crash"; message: string }
+  | Unavailable;
 
 export type MeasureOutcome =
   | { kind: "measured"; result: Measurement }
   /** Stopped by the person, or past the time limit without stopping itself (stuck inside one call). */
   | { kind: "stopped"; reason: "person" | "unresponsive" }
-  | { kind: "crash"; message: string };
+  | { kind: "crash"; message: string }
+  | Unavailable;
+
+/** Shown when a worker speaks another protocol version than the page. */
+export const OUTDATED_MESSAGE = "PR0L1NE was updated since this page loaded. Reload the page to use the new version.";
 
 /**
  * Development builds only: what's wrong with a trace, per the trace schema.
@@ -63,6 +94,8 @@ export class Runner {
   private measuring: PendingMeasure | null = null;
   private isReady = false;
   private label = "";
+  /** Why the runtime can't run anything, until a fresh worker is started. */
+  private failure: Unavailable | null = null;
   /** The latest status, so the UI can show it when switching languages. */
   status: RunnerStatus = { kind: "loading" };
 
@@ -81,23 +114,55 @@ export class Runner {
 
   private start(): void {
     this.isReady = false;
+    this.failure = null;
     this.setStatus({ kind: "loading" });
     this.worker = this.createWorker();
     this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
     this.worker.onerror = (event) => {
-      this.setStatus({ kind: "failed", message: event.message || "The worker failed to start." });
+      event.preventDefault?.();
+      if (this.isReady) {
+        // It loaded, then died: an error the worker's own code didn't catch.
+        this.crashed(event.message || "the worker stopped unexpectedly");
+      } else {
+        const detail = event.message || "the worker failed to start";
+        this.fail("load", `Couldn't start the language runtime: ${detail}.`, detail);
+      }
     };
+  }
+
+  /** Nothing can run: say why, and end whatever was waiting. */
+  private fail(reason: Unavailable["reason"], message: string, detail?: string): void {
+    const failure: Unavailable = { kind: "unavailable", reason, message, ...(detail ? { detail } : {}) };
+    this.failure = failure;
+    this.isReady = false;
+    this.setStatus({ kind: "failed", message });
+    if (this.pending) this.settle(this.pending.runId, failure);
+    this.settleMeasure(failure);
+  }
+
+  /** The worker died after loading: whatever was running crashed with it. Start a fresh one. */
+  private crashed(message: string): void {
+    const outcome = { kind: "crash" as const, message };
+    this.worker.terminate();
+    if (this.pending) this.settle(this.pending.runId, outcome);
+    this.settleMeasure(outcome);
+    this.start();
   }
 
   private receive(message: FromWorker): void {
     switch (message.type) {
       case "ready":
+        if (message.protocolVersion !== PROTOCOL_VERSION) {
+          this.worker.terminate();
+          this.fail("version", OUTDATED_MESSAGE);
+          break;
+        }
         this.isReady = true;
         this.label = message.label;
         this.setStatus(this.pending || this.measuring ? { kind: "running" } : { kind: "ready", label: message.label });
         break;
       case "loadError":
-        this.setStatus({ kind: "failed", message: `Couldn't load the language runtime: ${message.message}` });
+        this.fail("load", `Couldn't load the language runtime: ${message.message}`, message.message);
         break;
       case "result":
         if (checkTrace) void this.settleChecked(message.runId, message.trace, message.elapsedMs);
@@ -170,6 +235,8 @@ export class Runner {
     overrides?: Record<string, number>,
   ): Promise<MeasureOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
+    const failure = this.unavailable();
+    if (failure) return Promise.resolve(failure);
     const runId = this.nextRunId++;
     return new Promise((resolve) => {
       const hard = limitMs + MEASURE_GRACE_MS + (this.isReady ? 0 : 60_000);
@@ -189,9 +256,22 @@ export class Runner {
     this.start();
   }
 
+  /**
+   * Before a run: if the runtime failed to load, try a fresh worker (the
+   * network may be back). A worker of another version can't be helped
+   * without reloading the page.
+   */
+  private unavailable(): Unavailable | null {
+    if (this.failure?.reason === "version") return this.failure;
+    if (this.failure) this.start();
+    return null;
+  }
+
   /** Run code. Only one run is in flight at a time; callers should await. */
   run(source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy): Promise<RunOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
+    const failure = this.unavailable();
+    if (failure) return Promise.resolve(failure);
     const runId = this.nextRunId++;
     return new Promise((resolve) => {
       // The timer starts when we send, but the first run also waits for

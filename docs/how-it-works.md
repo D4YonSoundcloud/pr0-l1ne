@@ -36,7 +36,7 @@ The design rule that holds this together: **each layer only talks to the next th
 
 User code runs in a **Web Worker**, a separate thread, so even a `while True:` can't lock up the editor.
 
-There's one worker per language, and both speak the same small protocol, defined in [`protocol.ts`](../src/worker/protocol.ts): the page sends `run` with the source code, and the worker answers with `ready`, then a `result` holding a trace.
+There's one worker per language, and both speak the same small protocol, defined in [`protocol.ts`](../src/worker/protocol.ts): the page sends `run` with the source code, and the worker answers with `ready`, then a `result` holding a trace. `ready` says which version of the protocol the worker speaks (`PROTOCOL_VERSION`); the page refuses a worker that speaks another one, such as a worker cached from before a deploy talking to a newer page, and asks for a reload instead of misreading its messages. Raise the version whenever a message changes shape.
 
 - [`pyodide.worker.ts`](../src/worker/pyodide.worker.ts) imports Pyodide from jsDelivr, loads the tracer into it, and then answers runs. Vite bundles every `.py` file in `src/worker/` except the tests as text (`import.meta.glob` with `?raw`). [`pythonModules.ts`](../src/worker/pythonModules.ts) writes each one into Pyodide's virtual file system and imports `tracer` and `measure` the normal way, so the modules import each other as they do on your machine. The Node tests load them the same way (`src/testing/pythonTracer.ts`).
 - [`javascript.worker.ts`](../src/js/javascript.worker.ts) and [`typescript.worker.ts`](../src/js/typescript.worker.ts) are one-line entry points into [`serve.ts`](../src/js/serve.ts), which handles the protocol. They're ready immediately, and call `traceJavaScript()` or `traceTypeScript()` for each run. Keeping them as separate workers means only the TypeScript one contains Babel's core.
@@ -44,6 +44,17 @@ There's one worker per language, and both speak the same small protocol, defined
 [`languages.ts`](../src/languages.ts) lists each language's worker, Monaco language mode and examples, so everything language-specific in the UI comes from one place.
 
 [`runner.ts`](../src/worker/runner.ts) is the main-thread side. There's one runner per language, created the first time that language is used, so someone writing JavaScript never downloads Python. It keeps one run in flight at a time, and the run controller ([`app/runController.ts`](../src/app/runController.ts)) drops intermediate edits so only the newest code runs after the current run finishes. It also has a **watchdog**: if a run takes longer than 10 seconds, it terminates the worker and starts a fresh one. (The tracer's own step budget, below, catches almost every runaway loop first. The watchdog is the fallback for code stuck inside a single long C call, like `sum(range(10**12))`, which never produces a trace event.)
+
+**How a run can fail.** The runner turns everything that can happen at the boundary into one of four outcomes, and the run controller shows each its own way (a message, and a colour on the banner):
+
+| What happened | Outcome | Shown as |
+| --- | --- | --- |
+| The program raised an error | a `trace` with `error` | the program's own output: the error, on its line |
+| It used up its steps or time, or the watchdog stopped it | a `trace` with `truncated`, or `timeout` | stopped, and why, with what to do next |
+| The tracer itself failed (an exception in the worker, the worker dying after it loaded, or, in development builds, a trace that doesn't match the schema) | `crash` | a PR0L1NE bug, not the program's, with a link to report it |
+| The language runtime didn't load (usually the network), or the worker speaks another protocol version | `unavailable` | nothing ran: try again, or reload the page |
+
+A run waiting when the runtime fails to load ends at once as `unavailable`, and the next run tries a fresh worker. Only a `crash` goes to `reportCrash` (`RunOptions` and `MeasureOptions`), where error reporting will plug in; the other three are the program's doing or the network's. `src/worker/runner.test.ts` drives the runner with a fake worker through each of these, plus results arriving out of order, a run that never answers, and two languages' runners at once.
 
 ## 2. Tracing Python with `sys.settrace`
 

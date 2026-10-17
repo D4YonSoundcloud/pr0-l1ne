@@ -805,6 +805,27 @@ select {
   cursor: pointer;
   font-weight: 600;
 }
+/* Each kind of message has its own colour (app/banner.ts, BannerTone). */
+.banner[data-tone="budget"] {
+  border-left-color: var(--frontier);
+}
+.banner[data-tone="hint"] {
+  border-left-color: var(--ballpoint);
+}
+.banner[data-tone="runtime"] {
+  border-left-color: var(--ink-faint);
+  background: var(--cell-alt);
+}
+.banner[data-tone="tracer"] {
+  border-left-color: var(--path);
+  border-left-style: double;
+  border-left-width: 6px;
+}
+.banner a {
+  color: inherit;
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
 .banner-link:focus-visible {
   outline: 2px solid var(--accent, currentColor);
   outline-offset: 2px;

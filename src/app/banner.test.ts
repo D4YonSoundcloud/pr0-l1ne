@@ -28,4 +28,14 @@ describe("Banner", () => {
     el.click(); // not a button
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it("marks what kind of message it is, so each kind looks different", () => {
+    document.body.innerHTML = `<div id="banner"></div>`;
+    const el = document.getElementById("banner")!;
+    const banner = new Banner(el, {});
+    banner.show("Stopped after 20,000 steps", "budget");
+    expect(el.dataset.tone).toBe("budget");
+    banner.show("<strong>ValueError</strong>");
+    expect(el.dataset.tone).toBe("program"); // the default: the program's own error
+  });
 });

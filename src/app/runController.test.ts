@@ -6,7 +6,8 @@ import { createSettings } from "../settings";
 import { POLICY } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import type { RunnerStatus, RunOutcome } from "../worker/runner";
-import { LIVE_DELAY_MS, RunController, type RunnerLike } from "./runController";
+import type { BannerTone } from "./banner";
+import { LIVE_DELAY_MS, RunController, type RunnerLike, reportLink, type TracerCrash } from "./runController";
 import { AppStore } from "./state";
 
 /** A trace of `steps` empty steps (enough for the controller). */
@@ -59,13 +60,19 @@ function setup() {
   const banners: (string | null)[] = [];
   const marks: unknown[] = [];
   const results: boolean[] = [];
+  const tones: (BannerTone | undefined)[] = [];
+  const crashes: TracerCrash[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
   const runs = new RunController({
     app,
     status: document.getElementById("status")!,
     editor: { setMarks: (m) => marks.push(m), setHintWarnings: () => {} },
-    setBanner: (html) => banners.push(html),
+    setBanner: (html, tone) => {
+      banners.push(html);
+      tones.push(tone);
+    },
+    reportCrash: (crash) => crashes.push(crash),
     onResult: (updateMarks) => results.push(updateMarks),
     createRunner: (language, onStatus) => {
       const runner = new FakeRunner(onStatus);
@@ -89,6 +96,8 @@ function setup() {
     runs,
     runners,
     banners,
+    tones,
+    crashes,
     marks,
     results,
     fireTimers,
@@ -211,17 +220,81 @@ describe("RunController", () => {
     expect(results.at(-1)).toBe(false); // the error mark is already set
   });
 
-  it("explains timeouts and tracer crashes, escaping what it quotes", async () => {
-    const { runs, runners, app, banners } = setup();
-    runs.runNow("a");
-    runners.get("javascript")!.calls[0].finish({ kind: "timeout", seconds: 10 });
-    await flush();
-    expect(app.get().stale).toBe(true);
-    expect(banners.at(-1)).toMatch(/ran for more than 10 seconds/);
-    runs.runNow("b");
-    runners.get("javascript")!.calls[1].finish({ kind: "crash", message: "<boom>" });
-    await flush();
-    expect(banners.at(-1)).toBe("The tracer failed: <code>&lt;boom&gt;</code>");
+  describe("every way a run can fail has its own message and tone, and only a tracer crash is reported", () => {
+    /** Run once, finish with `outcome`, and say what the banner showed. */
+    async function failWith(outcome: RunOutcome, language: LanguageId = "javascript") {
+      const t = setup();
+      t.app.setLanguage(language);
+      t.runs.runNow("code");
+      t.runners.get(language)!.calls[0].finish(outcome);
+      await flush();
+      return { html: t.banners.at(-1)!, tone: t.tones.at(-1), crashes: t.crashes, stale: t.app.get().stale };
+    }
+
+    it("the program raised an error: its own output", async () => {
+      const r = await failWith({
+        kind: "trace",
+        trace: makeTrace(3, { error: { type: "ValueError", message: "<bad>", line: 2 } }),
+        elapsedMs: 1,
+      });
+      expect(r).toMatchObject({ html: "<strong>ValueError</strong> on line 2: &lt;bad&gt;", tone: "program" });
+      expect(r.crashes).toEqual([]);
+    });
+
+    it("it used up its steps, or its time: stopped, and labelled so", async () => {
+      const steps = await failWith({ kind: "trace", trace: makeTrace(3, { truncated: true }), elapsedMs: 1 });
+      expect(steps).toMatchObject({ tone: "budget", stale: false });
+      expect(steps.html).toContain(`Stopped after ${POLICY.maxSteps.toLocaleString()} recorded steps`);
+      const stuck = await failWith({ kind: "timeout", seconds: 10 });
+      expect(stuck).toMatchObject({ tone: "budget", stale: true });
+      expect(stuck.html).toMatch(/ran for more than 10 seconds/);
+      expect([...steps.crashes, ...stuck.crashes]).toEqual([]);
+    });
+
+    it("the tracer crashed: a PR0L1NE bug, with a way to report it", async () => {
+      const r = await failWith({ kind: "crash", message: "<boom>" }, "python");
+      expect(r).toMatchObject({ tone: "tracer", stale: true });
+      expect(r.html).toContain("a bug in PR0L1NE, not in your code: <code>&lt;boom&gt;</code>");
+      expect(r.html).toContain('target="_blank"');
+      expect(r.crashes).toEqual([{ language: "python", message: "<boom>" }]);
+      const link = new URL(reportLink({ language: "python", message: "<boom>" }));
+      expect(link.searchParams.get("title")).toBe("Tracer crash (Python): <boom>");
+      expect(link.searchParams.get("body")).toContain("**Error:** <boom>");
+    });
+
+    it("the runtime couldn't load: nothing ran, try again", async () => {
+      const r = await failWith(
+        {
+          kind: "unavailable",
+          reason: "load",
+          message: "Couldn't load the language runtime: offline",
+          detail: "offline",
+        },
+        "python",
+      );
+      expect(r).toMatchObject({ tone: "runtime", stale: true });
+      expect(r.html).toContain("<strong>Python couldn't load</strong>, so nothing ran (<code>offline</code>).");
+      expect(r.html).toContain('data-action="run"');
+      expect(r.crashes).toEqual([]);
+    });
+
+    it("the worker is from another version: reload", async () => {
+      const r = await failWith({ kind: "unavailable", reason: "version", message: "PR0L1NE was updated." });
+      expect(r).toMatchObject({ tone: "runtime" });
+      expect(r.html).toContain('data-action="reload"');
+      expect(r.crashes).toEqual([]);
+    });
+
+    it("a crash is reported even after switching language, but not shown", async () => {
+      const t = setup();
+      t.runs.runNow("code");
+      t.app.setLanguage("python");
+      const shown = t.banners.length;
+      t.runners.get("javascript")!.calls[0].finish({ kind: "crash", message: "late" });
+      await flush();
+      expect(t.crashes).toEqual([{ language: "javascript", message: "late" }]);
+      expect(t.banners.length).toBe(shown);
+    });
   });
 
   it("explains a trace cut short, offering Run after a Live run", async () => {

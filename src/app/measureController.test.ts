@@ -217,7 +217,12 @@ describe("MeasureController", () => {
     await flush();
     calls[1].finish({ kind: "crash", message: "<oops>" });
     await done;
-    expect(banners.at(-1)).toBe("Measuring failed: <code>&lt;oops&gt;</code>");
+    expect(banners.at(-1)).toContain("a bug in PR0L1NE, not in your code: <code>&lt;oops&gt;</code>");
+    done = measure.measure();
+    await flush();
+    calls[2].finish({ kind: "unavailable", reason: "load", message: "offline." });
+    await done;
+    expect(banners.at(-1)).toContain("couldn't load</strong>, so nothing ran (<code>offline.</code>)");
   });
 
   it("uses the default limit when the saved one isn't offered", async () => {

@@ -8,7 +8,7 @@
  */
 import { expandHeaps } from "../trace/delta";
 import type { Trace } from "../trace/types";
-import type { FromWorker, ToWorker } from "./protocol";
+import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
 import { loadPythonTracer, type PyodideFiles } from "./pythonModules";
 
 /** The tracer's Python files, bundled as text (every .py here; loadPythonTracer skips the tests). */
@@ -47,7 +47,7 @@ async function boot(): Promise<void> {
     const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL, env: { PYTHONHASHSEED: "0" } });
     ({ runTrace, runMeasure } = loadPythonTracer(pyodide, PYTHON_FILES));
     const pythonVersion = String(pyodide.runPython("import sys; sys.version.split()[0]"));
-    post({ type: "ready", label: `Python ${pythonVersion}` });
+    post({ type: "ready", label: `Python ${pythonVersion}`, protocolVersion: PROTOCOL_VERSION });
     while (queue.length) handle(queue.shift()!);
   } catch (error) {
     post({ type: "loadError", message: error instanceof Error ? error.message : String(error) });

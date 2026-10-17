@@ -20,8 +20,9 @@ import { estimateComplexity } from "../trace/complexity";
 import { findSizes, type GrowthPoint, ladder, pointFrom, staticGrowth } from "../trace/growth";
 import { duration, type Measurement } from "../trace/measurement";
 import { POLICY } from "../trace/policy";
-import { escapeHtml } from "./html";
-import type { RunController } from "./runController";
+import type { MeasureOutcome } from "../worker/runner";
+import type { BannerTone } from "./banner";
+import { failureBanner, type RunController, type TracerCrash } from "./runController";
 import type { AppStore } from "./state";
 
 const DEFAULT_LIMIT_MS = POLICY.measureMs;
@@ -50,7 +51,9 @@ export interface MeasureOptions {
   runs: Pick<RunController, "runnerFor" | "whenIdle" | "resumeQueued" | "refreshStatus">;
   els: MeasureElements;
   editor: MeasureEditor;
-  setBanner(html: string | null): void;
+  setBanner(html: string | null, tone?: BannerTone): void;
+  /** The tracer crashed while measuring: a bug in PR0L1NE (see RunOptions.reportCrash). */
+  reportCrash?(crash: TracerCrash): void;
   /** Stop playback (measuring starts from a still picture). */
   pause(): void;
   /** A new measurement for the code on screen: the complexity estimate can use its counts. */
@@ -280,13 +283,28 @@ export class MeasureController {
           outcome.reason === "person"
             ? "Measuring stopped. Nothing was counted, since the run was cut off from outside."
             : `The program didn't stop at the ${duration(this.limit)} limit (probably stuck inside one long built-in call), so it was stopped from outside.`,
+          "budget",
         );
       } else {
-        this.options.setBanner(`Measuring failed: <code>${escapeHtml(outcome.message)}</code>`);
+        this.options.setBanner(...failureBanner(outcome, lang));
       }
     }
+    if (outcome.kind === "crash") this.options.reportCrash?.({ language: lang, message: outcome.message });
     // Edits made while measuring were waiting.
     runs.resumeQueued();
+  }
+
+  /** Why a growth run ended before its last size, when it ended without a measurement. */
+  private cutShort(outcome: Exclude<MeasureOutcome, { kind: "measured" }>, at: string, lang: LanguageId): string {
+    switch (outcome.kind) {
+      case "stopped":
+        return outcome.reason === "person" ? `Stopped at ${at}.` : `At ${at} the run didn't stop at the time limit.`;
+      case "crash":
+        this.options.reportCrash?.({ language: lang, message: outcome.message });
+        return `At ${at} PR0L1NE's tracer failed (a bug in PR0L1NE, not your code): ${outcome.message}`;
+      case "unavailable":
+        return `At ${at} the language couldn't run: ${outcome.message}`;
+    }
   }
 
   /**
@@ -321,13 +339,7 @@ export class MeasureController {
       const full = rungs[rungs.length - 1].x;
       const at = `At ${x} = ${rung.x.toLocaleString()}`;
       if (outcome.kind !== "measured") {
-        stopped = {
-          x: full,
-          why:
-            outcome.kind === "stopped" && outcome.reason === "person"
-              ? `Stopped at ${x} = ${rung.x.toLocaleString()}.`
-              : `${at} the run didn't stop at the time limit.`,
-        };
+        stopped = { x: full, why: this.cutShort(outcome, `${x} = ${rung.x.toLocaleString()}`, lang) };
         break;
       }
       const m = outcome.result;

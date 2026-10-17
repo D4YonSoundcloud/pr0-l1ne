@@ -14,6 +14,7 @@ import { applyHints } from "../trace/hints";
 import { POLICY } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { Runner, type RunnerStatus, type RunOutcome } from "../worker/runner";
+import type { BannerTone } from "./banner";
 import { escapeHtml } from "./html";
 import { firstStepFor } from "./playbackController";
 import type { AppStore } from "./state";
@@ -44,13 +45,34 @@ export interface RunOptions {
   /** The status text in the toolbar. */
   status: HTMLElement;
   editor: RunEditor;
-  setBanner(html: string | null): void;
+  setBanner(html: string | null, tone?: BannerTone): void;
+  /**
+   * The tracer crashed: a bug in PR0L1NE. The one failure worth reporting
+   * (the others are the program's own, or the network's); nothing is sent
+   * anywhere yet, this is where error reporting will plug in.
+   */
+  reportCrash?(crash: TracerCrash): void;
   /** A run produced something to show: draw it. `updateMarks` is false when the editor's marks are already set. */
   onResult(updateMarks: boolean): void;
   /** Make a language's runner. */
   createRunner?(language: LanguageId, onStatus: (status: RunnerStatus) => void): RunnerLike;
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;
+}
+
+export interface TracerCrash {
+  language: LanguageId;
+  message: string;
+}
+
+/** Where people report a PR0L1NE bug. */
+export const ISSUES_URL = "https://github.com/D4YonSoundcloud/pr0-l1ne/issues/new";
+
+/** A link that opens a bug report about this crash, filled in. */
+export function reportLink(crash: TracerCrash): string {
+  const title = `Tracer crash (${LANGUAGES[crash.language].label}): ${crash.message.slice(0, 80)}`;
+  const body = `**Language:** ${LANGUAGES[crash.language].label}\n**Error:** ${crash.message}\n\n**The program** (or a smaller one that fails the same way):\n\n\`\`\`\n\n\`\`\`\n`;
+  return `${ISSUES_URL}?${new URLSearchParams({ title, body })}`;
 }
 
 interface Queued {
@@ -164,8 +186,9 @@ export class RunController {
     const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling);
     this.lastBudget = budget;
     this.inFlight = false;
-    // Ignore results for a language the person has switched away from.
-    if (language === this.language) this.apply(outcome, code);
+    // Report a crash whatever the language now; show results only for the language on screen.
+    if (outcome.kind === "crash") this.options.reportCrash?.({ language, message: outcome.message });
+    if (language === this.language) this.apply(outcome, code, language);
     this.resumeQueued();
   }
 
@@ -182,19 +205,13 @@ export class RunController {
     while (this.inFlight) await new Promise((resolve) => this.setTimer(() => resolve(undefined), 30));
   }
 
-  private apply(outcome: RunOutcome, code: string): void {
+  private apply(outcome: RunOutcome, code: string, language: LanguageId): void {
     const { app, setBanner, editor, onResult } = this.options;
-    if (outcome.kind === "timeout") {
+    if (outcome.kind !== "trace") {
+      // Nothing new to show: keep the last picture, dimmed, and say why.
       app.markStale();
-      setBanner(
-        `Your code ran for more than ${outcome.seconds} seconds and was stopped. Check for a loop that never ends.`,
-      );
-      onResult(true);
-      return;
-    }
-    if (outcome.kind === "crash") {
-      app.markStale();
-      setBanner(`The tracer failed: <code>${escapeHtml(outcome.message)}</code>`);
+      const [html, tone] = failureBanner(outcome, language);
+      setBanner(html, tone);
       onResult(true);
       return;
     }
@@ -207,6 +224,7 @@ export class RunController {
       const where = next.error.line ? ` on line ${next.error.line}` : "";
       setBanner(
         `<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`,
+        "program",
       );
       editor.setMarks({
         next: null,
@@ -227,13 +245,16 @@ export class RunController {
     app.showTrace(trace, code, wasAtEnd ? last : Math.max(firstStepFor(trace.steps.length), Math.min(stepIndex, last)));
 
     if (trace.truncated) {
-      setBanner(this.truncationBanner(trace));
+      setBanner(this.truncationBanner(trace), "budget");
     } else if (trace.error) {
       const where = trace.error.line ? ` on line ${trace.error.line}` : "";
-      setBanner(`<strong>${escapeHtml(trace.error.type)}</strong>${where}: ${escapeHtml(trace.error.message)}`);
+      setBanner(
+        `<strong>${escapeHtml(trace.error.type)}</strong>${where}: ${escapeHtml(trace.error.message)}`,
+        "program",
+      );
     } else if (warnings.length) {
       const more = warnings.length > 1 ? ` (and ${warnings.length - 1} more, underlined in the editor)` : "";
-      setBanner(`<strong>Hint on line ${warnings[0].line}</strong>: ${escapeHtml(warnings[0].message)}${more}`);
+      setBanner(`<strong>Hint on line ${warnings[0].line}</strong>: ${escapeHtml(warnings[0].message)}${more}`, "hint");
     } else {
       setBanner(null);
     }
@@ -253,5 +274,37 @@ export class RunController {
       return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
     }
     return `Stopped after ${POLICY.maxSteps.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
+  }
+}
+
+/** The banner for a run that produced no trace, and its tone: each kind of failure says something different. */
+export function failureBanner(
+  outcome: Exclude<RunOutcome, { kind: "trace" }>,
+  language: LanguageId,
+): [string, BannerTone] {
+  const name = LANGUAGES[language].label;
+  switch (outcome.kind) {
+    case "timeout":
+      // The program's doing, like any other limit.
+      return [
+        `Your code ran for more than ${outcome.seconds} seconds without the tracer getting a word in (probably one long built-in call), so it was stopped. Check for a loop that never ends.`,
+        "budget",
+      ];
+    case "crash":
+      // Ours: say so plainly, and how to tell us.
+      return [
+        `<strong>PR0L1NE's tracer failed.</strong> That's a bug in PR0L1NE, not in your code: <code>${escapeHtml(outcome.message)}</code>. <a href="${escapeHtml(reportLink({ language, message: outcome.message }))}" target="_blank" rel="noopener">Report it</a> so it can be fixed.`,
+        "tracer",
+      ];
+    case "unavailable":
+      if (outcome.reason === "version")
+        return [
+          `${escapeHtml(outcome.message)} <button type="button" class="banner-link" data-action="reload">Reload</button>`,
+          "runtime",
+        ];
+      return [
+        `<strong>${escapeHtml(name)} couldn't load</strong>, so nothing ran (<code>${escapeHtml(outcome.detail ?? outcome.message)}</code>). Check your connection, then <button type="button" class="banner-link" data-action="run">Run</button> to try again.`,
+        "runtime",
+      ];
   }
 }
