@@ -75,7 +75,7 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
 
-Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer is tested directly: hints, loops and index names (`analysis.py`) in `test_analysis.py`, the code-shape analysis (`shape*.py`) in `test_shape.py`, the `Serializer` (`serialize.py`) in `test_serializer.py`, and memory sizes (`sizes.py`) in `test_sizes.py`.
+Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_tracer.py`, `HookTests`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py` and `test_virtual_asyncio.py`.
 
 
 
@@ -271,7 +271,10 @@ pr0-l1ne/
         ├── runner.ts           Starts a worker, runs code, watchdog
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
         ├── pythonModules.ts    Writes the Python modules into Pyodide and imports them
-        ├── tracer.py           The Python tracer (settrace hooks and the step loop)
+        ├── tracer.py           The Python tracer: the settrace hook and the run
+        ├── sampling.py         Which passes of long loops are recorded
+        ├── steplog.py          Recorded steps, with heaps as deltas
+        ├── virtual_asyncio.py  asyncio on a virtual clock (tracer and Measure)
         ├── analysis.py         Read before running: hints, loops, index names
         ├── shape.py            The code's shape for complexity: the tree per function
         ├── shape_names.py      ...what size each name stands for

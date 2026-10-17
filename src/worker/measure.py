@@ -34,7 +34,7 @@ import time
 
 from analysis import USER_FILENAME
 from sizes import size64
-from tracer import virtual_loop_policy
+from virtual_asyncio import virtual_asyncio
 
 POLL_EVERY = 5000  # loop passes and calls between clock checks
 PROGRESS_EVERY = 0.25  # seconds between progress reports
@@ -516,21 +516,12 @@ class Measure:
         return result
 
     def _execute(self, code, env, out, memory):
+        with virtual_asyncio("asyncio" in self.source):
+            return self._execute_counted(code, env, out, memory)
+
+    def _execute_counted(self, code, env, out, memory):
         old_stdout = sys.stdout
         sys.stdout = out
-        uses_asyncio = "asyncio" in self.source
-        if uses_asyncio:
-            import asyncio
-
-            # asyncio's private policy and running-loop slots (see virtual_loop_policy).
-            saved = (
-                asyncio.events._event_loop_policy,  # pyright: ignore[reportAttributeAccessIssue]
-                asyncio.run,
-                asyncio.events._get_running_loop(),
-            )
-            asyncio.set_event_loop_policy(virtual_loop_policy())
-            asyncio.run = asyncio.runners.run
-            asyncio.events._set_running_loop(None)
         tracemalloc = None
         if memory:
             try:
@@ -558,11 +549,6 @@ class Measure:
             finally:
                 tracemalloc.stop()
         sys.stdout = old_stdout
-        if uses_asyncio:
-            # Put asyncio's private policy slot back (see virtual_loop_policy).
-            policy, asyncio.run, running = saved
-            asyncio.events._event_loop_policy = policy  # pyright: ignore[reportAttributeAccessIssue]
-            asyncio.events._set_running_loop(running)
         return status, error, elapsed, peak, stopped_at
 
 
