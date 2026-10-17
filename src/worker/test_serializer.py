@@ -193,6 +193,7 @@ class HelperTests(unittest.TestCase):
 
     def test_strips_are_for_numbers_only(self):
         strip = T.strip_of(list(range(300)))
+        assert strip is not None
         self.assertLessEqual(len(strip["values"]), T.STRIP_SAMPLES)
         self.assertIsNone(T.strip_of(["a"] * 300))
 
@@ -204,7 +205,9 @@ class HelperTests(unittest.TestCase):
     def test_sizes_are_as_on_a_64_bit_python(self):
         self.assertEqual(T.size64(None), 16)
         self.assertEqual(T.size64(1), 28)
-        self.assertGreater(T.size64({i: i for i in range(10)}), T.size64({}))
+        big, empty = T.size64({i: i for i in range(10)}), T.size64({})
+        assert big is not None and empty is not None
+        self.assertGreater(big, empty)
         self.assertGreaterEqual(T.list_capacity([1, 2, 3]), 3)
 
     def test_hints_are_read_from_comments(self):

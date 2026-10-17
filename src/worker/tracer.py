@@ -24,6 +24,8 @@ import types
 import warnings
 import weakref
 from collections import deque
+from itertools import islice
+from typing import Any
 
 USER_FILENAME = "<user>"
 MAX_ITEMS = 60  # items shown per container before truncating
@@ -257,7 +259,11 @@ def _walk_shallow(node):
 class FunctionShape:
     """Builds one CostFunction."""
 
+    #: The function's decorators' names (cost_analysis sets them): memoized functions cost differently.
+    decorators: list[str | None]
+
     def __init__(self, name, line, params, body, user_functions, is_global):
+        self.decorators = []
         self.name = name
         self.line = line
         self.params = params
@@ -343,7 +349,7 @@ class FunctionShape:
                 return EMPTY_CONTAINERS[name]
         return None
 
-    def size_of(self, node, allow_value=False):
+    def size_of(self, node, allow_value=False):  # noqa: C901 (W4 splits it)
         """The size an expression measures, as a SizeRef; "const" or None."""
         if node is None:
             return None
@@ -401,7 +407,7 @@ class FunctionShape:
             return self.length_of(node.value)
         return None
 
-    def length_of(self, node):
+    def length_of(self, node):  # noqa: C901 (W4 splits it)
         """len(node) as a SizeRef."""
         if isinstance(node, ast.Name):
             if node.id in self.elements:
@@ -582,7 +588,7 @@ class FunctionShape:
             return alias if alias and alias.get("len") else {"name": it.id, "len": True}
         return None
 
-    def while_bound(self, node):
+    def while_bound(self, node):  # noqa: C901 (W4 splits it)
         test = node.test
         header = "while " + ast.unparse(test)
         test_names = {n.id for n in ast.walk(test) if isinstance(n, ast.Name)}
@@ -735,7 +741,7 @@ class FunctionShape:
         body = self.block(self.body)
         return {"name": self.name, "line": self.line, "params": self.params, "memo": self.is_memoized(), "body": body}
 
-    def block(self, stmts, in_loop=False):
+    def block(self, stmts, in_loop=False):  # noqa: C901 (W4 splits it)
         out = []
         for stmt in stmts:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -791,7 +797,8 @@ class FunctionShape:
         if isinstance(stmt, ast.Assign):
             value = stmt.value
             sizes = self.alloc_sizes(value)
-            simple = len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name)
+            only = stmt.targets[0] if len(stmt.targets) == 1 else None
+            name = only.id if isinstance(only, ast.Name) else None
             if sizes:
                 out.append(
                     {
@@ -799,7 +806,7 @@ class FunctionShape:
                         "line": stmt.lineno,
                         "what": ast.unparse(value)[:40],
                         "sizes": sizes,
-                        **({"name": stmt.targets[0].id} if simple else {}),
+                        **({"name": name} if name else {}),
                     }
                 )
             for target in stmt.targets:
@@ -838,7 +845,7 @@ class FunctionShape:
                     )
         return out
 
-    def alloc_sizes(self, value):
+    def alloc_sizes(self, value):  # noqa: C901 (W4 splits it)
         """Sizes multiplied together if value makes a new collection sized by them, else None."""
         if (
             isinstance(value, ast.BinOp)
@@ -877,7 +884,7 @@ class FunctionShape:
                 return [ref] if ref and ref != "const" else None
         return None
 
-    def expr(self, node, in_loop):
+    def expr(self, node, in_loop):  # noqa: C901 (W4 splits it)
         """Calls, costly built-ins, comprehensions and growth in an expression, in source order."""
         out = []
         if node is None:
@@ -948,7 +955,7 @@ class FunctionShape:
         out.append({"kind": "loop", "line": node.lineno, "bound": bound, "body": body})
         return out
 
-    def call(self, node):
+    def call(self, node):  # noqa: C901 (W4 splits it)
         out = []
         name = _call_name(node)
         line = node.lineno
@@ -1090,7 +1097,7 @@ class FunctionShape:
             return "same"
         return "unknown"
 
-    def arg_shrink(self, arg, param):
+    def arg_shrink(self, arg, param):  # noqa: C901 (W4 splits it)
         names = {n.id for n in ast.walk(arg) if isinstance(n, ast.Name)}
         if _is_const(arg):
             return "const"
@@ -1149,8 +1156,6 @@ class FunctionShape:
                         if base:
                             stored.add(base)
         return bool(checked & stored)
-
-    decorators = ()
 
 
 def explorations(shape):
@@ -1366,7 +1371,7 @@ class Serializer:
     def value(self, v):
         if isinstance(v, PRIMITIVE_TYPES):
             type_name = "none" if v is None else type(v).__name__
-            out = {"kind": "prim", "type": type_name, "repr": short_repr(v)}
+            out: dict[str, Any] = {"kind": "prim", "type": type_name, "repr": short_repr(v)}
             # Sizes the renderer can't tell from the repr: strings and bytes
             # (which may be shortened) and big ints. Others are fixed.
             if isinstance(v, (str, bytes)) or (type(v) is int and v.bit_length() > 30):
@@ -1436,7 +1441,7 @@ class Serializer:
             out.append(self.value(item))
         return out
 
-    def describe(self, v, oid):
+    def describe(self, v, oid):  # noqa: C901 (W4 splits it)
         type_name = type(v).__name__
 
         if isinstance(v, SEQUENCE_TYPES):
@@ -1453,7 +1458,8 @@ class Serializer:
                     "kind": kind,
                     "id": oid,
                     "typeName": type_name,
-                    "items": self.items(v[start : start + MAX_ITEMS]),
+                    # islice, not v[start:...]: a deque can't be sliced.
+                    "items": self.items(islice(v, start, start + MAX_ITEMS)),
                     "length": n,
                     "size": size64(v),
                 }
@@ -1574,7 +1580,7 @@ class Tracer:
         self.object_ids = {}
         self.frame_ids = {}
         # What print() was given since the last step: {"line", "objects"}.
-        self.pending_print = None
+        self.pending_print: dict | None = None
         self.frame_counter = 0
         self.loops = []
         self.index_names = {}
@@ -1760,7 +1766,7 @@ class Tracer:
 
     # -- recording ---------------------------------------------------------
 
-    def record(self, frame, event, arg, into=None):
+    def record(self, frame, event, arg, into=None):  # noqa: C901 (W4 splits it)
         if into is None and len(self.steps) >= self.max_steps:
             self.stopped_by = "steps"
             raise StepLimitExceeded()
@@ -1903,7 +1909,7 @@ class Tracer:
                 self.commit(step)
         self.tail = None
 
-    def trace(self, frame, event, arg):
+    def trace(self, frame, event, arg):  # noqa: C901 (W4 splits it)
         code = frame.f_code
         if code.co_filename != USER_FILENAME:
             return None  # don't trace library code
@@ -2024,7 +2030,7 @@ class Tracer:
 
         return print
 
-    def run(self):
+    def run(self):  # noqa: C901 (W4 splits it)
         result = {
             "version": 1,
             "language": "python",
@@ -2079,7 +2085,12 @@ class Tracer:
             # Pyodide's back.
             import asyncio
 
-            saved_asyncio = (asyncio.events._event_loop_policy, asyncio.run, asyncio.events._get_running_loop())
+            # asyncio's private policy and running-loop slots (see virtual_loop_policy).
+            saved_asyncio = (
+                asyncio.events._event_loop_policy,  # pyright: ignore[reportAttributeAccessIssue]
+                asyncio.run,
+                asyncio.events._get_running_loop(),
+            )
             asyncio.set_event_loop_policy(virtual_loop_policy())
             asyncio.run = asyncio.runners.run
             asyncio.events._set_running_loop(None)
@@ -2103,7 +2114,9 @@ class Tracer:
             sys.settrace(None)
             sys.stdout = old_stdout
             if uses_asyncio:
-                asyncio.events._event_loop_policy, asyncio.run, running = saved_asyncio
+                # Put asyncio's private policy slot back (see virtual_loop_policy).
+                policy, asyncio.run, running = saved_asyncio
+                asyncio.events._event_loop_policy = policy  # pyright: ignore[reportAttributeAccessIssue]
                 asyncio.events._set_running_loop(running)
 
         result["stdout"] = self.stdout.getvalue()
@@ -2184,7 +2197,8 @@ def virtual_loop_policy():
     class Policy(asyncio.events.BaseDefaultEventLoopPolicy):
         _loop_factory = VirtualLoop
 
-    return Policy()
+    # Typeshed's stubs list the child watcher methods as abstract; asyncio's own policy doesn't need them.
+    return Policy()  # pyright: ignore[reportAbstractUsage]
 
 
 def last_user_line(tb):

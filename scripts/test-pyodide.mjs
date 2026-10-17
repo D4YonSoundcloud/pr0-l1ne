@@ -8,28 +8,23 @@
  *   npm run test:pyodide
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { loadPyodide } from "pyodide";
 
 const dir = new URL("../src/worker/", import.meta.url);
 const pyodide = await loadPyodide({ env: { PYTHONHASHSEED: "0" } }); // as the app does
-for (const file of [
-  "tracer.py",
-  "test_tracer.py",
-  "test_serializer.py",
-  "test_analysis.py",
-  "measure.py",
-  "test_measure.py",
-]) {
-  pyodide.FS.writeFile(`/home/pyodide/${file}`, readFileSync(new URL(file, dir), "utf8"));
-}
+// Every Python file, as the app loads them (src/worker/pythonModules.ts), plus the tests.
+const files = readdirSync(dir).filter((f) => f.endsWith(".py"));
+pyodide.FS.mkdirTree("/pr0l1ne");
+for (const file of files) pyodide.FS.writeFile(`/pr0l1ne/${file}`, readFileSync(new URL(file, dir), "utf8"));
+const tests = files.filter((f) => f.startsWith("test_")).map((f) => f.slice(0, -3));
 const [ok, report] = pyodide
   .runPython(`
-import sys, io, unittest
-sys.path.insert(0, "/home/pyodide")
-import test_tracer, test_serializer, test_analysis, test_measure
+import sys, io, importlib, unittest
+sys.path.append("/pr0l1ne")
+modules = [importlib.import_module(name) for name in ${JSON.stringify(tests)}]
 stream = io.StringIO()
-suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromModule(m) for m in (test_tracer, test_serializer, test_analysis, test_measure)])
+suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromModule(m) for m in modules])
 result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
 (result.wasSuccessful(), f"Python {sys.version.split()[0]} in Pyodide\\n" + stream.getvalue())
 `)

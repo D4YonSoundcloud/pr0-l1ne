@@ -38,7 +38,7 @@ Open the URL Vite prints (usually http://localhost:5173). The bubble sort exampl
 | `npm run schema` | Regenerates `schema/trace.schema.json` from `src/trace/types.ts`. Run it after changing the trace types; a test fails until you do. |
 | `npm run test:golden` | Traces every example in all three languages and compares with `fixtures/traces/`. Add `-- -u` to accept intended changes. |
 | `npm run test:coverage` | Runs the TypeScript tests with coverage (report in `coverage/js/index.html`), then the Python tests with coverage (`coverage/python/index.html`). Python coverage needs `pip install coverage`. |
-| `npm run lint` | Checks formatting and lint rules: Biome for TypeScript, JavaScript, JSON, CSS and HTML, then Ruff for Python. Changes nothing. |
+| `npm run lint` | Checks formatting and lint rules: Biome for TypeScript, JavaScript, JSON, CSS and HTML, then Ruff and Pyright (types) for Python. Changes nothing. |
 | `npm run format` | Fixes what can be fixed automatically: formats every file and applies safe lint fixes. |
 
 The output of `npm run build` is plain static files. You can host `dist/` anywhere that serves static content (GitHub Pages, Netlify, an S3 bucket, `python3 -m http.server`).
@@ -127,12 +127,13 @@ Formatting and lint rules are automatic, so nobody has to think about spacing or
 | --- | --- | --- |
 | [Biome](https://biomejs.dev/) | TypeScript, JavaScript, JSON, CSS and HTML: formatting, lint rules, sorted imports | `biome.json` |
 | [Ruff](https://docs.astral.sh/ruff/) | Python in `src/worker/`: formatting and lint rules | `pyproject.toml` |
-| [Lefthook](https://lefthook.dev/) | Runs both on the files you commit, and a typecheck before you push | `lefthook.yml` |
+| [Pyright](https://microsoft.github.io/pyright/) | Python types, in basic mode (installed by npm, no Python setup needed) | `pyproject.toml` |
+| [Lefthook](https://lefthook.dev/) | Runs Biome and Ruff on the files you commit, and both typecheckers before you push | `lefthook.yml` |
 | EditorConfig | Indentation and line endings for editors | `.editorconfig` |
 
 The style: 2-space indents (4 in Python), double quotes, semicolons, trailing commas, lines up to 120 characters.
 
-**Hooks.** `npm ci` installs the git hooks. Each commit formats and fixes the staged files and adds the fixes to the commit; each push type-checks the project. Ruff is a Python tool, so install it once with `pip install ruff` (or `pipx install ruff`); without it, the hook skips the Python files with a note. To skip the hooks once, use `git commit --no-verify`.
+**Hooks.** `npm ci` installs the git hooks. Each commit formats and fixes the staged files and adds the fixes to the commit; each push type-checks the project (TypeScript with `tsc`, Python with Pyright). Ruff is a Python tool, so install it once with `pip install ruff` (or `pipx install ruff`); without it, the hook skips the Python files with a note. To skip the hooks once, use `git commit --no-verify`.
 
 **Editors.** VS Code suggests the Biome, Ruff and EditorConfig extensions when you open the project (`.vscode/extensions.json`). With them, files format on save the same way the hooks do.
 
@@ -141,7 +142,11 @@ The style: 2-space indents (4 in Python), double quotes, semicolons, trailing co
 - `noNonNullAssertion` is off: the code uses `!` deliberately where TypeScript can't see that a value exists.
 - In CSS, `noDescendingSpecificity` and `noImportantStyles` are off: some rules must override the Monaco editor's own styles.
 
-Ruff checks errors (`E4`, `E7`, `E9`, `F`), likely bugs (`B`), import order (`I`) and modern syntax (`UP`); `pyproject.toml` lists the two rules it skips and why. A rule that's wrong for one line is silenced on that line with a reason, for example `// biome-ignore lint/complexity/noBannedTypes: keys are the user's own functions`, never turned off for the whole project.
+Ruff checks errors (`E4`, `E7`, `E9`, `F`), likely bugs (`B`), import order (`I`), modern syntax (`UP`) and complexity (`C90`: a function with more than 10 branches is split into named steps); `pyproject.toml` lists the two rules it skips and why. The functions over that limit when the check was turned on are marked `# noqa: C901 (W4 splits it)`, and the marks go as the code health plan's W4 splits them.
+
+Pyright checks Python types in basic mode. Where it can't follow the code (asyncio's private event loop slots, which the tracer sets on purpose), the line says so with `# pyright: ignore[rule]` and a comment above it.
+
+A rule that's wrong for one line is silenced on that line with a reason, for example `// biome-ignore lint/complexity/noBannedTypes: keys are the user's own functions`, never turned off for the whole project.
 
 **`git blame` and the big format.** The commit that first formatted the whole codebase is listed in `.git-blame-ignore-revs`, so `git blame` and GitHub's blame view skip it and show who last really changed each line. Locally, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
 

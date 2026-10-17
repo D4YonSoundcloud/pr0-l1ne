@@ -32,10 +32,7 @@ import math
 import sys
 import time
 
-try:  # in the browser, tracer.py is loaded into the same namespace first
-    from tracer import USER_FILENAME, size64, virtual_loop_policy  # noqa: F401
-except ImportError:
-    pass
+from tracer import USER_FILENAME, size64, virtual_loop_policy
 
 POLL_EVERY = 5000  # loop passes and calls between clock checks
 PROGRESS_EVERY = 0.25  # seconds between progress reports
@@ -211,15 +208,16 @@ class Counters(ast.NodeTransformer):
         node.body = self.body(node.body)
         return node
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
         node.decorator_list = [self.visit(d) for d in node.decorator_list]
         node.args = self.visit(node.args)
         node.body = self.body(node.body, function=True, def_line=node.lineno)
         return node
 
-    visit_AsyncFunctionDef = visit_FunctionDef
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):  # counted as a def is
+        return self.visit_FunctionDef(node)
 
-    def visit_For(self, node):
+    def visit_For(self, node: ast.For | ast.AsyncFor):
         line = node.lineno
         node.target = self.visit(node.target)
         node.iter = ast.copy_location(_call("_miter", ast.Constant(line), self.visit(node.iter)), node.iter)
@@ -227,7 +225,8 @@ class Counters(ast.NodeTransformer):
         node.orelse = self.wrap_existing([self.visit(s) for s in node.orelse])
         return node
 
-    visit_AsyncFor = visit_For
+    def visit_AsyncFor(self, node: ast.AsyncFor):  # counted as a for is
+        return self.visit_For(node)
 
     def visit_While(self, node):
         node.test = self.visit(node.test)
@@ -521,7 +520,12 @@ class Measure:
         if uses_asyncio:
             import asyncio
 
-            saved = (asyncio.events._event_loop_policy, asyncio.run, asyncio.events._get_running_loop())
+            # asyncio's private policy and running-loop slots (see virtual_loop_policy).
+            saved = (
+                asyncio.events._event_loop_policy,  # pyright: ignore[reportAttributeAccessIssue]
+                asyncio.run,
+                asyncio.events._get_running_loop(),
+            )
             asyncio.set_event_loop_policy(virtual_loop_policy())
             asyncio.run = asyncio.runners.run
             asyncio.events._set_running_loop(None)
@@ -553,7 +557,9 @@ class Measure:
                 tracemalloc.stop()
         sys.stdout = old_stdout
         if uses_asyncio:
-            asyncio.events._event_loop_policy, asyncio.run, running = saved
+            # Put asyncio's private policy slot back (see virtual_loop_policy).
+            policy, asyncio.run, running = saved
+            asyncio.events._event_loop_policy = policy  # pyright: ignore[reportAttributeAccessIssue]
             asyncio.events._set_running_loop(running)
         return status, error, elapsed, peak, stopped_at
 
@@ -590,7 +596,7 @@ def held_bytes(env):
     return total
 
 
-def run_measure(source, limit_ms=20000, report=None, overrides_json=None):
+def run_measure(source: str, limit_ms: float = 20000, report=None, overrides_json: str | None = None) -> str:
     """Entry point for the worker. `report(json)` gets progress. `overrides_json`:
     {"n": 625} sets top-level sizes (growth runs). Returns a JSON string."""
     overrides = json.loads(overrides_json) if overrides_json else None

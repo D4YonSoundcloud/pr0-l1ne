@@ -3,13 +3,20 @@
  * Runs in a Web Worker so user code can never freeze the page.
  *
  * Loads Pyodide (CPython compiled to WebAssembly) from the jsDelivr CDN,
- * loads tracer.py into it, then answers "run" messages with a Trace.
+ * loads the tracer's modules into it (pythonModules.ts), then answers "run"
+ * messages with a Trace and "measure" messages with a Measurement.
  */
 import { expandHeaps } from "../trace/delta";
 import type { Trace } from "../trace/types";
-import measureSource from "./measure.py?raw";
 import type { FromWorker, ToWorker } from "./protocol";
-import tracerSource from "./tracer.py?raw";
+import { loadPythonTracer, type PyodideFiles } from "./pythonModules";
+
+/** The tracer's Python files, bundled as text (every .py here; loadPythonTracer skips the tests). */
+const PYTHON_FILES = import.meta.glob<string>(["./*.py", "!./test_*.py"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 
 // Pyodide 0.27.x ships CPython 3.12. The npm package on jsDelivr contains the
 // core interpreter and standard library, which is all the tracer needs.
@@ -17,10 +24,8 @@ export const PYODIDE_VERSION = "0.27.8";
 const INDEX_URL = `https://cdn.jsdelivr.net/npm/pyodide@${PYODIDE_VERSION}/`;
 
 /** The small part of the Pyodide API we use. */
-interface Pyodide {
+interface Pyodide extends PyodideFiles {
   version: string;
-  runPython(code: string): unknown;
-  globals: { get(name: string): unknown };
 }
 
 type RunTrace = (source: string, maxSteps: number, maxSeconds: number) => string;
@@ -40,10 +45,7 @@ async function boot(): Promise<void> {
     // run and every page load (Python randomizes it by default), so a
     // program's output and drawing are repeatable.
     const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL, env: { PYTHONHASHSEED: "0" } });
-    pyodide.runPython(tracerSource);
-    pyodide.runPython(measureSource); // uses the tracer's helpers, from the same namespace
-    runTrace = pyodide.globals.get("run_trace") as RunTrace;
-    runMeasure = pyodide.globals.get("run_measure") as RunMeasure;
+    ({ runTrace, runMeasure } = loadPythonTracer(pyodide, PYTHON_FILES));
     const pythonVersion = String(pyodide.runPython("import sys; sys.version.split()[0]"));
     post({ type: "ready", label: `Python ${pythonVersion}` });
     while (queue.length) handle(queue.shift()!);

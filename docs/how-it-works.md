@@ -38,7 +38,7 @@ User code runs in a **Web Worker**, a separate thread, so even a `while True:` c
 
 There's one worker per language, and both speak the same small protocol, defined in [`protocol.ts`](../src/worker/protocol.ts): the page sends `run` with the source code, and the worker answers with `ready`, then a `result` holding a trace.
 
-- [`pyodide.worker.ts`](../src/worker/pyodide.worker.ts) imports Pyodide from jsDelivr, loads the tracer's Python source into it (Vite bundles `tracer.py` as a string through its `?raw` import), and then answers runs.
+- [`pyodide.worker.ts`](../src/worker/pyodide.worker.ts) imports Pyodide from jsDelivr, loads the tracer into it, and then answers runs. Vite bundles every `.py` file in `src/worker/` except the tests as text (`import.meta.glob` with `?raw`). [`pythonModules.ts`](../src/worker/pythonModules.ts) writes each one into Pyodide's virtual file system and imports `tracer` and `measure` the normal way, so the modules import each other as they do on your machine. The Node tests load them the same way (`src/testing/pythonTracer.ts`).
 - [`javascript.worker.ts`](../src/js/javascript.worker.ts) and [`typescript.worker.ts`](../src/js/typescript.worker.ts) are one-line entry points into [`serve.ts`](../src/js/serve.ts), which handles the protocol. They're ready immediately, and call `traceJavaScript()` or `traceTypeScript()` for each run. Keeping them as separate workers means only the TypeScript one contains Babel's core.
 
 [`languages.ts`](../src/languages.ts) lists each language's worker, Monaco language mode and examples, so everything language-specific in the UI comes from one place.

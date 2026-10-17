@@ -36,6 +36,22 @@ class TracerTests(unittest.TestCase):
         self.assertEqual(obj["kind"], "list")
         self.assertEqual([v["repr"] for v in obj["items"]], ["3", "'a'", "None"])
 
+    def test_long_containers_show_a_window_of_their_items(self):
+        # A deque can't be sliced: this used to stop the program with a TypeError.
+        t = trace("""
+            from collections import deque
+            q = deque(range(100))
+            q.rotate(5)
+            nums = list(range(100))
+        """)
+        self.assertIsNone(t["error"])
+        heap = t["steps"][-1]["heap"]
+        for name, first in (("q", "95"), ("nums", "0")):
+            obj = heap[last_locals(t)[name]["id"]]
+            self.assertEqual(obj["length"], 100)
+            self.assertEqual(len(obj["items"]), 60)
+            self.assertEqual(obj["items"][0]["repr"], first)
+
     def test_sizes_are_recorded_as_on_a_64_bit_python(self):
         t = trace("""
             nums = []
