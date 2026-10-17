@@ -77,6 +77,8 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_hooks.py`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. `test_tracer.py` traces whole programs end to end. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py`, `test_virtual_asyncio.py` and `test_measure.py`.
 
+The JavaScript tracer has no such blind spot, so its modules are tested both end to end (`trace.test.ts`, `async.test.ts`) and directly (`inspector.test.ts`, `sampling.test.ts`, `instrument.test.ts`, `cost.test.ts`). The cost tables in `src/js/costs/` are tested entry by entry: `checkTable()` in `tableTests.ts` writes a call to each method and checks the estimate does what the entry says (a loop, a linear or n log n operation, a copy, growth, a result as long as its receiver). A new method goes in its table and is tested from there. Every file in `src/js/` has at least 80% of its branches covered.
+
 
 
 ## How the app is put together
@@ -252,20 +254,39 @@ pr0-l1ne/
     │   ├── animate.test.ts     Animation tests (jsdom)
     │   └── viewport.ts         Pan, zoom and node dragging for both sections
     ├── js/
-    │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel)
-    │   ├── cost.ts             The code's shape, for complexity estimates
+    │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel): parse, then
+    │   ├── analyze.ts            passes 1 and 2: blocks everywhere; what each statement sees
+    │   ├── transform.ts          pass 3: insert the runtime's calls
+    │   ├── cost.ts             The code's shape, for complexity estimates (costAnalysis)
+    │   ├── costs/
+    │   │   ├── shape.ts        A function's loops, calls and costly built-ins, in order
+    │   │   ├── loops.ts        How many passes each loop makes
+    │   │   ├── sizes.ts        What each name and expression measures
+    │   │   ├── syntax.ts       AST helpers shared by the above
+    │   │   ├── table.ts        The MethodCost format; tables merged by method name
+    │   │   ├── arrays.ts       What array methods cost (tests: arrays.test.ts)
+    │   │   ├── strings.ts      What string methods cost (strings.test.ts)
+    │   │   ├── maps.ts         What Map and Set methods cost (maps.test.ts)
+    │   │   ├── builtins.ts     Object.keys and friends, Math (builtins.test.ts)
+    │   │   └── tableTests.ts   checkTable(): every table entry, estimated as it says
     │   ├── measure.ts          Measure: run at full size with counters
-    │   ├── measure.test.ts     Measure tests
     │   ├── typescript.ts       Strips TypeScript types, then instruments as JS
-    │   ├── runtime.ts          Records steps: shadow stack, loops, serialization
+    │   ├── runtime.ts          Records steps: shadow stack, frames, timers, console
+    │   ├── sampling.ts         Which passes of long loops are recorded (as sampling.py)
+    │   ├── inspector.ts        How values look: the heap (Serializer) and console.log
     │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
     │   ├── serve.ts            Worker side of the protocol, shared by JS and TS
     │   ├── javascript.worker.ts  Entry point for the JavaScript worker
     │   ├── typescript.worker.ts  Entry point for the TypeScript worker
     │   ├── cli.ts              npm run instrument / trace:js
-    │   ├── trace.test.ts       JavaScript tracer tests (Vitest)
+    │   ├── trace.test.ts       JavaScript tracer tests, end to end (Vitest)
     │   ├── async.test.ts       Generators, async, timers and the event loop
-    │   └── typescript.test.ts  TypeScript tracer tests (Vitest)
+    │   ├── typescript.test.ts  TypeScript tracer tests
+    │   ├── instrument.test.ts  Function names, loop ids, parse errors, hints
+    │   ├── inspector.test.ts   The serializer and console formatting, directly
+    │   ├── sampling.test.ts    Sampling, driven by hand
+    │   ├── cost.test.ts        costAnalysis: parameters, recursion, memoization
+    │   └── measure.test.ts     Measure tests
     └── worker/
         ├── protocol.ts         Message types between page and workers
         ├── runner.ts           Starts a worker, runs code, watchdog
@@ -335,7 +356,7 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 
 Say you want sets drawn as bubbles or tuples drawn differently:
 
-1. **Tracers**: add a branch to `Serializer.describe()` in `serialize.py` (Python) and in `runtime.ts` (JavaScript) that returns a new `kind`.
+1. **Tracers**: add a branch to `Serializer.describe()` in `serialize.py` (Python) and in `inspector.ts` (JavaScript) that returns a new `kind`.
 2. **Types**: add the shape to the `HeapObject` union in `trace/types.ts`. TypeScript will then point out every `switch` that needs a case.
 3. **Diff**: teach `slotsOf()` in `diff.ts` what the object's slots are, so changes get highlighted.
 4. **Render**: add a shape builder in `memory.ts` (and, if it's a container, handle it in `cellsOf()` in `loopView.ts`).

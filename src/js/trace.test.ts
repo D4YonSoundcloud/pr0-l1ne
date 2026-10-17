@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HeapObject, SequenceObject, Step, Trace, Value } from "../trace/types";
-import { inspect, parseParams } from "./runtime";
+import { inspect, parseParams } from "./inspector";
 import { traceJavaScript } from "./trace";
 
 const last = (trace: Trace) => trace.steps[trace.steps.length - 1];

@@ -367,7 +367,8 @@ async function execute(
   } finally {
     stop();
   }
-  if (failed && failure === LIMIT) return { status: "limit", error: null };
+  // A catch in the program can swallow LIMIT and let the run end quietly.
+  if (deadline() || (failed && failure === LIMIT)) return { status: "limit", error: null };
   if (failed) return { status: "error", error: failure };
   return { status: "done", error: null };
 }
