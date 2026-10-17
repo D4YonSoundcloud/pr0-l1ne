@@ -12,17 +12,18 @@ import { LANGUAGES } from "../languages";
 import type { Program, ProgramStore } from "../programs";
 import type { AppStore } from "./state";
 
+/** The page's elements this controller uses, by their ids (see elements.ts). */
 export interface ProgramsElements {
   /** The "Open…" menu. */
-  menu: HTMLSelectElement;
-  name: HTMLElement;
-  dirty: HTMLElement;
-  dirtyLabel: HTMLElement;
+  programs: HTMLSelectElement;
+  programName: HTMLElement;
+  programDirty: HTMLElement;
+  programDirtyLabel: HTMLElement;
   save: HTMLButtonElement;
   delete: HTMLButtonElement;
-  dialog: HTMLDialogElement;
-  dialogName: HTMLInputElement;
-  dialogHint: HTMLElement;
+  saveDialog: HTMLDialogElement;
+  saveName: HTMLInputElement;
+  saveHint: HTMLElement;
   /** A live region for screen readers ("Saved \"Sort\""). */
   announce: HTMLElement;
 }
@@ -47,15 +48,15 @@ export class ProgramsController {
     this.confirm = options.confirm ?? ((message) => window.confirm(message));
     const { els, app } = options;
 
-    els.dialogName.addEventListener("input", () => this.updateSaveHint());
-    els.dialog.querySelector<HTMLButtonElement>('button[value="cancel"]')?.addEventListener("click", (event) => {
+    els.saveName.addEventListener("input", () => this.updateSaveHint());
+    els.saveDialog.querySelector<HTMLButtonElement>('button[value="cancel"]')?.addEventListener("click", (event) => {
       event.preventDefault();
-      els.dialog.close("cancel");
+      els.saveDialog.close("cancel");
     });
-    els.dialog.addEventListener("close", () => this.dialogClosed());
+    els.saveDialog.addEventListener("close", () => this.dialogClosed());
     els.save.addEventListener("click", () => this.save());
     els.delete.addEventListener("click", () => this.deleteOpen());
-    els.menu.addEventListener("change", () => this.menuChosen());
+    els.programs.addEventListener("change", () => this.menuChosen());
 
     app.watch(
       (s) => s.language,
@@ -92,25 +93,25 @@ export class ProgramsController {
   updateUI(): void {
     const { els } = this.options;
     const open = this.open;
-    els.name.textContent = open?.name ?? "Untitled";
-    els.name.title = open?.name ?? "Not saved yet";
-    els.name.classList.toggle("is-untitled", !open);
+    els.programName.textContent = open?.name ?? "Untitled";
+    els.programName.title = open?.name ?? "Not saved yet";
+    els.programName.classList.toggle("is-untitled", !open);
     const dirty = this.hasUnsavedChanges();
-    els.dirty.hidden = !dirty;
-    els.dirtyLabel.textContent = dirty ? "Unsaved changes" : "";
+    els.programDirty.hidden = !dirty;
+    els.programDirtyLabel.textContent = dirty ? "Unsaved changes" : "";
     els.delete.hidden = !open;
   }
 
   /** The "Open…" menu: your saved programs, then the examples by topic. */
   fillMenu(): void {
     const { els, programs } = this.options;
-    els.menu.replaceChildren(new Option("Open…", "", true, true));
+    els.programs.replaceChildren(new Option("Open…", "", true, true));
     const saved = programs.list(this.language);
     if (saved.length) {
       const group = document.createElement("optgroup");
       group.label = "Your programs";
       for (const program of saved) group.append(new Option(program.name, `saved:${program.id}`));
-      els.menu.append(group);
+      els.programs.append(group);
     }
     // Examples, one group per topic, in the order the topics first appear.
     const groups = new Map<string, HTMLOptGroupElement>();
@@ -121,7 +122,7 @@ export class ProgramsController {
         group = document.createElement("optgroup");
         group.label = `Examples: ${topic}`;
         groups.set(topic, group);
-        els.menu.append(group);
+        els.programs.append(group);
       }
       group.append(new Option(example.name, `example:${index}`));
     }
@@ -137,28 +138,28 @@ export class ProgramsController {
   /** Ctrl/Cmd + Shift + S: always ask for a name. */
   saveAs(): void {
     const { els } = this.options;
-    if (els.dialog.open) return;
-    els.dialogName.value = this.open?.name ?? "";
+    if (els.saveDialog.open) return;
+    els.saveName.value = this.open?.name ?? "";
     this.updateSaveHint();
-    els.dialog.returnValue = "";
-    els.dialog.showModal();
-    els.dialogName.select();
+    els.saveDialog.returnValue = "";
+    els.saveDialog.showModal();
+    els.saveName.select();
   }
 
   private updateSaveHint(): void {
     const { els, programs } = this.options;
-    const existing = programs.findByName(this.language, els.dialogName.value);
+    const existing = programs.findByName(this.language, els.saveName.value);
     const replacing = !!existing && existing.id !== this.open?.id;
-    els.dialogHint.textContent = replacing
+    els.saveHint.textContent = replacing
       ? `A ${LANGUAGES[this.language].label} program with this name already exists. Saving replaces it.`
       : "Saved programs stay in this browser.";
-    els.dialogHint.classList.toggle("is-warning", replacing);
+    els.saveHint.classList.toggle("is-warning", replacing);
   }
 
   private dialogClosed(): void {
     const { els, programs, editor } = this.options;
-    if (els.dialog.returnValue !== "save") return;
-    const name = els.dialogName.value.trim();
+    if (els.saveDialog.returnValue !== "save") return;
+    const name = els.saveName.value.trim();
     if (!name) return;
     // Saving under an existing name replaces that program (the hint warned).
     this.write(name, programs.findByName(this.language, name)?.id);
@@ -203,8 +204,8 @@ export class ProgramsController {
 
   private menuChosen(): void {
     const { els, programs, app, load } = this.options;
-    const [kind, key] = els.menu.value.split(/:(.*)/s);
-    els.menu.value = "";
+    const [kind, key] = els.programs.value.split(/:(.*)/s);
+    els.programs.value = "";
     const program = kind === "saved" ? programs.get(key) : undefined;
     const example = kind === "example" ? this.examples()[Number(key)] : undefined;
     if (!program && !example) return;

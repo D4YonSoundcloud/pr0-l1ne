@@ -13,7 +13,7 @@
 │                       language)       │        │            sys.settrace + ast  │
 │                      ◀────────────────┼─trace──┤                                │
 │                                       │  JSON  │  javascript.worker.ts  (JS)    │
-│  main.ts holds { trace, stepIndex }   │        │    ├─ instrument.ts  (Babel)   │
+│  app state holds { trace, stepIndex } │        │    ├─ instrument.ts  (Babel)   │
 │                                       │        │    └─ runtime.ts  (recorder)   │
 │                                       │        │                                │
 │                                       │        │  typescript.worker.ts  (TS)    │
@@ -43,7 +43,7 @@ There's one worker per language, and both speak the same small protocol, defined
 
 [`languages.ts`](../src/languages.ts) lists each language's worker, Monaco language mode and examples, so everything language-specific in the UI comes from one place.
 
-[`runner.ts`](../src/worker/runner.ts) is the main-thread side. There's one runner per language, created the first time that language is used, so someone writing JavaScript never downloads Python. It keeps one run in flight at a time, and `main.ts` drops intermediate edits so only the newest code runs after the current run finishes. It also has a **watchdog**: if a run takes longer than 10 seconds, it terminates the worker and starts a fresh one. (The tracer's own step budget, below, catches almost every runaway loop first. The watchdog is the fallback for code stuck inside a single long C call, like `sum(range(10**12))`, which never produces a trace event.)
+[`runner.ts`](../src/worker/runner.ts) is the main-thread side. There's one runner per language, created the first time that language is used, so someone writing JavaScript never downloads Python. It keeps one run in flight at a time, and the run controller ([`app/runController.ts`](../src/app/runController.ts)) drops intermediate edits so only the newest code runs after the current run finishes. It also has a **watchdog**: if a run takes longer than 10 seconds, it terminates the worker and starts a fresh one. (The tracer's own step budget, below, catches almost every runaway loop first. The watchdog is the fallback for code stuck inside a single long C call, like `sum(range(10**12))`, which never produces a trace event.)
 
 ## 2. Tracing Python with `sys.settrace`
 
@@ -74,7 +74,7 @@ At each event, `record()` walks the stack from the current frame outward, serial
 
 **Safety rails:**
 
-- **Step and time budgets.** After `maxSteps` recorded steps (20,000, set in `main.ts`), or after `max_seconds` (6 for Run, 1.5 for Live runs), the trace function raises `StepLimitExceeded`. It subclasses `BaseException` rather than `Exception`, so user code with `except Exception:` can't swallow it.
+- **Step and time budgets.** After `maxSteps` recorded steps (20,000, set in `app/runController.ts`), or after `max_seconds` (6 for Run, 1.5 for Live runs), the trace function raises `StepLimitExceeded`. It subclasses `BaseException` rather than `Exception`, so user code with `except Exception:` can't swallow it.
 - **Size caps.** Containers show at most 60 items and primitives at most 48 characters, so a 10,000-element list doesn't produce a huge trace.
 - **Output capture.** `sys.stdout` is swapped for a `StringIO` during the run. Each step records how many characters had been printed so far, so the output panel shows exactly what was printed up to the step you're on.
 - **No `input()`.** There's no keyboard in a worker, so `input()` raises an error asking you to hard-code test data.
@@ -320,7 +320,7 @@ Both canvas sections are wrapped in a [`Viewport`](../src/render/viewport.ts). T
 
 All input goes through pointer events, so mouse, pen and touch share one code path:
 
-- A press on an element with a `data-node-key` starts a **node drag**, but only after it moves 3 px, so a click isn't a drag. Each move reports the box's new position in diagram units (screen pixels divided by the zoom) through `onNodeMove`. `main.ts` stores it and re-renders the memory view. That's fast because rendering is pure arithmetic, and it means arrows are always correct mid-drag.
+- A press on an element with a `data-node-key` starts a **node drag**, but only after it moves 3 px, so a click isn't a drag. Each move reports the box's new position in diagram units (screen pixels divided by the zoom) through `onNodeMove`. The memory controller ([`app/memoryController.ts`](../src/app/memoryController.ts)) stores it and re-renders the memory view. That's fast because rendering is pure arithmetic, and it means arrows are always correct mid-drag.
 - A press anywhere else starts a **pan**.
 - A second pointer turns it into a **pinch**, which zooms around where the fingers started and pans with their midpoint. Lifting one finger carries on as a pan.
 - The pointer is captured on the viewport rather than on the diagram, because the diagram is replaced on every re-render during a drag.
@@ -329,7 +329,7 @@ Wheel events pan, except with `Ctrl` or `Cmd` held, when they zoom. Browsers rep
 
 **Auto-fit** lives in the viewport too, so both sections have it. After `setContent()` puts in a new step's diagram, `refit()` computes the zoom that fits it from the cached view size and the diagram's `width`/`height` attributes, so it never measures the page. "Zoom out only" fits the largest diagram size seen since Auto-fit started, rather than remembering a zoom level, which keeps it right when the window is resized. When the view changes, `glide()` animates from the old transform to the new one with the Web Animations API, on both the diagram layer and the graph paper's `background-size`/`background-position`, so they move together. It uses the window's easing and duration (`setZoomAnimation()`), and a new fit cancels a glide that's still running, so fast playback never queues them up. Any manual pan, wheel, pinch, zoom button or zoom key goes through `manual()`, which switches Auto-fit off first.
 
-The dividers in [`main.ts`](../src/main.ts) share one helper, `makeDivider()`, which handles dragging, arrow keys, double-click to reset, the `aria-valuenow` for screen readers, and remembering the position.
+The dividers in [`app/layout.ts`](../src/app/layout.ts) share one helper, `makeDivider()`, which handles dragging, arrow keys, double-click to reset, the `aria-valuenow` for screen readers, and remembering the position.
 
 ## 11. Drawing the loop history
 
@@ -367,8 +367,8 @@ Hints are split so that each language does as little as possible:
 
 1. **The tracers collect comments.** Python's tracer runs `tokenize` over the source and keeps `COMMENT` tokens matching `# viz: ...` (tokenizing, rather than searching the text, is what keeps `"# viz:"` inside a string from counting). The JavaScript instrumenter reads `ast.comments`, which Babel fills in while parsing, for `//` and `/* */` comments starting with `viz:`. TypeScript keeps the comments through type stripping. Each produces `{ line, text }` pairs in `trace.hints`.
 2. **One parser for every language.** [`trace/hints.ts`](../src/trace/hints.ts) turns those into a `VizHints` object: `hide`, `show`, `pointers` (container name to names), `linked` (class, shape and link fields) and `warnings`. Anything that doesn't parse becomes a warning with its line and the expected form, rather than an error.
-3. **Applied before drawing.** `applyHints()` runs once per new trace in `main.ts`. It removes hidden variables from every frame of every step (so diffing, the loop history and the memory view never see them), merges `pointers` into `trace.indexNames` (so they behave exactly like names found by static analysis), and stores the rest on `trace.viz`.
-4. **Used by the renderers.** `findLinkedTrack(rows, hints)` lets a `tree` or `list` hint pick the class and its links, overriding detection, in both the memory view and the loop history. The loop view adds `show` names to what it picks. `main.ts` shows `warnings` in the banner, and `editor.setHintWarnings()` turns them into Monaco markers with severity Warning under their own owner, so they don't interfere with error markers.
+3. **Applied before drawing.** `applyHints()` runs once per new trace, in the run controller (`app/runController.ts`). It removes hidden variables from every frame of every step (so diffing, the loop history and the memory view never see them), merges `pointers` into `trace.indexNames` (so they behave exactly like names found by static analysis), and stores the rest on `trace.viz`.
+4. **Used by the renderers.** `findLinkedTrack(rows, hints)` lets a `tree` or `list` hint pick the class and its links, overriding detection, in both the memory view and the loop history. The loop view adds `show` names to what it picks. The run controller shows `warnings` in the banner, and `editor.setHintWarnings()` turns them into Monaco markers with severity Warning under their own owner, so they don't interfere with error markers.
 
 This keeps every hint keyword in one TypeScript file with its own tests (`hints.test.ts`), and adding a hint never touches the tracers.
 
@@ -382,7 +382,7 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 **Why it's fast.** Positions come from `data-x`/`data-y` attributes the renderers write in diagram units, never from `getBoundingClientRect()`, so a step never forces the browser to compute layout before painting. Only `transform` and `opacity` are animated, with the Web Animations API (`element.animate`), so the browser can run them on the compositor without repainting the diagram. The viewport also caches its own size with a `ResizeObserver` instead of measuring, and its "keep the current iteration in view" scrolling works in diagram units. Together, rendering and starting the animations takes about 2 ms per step (10 ms at worst) on the examples, which keeps 16 steps per second at 60 fps.
 
-**Playback** in `main.ts` is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step. Each window then animates with its own easing and duration from the Style panel (`animationFor()`), capped at `0.75 × interval` while playing, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
+**Playback** ([`app/playbackController.ts`](../src/app/playbackController.ts)) is a `setTimeout` chain at `1000 / speed` ms that calls `goTo(step + 1, { playing: true })`. `goTo()` animates only when it moves exactly one step. Each window then animates with its own easing and duration from the Style panel (`animationFor()` in `app/styleController.ts`), capped at `0.75 × interval` while playing, so an animation always ends before the next one starts. Every other kind of navigation calls `goTo()` without `playing`, which pauses. `prefersReducedMotion()` turns animation off entirely.
 
 ## 14. Styling
 
@@ -390,7 +390,7 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 - **Diagram colors and line weights** are set on the `#canvas` element, so they don't leak into the toolbar or the editor. The stylesheet draws everything in terms of them: `stroke-width: calc(1.5px * var(--arrow-width))`, `rx: var(--cell-radius)`, `fill: var(--paper-ink-soft)` for text on the background, and so on.
 - **Each window's background** (`--paper`, `--paper-grid`, `--grid-image`) is set on its section, so the header strip and the viewport both inherit it. The header's tint and borders are `color-mix()`es of the background and ink, so they suit any background. The grid's square size isn't CSS, because the viewport scales it with the zoom, so `Viewport.setGridSize()` takes it.
-- **Easing and duration** aren't CSS either. `main.ts` reads them for each window when it animates a step, and passes them to `transition()` in `animate.ts`.
+- **Easing and duration** aren't CSS either. The style controller reads them for each window when it animates a step, and passes them to `transition()` in `animate.ts`.
 
 Saved settings are read by `parseAppearance()`, which checks every field and falls back to the default for anything missing or invalid, so an old or hand-edited setting can't break the canvas. [`stylePanel.ts`](../src/stylePanel.ts) builds the panel from the same field lists. Each control registers a `sync()` that re-reads its value, so choosing a preset updates every control at once.
 
@@ -515,7 +515,7 @@ A loop of unknown length can't know its last passes until it ends, so its passes
 
 ## 21. Growth runs
 
-[`trace/growth.ts`](../src/trace/growth.ts) is the arithmetic, [`growthView.ts`](../src/growthView.ts) the panel section and charts, and `measureGrowth()` in [`main.ts`](../src/main.ts) runs the ladder.
+[`trace/growth.ts`](../src/trace/growth.ts) is the arithmetic, [`growthView.ts`](../src/growthView.ts) the panel section and charts, and `measureGrowth()` in [`app/measureController.ts`](../src/app/measureController.ts) runs the ladder.
 
 - **Sizes.** `findSizes()` reads the `viz: size` hints straight from the code (no trace needed) and finds each name's top-level `name = <integer>` with a regular expression. Growth runs need that line: Measure rewrites it. Python's `apply_overrides()` replaces the value of a module-level `Assign` or `AnnAssign`; JavaScript's `applyOverrides()` replaces a top-level declarator's or assignment's numeric literal, in the counted run and the untouched one.
 - **The ladder** is n/64, n/16, n/4 and n for the growing names (at least 1, with repeats dropped); other size names stay at their full size. Each size is an ordinary Measure run with `overrides` in its message.

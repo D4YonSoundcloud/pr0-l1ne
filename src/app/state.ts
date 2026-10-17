@@ -38,6 +38,8 @@ export interface AppState {
    * syntax error mid-typing), crashed or timed out. It's shown dimmed.
    */
   readonly stale: boolean;
+  /** Measure (or a growth run) is using the runner; traced runs wait until it's done. */
+  readonly measuring: boolean;
 }
 
 export class AppStore extends Store<AppState> {
@@ -58,6 +60,7 @@ export class AppStore extends Store<AppState> {
       trace: null,
       tracedCode: null,
       stale: false,
+      measuring: false,
     });
   }
 
@@ -65,13 +68,20 @@ export class AppStore extends Store<AppState> {
     return programs.get(settings.openProgram(language).get()) ?? null;
   }
 
-  /** Switch language, reopening the program that was open in it. */
+  /**
+   * Switch language, reopening the program that was open in it. The trace
+   * goes: it has nothing to do with the other language's code.
+   */
   setLanguage(language: LanguageId): void {
     if (language === this.get().language) return;
     this.settings.language.set(language);
     this.update("setLanguage", {
       language,
       program: AppStore.openProgramFor(this.settings, this.programs, language),
+      trace: null,
+      tracedCode: null,
+      stale: false,
+      stepIndex: 0,
     });
   }
 
@@ -100,9 +110,8 @@ export class AppStore extends Store<AppState> {
     this.update("markStale", { stale: true });
   }
 
-  /** Forget the trace (a different language: it has nothing to do with the new code). */
-  clearTrace(): void {
-    this.update("clearTrace", { trace: null, tracedCode: null, stale: false, stepIndex: 0 });
+  setMeasuring(measuring: boolean): void {
+    this.update("setMeasuring", { measuring });
   }
 
   /** The saved program now open (null: the code isn't a saved program). */

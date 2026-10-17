@@ -60,14 +60,12 @@ function setup() {
   const results: boolean[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
-  let busy = false;
   const runs = new RunController({
     app,
     status: document.getElementById("status")!,
     editor: { setMarks: (m) => marks.push(m), setHintWarnings: () => {} },
     setBanner: (html) => banners.push(html),
     onResult: (updateMarks) => results.push(updateMarks),
-    busy: () => busy,
     createRunner: (language, onStatus) => {
       const runner = new FakeRunner(onStatus);
       runners.set(language, runner);
@@ -95,9 +93,7 @@ function setup() {
     fireTimers,
     timers,
     status: document.getElementById("status")!,
-    setBusy: (on: boolean) => {
-      busy = on;
-    },
+    setBusy: (on: boolean) => app.setMeasuring(on),
   };
 }
 
@@ -134,6 +130,16 @@ describe("RunController", () => {
     runs.runNow("x");
     fireTimers();
     expect(runners.get("javascript")!.calls).toHaveLength(1);
+  });
+
+  it("switching language drops a pending Live run and shows the new language's status", () => {
+    const { runs, runners, fireTimers, app, status } = setup();
+    runs.scheduleLive("let a = 1");
+    app.setLanguage("python");
+    fireTimers();
+    expect(runners.get("javascript")?.calls ?? []).toHaveLength(0);
+    runners.get("python")!.setStatus({ kind: "loading" });
+    expect(status.textContent).toBe("Downloading Python (6 MB)…");
   });
 
   it("queues only the newest run while one is going", async () => {

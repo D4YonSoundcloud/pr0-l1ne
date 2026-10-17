@@ -77,25 +77,38 @@ Part of the Python tracer can't be measured. Python pauses all other tracing and
 
 ## How the app is put together
 
-`src/main.ts` is being split into small pieces, one concern at a time (the code health plan's W3). The pieces so far:
+`src/main.ts` only creates the pieces and connects them. Each piece owns one part of the page:
 
 | File | What it does |
 | --- | --- |
 | `src/settings.ts` | Everything saved between visits (see "Saved settings") |
 | `src/app/store.ts` | A small store: one state object, changed by named actions, with listeners |
-| `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`, the `trace` on screen, the `tracedCode` it came from, and whether it's `stale`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`, `showTrace`, `markStale`, `clearTrace`), which also save what's remembered |
+| `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`, the `trace` on screen, the `tracedCode` it came from, whether it's `stale`, and whether Measure is `measuring`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`, `showTrace`, `markStale`, `setMeasuring`), which also save what's remembered |
+| `src/app/elements.ts` | Finds the page's elements (`index.html`) once, by id |
 | `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
 | `src/app/playbackController.ts` | Moving through the steps: first / previous / next / last, the scrubber, Play and the speed menu, and the stepping keys (arrows, Home / End, Space, F10, Ctrl/Cmd + Enter) |
 | `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
+| `src/app/measureController.ts` | Measure and growth runs: the Measure and results buttons, the Measure panel and its growth section, the time limit, the editor's count labels, and the last measurement (shown only in its language, and only while the code still matches) |
+| `src/app/stepView.ts` | Drawing the step on screen: the step label, both canvas windows, the output so far and the editor's line marks |
+| `src/app/memoryController.ts` | The memory view: dragging boxes and Reset layout, hover highlighting, arrows or nested, memory sizes and their model, and output on the canvas |
+| `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically |
+| `src/app/styleController.ts` | The Style panel and the appearance it edits, and how long each window's step animation runs |
+| `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
+| `src/app/layout.ts` | The two dividers (drag, arrow keys, double-click to reset) and swapping the editor and canvas sides |
+| `src/app/shortcuts.ts` | The keys that work anywhere outside the editor: Run, Measure, Save, Save as, and the stepping keys |
+| `src/app/banner.ts` | The banner above the canvas, and its Run / Measure buttons |
 | `src/app/html.ts` | `escapeHtml`, for text put into the banner and panels |
+| `src/app/autoFit.ts` | Reads a window's remembered auto-fit setting |
+| `src/app/testHelpers.ts` | Helpers for the controllers' tests: a storage stand-in, app state, tracing JavaScript, timers run by hand |
 
 How the pieces talk:
 
 - **Controllers read the state** with `app.get()`.
-- **They change it only through actions.** For example, `app.setLanguage("python")` also reopens the program that was open in Python.
-- **They react to changes** with `app.watch(...)`. When the language changes, the programs controller refills its menu, so `main.ts` doesn't have to remember to.
-- **Each controller takes its page elements and helpers as arguments,** so its tests (`*.test.ts` beside it, in a jsdom page) build a small page and check what a person would see.
-- **`src/app/elements.test.ts` guards the page itself.** It checks that every element `main.ts` looks up by id exists in `index.html`; a missing one would stop the app as it starts.
+- **They change it only through actions.** For example, `app.setLanguage("python")` also reopens the program that was open in Python, and forgets the trace.
+- **They react to changes themselves** with `app.watch(...)`. When the language changes, the run controller drops a waiting Live run, Measure stops and shows that language's results, the canvas windows start afresh and the Open menu refills, without `main.ts` calling each of them. The complexity estimate is redone whenever the trace changes.
+- **Each controller takes its page elements (by their ids' names) and helpers as arguments,** so its tests (`*.test.ts` beside it, in a jsdom page) build a small page and check what a person would see. `main.ts` passes the whole page (`els`); each takes the elements it names.
+- **Controllers that need each other get a function, not the object** (`animation: () => style.animationFor("memory")`), so they can be created in any order. A controller mustn't call these while it's being constructed: what they reach may not exist yet.
+- **`src/app/elements.test.ts` guards the page itself.** It loads `index.html` and checks every element the app looks up is there; a missing one would stop the app as it starts.
 
 ## Saved settings
 
@@ -177,7 +190,7 @@ pr0-l1ne/
 ├── scripts/
 │   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
 └── src/
-    ├── main.ts                 Wires the pieces together; rendering, Measure, layout (being split up)
+    ├── main.ts                 Creates the state and controllers and connects them
     ├── app/                    The app's state and controllers (see "How the app is put together")
     ├── languages.ts            Per-language worker, Monaco mode and examples
     ├── programs.ts             Saved programs (localStorage)

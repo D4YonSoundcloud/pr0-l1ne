@@ -102,7 +102,7 @@ Everything listed for JavaScript applies, plus:
 
 **Nothing happens when I type.** Check that **Live** is ticked, or press `Ctrl + '`. A banner at the top of the canvas shows syntax errors, and the canvas dims while it's showing the last version that ran.
 
-**"Traced for 6 seconds and stopped" or "Stopped after 20,000 recorded steps."** The trace hit its time or step budget (the banner says how many steps ran in all). Usually that's an infinite loop, but a correct program on a big input can hit it too: what's shown is the start of the run. Press **Measure** to run all of it with counters, use a smaller input, or raise `MAX_STEPS` / `RUN_SECONDS` in `main.ts`. A Live run while typing stops after 1.5 seconds; **Run** gives it 6.
+**"Traced for 6 seconds and stopped" or "Stopped after 20,000 recorded steps."** The trace hit its time or step budget (the banner says how many steps ran in all). Usually that's an infinite loop, but a correct program on a big input can hit it too: what's shown is the start of the run. Press **Measure** to run all of it with counters, use a smaller input, or raise `MAX_STEPS` / `RUN_SECONDS` in [`src/app/runController.ts`](../src/app/runController.ts). A Live run while typing stops after 1.5 seconds; **Run** gives it 6.
 
 **"#6 to #9: 4 passes like these ran, not recorded" in the loop history.** The loop was long, so it was [sampled](user-guide.md#big-inputs). Those passes ran; they just weren't kept.
 

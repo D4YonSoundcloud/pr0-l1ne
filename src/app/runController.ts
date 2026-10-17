@@ -52,8 +52,6 @@ export interface RunOptions {
   setBanner(html: string | null): void;
   /** A run produced something to show: draw it. `updateMarks` is false when the editor's marks are already set. */
   onResult(updateMarks: boolean): void;
-  /** Something else (Measure) is using the runner: queue runs until it's done. */
-  busy(): boolean;
   /** Make a language's runner. */
   createRunner?(language: LanguageId, onStatus: (status: RunnerStatus) => void): RunnerLike;
   setTimeout?(callback: () => void, ms: number): number;
@@ -81,10 +79,23 @@ export class RunController {
       options.createRunner ?? ((language, onStatus) => new Runner(LANGUAGES[language].createWorker, onStatus));
     this.setTimer = options.setTimeout ?? ((callback, ms) => window.setTimeout(callback, ms));
     this.clearTimer = options.clearTimeout ?? ((id) => window.clearTimeout(id));
+    // A Live run waiting for the old language's code shouldn't run; the status is the new language's runner's.
+    options.app.watch(
+      (s) => s.language,
+      () => {
+        this.cancelLive();
+        this.refreshStatus();
+      },
+    );
   }
 
   private get language(): LanguageId {
     return this.options.app.get().language;
+  }
+
+  /** Measure is using the runner: runs wait until it's done. */
+  private get busy(): boolean {
+    return this.options.app.get().measuring;
   }
 
   /** A language's runner, started the first time it's needed (so people writing JavaScript never download Python). */
@@ -149,7 +160,7 @@ export class RunController {
 
   /** Trace `code`. While another run (or Measure) is going, only the newest request waits. */
   async run(code: string, language: LanguageId, budget: Budget): Promise<void> {
-    if (this.inFlight || this.options.busy()) {
+    if (this.inFlight || this.busy) {
       this.queued = { code, language, budget };
       return;
     }
@@ -164,7 +175,7 @@ export class RunController {
 
   /** Start the run that was waiting, if any (Measure calls this when it finishes). */
   resumeQueued(): void {
-    if (this.queued === null || this.options.busy()) return;
+    if (this.queued === null || this.busy) return;
     const next = this.queued;
     this.queued = null;
     void this.run(next.code, next.language, next.budget);
