@@ -58,6 +58,10 @@ The output of `npm run build` is plain static files. You can host `dist/` anywhe
 - **They're repeatable.** Traces stop on the 20,000-step budget, never the clock. Python runs with `PYTHONHASHSEED=0` (as the app does), and sets of objects are listed in the order the tracer first saw them, so traces come out the same on every machine and every run.
 - **A new example** gets its golden file the first time the test runs locally. In CI a missing file fails the test, so commit it with the example.
 
+### Complexity shapes
+
+The golden traces include each example's code shape (`Trace.cost`), but the examples don't reach every path of the Python analysis. `fixtures/shapes/python.json` holds programs that do (loops over `a + b`, recursion that halves, `heappush`, memoized functions...) with the shape recorded for each. `test_shape.py` checks every one is unchanged, on your Python and in Pyodide. If you change the analysis on purpose, record the new shapes with `UPDATE_SHAPES=1 npm run test:tracer` and review the diff. To cover a new path, add a program to the file's `programs` and record.
+
 
 ### The trace contract
 
@@ -71,7 +75,7 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
 
-Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer is tested directly: the code-shape analysis in `test_analysis.py`, the `Serializer` (`serialize.py`) in `test_serializer.py`, and memory sizes (`sizes.py`) in `test_sizes.py`.
+Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer is tested directly: hints, loops and index names (`analysis.py`) in `test_analysis.py`, the code-shape analysis (`shape*.py`) in `test_shape.py`, the `Serializer` (`serialize.py`) in `test_serializer.py`, and memory sizes (`sizes.py`) in `test_sizes.py`.
 
 
 
@@ -267,7 +271,12 @@ pr0-l1ne/
         ├── runner.ts           Starts a worker, runs code, watchdog
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
         ├── pythonModules.ts    Writes the Python modules into Pyodide and imports them
-        ├── tracer.py           The Python tracer (settrace + ast)
+        ├── tracer.py           The Python tracer (settrace hooks and the step loop)
+        ├── analysis.py         Read before running: hints, loops, index names
+        ├── shape.py            The code's shape for complexity: the tree per function
+        ├── shape_names.py      ...what size each name stands for
+        ├── shape_loops.py      ...how many passes a while loop makes
+        ├── shape_costs.py      ...what expressions and calls cost
         ├── serialize.py        Python values -> trace values and heap objects
         ├── sizes.py            Memory sizes, as a 64-bit Python reports them
         ├── test_*.py           Python tests, one file per module

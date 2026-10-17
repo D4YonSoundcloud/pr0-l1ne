@@ -550,17 +550,13 @@ class LongListTests(unittest.TestCase):
 
 
 class TracerHelperTests(unittest.TestCase):
-    """Helpers that move to their own modules later in the code health plan's W4."""
+    """A helper that moves to sampling.py later in the code health plan's W4."""
 
     def test_round_passes(self):
         self.assertEqual(
             [n for n in [5, 9, 10, 13, 20, 99, 100, 150, 200, 1000] if T.round_pass(n)],
             [10, 20, 100, 200, 1000],
         )
-
-    def test_hints_are_read_from_comments(self):
-        hints = T.collect_hints("x = 1  # viz: hide temp\ny = 2  # viz: pointers nums: a, b\n")
-        self.assertEqual([h["line"] for h in hints], [1, 2])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,12 @@ const pyodide = await loadPyodide({ env: { PYTHONHASHSEED: "0" } }); // as the a
 const files = readdirSync(dir).filter((f) => f.endsWith(".py"));
 pyodide.FS.mkdirTree("/pr0l1ne");
 for (const file of files) pyodide.FS.writeFile(`/pr0l1ne/${file}`, readFileSync(new URL(file, dir), "utf8"));
+// The shape corpus (see test_shape.py), found from the tests by its folder.
+pyodide.FS.mkdirTree("/fixtures/shapes");
+pyodide.FS.writeFile(
+  "/fixtures/shapes/python.json",
+  readFileSync(new URL("../fixtures/shapes/python.json", import.meta.url), "utf8"),
+);
 const tests = files.filter((f) => f.startsWith("test_")).map((f) => f.slice(0, -3));
 const [ok, report] = pyodide
   .runPython(`

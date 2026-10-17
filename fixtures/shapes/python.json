@@ -1,0 +1,3024 @@
+{
+ "programs": [
+  "fs = [len]\nx = fs[0]([1, 2])\n",
+  "a = [1, 2, 3]\nn: int = len(a)\nif (m := len(a)) > 2:\n    pass\nfor i in range(n):\n    pass\n",
+  "a = [1, 2, 3]\nk = 2\nm = abs(len(a) - k)\nc = max(3, 4)\nd = min(len(a), 10)\ne = int(7)\nfor i in range(m):\n    pass\nfor j in range(d):\n    pass\n",
+  "a = [1, 2]\nn = -len(a)\nfor i in range(n):\n    pass\n",
+  "def f():\n    return [[1]]\nfor x in f()[0]:\n    pass\n",
+  "class A:\n    pass\na = A()\nfor x in a.b.c:\n    pass\nitems = []\nfor y in items.real:\n    pass\n",
+  "a = [1]\nb = [2]\nn = 5\nfor x in a + b:\n    pass\nfor y in [0] * n:\n    pass\nfor z in [1, 2] + [3]:\n    pass\nfor w in [1] * 3:\n    pass\n",
+  "for i in range():\n    pass\n",
+  "class S:\n    def __init__(self):\n        self.items = []\ndef f(xs):\n    return xs\ns = S()\nn = f(s.items)\nfor i in range(n):\n    pass\n",
+  "def g(xs):\n    return xs\ndef f1(xs):\n    t = len(xs)\n    n = g(xs)\n    for i in range(n):\n        pass\ndef f2(xs):\n    v = xs[0]\n    n = g(xs)\n    for i in range(n):\n        pass\ndef f3(xs):\n    for x in xs:\n        pass\n    n = g(xs)\n    for i in range(n):\n        pass\ndef f4(xs):\n    n = g(xs)\n    for i in range(n):\n        pass\n",
+  "def f(n):\n    for i in range(n):\n        pass\na = [1, 2]\nn = len(a)\nf(n)\nf(len(a))\n",
+  "def something():\n    return [1]\nfor x in something():\n    pass\n",
+  "a = [1, 2, 3]\ni = 0\nn = len(a)\nwhile i < n:\n    i = i + 1\nj = len(a) - 1\nwhile j > 0:\n    j = j - 1\n",
+  "def walk(cur):\n    while cur:\n        nxt = cur.left\n        cur = nxt\n",
+  "def f(head):\n    a = b\n    b = a\n    while a:\n        a = a.next\n",
+  "def f(n):\n    k = n\n    while k > 1:\n        k //= 2\n",
+  "def f(n):\n    lo, hi = 0, n\n    while lo < hi:\n        mid = (lo + hi) // 2\n        lo = mid + 1\n",
+  "def f(n):\n    x = 1\n    while x < n:\n        x *= 2\n    y = n\n    while y:\n        y >>= 1\n    z = 1\n    while z < n:\n        z <<= 1\n",
+  "a = [1, 2, 3]\nn = 3\nif 2 in range(n):\n    pass\nif 2 in a:\n    pass\nif 2 in {1, 2}:\n    pass\nif 2 in a[1:]:\n    pass\nwords = ['a', 'b']\ns = ', '.join(words)\nt = ''.join('ab')\n",
+  "def f(nums, node, n, lo, hi):\n    if n == 0:\n        return 0\n    mid = (lo + hi) // 2\n    for child in nums:\n        f(child, node, n, lo, hi)\n    part = nums[1:]\n    f(part, node, n, lo, hi)\n    f(nums[: len(nums) // 2], node.left, n - 1, lo, mid)\n    f(nums[:mid], node, n, mid, hi)\n    f(3, node, n * 2, lo, hi)\n    f(nums[1:], node, n, lo, hi)\n    return f(nums, node, n, lo, hi)\n",
+  "def walk(r):\n    for _ in range(2):\n        walk(r + 1)\n        walk(r - 1)\n",
+  "import heapq, bisect\nh = []\na = [3, 1, 2]\nfor x in a:\n    heapq.heappush(h, x)\n    bisect.insort(a, x)\nwhile h:\n    heapq.heappop(h)\nb = sorted(a)\nc = sum(a)\nd = list(a)\na.sort()\na.index(1)\na.count(1)\na.remove(1)\na.reverse()\ne = a.copy()\na.insert(0, 5)\nd2 = {}\nd2.insert = 1\na.pop(0)\na.pop()\na.extend(b)\na.append(1)\ns = set()\ns.add(1)\nfrom collections import deque\nq = deque()\nq.appendleft(1)\nq.extendleft(a)\nd2.setdefault('a', 1)\nd2.update({})\n",
+  "from functools import lru_cache, cache\nimport functools\n@lru_cache(None)\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n@cache\ndef g(n):\n    return g(n - 1)\n@functools.cache\ndef h(n):\n    return h(n - 1)\nmemo = {}\ndef m(n):\n    if n in memo:\n        return memo[n]\n    memo[n] = m(n - 1)\n    return memo[n]\n",
+  "class Node:\n    def __init__(self):\n        self.children = {}\nclass Trie:\n    def __init__(self):\n        self.root = Node()\n    def insert(self, word):\n        node = self.root\n        for ch in word:\n            if ch not in node.children:\n                node.children[ch] = Node()\n            node = node.children[ch]\n",
+  "a = [1, 2, 3]\nn = len(a)\nb = [0] * n\nc = [[0] * n for _ in range(n)]\nd = {x: 1 for x in a}\ne = {x for x in a}\nf = a[1:]\ng = list(a)\nh = a.copy()\ni = [0] + [1] * n\nj = [1] + [2]\ngrid = {}\ngrid[1] = 2\nk = (1, 2) * n\nl = [y for y in range(3)]\nm = [[z for z in a] for w in a]\nv = set(range(n))\nfor p, q in zip(a, b):\n    pass\nfor idx, val in enumerate(a):\n    pass\nfor key, val in d.items():\n    pass\nfor key in d.keys():\n    pass\nfor val in reversed(a):\n    pass\nfor val in sorted(a):\n    pass\nfor val in iter(a):\n    pass\nfor ch in 'abc'.upper():\n    pass\nfor val in list(a):\n    pass\ntotal = sum(x * x for x in a if x > 1)\n",
+  "def f(xs):\n    with open('x') as fh:\n        for line in fh:\n            pass\n    try:\n        for x in xs:\n            pass\n    except ValueError:\n        for x in xs:\n            pass\n    else:\n        pass\n    finally:\n        pass\n    match xs:\n        case [a]:\n            for x in xs:\n                pass\n        case _:\n            pass\n    for x in xs:\n        pass\n    else:\n        pass\n    while xs:\n        xs.pop()\n    else:\n        pass\n",
+  "async def f(xs):\n    async for x in xs:\n        pass\n    async with xs as y:\n        pass\n    lam = lambda q: [i for i in q]\n    return [x async for x in xs]\n",
+  "def f(s):\n    left, right = 0, len(s) - 1\n    while left < right:\n        left += 1\n        right -= 1\n    i = len(s)\n    while i > 0:\n        i -= 1\n    count = 0\n    while count < 10:\n        count += 1\n    k = 0\n    while k < len(s) and s[k]:\n        k += 1\n",
+  "def bs(nums, target):\n    lo, hi = 0, len(nums) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if nums[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return -1\ndef half(n):\n    steps = 0\n    while n > 1:\n        n = n // 2\n        steps += 1\n    return steps\n",
+  "def mid_test(a):\n    lo, hi = 0, len(a)\n    while hi - lo > 1:\n        m = (lo + hi) // 2\n        lo = m\n",
+  "class LL:\n    def __init__(self):\n        self.head = None\n    def size(self):\n        n = 0\n        cur = self.head\n        while cur:\n            n += 1\n            cur = cur.next\n        return n\n    def __len__(self):\n        return self.size()\ndef depth(root):\n    if root is None:\n        return 0\n    return 1 + max(depth(root.left), depth(root.right))\n",
+  "def outer(xs):\n    def inner(ys):\n        return len(ys)\n    class K:\n        pass\n    return inner(xs)\nfor t in (1, 2):\n    pass\nfor u in {1: 2}:\n    pass\nfor s in f'x':\n    pass\nfor v in 'abc':\n    pass\n",
+  "def f(a, b):\n    return f(a[1:], b) if a else 0\ndef g(n, k):\n    return g(n - 1, k) + g(n - 2, k)\ndef h(n):\n    return h(n + 1)\ndef q(x):\n    return q(x)\ndef r(x):\n    return r()\n",
+  "import math\na = [1, 2]\nn = math.floor(len(a))\nfor i in range(n):\n    pass\nfor i in range(1, len(a)):\n    pass\nfor i in range(len(a), 0, -1):\n    pass\nfor i in range(2, 5):\n    pass\nfor i in range(0, n):\n    pass\n",
+  "a = [1]\nb = [2]\nflag = True\nfor x in a if flag else b:\n    pass\n",
+  "words = ['a', 'b']\nsep = ', '\ns = sep.join(words)\nt = sep.join('xy')\n",
+  "def f(n):\n    n = n * 1\n    while n > 1:\n        n //= 2\n"
+ ],
+ "shapes": [
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L5",
+       "line": 5,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(m)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L9",
+       "line": 9,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(d)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 3,
+       "callee": "f",
+       "args": [],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "unknown",
+        "why": "f()[0]"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a.b.c",
+          "len": true
+         }
+        ],
+        "why": "a.b.c"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "items.real",
+          "len": true
+         }
+        ],
+        "why": "items.real"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a + b"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L6",
+       "line": 6,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "n"
+         }
+        ],
+        "why": "[0] * n"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L8",
+       "line": 8,
+       "bound": {
+        "kind": "const",
+        "why": "[1, 2] + [3]"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L10",
+       "line": 10,
+       "bound": {
+        "kind": "const",
+        "why": "[1] * 3"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L1",
+       "line": 1,
+       "bound": {
+        "kind": "unknown",
+        "why": "range()"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 7,
+       "callee": "f",
+       "args": [
+        {
+         "name": "s.items"
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L8",
+       "line": 8,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "s.items"
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "f",
+     "line": 4,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "__init__",
+     "line": 2,
+     "params": [],
+     "memo": false,
+     "body": []
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "g",
+     "line": 1,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f1",
+     "line": 3,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 5,
+       "callee": "g",
+       "args": [
+        {
+         "name": "xs"
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L6",
+       "line": 6,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "f2",
+     "line": 8,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 10,
+       "callee": "g",
+       "args": [
+        {
+         "name": "xs"
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L11",
+       "line": 11,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "f3",
+     "line": 13,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L14",
+       "line": 14,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "call",
+       "line": 16,
+       "callee": "g",
+       "args": [
+        {
+         "name": "xs"
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L17",
+       "line": 17,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "f4",
+     "line": 19,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 20,
+       "callee": "g",
+       "args": [
+        {
+         "name": "xs"
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L21",
+       "line": 21,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs"
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 6,
+       "callee": "f",
+       "args": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "shrink": "same"
+      },
+      {
+       "kind": "call",
+       "line": 7,
+       "callee": "f",
+       "args": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "shrink": "same"
+      }
+     ]
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L2",
+       "line": 2,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "n"
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 3,
+       "callee": "something",
+       "args": [],
+       "shrink": "same"
+      },
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "unknown",
+        "why": "something()"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "something",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "while i < n"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "while j > 0"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "walk",
+     "line": 1,
+     "params": [
+      "cur"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L2",
+       "line": 2,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "cur",
+          "len": true
+         }
+        ],
+        "why": "while cur (follows .left)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "head"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "while a (follows .next)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while k > 1 (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while lo < hi (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while x < n (halves each pass)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L6",
+       "line": 6,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while y (halves each pass)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L9",
+       "line": 9,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while z < n (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "op",
+       "line": 5,
+       "what": "in a",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 9,
+       "what": "a[1:] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      },
+      {
+       "kind": "op",
+       "line": 9,
+       "what": "in a[1:]",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "nums",
+      "node",
+      "n",
+      "lo",
+      "hi"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L5",
+       "line": 5,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "nums",
+          "len": true
+         }
+        ],
+        "why": "nums"
+       },
+       "body": [
+        {
+         "kind": "call",
+         "line": 6,
+         "callee": "f",
+         "args": [
+          {
+           "name": "child"
+          },
+          {
+           "name": "node"
+          },
+          {
+           "name": "n"
+          },
+          {
+           "name": "lo"
+          },
+          {
+           "name": "hi"
+          }
+         ],
+         "shrink": "unknown"
+        }
+       ]
+      },
+      {
+       "kind": "op",
+       "line": 7,
+       "what": "nums[1:] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "nums",
+        "len": true
+       }
+      },
+      {
+       "kind": "alloc",
+       "line": 7,
+       "what": "nums[1:]",
+       "sizes": [
+        {
+         "name": "nums",
+         "len": true
+        }
+       ],
+       "name": "part"
+      },
+      {
+       "kind": "call",
+       "line": 8,
+       "callee": "f",
+       "args": [
+        {
+         "name": "nums",
+         "len": true
+        },
+        {
+         "name": "node"
+        },
+        {
+         "name": "n"
+        },
+        {
+         "name": "lo"
+        },
+        {
+         "name": "hi"
+        }
+       ],
+       "shrink": "unknown"
+      },
+      {
+       "kind": "op",
+       "line": 9,
+       "what": "nums[:len(nums) // 2] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "nums",
+        "len": true
+       }
+      },
+      {
+       "kind": "call",
+       "line": 9,
+       "callee": "f",
+       "args": [
+        {
+         "name": "nums"
+        },
+        {
+         "name": "node.left"
+        },
+        {
+         "name": "n"
+        },
+        {
+         "name": "lo"
+        },
+        null
+       ],
+       "shrink": "unknown"
+      },
+      {
+       "kind": "op",
+       "line": 10,
+       "what": "nums[:mid] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "nums",
+        "len": true
+       }
+      },
+      {
+       "kind": "call",
+       "line": 10,
+       "callee": "f",
+       "args": [
+        {
+         "name": "nums"
+        },
+        {
+         "name": "node"
+        },
+        {
+         "name": "n"
+        },
+        null,
+        {
+         "name": "hi"
+        }
+       ],
+       "shrink": "unknown"
+      },
+      {
+       "kind": "call",
+       "line": 11,
+       "callee": "f",
+       "args": [
+        null,
+        {
+         "name": "node"
+        },
+        {
+         "name": "n"
+        },
+        {
+         "name": "lo"
+        },
+        {
+         "name": "hi"
+        }
+       ],
+       "shrink": "unknown"
+      },
+      {
+       "kind": "op",
+       "line": 12,
+       "what": "nums[1:] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "nums",
+        "len": true
+       }
+      },
+      {
+       "kind": "call",
+       "line": 12,
+       "callee": "f",
+       "args": [
+        {
+         "name": "nums"
+        },
+        {
+         "name": "node"
+        },
+        {
+         "name": "n"
+        },
+        {
+         "name": "lo"
+        },
+        {
+         "name": "hi"
+        }
+       ],
+       "shrink": "unknown"
+      },
+      {
+       "kind": "call",
+       "line": 13,
+       "callee": "f",
+       "args": [
+        {
+         "name": "nums"
+        },
+        {
+         "name": "node"
+        },
+        {
+         "name": "n"
+        },
+        {
+         "name": "lo"
+        },
+        {
+         "name": "hi"
+        }
+       ],
+       "shrink": "unknown",
+       "alt": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "walk",
+     "line": 1,
+     "params": [
+      "r"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L2",
+       "line": 2,
+       "bound": {
+        "kind": "const",
+        "why": "range(2)"
+       },
+       "body": [
+        {
+         "kind": "call",
+         "line": 3,
+         "callee": "walk",
+         "args": [
+          {
+           "name": "r"
+          }
+         ],
+         "shrink": "unknown"
+        },
+        {
+         "kind": "call",
+         "line": 4,
+         "callee": "walk",
+         "args": [
+          {
+           "name": "r"
+          }
+         ],
+         "shrink": "unknown"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a"
+       },
+       "body": [
+        {
+         "kind": "op",
+         "line": 5,
+         "what": "heappush()",
+         "cost": "log",
+         "size": {
+          "name": "h",
+          "len": true
+         }
+        },
+        {
+         "kind": "alloc",
+         "line": 5,
+         "what": "heappush()",
+         "sizes": [],
+         "into": "h"
+        },
+        {
+         "kind": "op",
+         "line": 6,
+         "what": "insort()",
+         "cost": "log",
+         "size": {
+          "name": "a",
+          "len": true
+         }
+        },
+        {
+         "kind": "alloc",
+         "line": 6,
+         "what": "insort()",
+         "sizes": [],
+         "into": "a"
+        }
+       ]
+      },
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "unknown",
+        "why": "while h"
+       },
+       "body": [
+        {
+         "kind": "op",
+         "line": 8,
+         "what": "heappop()",
+         "cost": "log",
+         "size": {
+          "name": "h",
+          "len": true
+         }
+        }
+       ]
+      },
+      {
+       "kind": "op",
+       "line": 9,
+       "what": "sorted() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "nlogn"
+      },
+      {
+       "kind": "alloc",
+       "line": 9,
+       "what": "sorted(a)",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "b"
+      },
+      {
+       "kind": "op",
+       "line": 10,
+       "what": "sum()",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      },
+      {
+       "kind": "op",
+       "line": 11,
+       "what": "list() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      },
+      {
+       "kind": "alloc",
+       "line": 11,
+       "what": "list(a)",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "d"
+      },
+      {
+       "kind": "op",
+       "line": 12,
+       "what": "a.sort()",
+       "cost": "nlogn",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      },
+      {
+       "kind": "op",
+       "line": 13,
+       "what": "a.index()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 14,
+       "what": "a.count()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 15,
+       "what": "a.remove()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 16,
+       "what": "a.reverse()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 17,
+       "what": "a.copy()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "alloc",
+       "line": 17,
+       "what": "a.copy()",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "e"
+      },
+      {
+       "kind": "op",
+       "line": 18,
+       "what": "a.insert()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "alloc",
+       "line": 18,
+       "what": "a.insert()",
+       "sizes": [],
+       "into": "a"
+      },
+      {
+       "kind": "op",
+       "line": 21,
+       "what": "a.pop(0)",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "op",
+       "line": 23,
+       "what": "a.extend()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      },
+      {
+       "kind": "alloc",
+       "line": 23,
+       "what": "a.extend()",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "into": "a"
+      },
+      {
+       "kind": "alloc",
+       "line": 24,
+       "what": "a.append()",
+       "sizes": [],
+       "into": "a"
+      },
+      {
+       "kind": "alloc",
+       "line": 26,
+       "what": "s.add()",
+       "sizes": [],
+       "into": "s"
+      },
+      {
+       "kind": "alloc",
+       "line": 29,
+       "what": "q.appendleft()",
+       "sizes": [],
+       "into": "q"
+      },
+      {
+       "kind": "alloc",
+       "line": 30,
+       "what": "q.extendleft()",
+       "sizes": [],
+       "into": "q"
+      },
+      {
+       "kind": "alloc",
+       "line": 31,
+       "what": "d2.setdefault()",
+       "sizes": [],
+       "into": "d2"
+      },
+      {
+       "kind": "alloc",
+       "line": 32,
+       "what": "d2.update()",
+       "sizes": [],
+       "into": "d2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "fib",
+     "line": 4,
+     "params": [
+      "n"
+     ],
+     "memo": true,
+     "body": [
+      {
+       "kind": "call",
+       "line": 5,
+       "callee": "fib",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus"
+      },
+      {
+       "kind": "call",
+       "line": 5,
+       "callee": "fib",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus"
+      }
+     ]
+    },
+    {
+     "name": "g",
+     "line": 7,
+     "params": [
+      "n"
+     ],
+     "memo": true,
+     "body": [
+      {
+       "kind": "call",
+       "line": 8,
+       "callee": "g",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus",
+       "alt": true
+      }
+     ]
+    },
+    {
+     "name": "h",
+     "line": 10,
+     "params": [
+      "n"
+     ],
+     "memo": true,
+     "body": [
+      {
+       "kind": "call",
+       "line": 11,
+       "callee": "h",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus",
+       "alt": true
+      }
+     ]
+    },
+    {
+     "name": "m",
+     "line": 13,
+     "params": [
+      "n"
+     ],
+     "memo": true,
+     "body": [
+      {
+       "kind": "op",
+       "line": 14,
+       "what": "in memo",
+       "cost": "linear",
+       "size": {
+        "name": "memo",
+        "len": true
+       },
+       "container": "memo"
+      },
+      {
+       "kind": "call",
+       "line": 16,
+       "callee": "m",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "__init__",
+     "line": 2,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "insert",
+     "line": 7,
+     "params": [
+      "word"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L9",
+       "line": 9,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "word",
+          "len": true
+         }
+        ],
+        "why": "word"
+       },
+       "body": [
+        {
+         "kind": "op",
+         "line": 10,
+         "what": "in node.children",
+         "cost": "linear",
+         "size": {
+          "name": "node",
+          "len": true,
+          "inner": true
+         },
+         "container": "node.children"
+        },
+        {
+         "kind": "alloc",
+         "line": 11,
+         "what": "node.children[...] = Node()",
+         "sizes": [],
+         "into": "node.children"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "alloc",
+       "line": 3,
+       "what": "[0] * n",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "b"
+      },
+      {
+       "kind": "loop",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      },
+      {
+       "kind": "alloc",
+       "line": 4,
+       "what": "[[0] * n for _ in range(n)]",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        },
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "c"
+      },
+      {
+       "kind": "loop",
+       "line": 5,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a"
+       },
+       "body": []
+      },
+      {
+       "kind": "alloc",
+       "line": 5,
+       "what": "{x: 1 for x in a}",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "d"
+      },
+      {
+       "kind": "loop",
+       "line": 6,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a"
+       },
+       "body": []
+      },
+      {
+       "kind": "alloc",
+       "line": 6,
+       "what": "{x for x in a}",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "e"
+      },
+      {
+       "kind": "op",
+       "line": 7,
+       "what": "a[1:] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      },
+      {
+       "kind": "alloc",
+       "line": 7,
+       "what": "a[1:]",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "f"
+      },
+      {
+       "kind": "op",
+       "line": 8,
+       "what": "list() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      },
+      {
+       "kind": "alloc",
+       "line": 8,
+       "what": "list(a)",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "g"
+      },
+      {
+       "kind": "op",
+       "line": 9,
+       "what": "a.copy()",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "container": "a"
+      },
+      {
+       "kind": "alloc",
+       "line": 9,
+       "what": "a.copy()",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "h"
+      },
+      {
+       "kind": "alloc",
+       "line": 10,
+       "what": "[0] + [1] * n",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "i"
+      },
+      {
+       "kind": "alloc",
+       "line": 13,
+       "what": "grid[...] = ...",
+       "sizes": [],
+       "into": "grid"
+      },
+      {
+       "kind": "alloc",
+       "line": 14,
+       "what": "(1, 2) * n",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "k"
+      },
+      {
+       "kind": "loop",
+       "line": 15,
+       "bound": {
+        "kind": "const",
+        "why": "range(3)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "line": 16,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a"
+       },
+       "body": [
+        {
+         "kind": "loop",
+         "line": 16,
+         "bound": {
+          "kind": "size",
+          "sizes": [
+           {
+            "name": "a",
+            "len": true
+           }
+          ],
+          "why": "a"
+         },
+         "body": []
+        }
+       ]
+      },
+      {
+       "kind": "alloc",
+       "line": 16,
+       "what": "[[z for z in a] for w in a]",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        },
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "m"
+      },
+      {
+       "kind": "op",
+       "line": 17,
+       "what": "set() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      },
+      {
+       "kind": "alloc",
+       "line": 17,
+       "what": "set(range(n))",
+       "sizes": [
+        {
+         "name": "a",
+         "len": true
+        }
+       ],
+       "name": "v"
+      },
+      {
+       "kind": "loop",
+       "loop": "L18",
+       "line": 18,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "zip(a, b)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L20",
+       "line": 20,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "enumerate(a)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L22",
+       "line": 22,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "d",
+          "len": true
+         }
+        ],
+        "why": "d.items()"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L24",
+       "line": 24,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "d",
+          "len": true
+         }
+        ],
+        "why": "d.keys()"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L26",
+       "line": 26,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "reversed(a)"
+       },
+       "body": []
+      },
+      {
+       "kind": "op",
+       "line": 28,
+       "what": "sorted() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "nlogn"
+      },
+      {
+       "kind": "loop",
+       "loop": "L28",
+       "line": 28,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "sorted(a)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L30",
+       "line": 30,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "iter(a)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L32",
+       "line": 32,
+       "bound": {
+        "kind": "const",
+        "why": "'abc'.upper()"
+       },
+       "body": []
+      },
+      {
+       "kind": "op",
+       "line": 34,
+       "what": "list() (copies)",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      },
+      {
+       "kind": "loop",
+       "loop": "L34",
+       "line": 34,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "list(a)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "line": 36,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "a"
+       },
+       "body": []
+      },
+      {
+       "kind": "op",
+       "line": 36,
+       "what": "sum()",
+       "size": {
+        "name": "a",
+        "len": true
+       },
+       "cost": "linear"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "fh",
+          "len": true
+         }
+        ],
+        "why": "fh"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L6",
+       "line": 6,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L9",
+       "line": 9,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L17",
+       "line": 17,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L21",
+       "line": 21,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L25",
+       "line": 25,
+       "bound": {
+        "kind": "unknown",
+        "why": "while xs"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L2",
+       "line": 2,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "xs",
+          "len": true
+         }
+        ],
+        "why": "xs"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "s"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "s",
+          "len": true
+         }
+        ],
+        "why": "while left < right"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "s",
+          "len": true
+         }
+        ],
+        "why": "while i > 0"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L10",
+       "line": 10,
+       "bound": {
+        "kind": "unknown",
+        "why": "while count < 10"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L13",
+       "line": 13,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "s",
+          "len": true
+         }
+        ],
+        "why": "while k < len(s) and s[k]"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "bs",
+     "line": 1,
+     "params": [
+      "nums",
+      "target"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "nums",
+         "len": true
+        },
+        "why": "while lo <= hi (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "half",
+     "line": 10,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L12",
+       "line": 12,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while n > 1 (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "mid_test",
+     "line": 1,
+     "params": [
+      "a"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "a",
+         "len": true
+        },
+        "why": "while hi - lo > 1 (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "depth",
+     "line": 13,
+     "params": [
+      "root"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 16,
+       "callee": "depth",
+       "args": [
+        {
+         "name": "root.left"
+        }
+       ],
+       "shrink": "child"
+      },
+      {
+       "kind": "call",
+       "line": 16,
+       "callee": "depth",
+       "args": [
+        {
+         "name": "root.right"
+        }
+       ],
+       "shrink": "child"
+      }
+     ]
+    },
+    {
+     "name": "__init__",
+     "line": 2,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "size",
+     "line": 4,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "self",
+          "len": true
+         }
+        ],
+        "why": "while cur (follows .next)"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "__len__",
+     "line": 11,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 12,
+       "callee": "size",
+       "args": [],
+       "shrink": "same",
+       "alt": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L7",
+       "line": 7,
+       "bound": {
+        "kind": "const",
+        "why": "(1, 2)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L9",
+       "line": 9,
+       "bound": {
+        "kind": "const",
+        "why": "{1: 2}"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L11",
+       "line": 11,
+       "bound": {
+        "kind": "const",
+        "why": "f'x'"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L13",
+       "line": 13,
+       "bound": {
+        "kind": "const",
+        "why": "'abc'"
+       },
+       "body": []
+      }
+     ]
+    },
+    {
+     "name": "outer",
+     "line": 1,
+     "params": [
+      "xs"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 6,
+       "callee": "inner",
+       "args": [
+        {
+         "name": "xs"
+        }
+       ],
+       "shrink": "same",
+       "alt": true
+      }
+     ]
+    },
+    {
+     "name": "inner",
+     "line": 2,
+     "params": [
+      "ys"
+     ],
+     "memo": false,
+     "body": []
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "a",
+      "b"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "op",
+       "line": 2,
+       "what": "a[1:] (copies)",
+       "cost": "linear",
+       "size": {
+        "name": "a",
+        "len": true
+       }
+      },
+      {
+       "kind": "call",
+       "line": 2,
+       "callee": "f",
+       "args": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "b"
+        }
+       ],
+       "shrink": "minus"
+      }
+     ]
+    },
+    {
+     "name": "g",
+     "line": 3,
+     "params": [
+      "n",
+      "k"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 4,
+       "callee": "g",
+       "args": [
+        {
+         "name": "n"
+        },
+        {
+         "name": "k"
+        }
+       ],
+       "shrink": "minus"
+      },
+      {
+       "kind": "call",
+       "line": 4,
+       "callee": "g",
+       "args": [
+        {
+         "name": "n"
+        },
+        {
+         "name": "k"
+        }
+       ],
+       "shrink": "minus"
+      }
+     ]
+    },
+    {
+     "name": "h",
+     "line": 5,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 6,
+       "callee": "h",
+       "args": [
+        {
+         "name": "n"
+        }
+       ],
+       "shrink": "minus",
+       "alt": true
+      }
+     ]
+    },
+    {
+     "name": "q",
+     "line": 7,
+     "params": [
+      "x"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 8,
+       "callee": "q",
+       "args": [
+        {
+         "name": "x"
+        }
+       ],
+       "shrink": "same",
+       "alt": true
+      }
+     ]
+    },
+    {
+     "name": "r",
+     "line": 9,
+     "params": [
+      "x"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "call",
+       "line": 10,
+       "callee": "r",
+       "args": [],
+       "shrink": "unknown",
+       "alt": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "n"
+         }
+        ],
+        "why": "range(n)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L6",
+       "line": 6,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(1, len(a))"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L8",
+       "line": 8,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "a",
+          "len": true
+         }
+        ],
+        "why": "range(len(a), 0, -1)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L10",
+       "line": 10,
+       "bound": {
+        "kind": "const",
+        "why": "range(2, 5)"
+       },
+       "body": []
+      },
+      {
+       "kind": "loop",
+       "loop": "L12",
+       "line": 12,
+       "bound": {
+        "kind": "size",
+        "sizes": [
+         {
+          "name": "n"
+         }
+        ],
+        "why": "range(0, n)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L4",
+       "line": 4,
+       "bound": {
+        "kind": "unknown",
+        "why": "a if flag else b"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": [
+      {
+       "kind": "op",
+       "line": 3,
+       "what": "join()",
+       "cost": "linear",
+       "size": {
+        "name": "words",
+        "len": true
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "functions": [
+    {
+     "name": "Global",
+     "line": 1,
+     "params": [],
+     "memo": false,
+     "body": []
+    },
+    {
+     "name": "f",
+     "line": 1,
+     "params": [
+      "n"
+     ],
+     "memo": false,
+     "body": [
+      {
+       "kind": "loop",
+       "loop": "L3",
+       "line": 3,
+       "bound": {
+        "kind": "log",
+        "size": {
+         "name": "n"
+        },
+        "why": "while n > 1 (halves each pass)"
+       },
+       "body": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

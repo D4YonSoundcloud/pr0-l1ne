@@ -81,7 +81,7 @@ At each event, `record()` walks the stack from the current frame outward, serial
 
 ## 3. Static analysis of Python with `ast`
 
-Before running anything, `analyze()` parses the code with Python's own `ast` module to learn two things the runtime trace can't tell us.
+Before running anything, `analyze()` ([`analysis.py`](../src/worker/analysis.py)) parses the code with Python's own `ast` module to learn two things the runtime trace can't tell us.
 
 **Where the loops are.** For each `for` and `while`, it records the header line and the body's line range. Each loop gets an id from its header line (`L4`).
 
@@ -462,7 +462,7 @@ Pyodide's event loop is the browser's, and the browser's can't block. So Pyodide
 
 Three parts: each tracer describes the code's shape, [`trace/bigO.ts`](../src/trace/bigO.ts) does the arithmetic, and [`trace/complexity.ts`](../src/trace/complexity.ts) puts the two together with the run.
 
-**The shape** (`Trace.cost`, a `CostInfo`) is a tree per function, written by `cost_analysis()` in [`tracer.py`](../src/worker/tracer.py) from Python's `ast`, and by [`js/cost.ts`](../src/js/cost.ts) from the Babel AST before instrumentation, in the same language-neutral format:
+**The shape** (`Trace.cost`, a `CostInfo`) is a tree per function, written by `cost_analysis()` in [`shape.py`](../src/worker/shape.py) from Python's `ast` (with `shape_names.py`, `shape_loops.py` and `shape_costs.py`), and by [`js/cost.ts`](../src/js/cost.ts) from the Babel AST before instrumentation, in the same language-neutral format:
 
 - **loop** nodes, with the `LoopInfo` id when there is one, and a bound: `size` (a list of `SizeRef`s that add), `log`, `const`, or `unknown`. Comprehensions and array callbacks (`arr.map(x => ...)`) are loops too, with their body inside.
 - **call** nodes for the program's own functions, with each argument as a `SizeRef` the callee's sizes can be renamed to, and for recursive calls, how the argument shrinks: `minus` (`n - 1`, `i + 1`, `items[1:]`), `half` (`n // 2`, `items[:mid]` where `mid` was assigned a halving), `child` (`node.left`), or `unknown`. A parameter that moves both ways across calls (`r + 1` and `r - 1`) is a search, so it's `unknown`. A call that's the whole of a `return` is marked `alt`: of `return f(a)` in one branch and `return f(b)` in another, only one runs.
