@@ -5,6 +5,7 @@
  * only contains what it needs (the TypeScript one adds Babel's core).
  */
 import type { Measurement, MeasureProgress } from "../trace/measurement";
+import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import type { FromWorker, ToWorker } from "../worker/protocol";
 
@@ -17,7 +18,7 @@ type Measure = (
 
 export function serve(
   label: string,
-  trace: (source: string, maxSteps: number, maxSeconds: number) => Promise<Trace>,
+  trace: (source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy) => Promise<Trace>,
   measure: Measure,
 ): void {
   const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -39,13 +40,13 @@ export function serve(
       }
       return;
     }
-    const { runId, source, maxSteps, maxSeconds } = event.data;
+    const { runId, source, maxSteps, maxSeconds, sampling } = event.data;
     const started = performance.now();
     try {
       post({
         type: "result",
         runId,
-        trace: await trace(source, maxSteps, maxSeconds),
+        trace: await trace(source, maxSteps, maxSeconds, sampling),
         elapsedMs: performance.now() - started,
       });
     } catch (error) {

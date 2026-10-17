@@ -36,7 +36,7 @@ describe("loading the Python tracer", () => {
     expect(files.get(`${PYTHON_DIR}/sizes.py`)).toBe("# sizes");
     expect(ran[0]).toBe(`mkdir ${PYTHON_DIR}`);
     expect(ran[1]).toContain(`sys.path.append("${PYTHON_DIR}")`); // after the standard library
-    expect(tracer.runTrace("", 1, 1)).toBe("trace from tracer");
+    expect(tracer.runTrace("", 1, 1, "{}")).toBe("trace from tracer");
     expect(tracer.runMeasure("", 1, () => {})).toBe("measure from measure");
   });
 

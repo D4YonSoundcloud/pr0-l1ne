@@ -28,7 +28,7 @@ interface Pyodide extends PyodideFiles {
   version: string;
 }
 
-type RunTrace = (source: string, maxSteps: number, maxSeconds: number) => string;
+type RunTrace = (source: string, maxSteps: number, maxSeconds: number, samplingJson: string) => string;
 type RunMeasure = (source: string, limitMs: number, report: (json: string) => void, overridesJson?: string) => string;
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -78,7 +78,7 @@ function handle(message: ToWorker): void {
   }
   const started = performance.now();
   try {
-    const json = runTrace(message.source, message.maxSteps, message.maxSeconds);
+    const json = runTrace(message.source, message.maxSteps, message.maxSeconds, JSON.stringify(message.sampling));
     // Rebuilt here, so the page gets heaps that share unchanged objects.
     const trace = expandHeaps(JSON.parse(json) as Trace);
     post({ type: "result", runId: message.runId, trace, elapsedMs: performance.now() - started });

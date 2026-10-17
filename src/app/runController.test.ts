@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { LanguageId } from "../languages";
 import { ProgramStore } from "../programs";
 import { createSettings } from "../settings";
+import { POLICY } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import type { RunnerStatus, RunOutcome } from "../worker/runner";
-import { LIVE_DELAY_MS, LIVE_SECONDS, RUN_SECONDS, RunController, type RunnerLike } from "./runController";
+import { LIVE_DELAY_MS, RunController, type RunnerLike } from "./runController";
 import { AppStore } from "./state";
 
 /** A trace of `steps` empty steps (enough for the controller). */
@@ -33,10 +34,10 @@ function makeTrace(steps: number, extra: Partial<Trace> = {}): Trace {
 /** A runner whose runs finish when the test says so. */
 class FakeRunner implements RunnerLike {
   status: RunnerStatus = { kind: "ready", label: "JavaScript" };
-  calls: { code: string; seconds: number; finish(outcome: RunOutcome): void }[] = [];
+  calls: { code: string; steps: number; seconds: number; sampling: unknown; finish(outcome: RunOutcome): void }[] = [];
   constructor(readonly onStatus: (status: RunnerStatus) => void) {}
-  run(code: string, _steps: number, seconds: number): Promise<RunOutcome> {
-    return new Promise((resolve) => this.calls.push({ code, seconds, finish: resolve }));
+  run(code: string, steps: number, seconds: number, sampling: unknown): Promise<RunOutcome> {
+    return new Promise((resolve) => this.calls.push({ code, steps, seconds, sampling, finish: resolve }));
   }
   measure(): never {
     throw new Error("not used");
@@ -102,7 +103,9 @@ describe("RunController", () => {
     const { runs, runners, app, results, banners } = setup();
     runs.runNow("let a = 1;");
     const call = runners.get("javascript")!.calls[0];
-    expect(call.seconds).toBe(RUN_SECONDS);
+    expect(call.seconds).toBe(POLICY.runSeconds);
+    expect(call.steps).toBe(POLICY.maxSteps);
+    expect(call.sampling).toBe(POLICY.sampling); // sent with every run, so both tracers sample alike
     call.finish({ kind: "trace", trace: makeTrace(5), elapsedMs: 1 });
     await flush();
     expect(app.get().trace?.steps).toHaveLength(5);
@@ -121,7 +124,7 @@ describe("RunController", () => {
     expect(LIVE_DELAY_MS).toBeGreaterThan(0);
     fireTimers();
     const calls = runners.get("javascript")!.calls;
-    expect(calls.map((c) => [c.code, c.seconds])).toEqual([["let a = 12", LIVE_SECONDS]]);
+    expect(calls.map((c) => [c.code, c.seconds])).toEqual([["let a = 12", POLICY.liveSeconds]]);
   });
 
   it("Run cancels a pending Live run", () => {
@@ -231,7 +234,7 @@ describe("RunController", () => {
       elapsedMs: 1,
     });
     await flush();
-    expect(banners.at(-1)).toContain(`Traced for ${LIVE_SECONDS} seconds`);
+    expect(banners.at(-1)).toContain(`Traced for ${POLICY.liveSeconds} seconds`);
     expect(banners.at(-1)).toContain('data-action="run"');
     expect(banners.at(-1)).toContain('data-action="measure"');
   });

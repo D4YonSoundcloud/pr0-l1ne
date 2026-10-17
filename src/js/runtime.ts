@@ -9,6 +9,7 @@
  */
 
 import { sameData } from "../trace/delta";
+import type { SamplingPolicy } from "../trace/policy";
 import type { HeapObject, LoopContext, Step } from "../trace/types";
 import {
   CONVENTIONAL_POINTERS,
@@ -25,7 +26,6 @@ import { type LoopState, RECORD, Sampler } from "./sampling";
 export type { Getter } from "./inspector";
 
 const MAX_DEPTH = 250;
-export const TRACE_SECONDS = 6;
 
 /** Thrown to stop the program when the step budget runs out. */
 export class StepLimit {
@@ -84,9 +84,10 @@ export class Runtime {
 
   constructor(
     private readonly maxSteps: number,
-    maxSeconds = TRACE_SECONDS,
+    maxSeconds: number,
+    sampling: SamplingPolicy,
   ) {
-    this.sampler = new Sampler(maxSteps, (step) => this.commit(step));
+    this.sampler = new Sampler(maxSteps, sampling, (step) => this.commit(step));
     this.deadline = (typeof performance !== "undefined" ? performance.now() : Date.now()) + maxSeconds * 1000;
   }
 

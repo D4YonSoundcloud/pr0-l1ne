@@ -15,6 +15,10 @@ generator expression calls).
 
 The tracer asks place() where each event's step goes: straight into the
 trace, into the buffer of a long loop's last passes, or nowhere.
+
+How many passes, and what share of the budget, come from the SamplingPolicy
+each run is given (src/trace/policy.ts), the same numbers the JavaScript
+tracer gets.
 """
 
 import ast
@@ -24,10 +28,8 @@ from types import FrameType
 from typing import Any, Literal
 
 from analysis import USER_FILENAME
+from policy import SamplingPolicy
 from steplog import Step, StepLog
-
-SAMPLE_FIRST = 5  # passes always recorded at the start
-SAMPLE_LAST = 5  # passes always recorded at the end
 
 # Where place() puts an event's step: RECORD (into the trace now), a list
 # (buffered with a long loop's last passes), or None (not recorded).
@@ -39,9 +41,9 @@ Placement = list[Step] | Literal["record"] | None
 LoopState = dict[str, Any]
 
 
-def round_pass(n: int) -> bool:
-    """10, 20 ... 90, 100, 200 ... 900, 1000 ...: a pass worth keeping in a long loop."""
-    if n < 10:
+def round_pass(n: int, policy: SamplingPolicy) -> bool:
+    """10, 20 ... 90, 100, 200 ... 900, 1000 ... (from policy roundFrom): a pass worth keeping in a long loop."""
+    if n < policy["roundFrom"]:
         return False
     scale = 10 ** (len(str(n)) - 1)
     return n % scale == 0
@@ -79,7 +81,8 @@ class LoopLengths(ast.NodeTransformer):
 class Sampler:
     """Which passes of which loops are recorded, for one run."""
 
-    def __init__(self, log: StepLog, frame_ids: dict[int, str]) -> None:
+    def __init__(self, log: StepLog, frame_ids: dict[int, str], policy: SamplingPolicy) -> None:
+        self.policy = policy
         self.log = log
         self.frame_ids = frame_ids  # id(frame) -> "f3", shared with the tracer
         self.loops: list[dict[str, Any]] = []  # the program's loops (analysis.analyze)
@@ -172,14 +175,15 @@ class Sampler:
         """Decide, after a loop's first few passes, whether to record all of it."""
         it = state["iteration"]
         room = self.log.max_steps - state["start"]
-        if state["mode"] is None and it == SAMPLE_FIRST + 1:
-            per_pass = (self.log.considered - state["start"]) / SAMPLE_FIRST
+        first = self.policy["first"]
+        if state["mode"] is None and it == first + 1:
+            per_pass = (self.log.considered - state["start"]) / first
             total = state["total"]
             if total is not None:
-                state["mode"] = "sampled" if per_pass * total > room * 0.5 else "full"
+                state["mode"] = "sampled" if per_pass * total > room * self.policy["sampleShare"] else "full"
             else:
                 state["mode"] = "watch"
-        if state["mode"] == "watch" and self.log.considered - state["start"] > room * 0.25:
+        if state["mode"] == "watch" and self.log.considered - state["start"] > room * self.policy["watchShare"]:
             state["mode"] = "sampled"
         if state["mode"] == "sampled":
             self.sampled = True
@@ -194,13 +198,14 @@ class Sampler:
         round-numbered ones while the loop's share of the budget allows
         (leaving room for its last passes)."""
         it, total = state["iteration"], state["total"]
-        if it <= SAMPLE_FIRST or (total is not None and it > total - SAMPLE_LAST):
+        first, last = self.policy["first"], self.policy["last"]
+        if it <= first or (total is not None and it > total - last):
             return True
-        if not round_pass(it):
+        if not round_pass(it, self.policy):
             return False
         spent = self.log.considered - state["start"]
         per_pass = spent / max(1, state.get("kept", 0))
-        return spent + per_pass * (SAMPLE_LAST + 1) <= room * 0.6
+        return spent + per_pass * (last + 1) <= room * self.policy["roundShare"]
 
     @staticmethod
     def keep_pass(state: LoopState) -> bool:
@@ -328,7 +333,7 @@ class Sampler:
             passes.append((state["iteration"], [], pinned))
             if not pinned:
                 tail["loose"] += 1
-            while tail["loose"] > SAMPLE_LAST:
+            while tail["loose"] > self.policy["last"]:
                 _it, steps, was_pinned = passes.popleft()
                 if was_pinned:
                     for step in steps:
@@ -337,7 +342,7 @@ class Sampler:
                     tail["loose"] -= 1
                     self.log.skip(len(steps))
         steps = passes[-1][1]
-        if len(steps) > self.log.max_steps // 4:
+        if len(steps) > self.log.max_steps * self.policy["passShare"]:
             self.log.skip()  # one enormous pass: keep its start
             return None
         return steps

@@ -23,6 +23,11 @@ pyodide.FS.writeFile(
   "/fixtures/shapes/python.json",
   readFileSync(new URL("../fixtures/shapes/python.json", import.meta.url), "utf8"),
 );
+// The tracing policy (see policy.py), for tests that run the tracer without passing one.
+pyodide.FS.writeFile(
+  "/fixtures/policy.json",
+  readFileSync(new URL("../fixtures/policy.json", import.meta.url), "utf8"),
+);
 const tests = files.filter((f) => f.startsWith("test_")).map((f) => f.slice(0, -3));
 const [ok, report] = pyodide
   .runPython(`

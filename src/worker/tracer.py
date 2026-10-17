@@ -29,6 +29,7 @@ from types import CodeType, FrameType
 from typing import Any
 
 from analysis import USER_FILENAME, analyze, collect_hints, last_user_line
+from policy import SamplingPolicy, load_policy
 from sampling import RECORD, LoopLengths, Sampler, user_frames
 from serialize import CONVENTIONAL_POINTERS, MAX_ITEMS, PRIMITIVE_TYPES, Serializer, is_hidden_name
 from shape import cost_analysis
@@ -57,8 +58,6 @@ STEP_EVENTS = ("call", "line", "return", "exception", "resume", "yield", "await"
 # variable. It's harmless (the trace is correct) but floods the console.
 warnings.filterwarnings("ignore", message="assigning None to unbound local", category=RuntimeWarning)
 
-TRACE_SECONDS = 6.0  # stop tracing after this long, even within the step budget
-# (the page passes less for live runs while typing)
 CLOCK_EVERY = 1000  # events between checks of the clock
 
 
@@ -71,7 +70,7 @@ class StepLimitExceeded(BaseException):
 
 
 class Tracer:
-    def __init__(self, source: str, max_steps: int, max_seconds: float = TRACE_SECONDS) -> None:
+    def __init__(self, source: str, max_steps: int, max_seconds: float, sampling: SamplingPolicy) -> None:
         self.source = source
         self.max_seconds = max_seconds
         self.log = StepLog(max_steps)
@@ -82,7 +81,7 @@ class Tracer:
         self.object_ids: dict[Any, Any] = {}
         self.frame_ids: dict[int, str] = {}
         self.frame_counter = 0
-        self.sampler = Sampler(self.log, self.frame_ids)
+        self.sampler = Sampler(self.log, self.frame_ids, sampling)
         # What print() was given since the last step: {"line", "objects"}.
         self.pending_print: dict | None = None
         # Names that index each list (analysis.analyze, plus `viz: pointers` hints).
@@ -414,9 +413,24 @@ def with_pointer_hints(index_names: dict[str, list[str]], hints: list[dict[str, 
     return out
 
 
-def run_trace(source: str, max_steps: int = 2000, max_seconds: float = TRACE_SECONDS) -> str:
-    """Entry point called from the Pyodide worker. Returns a JSON string."""
-    tracer = Tracer(source, int(max_steps), float(max_seconds))
+def run_trace(
+    source: str,
+    max_steps: int = 2000,
+    max_seconds: float | None = None,
+    sampling: str | SamplingPolicy | None = None,
+) -> str:
+    """Entry point called from the Pyodide worker. Returns a JSON string.
+
+    The worker passes the run's time limit and sampling rules (sampling as
+    JSON). Left out, as from the CLI or a test, they're the policy in
+    fixtures/policy.json: how long a Run may take, and how it samples.
+    """
+    if max_seconds is None or sampling is None:
+        policy = load_policy()
+        max_seconds = policy["runSeconds"] if max_seconds is None else max_seconds
+        sampling = policy["sampling"] if sampling is None else sampling
+    rules: SamplingPolicy = json.loads(sampling) if isinstance(sampling, str) else sampling
+    tracer = Tracer(source, int(max_steps), float(max_seconds), rules)
     result = tracer.run()
     tracer.keepalive.clear()
     return json.dumps(result)

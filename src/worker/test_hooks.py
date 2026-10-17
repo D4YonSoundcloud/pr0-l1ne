@@ -9,6 +9,14 @@ import textwrap
 import unittest
 
 import tracer as T
+from policy import load_policy
+
+POLICY = load_policy()
+
+
+def tracer_for(source, max_steps):
+    """A Tracer with the app's time limit and sampling rules."""
+    return T.Tracer(source, max_steps, POLICY["runSeconds"], POLICY["sampling"])
 
 
 def capture(source, **names):
@@ -28,7 +36,7 @@ class HookTests(unittest.TestCase):
 
     def test_events_in_the_programs_terms(self):
         frames = capture("def f():\n    capture()\nf()\n")
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         frame = frames[0]
         self.assertEqual(tracer.classify(frame, "f1", "line", None), "line")
         tracer.suspended["f1"] = frame
@@ -66,7 +74,7 @@ class HookTests(unittest.TestCase):
             ),
             names,
         )
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         self.assertEqual(tracer.returned(names["g"].gi_frame, "f1", 1), "yield")
         self.assertEqual(tracer.returned(names["c"].cr_frame, "f2", None), "await")
         self.assertEqual(set(tracer.suspended), {"f1", "f2"})
@@ -82,13 +90,13 @@ class HookTests(unittest.TestCase):
 
     def test_calls_are_counted_with_their_deepest_recursion(self):
         (frame,) = capture("def f(n):\n    if n == 0:\n        capture()\n    else:\n        f(n - 1)\nf(2)\n")
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         tracer.count(frame, "call")
         tracer.count(frame, "line")
         self.assertEqual(tracer.counts, {"steps": 2, "calls": {"f": 1}, "depth": {"f": 3}})
 
     def test_the_clock_is_checked_every_so_often(self):
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         tracer.deadline = 0  # long past
         tracer.tick = 2
         tracer.check_clock()  # not yet
@@ -101,7 +109,7 @@ class HookTests(unittest.TestCase):
 
     def test_a_step_is_the_stack_the_heap_and_the_output_so_far(self):
         (frame,) = capture("nums = [1, 2]\nprint('hi')\ncapture()\n", print=lambda *a: None)
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         into = []
         tracer.record(frame, "line", None, into=into)
         (step,) = into
@@ -117,7 +125,7 @@ class HookTests(unittest.TestCase):
 
     def test_the_step_budget_stops_the_run(self):
         (frame,) = capture("capture()\n")
-        tracer = T.Tracer("", 1)
+        tracer = tracer_for("", 1)
         tracer.record(frame, "line", None)
         with self.assertRaises(T.StepLimitExceeded):
             tracer.record(frame, "line", None)
@@ -125,7 +133,7 @@ class HookTests(unittest.TestCase):
 
     def test_printed_objects_are_pointed_at_on_the_next_step(self):
         (frame,) = capture("box = [1]\ncapture()\n")
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         box = frame.f_locals["box"]
         tracer.pending_print = {"line": 1, "objects": [box, box, object()]}
         tracer.record(frame, "line", None)
@@ -134,7 +142,7 @@ class HookTests(unittest.TestCase):
 
     def test_long_lists_follow_the_names_that_index_them(self):
         (frame,) = capture("nums = list(range(100))\ni = 50\nlo = 3\nshort = [1]\nj = 0\ncapture()\n")
-        tracer = T.Tracer("", 100)
+        tracer = tracer_for("", 100)
         self.assertEqual(tracer.focus_of([frame]), {})  # no index names known
         tracer.index_names = {"nums": ["i"], "short": ["j"]}
         focus = tracer.focus_of([frame])
@@ -147,14 +155,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual(T.with_pointer_hints({"nums": ["i"]}, hints), {"nums": ["hi", "i", "lo"]})
 
     def test_prepare_reads_the_program_or_reports_why_it_cant(self):
-        tracer = T.Tracer("for i in range(3):\n    pass  # viz: hide i\n", 100)
+        tracer = tracer_for("for i in range(3):\n    pass  # viz: hide i\n", 100)
         result = {"indexNames": {}, "loops": []}
         self.assertIsNotNone(tracer.prepare(result))
         self.assertEqual([loop["id"] for loop in result["loops"]], ["L1"])
         self.assertEqual(result["hints"], [{"line": 2, "text": "hide i"}])
         self.assertIn("cost", result)
         broken = {"indexNames": {}, "loops": []}
-        self.assertIsNone(T.Tracer("x = (", 100).prepare(broken))
+        self.assertIsNone(tracer_for("x = (", 100).prepare(broken))
         self.assertEqual(broken["error"]["type"], "SyntaxError")
 
     def test_an_error_is_reported_at_the_programs_own_line(self):

@@ -35,7 +35,7 @@ Open the URL Vite prints (usually http://localhost:5173). The bubble sort exampl
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
 | `npm run instrument -- file.js` | Prints the instrumented version of a JavaScript or TypeScript file. |
-| `npm run schema` | Regenerates `schema/trace.schema.json` from `src/trace/types.ts`. Run it after changing the trace types; a test fails until you do. |
+| `npm run schema` | Regenerates `schema/trace.schema.json` from `src/trace/types.ts`, and `fixtures/policy.json` from `src/trace/policy.ts`. Run it after changing either; a test fails until you do. |
 | `npm run test:golden` | Traces every example in all three languages and compares with `fixtures/traces/`. Add `-- -u` to accept intended changes. |
 | `npm run test:coverage` | Runs the TypeScript tests with coverage (report in `coverage/js/index.html`), then the Python tests with coverage (`coverage/python/index.html`). Python coverage needs `pip install coverage`. |
 | `npm run lint` | Checks formatting and lint rules: Biome for TypeScript, JavaScript, JSON, CSS and HTML, then Ruff and Pyright (types) for Python. Changes nothing. |
@@ -67,6 +67,7 @@ The golden traces include each example's code shape (`Trace.cost`), but the exam
 
 The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agree on. Three things keep it honest:
 
+- **One policy.** The step budget, the time limits and the sampling rules are defined once, in `src/trace/policy.ts`. The app sends the budget and the sampling rules with every run (the `run` message in `worker/protocol.ts`), and both tracers take them as parameters, so neither has numbers of its own. The Python tracer, run outside the app (`npm run trace`, `npm run test:tracer`), reads the same policy from `fixtures/policy.json`, which `npm run schema` writes and `src/trace/policy.test.ts` checks. The conformance suite traces two 10,000-pass loops with the app's policy and with another one, and checks both tracers keep the same passes.
 - **A schema.** `schema/trace.schema.json` is generated from `types.ts` with `npm run schema`. `src/trace/schema.test.ts` fails if it's out of date, so a change to the format always shows up in review. The rules for versions (what counts as breaking, and when `version` goes to 2) are at the top of `types.ts`.
 - **Checks against it.** Every golden trace and every conformance trace is validated in the tests. In development builds (`npm run dev`), `src/worker/runner.ts` also checks every trace a worker sends. A bad trace then fails right away with a banner naming the field (`steps[3].heap.o4: needs "items"`), and the full trace in the console. Production builds leave the check, the validator and the schema out.
 - **A conformance suite.** `src/trace/conformance.cases.ts` holds 32 small programs written in both Python and JavaScript. `conformance.test.ts` traces each pair and checks both have the same shape (`src/trace/shape.ts`): the output, how the program ended, loops and their passes (including which passes a sampled loop kept), and the final globals with every object and link they reach. Type names, sizes, ids and step counts aren't compared, since the languages differ there on purpose. If the two tracers drift apart, a case fails. To add a case, follow the notes at the top of `conformance.cases.ts`.
@@ -222,6 +223,7 @@ pr0-l1ne/
     ├── styles.css              All styles, including the SVG diagram styles
     ├── trace/
     │   ├── types.ts            The trace format (the tracer/renderer contract)
+    │   ├── policy.ts           The step budget, time limits and sampling rules, for both tracers
     │   ├── diff.ts             What changed between two steps
     │   ├── loopHistory.ts      Group steps into loop iterations
     │   ├── hints.ts            Parse and apply viz: comment hints
@@ -294,6 +296,7 @@ pr0-l1ne/
         ├── pythonModules.ts    Writes the Python modules into Pyodide and imports them
         ├── tracer.py           The Python tracer: the settrace hook and the run
         ├── sampling.py         Which passes of long loops are recorded
+        ├── policy.py           The policy's types; fixtures/policy.json outside the app
         ├── steplog.py          Recorded steps, with heaps as deltas
         ├── virtual_asyncio.py  asyncio on a virtual clock (tracer and Measure)
         ├── analysis.py         Read before running: hints, loops, index names

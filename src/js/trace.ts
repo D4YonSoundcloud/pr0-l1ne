@@ -2,12 +2,19 @@
  * Runs JavaScript (or, via typescript.ts, TypeScript) source and returns a
  * Trace, the same format tracer.py produces. Pure functions only, so it works in the worker and in tests.
  */
+import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrument, RUNTIME } from "./instrument";
 import { Runtime } from "./runtime";
 
-export function traceJavaScript(source: string, maxSteps = 2000, maxSeconds?: number): Promise<Trace> {
-  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds);
+/** The app passes the budget and the sampling policy with each run; tests and the CLI can leave them to POLICY. */
+export function traceJavaScript(
+  source: string,
+  maxSteps = 2000,
+  maxSeconds = POLICY.runSeconds,
+  sampling: SamplingPolicy = POLICY.sampling,
+): Promise<Trace> {
+  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds, sampling);
 }
 
 /** Most turns of the event loop to run before giving up (setInterval forever). */
@@ -68,7 +75,8 @@ export async function traceProgram(
   maxSteps: number,
   language: "javascript" | "typescript",
   instrumenter: (source: string) => Instrumented,
-  maxSeconds?: number,
+  maxSeconds: number,
+  sampling: SamplingPolicy,
 ): Promise<Trace> {
   const trace: Trace = {
     version: 1,
@@ -95,7 +103,7 @@ export async function traceProgram(
   if (program.hints.length) trace.hints = program.hints;
   if (program.cost) trace.cost = program.cost;
 
-  const runtime = new Runtime(maxSteps, maxSeconds);
+  const runtime = new Runtime(maxSteps, maxSeconds, sampling);
   runtime.indexNames = withPointerHints(program.indexNames, program.hints);
   let stopped = false;
   const fail = (error: unknown) => {

@@ -5,6 +5,7 @@ import type { MeasureLabel } from "../measurePanel";
 import { ProgramStore } from "../programs";
 import { createSettings, type KeyValueStorage } from "../settings";
 import type { Measurement, MeasureProgress } from "../trace/measurement";
+import { POLICY } from "../trace/policy";
 import type { MeasureOutcome } from "../worker/runner";
 import { MeasureController, sizeSuggestion } from "./measureController";
 import { AppStore } from "./state";
@@ -225,7 +226,7 @@ describe("MeasureController", () => {
     const { measure, calls } = setup(undefined, storage);
     void measure.measure();
     await flush();
-    expect(calls[0].limit).toBe(20_000);
+    expect(calls[0].limit).toBe(POLICY.measureMs);
   });
 
   it("drops a result for a language the person has left, and stops measuring it", async () => {

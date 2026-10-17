@@ -1,0 +1,15 @@
+{
+  "maxSteps": 20000,
+  "liveSeconds": 1.5,
+  "runSeconds": 6,
+  "measureMs": 20000,
+  "sampling": {
+    "first": 5,
+    "last": 5,
+    "roundFrom": 10,
+    "sampleShare": 0.5,
+    "watchShare": 0.25,
+    "roundShare": 0.6,
+    "passShare": 0.25
+  }
+}

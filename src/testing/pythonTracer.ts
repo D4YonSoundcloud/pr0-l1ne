@@ -6,10 +6,11 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { loadPyodide } from "pyodide";
+import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { loadPythonTracer, type PyodideFiles } from "../worker/pythonModules";
 
-export type TracePython = (source: string, maxSteps: number, maxSeconds: number) => Trace;
+export type TracePython = (source: string, maxSteps: number, maxSeconds: number, sampling?: SamplingPolicy) => Trace;
 
 const WORKER_DIR = new URL("../worker/", import.meta.url);
 
@@ -28,7 +29,8 @@ export function pythonTracer(): Promise<TracePython> {
   loading ??= (async () => {
     const pyodide = (await loadPyodide({ env: { PYTHONHASHSEED: "0" } })) as unknown as PyodideFiles;
     const { runTrace } = loadPythonTracer(pyodide, pythonFiles());
-    return (source, maxSteps, maxSeconds) => JSON.parse(runTrace(source, maxSteps, maxSeconds)) as Trace;
+    return (source, maxSteps, maxSeconds, sampling = POLICY.sampling) =>
+      JSON.parse(runTrace(source, maxSteps, maxSeconds, JSON.stringify(sampling))) as Trace;
   })();
   return loading;
 }

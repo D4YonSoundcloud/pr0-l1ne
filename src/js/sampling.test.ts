@@ -1,13 +1,17 @@
 /** The sampling policy, driven by hand: which passes of long loops are recorded. */
 import { describe, expect, it } from "vitest";
+import { POLICY } from "../trace/policy";
 import type { Step } from "../trace/types";
-import { type LoopState, RECORD, roundPass, SAMPLE_FIRST, SAMPLE_LAST, Sampler } from "./sampling";
+import { type LoopState, RECORD, roundPass, Sampler } from "./sampling";
+
+const SAMPLING = POLICY.sampling;
+const { first: SAMPLE_FIRST, last: SAMPLE_LAST } = SAMPLING;
 
 const step = () => ({ event: "line" }) as Step;
 
 function sampler(maxSteps = 1000) {
   const committed: Step[] = [];
-  return { s: new Sampler(maxSteps, (x) => committed.push(x)), committed };
+  return { s: new Sampler(maxSteps, SAMPLING, (x: Step) => committed.push(x)), committed };
 }
 
 /** A loop after its first passes, each `perPass` steps long. */
@@ -22,7 +26,9 @@ function started(s: Sampler, total: number | null, perPass: number): LoopState {
 
 describe("sampling", () => {
   it("keeps round-numbered passes", () => {
-    expect([5, 9, 10, 13, 20, 99, 100, 150, 200, 1000].filter(roundPass)).toEqual([10, 20, 100, 200, 1000]);
+    expect([5, 9, 10, 13, 20, 99, 100, 150, 200, 1000].filter((n) => roundPass(n, SAMPLING))).toEqual([
+      10, 20, 100, 200, 1000,
+    ]);
   });
 
   it("records a short loop in full, and samples a long one", () => {

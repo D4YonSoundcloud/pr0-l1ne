@@ -8,8 +8,12 @@ import sys
 import unittest
 
 from analysis import USER_FILENAME
-from sampling import RECORD, SAMPLE_FIRST, SAMPLE_LAST, LoopLengths, Sampler, round_pass, user_frames
+from policy import load_policy
+from sampling import RECORD, LoopLengths, Sampler, round_pass, user_frames
 from steplog import StepLog
+
+POLICY = load_policy()["sampling"]
+SAMPLE_FIRST, SAMPLE_LAST = POLICY["first"], POLICY["last"]
 
 LOOP = {"id": "L2", "line": 2, "bodyStart": 3, "bodyEnd": 4}
 
@@ -29,7 +33,7 @@ def library(fn):
 
 def sampler(max_steps=1000, loops=(LOOP,)):
     log = StepLog(max_steps)
-    s = Sampler(log, {})
+    s = Sampler(log, {}, POLICY)
     s.loops = list(loops)
     return s, log
 
@@ -43,7 +47,7 @@ def state(**kwargs):
 class HelperTests(unittest.TestCase):
     def test_round_passes(self):
         self.assertEqual(
-            [n for n in [5, 9, 10, 13, 20, 99, 100, 150, 200, 1000] if round_pass(n)],
+            [n for n in [5, 9, 10, 13, 20, 99, 100, 150, 200, 1000] if round_pass(n, POLICY)],
             [10, 20, 100, 200, 1000],
         )
 

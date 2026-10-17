@@ -18,7 +18,8 @@ export interface PyodideFiles {
 
 /** The tracer's entry points, called from JavaScript. */
 export interface PythonTracer {
-  runTrace(source: string, maxSteps: number, maxSeconds: number): string;
+  /** samplingJson: the run's SamplingPolicy (trace/policy.ts), as JSON. */
+  runTrace(source: string, maxSteps: number, maxSeconds: number, samplingJson: string): string;
   runMeasure(source: string, limitMs: number, report: (json: string) => void, overridesJson?: string): string;
 }
 

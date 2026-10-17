@@ -13,6 +13,7 @@
     "src/trace/complexity.test.ts",
     "src/trace/bigO.test.ts",
     "src/trace/schema.test.ts",
+    "src/trace/policy.test.ts",
     "src/examples/golden.test.ts",
     "src/trace/gridFocus.test.ts",
     "src/testing/**/*.ts",

@@ -1,20 +1,19 @@
 /**
- * The sampling policy for long loops: which passes are recorded, the same
- * rules as the Python tracer's sampling.py. After a loop's first passes it is
+ * Sampling long loops: which passes are recorded, the same rules as the
+ * Python tracer's sampling.py, with the numbers from the SamplingPolicy each
+ * run is given (trace/policy.ts). After a loop's first passes it is
  * recorded in full, sampled (its first and last passes and round-numbered
  * ones in between) or, when its length isn't known, watched until it has
  * spent a quarter of its room. The last passes of a loop of unknown length
  * wait in a buffer until it ends, since any pass could be one of the last.
  */
 
+import type { SamplingPolicy } from "../trace/policy";
 import type { Step } from "../trace/types";
 
-export const SAMPLE_FIRST = 5;
-export const SAMPLE_LAST = 5;
-
-/** 10, 20 ... 90, 100, 200 ... 900, 1000 ...: a pass worth keeping in a long loop. */
-export function roundPass(n: number): boolean {
-  if (n < 10) return false;
+/** 10, 20 ... 90, 100, 200 ... 900, 1000 ... (from policy.roundFrom): a pass worth keeping in a long loop. */
+export function roundPass(n: number, policy: SamplingPolicy): boolean {
+  if (n < policy.roundFrom) return false;
   const scale = 10 ** (String(n).length - 1);
   return n % scale === 0;
 }
@@ -59,6 +58,7 @@ export class Sampler {
 
   constructor(
     private readonly maxSteps: number,
+    private readonly policy: SamplingPolicy,
     /** Save a step to the trace. */
     private readonly commit: (step: Step) => void,
   ) {}
@@ -75,12 +75,13 @@ export class Sampler {
 
   /** A pass starting. After a loop's first passes, decide whether to record all of it. */
   newPass(state: LoopState): void {
+    const { first, sampleShare, watchShare } = this.policy;
     const room = this.maxSteps - state.start;
-    if (state.mode === null && state.iteration === SAMPLE_FIRST + 1) {
-      const perPass = (this.considered - state.start) / SAMPLE_FIRST;
-      state.mode = state.total !== null ? (perPass * state.total > room * 0.5 ? "sampled" : "full") : "watch";
+    if (state.mode === null && state.iteration === first + 1) {
+      const perPass = (this.considered - state.start) / first;
+      state.mode = state.total !== null ? (perPass * state.total > room * sampleShare ? "sampled" : "full") : "watch";
     }
-    if (state.mode === "watch" && this.considered - state.start > room * 0.25) state.mode = "sampled";
+    if (state.mode === "watch" && this.considered - state.start > room * watchShare) state.mode = "sampled";
     if (state.mode === "sampled") {
       this.sampled = true;
       state.keep = this.decideKeep(state, room);
@@ -96,12 +97,13 @@ export class Sampler {
    * (leaving room for its last passes).
    */
   decideKeep(state: LoopState, room: number): boolean {
+    const { first, last, roundShare } = this.policy;
     const it = state.iteration;
-    if (it <= SAMPLE_FIRST || (state.total !== null && it > state.total - SAMPLE_LAST)) return true;
-    if (!roundPass(it)) return false;
+    if (it <= first || (state.total !== null && it > state.total - last)) return true;
+    if (!roundPass(it, this.policy)) return false;
     const spent = this.considered - state.start;
     const perPass = spent / Math.max(1, state.kept ?? 0);
-    return spent + perPass * (SAMPLE_LAST + 1) <= room * 0.6;
+    return spent + perPass * (last + 1) <= room * roundShare;
   }
 
   static keepPass(state: LoopState): boolean {
@@ -149,7 +151,7 @@ export class Sampler {
     if (!passes.length || passes[passes.length - 1].it !== state.iteration) {
       passes.push({ it: state.iteration, steps: [], pinned });
       if (!pinned) tail.loose++;
-      while (tail.loose > SAMPLE_LAST) {
+      while (tail.loose > this.policy.last) {
         const first = passes.shift()!;
         if (first.pinned) {
           for (const step of first.steps) this.commit(step); // earlier than everything still buffered
@@ -160,7 +162,7 @@ export class Sampler {
       }
     }
     const steps = passes[passes.length - 1].steps;
-    if (steps.length > this.maxSteps / 4) return null;
+    if (steps.length > this.maxSteps * this.policy.passShare) return null;
     return steps;
   }
 }

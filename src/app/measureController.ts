@@ -19,11 +19,12 @@ import type { Settings } from "../settings";
 import { estimateComplexity } from "../trace/complexity";
 import { findSizes, type GrowthPoint, ladder, pointFrom, staticGrowth } from "../trace/growth";
 import { duration, type Measurement } from "../trace/measurement";
+import { POLICY } from "../trace/policy";
 import { escapeHtml } from "./html";
 import type { RunController } from "./runController";
 import type { AppStore } from "./state";
 
-const DEFAULT_LIMIT_MS = 20_000;
+const DEFAULT_LIMIT_MS = POLICY.measureMs;
 
 export interface MeasureElements {
   /** Measure (Stop while measuring). */

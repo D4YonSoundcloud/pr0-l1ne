@@ -10,6 +10,7 @@
  */
 
 import type { Measurement, MeasureProgress } from "../trace/measurement";
+import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import type { FromWorker, ToWorker } from "./protocol";
 
@@ -189,7 +190,7 @@ export class Runner {
   }
 
   /** Run code. Only one run is in flight at a time; callers should await. */
-  run(source: string, maxSteps: number, maxSeconds: number): Promise<RunOutcome> {
+  run(source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy): Promise<RunOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
     const runId = this.nextRunId++;
     return new Promise((resolve) => {
@@ -204,7 +205,7 @@ export class Runner {
       }, limit);
       this.pending = { runId, resolve, timer };
       if (this.isReady) this.setStatus({ kind: "running" });
-      const message: ToWorker = { type: "run", runId, source, maxSteps, maxSeconds };
+      const message: ToWorker = { type: "run", runId, source, maxSteps, maxSeconds, sampling };
       this.worker.postMessage(message);
     });
   }

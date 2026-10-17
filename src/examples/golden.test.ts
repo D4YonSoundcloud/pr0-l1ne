@@ -17,10 +17,11 @@ import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
 import { pythonTracer, type TracePython } from "../testing/pythonTracer";
 import { goldenText, slug } from "../trace/golden";
+import { POLICY } from "../trace/policy";
 import { traceProblems } from "../trace/validate";
 import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./index";
 
-const MAX_STEPS = 20_000; // as src/main.ts
+const MAX_STEPS = POLICY.maxSteps; // as the app
 const MAX_SECONDS = 600; // never the reason a trace stops
 
 const fixture = (language: string, example: Example) => `../../fixtures/traces/${language}/${slug(example.name)}.json`;

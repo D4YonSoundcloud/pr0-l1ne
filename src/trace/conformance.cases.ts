@@ -600,6 +600,37 @@ for (let i = 0; i < 5000; i++) {
     ignore: ["i"],
   },
   {
+    // The sampling rules come from trace/policy.ts, sent to both tracers with
+    // each run: these two also run under another policy (conformance.test.ts).
+    name: "a 10,000-pass loop is sampled the same way",
+    python: `total = 0
+for i in range(10000):
+    total += i
+print(total)
+`,
+    javascript: `let total = 0;
+for (let i = 0; i < 10000; i++) {
+  total += i;
+}
+console.log(total);
+`,
+    ignore: ["i"],
+  },
+  {
+    name: "a 10,000-pass loop of unknown length keeps the same last passes",
+    python: `n = 0
+while n < 10000:
+    n += 1
+print(n)
+`,
+    javascript: `let n = 0;
+while (n < 10000) {
+  n += 1;
+}
+console.log(n);
+`,
+  },
+  {
     name: "an endless loop is stopped",
     python: `x = 0
 while True:

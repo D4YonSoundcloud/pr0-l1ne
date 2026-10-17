@@ -1,9 +1,11 @@
 import type { Measurement, MeasureProgress } from "../trace/measurement";
+import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 
 /** Messages the main thread sends to the worker. */
 export type ToWorker =
-  | { type: "run"; runId: number; source: string; maxSteps: number; maxSeconds: number }
+  /** Trace: the budget for this run, and how to sample long loops (trace/policy.ts), so both tracers follow the same rules. */
+  | { type: "run"; runId: number; source: string; maxSteps: number; maxSeconds: number; sampling: SamplingPolicy }
   /** Run at full size with counters (see trace/measurement.ts). */
   | { type: "measure"; runId: number; source: string; limitMs: number; overrides?: Record<string, number> };
 

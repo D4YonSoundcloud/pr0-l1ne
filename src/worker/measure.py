@@ -37,6 +37,7 @@ from typing import Any
 
 from analysis import USER_FILENAME, last_user_line
 from counters import apply_overrides, instrument
+from policy import load_policy
 from sizes import size64
 from virtual_asyncio import virtual_asyncio
 
@@ -326,14 +327,20 @@ def held_bytes(env: dict[str, Any]) -> int:
 
 
 def run_measure(
-    source: str, limit_ms: float = 20000, report: Callable[[str], None] | None = None, overrides_json: str | None = None
+    source: str,
+    limit_ms: float | None = None,
+    report: Callable[[str], None] | None = None,
+    overrides_json: str | None = None,
 ) -> str:
     """Entry point for the worker. `report(json)` gets progress. `overrides_json`:
-    {"n": 625} sets top-level sizes (growth runs). Returns a JSON string."""
+    {"n": 625} sets top-level sizes (growth runs). Returns a JSON string.
+    The worker always passes the limit; left out, it's the policy's (fixtures/policy.json)."""
+    if limit_ms is None:
+        limit_ms = load_policy()["measureMs"]
     overrides = json.loads(overrides_json) if overrides_json else None
     return json.dumps(Measure(source, float(limit_ms), report, overrides).run())
 
 
 if __name__ == "__main__" and sys.platform != "emscripten":
     with open(sys.argv[1]) as handle:
-        print(run_measure(handle.read(), float(sys.argv[2]) if len(sys.argv) > 2 else 20000))
+        print(run_measure(handle.read(), float(sys.argv[2]) if len(sys.argv) > 2 else None))

@@ -21,6 +21,7 @@
 import { transformFromAstSync } from "@babel/core";
 import transformTypeScript from "@babel/plugin-transform-typescript";
 import * as t from "@babel/types";
+import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrumentAst, parseProgram } from "./instrument";
 import { traceProgram } from "./trace";
@@ -75,6 +76,11 @@ export function instrumentTypeScript(source: string): Instrumented {
   return instrumentAst(stripTypes(parseProgram(source, ["typescript"]), source), source);
 }
 
-export function traceTypeScript(source: string, maxSteps = 2000, maxSeconds?: number): Promise<Trace> {
-  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds);
+export function traceTypeScript(
+  source: string,
+  maxSteps = 2000,
+  maxSeconds = POLICY.runSeconds,
+  sampling: SamplingPolicy = POLICY.sampling,
+): Promise<Trace> {
+  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds, sampling);
 }

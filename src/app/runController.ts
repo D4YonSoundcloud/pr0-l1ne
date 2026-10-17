@@ -11,21 +11,16 @@
  */
 import { LANGUAGES, type LanguageId } from "../languages";
 import { applyHints } from "../trace/hints";
+import { POLICY } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { Runner, type RunnerStatus, type RunOutcome } from "../worker/runner";
 import { escapeHtml } from "./html";
 import { firstStepFor } from "./playbackController";
 import type { AppStore } from "./state";
 
-/** Steps recorded at most per trace. */
-export const MAX_STEPS = 20_000;
-/**
- * How long tracing may take: short while typing (Live), so the page keeps
- * up; longer for Run. Long loops are sampled, so a big input runs until
- * one of these instead of the step budget.
- */
-export const LIVE_SECONDS = 1.5;
-export const RUN_SECONDS = 6;
+// The step budget, how long tracing may take (Live or Run) and how long
+// loops are sampled are the tracing policy, trace/policy.ts.
+
 /** How long typing must pause before a Live run. */
 export const LIVE_DELAY_MS = 600;
 
@@ -165,7 +160,8 @@ export class RunController {
       return;
     }
     this.inFlight = true;
-    const outcome = await this.runnerFor(language).run(code, MAX_STEPS, budget === "live" ? LIVE_SECONDS : RUN_SECONDS);
+    const seconds = budget === "live" ? POLICY.liveSeconds : POLICY.runSeconds;
+    const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling);
     this.lastBudget = budget;
     this.inFlight = false;
     // Ignore results for a language the person has switched away from.
@@ -249,13 +245,13 @@ export class RunController {
     const ran = t.counts ? ` (${t.counts.steps.toLocaleString()} steps ran)` : "";
     const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
     if (t.stoppedBy === "time") {
-      const seconds = this.lastBudget === "live" ? LIVE_SECONDS : RUN_SECONDS;
+      const seconds = this.lastBudget === "live" ? POLICY.liveSeconds : POLICY.runSeconds;
       const runLonger =
         this.lastBudget === "live"
-          ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${RUN_SECONDS} seconds.`
+          ? ` <button type="button" class="banner-link" data-action="run">Run</button> traces for up to ${POLICY.runSeconds} seconds.`
           : "";
       return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
     }
-    return `Stopped after ${MAX_STEPS.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
+    return `Stopped after ${POLICY.maxSteps.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
   }
 }
