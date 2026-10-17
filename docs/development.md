@@ -71,7 +71,7 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
 
-Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer (the code-shape analysis, the `Serializer` and the helpers) is tested directly in `test_analysis.py` and `test_serializer.py`.
+Part of the Python tracer can't be measured. Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook (the step recorder and sampling in `Tracer`). That code shows as "missing" even though every trace runs it. The golden traces cover it instead. The rest of the tracer is tested directly: the code-shape analysis in `test_analysis.py`, the `Serializer` (`serialize.py`) in `test_serializer.py`, and memory sizes (`sizes.py`) in `test_sizes.py`.
 
 
 
@@ -266,10 +266,12 @@ pr0-l1ne/
         ├── protocol.ts         Message types between page and workers
         ├── runner.ts           Starts a worker, runs code, watchdog
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
+        ├── pythonModules.ts    Writes the Python modules into Pyodide and imports them
         ├── tracer.py           The Python tracer (settrace + ast)
-        ├── test_tracer.py      Python tracer tests
-        ├── measure.py          Measure for Python: run at full size with counters
-        └── test_measure.py     Measure tests
+        ├── serialize.py        Python values -> trace values and heap objects
+        ├── sizes.py            Memory sizes, as a 64-bit Python reports them
+        ├── test_*.py           Python tests, one file per module
+        └── measure.py          Measure for Python: run at full size with counters
 ```
 
 The diagram styling lives in the `/* diagrams */` section of `styles.css`. Every color, line weight and corner radius there is a CSS custom property. The Style panel sets them (see [Styling](how-it-works.md#14-styling)), and the defaults on `:root` match the Graph paper theme. To add a theme, add an entry to `PRESETS` in `appearance.ts`.
@@ -320,7 +322,7 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 
 Say you want sets drawn as bubbles or tuples drawn differently:
 
-1. **Tracers**: add a branch to `Serializer.describe()` in `tracer.py` (Python) and in `runtime.ts` (JavaScript) that returns a new `kind`.
+1. **Tracers**: add a branch to `Serializer.describe()` in `serialize.py` (Python) and in `runtime.ts` (JavaScript) that returns a new `kind`.
 2. **Types**: add the shape to the `HeapObject` union in `trace/types.ts`. TypeScript will then point out every `switch` that needs a case.
 3. **Diff**: teach `slotsOf()` in `diff.ts` what the object's slots are, so changes get highlighted.
 4. **Render**: add a shape builder in `memory.ts` (and, if it's a container, handle it in `cellsOf()` in `loopView.ts`).

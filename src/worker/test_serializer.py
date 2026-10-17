@@ -1,4 +1,4 @@
-"""Tests for the tracer's Serializer and value helpers, called directly.
+"""Tests for serialize.py: the Serializer and value helpers, called directly.
 
 These run inside the tracer's settrace hook during a real trace, where no
 coverage tool can see them, so they're tested here on their own.
@@ -9,12 +9,12 @@ import collections
 import sys
 import unittest
 
-import tracer as T
+import serialize as S
 
 
 def serialize(value, focus=None, ids=None):
     """The trace value for `value` and the heap objects it refers to."""
-    s = T.Serializer({}, ids if ids is not None else {}, focus=focus)
+    s = S.Serializer({}, ids if ids is not None else {}, focus=focus)
     return s.value(value), s.heap
 
 
@@ -113,7 +113,7 @@ class ContainerTests(unittest.TestCase):
     def test_long_lists_show_a_window_and_their_length(self):
         obj, _ = heap_object(list(range(500)))
         self.assertEqual(obj["length"], 500)
-        self.assertEqual(len(obj["items"]), T.MAX_ITEMS)
+        self.assertEqual(len(obj["items"]), S.MAX_ITEMS)
         self.assertEqual(obj["items"][0]["repr"], "0")
         self.assertIn("strip", obj)  # numbers get a color strip of the whole list
 
@@ -158,9 +158,9 @@ class ObjectTests(unittest.TestCase):
         obj, _ = heap_object(gen)
         self.assertEqual((obj["kind"], obj["repr"]), ("opaque", "counter() not started"))
         next(gen)
-        self.assertRegex(T.pausable_state(gen), r"counter\(\) paused at line \d+")
+        self.assertRegex(S.pausable_state(gen), r"counter\(\) paused at line \d+")
         list(gen)
-        self.assertEqual(T.pausable_state(gen), "counter() finished")
+        self.assertEqual(S.pausable_state(gen), "counter() finished")
 
     def test_other_values_are_opaque_with_a_short_repr(self):
         for value, type_name in [(range(5), "range"), (sys, "module"), (Ellipsis, "ellipsis")]:
@@ -168,51 +168,102 @@ class ObjectTests(unittest.TestCase):
             self.assertEqual((obj["kind"], obj["typeName"]), ("opaque", type_name))
 
     def test_the_heap_is_capped(self):
-        s = T.Serializer({}, {})
-        s.value([[[j] for j in range(10)] for _ in range(T.MAX_ITEMS)])  # 660 objects, 60 per list
+        s = S.Serializer({}, {})
+        s.value([[[j] for j in range(10)] for _ in range(S.MAX_ITEMS)])  # 660 objects, 60 per list
         # Past the cap, objects still appear (so arrows have somewhere to
         # point) but as "…" placeholders instead of full descriptions.
         placeholders = [o for o in s.heap.values() if o["kind"] == "opaque" and o["repr"] == "…"]
         self.assertTrue(placeholders)
-        self.assertLessEqual(len(s.heap) - len(placeholders), T.MAX_OBJECTS)
+        self.assertLessEqual(len(s.heap) - len(placeholders), S.MAX_OBJECTS)
+
+
+class EdgeCaseTests(unittest.TestCase):
+    def test_a_repr_that_raises_shows_the_type(self):
+        class Broken:
+            def __repr__(self):
+                raise RuntimeError("no")
+
+        self.assertEqual(S.short_repr(Broken()), "<Broken>")
+
+    def test_coroutines_and_async_generators_describe_their_state(self):
+        async def task():
+            return 1
+
+        async def stream():
+            yield 1
+
+        coro = task()
+        self.assertEqual(S.pausable_state(coro), "task() not started")
+        coro.close()
+        self.assertEqual(S.pausable_state(coro), "task() finished")
+        self.assertEqual(S.pausable_state(stream()), "stream() not started")
+
+    def test_a_running_generator_says_so(self):
+        states = []
+
+        def gen():
+            states.append(S.pausable_state(g))
+            yield
+
+        g = gen()
+        next(g)
+        self.assertEqual(states, ["gen() running"])
+
+    def test_strips_read_bools_as_numbers_and_give_up_on_anything_unplottable(self):
+        strip = S.strip_of([True, False] * 50)
+        assert strip is not None
+        self.assertEqual((strip["min"], strip["max"]), (0, 1))
+        self.assertIsNone(S.strip_of([1, 2**60]))
+        self.assertIsNone(S.strip_of([1.0, float("nan")]))
+        self.assertIsNone(S.strip_of([1.0, float("inf")]))
+
+    def test_very_large_sets_keep_pythons_order(self):
+        big = set(range(2000))
+        self.assertEqual(S.Serializer({}, {}).stable_order(big), list(big))
+
+    def test_long_iterables_and_dicts_stop_at_the_limit(self):
+        s = S.Serializer({}, {})
+        self.assertEqual(len(s.items(iter(range(100)))), S.MAX_ITEMS)
+        obj, _ = heap_object({i: i for i in range(100)})
+        self.assertEqual((len(obj["entries"]), obj["length"]), (S.MAX_ITEMS, 100))
+
+    def test_a_closure_over_a_variable_not_yet_set(self):
+        def outer():
+            def inner():
+                return later
+
+            fields, _ = heap_object(inner)
+            later = 1
+            return fields
+
+        fields = outer()["fields"]
+        self.assertEqual(fields, [["later", {"kind": "prim", "type": "unbound", "repr": "?"}]])
+
+    def test_collected_generators_give_up_their_id(self):
+        ids = {}
+        S.Serializer({}, ids).value(counter())  # dropped at once
+        self.assertEqual(ids.get("__retired__"), 1)
+        self.assertEqual(len([k for k in ids if k != "__retired__"]), 0)
 
 
 class HelperTests(unittest.TestCase):
-    def test_round_passes(self):
-        self.assertEqual(
-            [n for n in [5, 9, 10, 13, 20, 99, 100, 150, 200, 1000] if T.round_pass(n)],
-            [10, 20, 100, 200, 1000],
-        )
-
     def test_window_start_moves_in_steps_of_ten_and_stays_in_range(self):
-        self.assertEqual(T.window_start([0], 500), 0)
-        self.assertEqual(T.window_start([499], 500), 500 - T.MAX_ITEMS)
-        start = T.window_start([250, 260], 500)
+        self.assertEqual(S.window_start([0], 500), 0)
+        self.assertEqual(S.window_start([499], 500), 500 - S.MAX_ITEMS)
+        start = S.window_start([250, 260], 500)
         self.assertEqual(start % 10, 0)
-        self.assertTrue(start <= 250 and 260 < start + T.MAX_ITEMS)
+        self.assertTrue(start <= 250 and 260 < start + S.MAX_ITEMS)
 
     def test_strips_are_for_numbers_only(self):
-        strip = T.strip_of(list(range(300)))
+        strip = S.strip_of(list(range(300)))
         assert strip is not None
-        self.assertLessEqual(len(strip["values"]), T.STRIP_SAMPLES)
-        self.assertIsNone(T.strip_of(["a"] * 300))
+        self.assertLessEqual(len(strip["values"]), S.STRIP_SAMPLES)
+        self.assertIsNone(S.strip_of(["a"] * 300))
 
     def test_hidden_names(self):
-        self.assertTrue(T.is_hidden_name("__name__", "x"))
-        self.assertTrue(T.is_hidden_name("os", sys))
-        self.assertFalse(T.is_hidden_name("_private", 1))
-
-    def test_sizes_are_as_on_a_64_bit_python(self):
-        self.assertEqual(T.size64(None), 16)
-        self.assertEqual(T.size64(1), 28)
-        big, empty = T.size64({i: i for i in range(10)}), T.size64({})
-        assert big is not None and empty is not None
-        self.assertGreater(big, empty)
-        self.assertGreaterEqual(T.list_capacity([1, 2, 3]), 3)
-
-    def test_hints_are_read_from_comments(self):
-        hints = T.collect_hints("x = 1  # viz: hide temp\ny = 2  # viz: pointers nums: a, b\n")
-        self.assertEqual([h["line"] for h in hints], [1, 2])
+        self.assertTrue(S.is_hidden_name("__name__", "x"))
+        self.assertTrue(S.is_hidden_name("os", sys))
+        self.assertFalse(S.is_hidden_name("_private", 1))
 
 
 if __name__ == "__main__":

@@ -32,7 +32,8 @@ import math
 import sys
 import time
 
-from tracer import USER_FILENAME, size64, virtual_loop_policy
+from sizes import size64
+from tracer import USER_FILENAME, virtual_loop_policy
 
 POLL_EVERY = 5000  # loop passes and calls between clock checks
 PROGRESS_EVERY = 0.25  # seconds between progress reports

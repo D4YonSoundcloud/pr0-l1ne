@@ -65,7 +65,7 @@ The `frame` object is a live view of the running program. `frame.f_locals` holds
 
 At each event, `record()` walks the stack from the current frame outward, serializes every frame's variables, and appends a **step** to the trace.
 
-**Serialization** ([`Serializer`](../src/worker/tracer.py)) turns Python values into two kinds of trace value:
+**Serialization** ([`Serializer`](../src/worker/serialize.py)) turns Python values into two kinds of trace value:
 
 - primitives (`int`, `float`, `str`, `bool`, `None`, ...) become `{"kind": "prim", "type": "int", "repr": "42"}`,
 - everything else becomes a reference `{"kind": "ref", "id": "o140..."}`, and the object itself goes into the step's `heap` dictionary, recursively.
@@ -446,9 +446,9 @@ If you upgrade Monaco, the feature import list in `monaco.ts` may need regenerat
 
 Sizes are worked out in two places.
 
-**Python's come from the tracer.** [`tracer.py`](../src/worker/tracer.py) records `size` on every container, instance, function and class, on strings and bytes (whose length the shortened repr can't tell), and on ints too big for 30 bits. Lists also get `capacity`, from `(getsizeof(list) - getsizeof([])) // pointer size`. Fixed sizes (a small int is always 28 bytes) aren't recorded, to keep traces small.
+**Python's come from the tracer.** The serializer ([`serialize.py`](../src/worker/serialize.py)) records `size` on every container, instance, function and class, on strings and bytes (whose length the shortened repr can't tell), and on ints too big for 30 bits. Lists also get `capacity`, from `(getsizeof(list) - getsizeof([])) // pointer size`. Fixed sizes (a small int is always 28 bytes) aren't recorded, to keep traces small.
 
-In the browser, `struct.calcsize("P")` is 4, so `size64()` converts each size to its 64-bit equivalent: objects made of pointers double; ints and bools add 12 bytes (the header grows by 12, and the 30-bit digits stay 4 bytes); floats and complex add 8; strings add 20 (ASCII) or 28; bytes add 16; `None` is 16. Dicts don't scale evenly, because their index table's width depends on the table size, so `dict_size64()` solves for the number of slots and usable entries from the 32-bit size and rebuilds the 64-bit layout. An instance's size includes its attribute dict, as you'd count it by hand. These rules were checked against 64-bit CPython by running the tracer's tests in Pyodide (`npm run test:pyodide`).
+In the browser, `struct.calcsize("P")` is 4, so `size64()` ([`sizes.py`](../src/worker/sizes.py)) converts each size to its 64-bit equivalent: objects made of pointers double; ints and bools add 12 bytes (the header grows by 12, and the 30-bit digits stay 4 bytes); floats and complex add 8; strings add 20 (ASCII) or 28; bytes add 16; `None` is 16. Dicts don't scale evenly, because their index table's width depends on the table size, so `dict_size64()` solves for the number of slots and usable entries from the 32-bit size and rebuilds the 64-bit layout. An instance's size includes its attribute dict, as you'd count it by hand. These rules were checked against 64-bit CPython by running the tracer's tests in Pyodide (`npm run test:pyodide`).
 
 **Everything else is [`trace/memory.ts`](../src/trace/memory.ts).** `stepSizes(step, model)` returns, for one step, each object's own size and total, each cell's size, each frame's total and the program total. Python's model reads the recorded sizes (and the fixed ones: int 28, float 24, `None` 16, and so on). The textbook and V8 models are formulas over the trace's own structure, so they need nothing from the tracer: a JavaScript string's real length comes along when its repr is shortened. Totals walk references with a `seen` set, so shared objects count once. A cell's size is its slot plus what it holds: 8 bytes for a textbook number; 8 + 28 for a Python int, since the slot points at a separate object.
 
