@@ -4,6 +4,9 @@
  * and reacts to the state itself; see docs/development.md, "How the app is
  * put together".
  */
+
+import { prefersReducedMotion } from "./appearance";
+import { SVG_RENDERERS } from "./render/svgRenderers";
 import "./styles.css";
 import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
@@ -23,7 +26,6 @@ import { StyleController } from "./app/styleController";
 import { createEditor } from "./editor";
 import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
 import { ProgramStore } from "./programs";
-import { prefersReducedMotion } from "./render/animate";
 import { createSettings } from "./settings";
 
 /** Everything remembered between visits (see settings.ts). */
@@ -35,6 +37,8 @@ const programs = new ProgramStore(settings.programStorage());
 const app = new AppStore(settings, programs);
 const currentLanguage = () => app.get().language;
 const els = findElements();
+// What draws the two windows (see scene/renderer.ts): SVG.
+const renderers = SVG_RENDERERS;
 
 const banner = new Banner(els.banner, {
   run: () => runNow(),
@@ -102,6 +106,7 @@ function runNow(): void {
 
 const memory: MemoryController = new MemoryController({
   app,
+  renderers,
   settings,
   els,
   animation: () => style.animationFor("memory"),
@@ -109,6 +114,7 @@ const memory: MemoryController = new MemoryController({
 });
 const loop: LoopController = new LoopController({
   app,
+  renderers,
   settings,
   els,
   sizes: () => memory.sizes(),
@@ -123,7 +129,7 @@ const style: StyleController = new StyleController({
   app,
   settings,
   els,
-  views: { memory: memory.view, loop: loop.view },
+  views: { memory: memory.renderer, loop: loop.renderer },
   animation: () => playback.animation,
   replay: () => playback.replay(),
   onOpen: () => closePanelsBut("style"),

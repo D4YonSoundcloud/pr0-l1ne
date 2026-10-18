@@ -1,13 +1,13 @@
 /**
- * Loop history: each pass of the loop that's running, one row per pass
- * (render/loopView.ts), in its own pannable window. Tabs pick which loop
+ * Loop history: each pass of the loop that's running, one row per pass, built
+ * as a scene (scene/loopScene.ts) and drawn by the window's renderer
+ * (scene/renderer.ts; SVG today, render/svgRenderers.ts). Tabs pick which loop
  * when there are several (or all of a function's nested loops together).
  * Its toolbar picks stacked rows or one animated row, hiding variables that
  * don't change, and stacking containers vertically.
  */
-import { renderLoopHistory } from "../render/loopView";
-import { Viewport } from "../render/viewport";
-import { loopScene } from "../scene/loopScene";
+import { type LoopScene, loopScene } from "../scene/loopScene";
+import type { LoopRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
 import {
   ALL_LOOPS,
@@ -45,6 +45,8 @@ export interface LoopOptions {
   animation(): PaneAnimation;
   /** Redraw the whole step; `updateMarks` false keeps the editor's marks. */
   redraw(updateMarks: boolean): void;
+  /** What draws the window (main.ts picks: SVG today). */
+  renderers: Pick<RendererFactory, "loop">;
 }
 
 /** The loop's live state at a step, and at the step before, for animated mode. */
@@ -61,7 +63,9 @@ export function liveRows(t: Trace, index: number, history: LoopHistory): { prev:
 }
 
 export class LoopController {
-  readonly view: Viewport;
+  readonly renderer: LoopRenderer;
+  /** The scene last drawn, for the renderer to animate from. */
+  private drawn: LoopScene | null = null;
   /** The loop picked in the tabs (ALL_LOOPS: nested loops together), or null for the innermost running. */
   private selected: string | null = null;
   private hideQuiet: boolean;
@@ -75,11 +79,11 @@ export class LoopController {
     this.vertical = settings.loopVertical.get();
     this.mode = settings.loopMode.get();
 
-    this.view = new Viewport(els.loop, {
-      label: "Loop history",
+    this.renderer = options.renderers.loop(els.loop, {
       onAutoFitChange: (state) => settings.autoFit("loop").set(JSON.stringify(state)),
     });
-    this.view.setAutoFit(storedAutoFit(settings.autoFit("loop")), false);
+    this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("loop")) });
+    this.renderer.setLayout({ vertical: this.vertical });
 
     els.hideQuiet.addEventListener("change", () => {
       this.hideQuiet = els.hideQuiet.checked;
@@ -89,6 +93,7 @@ export class LoopController {
     els.loopVertical.addEventListener("change", () => {
       this.vertical = els.loopVertical.checked;
       settings.loopVertical.set(this.vertical);
+      this.renderer.setLayout({ vertical: this.vertical });
       options.redraw(true);
     });
     els.loopStacked.addEventListener("click", () => this.setMode("stacked"));
@@ -116,12 +121,13 @@ export class LoopController {
   /** A different program (or language): back to the loop that's running, fitted afresh. */
   reset(): void {
     this.selected = null;
-    this.view.restartAutoFit();
+    this.renderer.setViewport({ refit: true });
   }
 
   /** Nothing to show yet. */
   showEmpty(): void {
-    this.view.setContent(null);
+    this.drawn = null;
+    this.renderer.showMessage("");
     this.options.els.loopTabs.replaceChildren();
   }
 
@@ -174,23 +180,13 @@ export class LoopController {
     );
     if (history?.rows.length) {
       const live = this.mode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
-      const animation = this.options.animation();
-      this.view.setContent(
-        renderLoopHistory(loopScene(trace, history, { hideQuiet: this.hideQuiet, live, sizes: this.options.sizes() }), {
-          vertical: this.vertical,
-        }),
-        "",
-        live ? animation.duration : 0,
-        animation.easing,
-        animation.enter,
-      );
-      // As you step, keep the iteration that's running in view.
-      const current = els.loop.querySelector(".loop-row.is-current");
-      if (current)
-        this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
+      const scene = loopScene(trace, history, { hideQuiet: this.hideQuiet, live, sizes: this.options.sizes() });
+      this.renderer.setAppearance({ step: this.options.animation() });
+      this.renderer.render(scene, this.drawn);
+      this.drawn = scene;
     } else {
-      this.view.setContent(
-        null,
+      this.drawn = null;
+      this.renderer.showMessage(
         "When your code enters a loop, each iteration is stacked here so you can compare them.",
       );
     }

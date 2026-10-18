@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
+import { SVG_RENDERERS } from "../render/svgRenderers";
 import { buildLoopHistory } from "../trace/loopHistory";
 import { LoopController, liveRows } from "./loopController";
 import { makeApp, showJavaScript } from "./testHelpers";
@@ -34,6 +36,7 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
   const redraws: boolean[] = [];
   const loop = new LoopController({
     app,
+    renderers: SVG_RENDERERS,
     settings,
     els: {
       loop: $("loop"),

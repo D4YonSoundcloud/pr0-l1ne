@@ -411,3 +411,8 @@ export function applyAppearance(
     setGridSize(name, p.gridSize);
   }
 }
+
+/** True when the person has asked for less motion. */
+export function prefersReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}

@@ -4,6 +4,7 @@
  * how each window animates a step, which comes from the same settings.
  */
 import { type Appearance, applyAppearance, parseAppearance } from "../appearance";
+import type { Renderer, StepStyle } from "../scene/renderer";
 import type { Settings } from "../settings";
 import { StylePanel } from "../stylePanel";
 import type { StepAnimation } from "./playbackController";
@@ -11,18 +12,11 @@ import type { AppStore } from "./state";
 
 export type Pane = "memory" | "loop";
 
-/** What the Style panel changes on a window's view (render/viewport.ts). */
-export interface StyledView {
-  setGridSize(size: number): void;
-  setZoomAnimation(duration: number, easing: string): void;
-}
+/** What the Style panel changes on a window's renderer (scene/renderer.ts). */
+export type StyledView = Pick<Renderer<unknown>, "setAppearance">;
 
-export interface PaneAnimation {
-  /** In milliseconds; 0 means no animation. */
-  duration: number;
-  easing: string;
-  enter: { fade: boolean; slide: boolean };
-}
+/** How a window animates the step being drawn (the renderer's StepStyle). */
+export type PaneAnimation = StepStyle;
 
 export interface StyleOptions {
   app: AppStore;
@@ -77,11 +71,11 @@ export class StyleController {
     const { els, views, settings } = this.options;
     this.appearance = next;
     applyAppearance(next, { canvas: els.canvas, memory: els.memorySection, loop: els.loopSection }, (pane, size) =>
-      views[pane].setGridSize(size),
+      views[pane].setAppearance({ gridSize: size }),
     );
     // Auto-fit glides with each window's step animation.
-    views.memory.setZoomAnimation(next.memory.duration, next.memory.easing);
-    views.loop.setZoomAnimation(next.loop.duration, next.loop.easing);
+    views.memory.setAppearance({ zoom: { duration: next.memory.duration, easing: next.memory.easing } });
+    views.loop.setAppearance({ zoom: { duration: next.loop.duration, easing: next.loop.easing } });
     this.clearTimer(this.saveTimer);
     this.saveTimer = this.setTimer(() => settings.appearance.set(JSON.stringify(next)), 250);
   }

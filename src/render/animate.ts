@@ -127,8 +127,3 @@ export function transition(
     if (!moved && !old.has(slot)) arrive(el);
   }
 }
-
-/** True when the person has asked for less motion. */
-export function prefersReducedMotion(): boolean {
-  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-}

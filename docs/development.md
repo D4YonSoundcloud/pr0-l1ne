@@ -97,15 +97,16 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
 | `src/app/measureController.ts` | Measure and growth runs: the Measure and results buttons, the Measure panel and its growth section, the time limit, the editor's count labels, and the last measurement (shown only in its language, and only while the code still matches) |
 | `src/app/stepView.ts` | Drawing the step on screen: the step label, both canvas windows, the output so far and the editor's line marks |
-| `src/app/memoryController.ts` | The memory view: dragging boxes and Reset layout, hover highlighting, arrows or nested, memory sizes and their model, and output on the canvas |
-| `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically |
-| `src/app/styleController.ts` | The Style panel and the appearance it edits, and how long each window's step animation runs |
+| `src/app/memoryController.ts` | The memory view: builds the step's scene (arrows or nested, memory sizes and their model, output on the canvas) and hands it to the window's renderer; Reset layout |
+| `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically; builds the loop's scene and hands it to the window's renderer |
+| `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
 | `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
 | `src/app/layout.ts` | The two dividers (drag, arrow keys, double-click to reset) and swapping the editor and canvas sides |
 | `src/app/shortcuts.ts` | The keys that work anywhere outside the editor: Run, Measure, Save, Save as, and the stepping keys |
 | `src/app/banner.ts` | The banner above the canvas, and its Run / Measure buttons |
 | `src/app/html.ts` | `escapeHtml`, for text put into the banner and panels |
 | `src/app/autoFit.ts` | Reads a window's remembered auto-fit setting |
+| `src/app/renderers.test.ts` | Both controllers against renderers that only record what they're asked: the renderer contract is all they use |
 | `src/app/testHelpers.ts` | Helpers for the controllers' tests: a storage stand-in, app state, tracing JavaScript, timers run by hand |
 
 How the pieces talk:
@@ -250,8 +251,11 @@ pr0-l1ne/
     │   ├── loopScene.test.ts   Loop scene tests
     │   ├── nesting.ts          Nested mode: which objects are drawn inside others
     │   ├── nesting.test.ts     Tests for choosing what to nest
-    │   └── pointers.ts         Index pointers: which variables point into which lists
+    │   ├── pointers.ts         Index pointers: which variables point into which lists
+    │   └── renderer.ts         The renderer contract: what the app asks of whatever draws a window
     ├── render/
+    │   ├── svgRenderers.ts     The SVG renderers behind the contract (SVG_RENDERERS)
+    │   ├── svgRenderers.test.ts  What each renderer call does to the window
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointer markers
     │   ├── memory.ts           Draws a memory scene as SVG (columns, draggable boxes, arrows)
     │   ├── memory.test.ts      The SVG renderer drawing scenes
@@ -356,6 +360,8 @@ npm run test:js
 When something looks wrong in the canvas, `npm run instrument` is usually the quickest way to see why: the output is readable, and every `__av.` call corresponds to one recorded event. For TypeScript, it also shows you the JavaScript the types were stripped down to.
 
 Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build` and test the built worker in the browser.
+
+**Adding a renderer** (canvas, WebGL, WebGPU). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS`, then pass it as `renderers` in `main.ts`. Nothing else in the app changes. The scenes give you everything to draw and nothing about where; layout, routing, animation, pan and zoom, dragging and hover are yours. Copy the checks that keep the SVG renderer honest: draw every example's scenes and compare what you drew with the scene (boxes and links, rows and bands), as `layout.test.ts` and `loopView.test.ts` do, and run `src/app/renderers.test.ts`'s fake-renderer tests as a reminder of what the controllers call.
 
 **Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer.
 

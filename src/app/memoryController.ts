@@ -1,14 +1,13 @@
 /**
- * The memory view: the step's variables, objects and scopes (render/memory.ts)
- * in a pannable, zoomable window (render/viewport.ts). Boxes can be dragged
- * (Reset layout puts them back); hovering one highlights its arrows. Its
- * toolbar picks arrows or nested objects, memory sizes and their model, and
- * whether output is shown on the canvas.
+ * The memory view: the step's variables, objects and scopes, built as a scene
+ * (scene/memoryScene.ts) and drawn by the window's renderer (scene/renderer.ts;
+ * SVG today, render/svgRenderers.ts). Boxes can be dragged (Reset layout puts
+ * them back). Its toolbar picks arrows or nested objects, memory sizes and
+ * their model, and whether output is shown on the canvas.
  */
 import type { LanguageId } from "../languages";
-import { applyFocus, type Point, renderMemory } from "../render/memory";
-import { Viewport } from "../render/viewport";
-import { type MemoryMode, memoryScene } from "../scene/memoryScene";
+import { type MemoryMode, type MemoryScene, memoryScene } from "../scene/memoryScene";
+import type { MemoryRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
 import { diffSteps } from "../trace/diff";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
@@ -35,17 +34,17 @@ export interface MemoryOptions {
   animation(): PaneAnimation;
   /** Redraw the whole step (sizes and output also change loop history), keeping the editor's marks. */
   redraw(): void;
+  /** What draws the window (main.ts picks: SVG today). */
+  renderers: Pick<RendererFactory, "memory">;
 }
 
 /** Python has its own real sizes; JavaScript and TypeScript share theirs. */
 const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript");
 
 export class MemoryController {
-  readonly view: Viewport;
-  /** Where the person has dragged boxes, by node key. */
-  private readonly positions = new Map<string, Point>();
-  private dragging: string | null = null;
-  private hovered: string | null = null;
+  readonly renderer: MemoryRenderer;
+  /** The scene last drawn, for the renderer to animate from. */
+  private drawn: MemoryScene | null = null;
   /** Arrows, or objects drawn inside the thing that refers to them. */
   private mode: MemoryMode;
   private sizesOn: boolean;
@@ -62,36 +61,20 @@ export class MemoryController {
     this.outputOn = settings.showOutput.get();
     this.dimForOutput = settings.dimOutput.get();
 
-    this.view = new Viewport(els.memory, {
-      label: "Memory diagram",
-      onNodeMove: (key, position, done) => {
-        this.positions.set(key, position);
-        this.dragging = done ? null : key;
+    this.renderer = options.renderers.memory(els.memory, {
+      onLayoutChange: () => {
         this.render();
         this.updateResetButton();
       },
       onAutoFitChange: (state) => settings.autoFit("memory").set(JSON.stringify(state)),
     });
-    this.view.setAutoFit(storedAutoFit(settings.autoFit("memory")), false);
-    this.resetButton = this.view.addControl("Reset layout", "Put every box back in its automatic position", () => {
-      this.positions.clear();
+    this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("memory")) });
+    this.resetButton = this.renderer.addControl("Reset layout", "Put every box back in its automatic position", () => {
+      this.renderer.resetLayout();
       this.render();
       this.updateResetButton();
     });
     this.updateResetButton();
-
-    // Hovering a box (or dragging it) highlights its arrows and the boxes they
-    // connect to. The SVG is redrawn on every step, so the focus is re-applied.
-    els.memory.addEventListener("pointerover", (event) => {
-      const key = (event.target as Element).closest<SVGGElement>(".node")?.dataset.nodeKey ?? null;
-      if (key === this.hovered) return;
-      this.hovered = key;
-      this.refreshFocus();
-    });
-    els.memory.addEventListener("pointerleave", () => {
-      this.hovered = null;
-      this.refreshFocus();
-    });
 
     els.modeArrows.addEventListener("click", () => this.setMode("arrows"));
     els.modeNested.addEventListener("click", () => this.setMode("nested"));
@@ -182,22 +165,19 @@ export class MemoryController {
 
   /** A different program (or language): forget dragged boxes, and fit it afresh. */
   reset(): void {
-    this.positions.clear();
+    this.renderer.resetLayout();
     this.updateResetButton();
-    this.view.restartAutoFit();
+    this.renderer.setViewport({ refit: true });
   }
 
   private updateResetButton(): void {
-    this.resetButton.hidden = this.positions.size === 0;
-  }
-
-  private refreshFocus(): void {
-    applyFocus(this.options.els.memory.querySelector<SVGSVGElement>(".memory-svg"), this.dragging ?? this.hovered);
+    this.resetButton.hidden = !this.renderer.hasMovedBoxes;
   }
 
   /** Nothing to show yet. */
   showEmpty(): void {
-    this.view.setContent(null, "Write some code and press Run. Variables, objects and scopes appear here.");
+    this.drawn = null;
+    this.renderer.showMessage("Write some code and press Run. Variables, objects and scopes appear here.");
     this.updateTotal();
   }
 
@@ -206,24 +186,16 @@ export class MemoryController {
     const { trace, stepIndex } = this.options.app.get();
     if (!trace?.steps.length) return;
     const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
-    const animation = this.options.animation();
-    this.view.setContent(
-      renderMemory(
-        memoryScene(trace, stepIndex, diff, {
-          mode: this.mode,
-          sizes: this.sizes(),
-          output: this.outputOn,
-          dimForOutput: this.dimForOutput,
-        }),
-        { positions: this.positions, raise: this.dragging },
-      ),
-      "",
-      animation.duration,
-      animation.easing,
-      animation.enter,
-    );
+    const scene = memoryScene(trace, stepIndex, diff, {
+      mode: this.mode,
+      sizes: this.sizes(),
+      output: this.outputOn,
+      dimForOutput: this.dimForOutput,
+    });
+    this.renderer.setAppearance({ step: this.options.animation() });
+    this.renderer.render(scene, this.drawn);
+    this.drawn = scene;
     this.updateTotal();
-    this.refreshFocus();
   }
 
   /** "Program: 1.4 KB" in the memory header, for the step on screen. */

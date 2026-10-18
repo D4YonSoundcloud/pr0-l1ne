@@ -8,8 +8,10 @@ import { makeApp, manualTimers } from "./testHelpers";
 function fakeView() {
   const calls: string[] = [];
   const view: StyledView = {
-    setGridSize: (size) => void calls.push(`grid ${size}`),
-    setZoomAnimation: (duration, easing) => void calls.push(`zoom ${duration} ${easing}`),
+    setAppearance(style) {
+      if (style.gridSize !== undefined) calls.push(`grid ${style.gridSize}`);
+      if (style.zoom) calls.push(`zoom ${style.zoom.duration} ${style.zoom.easing}`);
+    },
   };
   return { view, calls };
 }

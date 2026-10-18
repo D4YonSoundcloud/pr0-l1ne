@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest";
+import { SVG_RENDERERS } from "../render/svgRenderers";
 import { MemoryController } from "./memoryController";
 import { makeApp, showJavaScript } from "./testHelpers";
 
@@ -19,6 +21,7 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
   let redraws = 0;
   const memory = new MemoryController({
     app,
+    renderers: SVG_RENDERERS,
     settings,
     els: {
       memory: $("memory"),

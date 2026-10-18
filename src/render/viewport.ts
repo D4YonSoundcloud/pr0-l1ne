@@ -13,6 +13,7 @@
  * the content, so the paper and the drawing feel like one sheet.
  */
 
+import type { AutoFit } from "../scene/renderer";
 import { type Enter, snapshot, transition as transition_ } from "./animate";
 
 export interface Point {
@@ -32,17 +33,8 @@ export interface ViewportOptions {
   onAutoFitChange?(state: AutoFit): void;
 }
 
-/**
- * Auto-fit keeps the whole diagram in view as it changes from step to step.
- *   "out"   only ever zooms out: once a step needed a wide view, it's kept,
- *           so the picture doesn't pump in and out while you step.
- *   "both"  zooms in again when the diagram gets smaller: always a snug fit.
- */
-export type AutoFitMode = "out" | "both";
-export interface AutoFit {
-  on: boolean;
-  mode: AutoFitMode;
-}
+export type { AutoFit } from "../scene/renderer";
+export type AutoFitMode = AutoFit["mode"];
 
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 3;
@@ -73,6 +65,9 @@ export class Viewport {
   private viewW = 0;
   private viewH = 0;
   private readonly pointers = new Map<number, Point>();
+  /** Every listener on the element, so dispose() can remove them. */
+  private readonly listening = new AbortController();
+  private resizes: ResizeObserver | null = null;
 
   /** Size of a grid square at 100% zoom (see setGridSize). */
   private gridSize = GRID;
@@ -147,26 +142,28 @@ export class Viewport {
       this.button("Fit", "Fit the whole diagram in view once", () => this.fit()),
     );
     el.append(this.layer, this.empty, this.controls);
+    const signal = this.listening.signal;
     el.addEventListener(
       "pointerdown",
       (e) => {
         if (!(e.target as Element).closest(".auto-fit-group")) this.toggleAutoFitMenu(false);
       },
-      true,
+      { capture: true, signal },
     );
 
-    el.addEventListener("pointerdown", (e) => this.onPointerDown(e));
-    el.addEventListener("pointermove", (e) => this.onPointerMove(e));
-    el.addEventListener("pointerup", (e) => this.onPointerUp(e));
-    el.addEventListener("pointercancel", (e) => this.onPointerUp(e));
-    el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
-    el.addEventListener("keydown", (e) => this.onKey(e));
+    el.addEventListener("pointerdown", (e) => this.onPointerDown(e), { signal });
+    el.addEventListener("pointermove", (e) => this.onPointerMove(e), { signal });
+    el.addEventListener("pointerup", (e) => this.onPointerUp(e), { signal });
+    el.addEventListener("pointercancel", (e) => this.onPointerUp(e), { signal });
+    el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false, signal });
+    el.addEventListener("keydown", (e) => this.onKey(e), { signal });
     if (typeof ResizeObserver === "function") {
-      new ResizeObserver(([entry]) => {
+      this.resizes = new ResizeObserver(([entry]) => {
         this.viewW = entry.contentRect.width;
         this.viewH = entry.contentRect.height;
         if (this.autoFit.on) this.refit(false);
-      }).observe(el);
+      });
+      this.resizes.observe(el);
     }
     this.apply();
   }
@@ -342,6 +339,29 @@ export class Viewport {
     this.x = cx - (cx - this.x) * (next / this.z);
     this.y = cy - (cy - this.y) * (next / this.z);
     this.z = next;
+    this.apply();
+  }
+
+  /** Stop listening, and empty the element. */
+  dispose(): void {
+    this.listening.abort();
+    this.resizes?.disconnect();
+    this.el.replaceChildren();
+    this.el.classList.remove("viewport");
+  }
+
+  /** Where the diagram is: its offset in the window, in pixels, and its zoom. */
+  get view(): { pan: Point; zoom: number } {
+    return { pan: { x: this.x, y: this.y }, zoom: this.z };
+  }
+
+  /** Put the diagram here (from code: Auto-fit stays as it is). */
+  moveTo(pan: Point | undefined, zoom: number | undefined): void {
+    if (pan) {
+      this.x = pan.x;
+      this.y = pan.y;
+    }
+    if (zoom !== undefined) this.z = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
     this.apply();
   }
 

@@ -1,4 +1,4 @@
-import type { AutoFit } from "../render/viewport";
+import type { AutoFit } from "../scene/renderer";
 import type { Setting } from "../settings";
 
 /** A window's auto-fit (see Viewport), as remembered; off if nothing valid was saved. */
