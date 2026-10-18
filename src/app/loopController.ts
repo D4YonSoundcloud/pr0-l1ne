@@ -7,6 +7,7 @@
  */
 import { renderLoopHistory } from "../render/loopView";
 import { Viewport } from "../render/viewport";
+import { loopScene } from "../scene/loopScene";
 import type { Settings } from "../settings";
 import {
   ALL_LOOPS,
@@ -175,10 +176,7 @@ export class LoopController {
       const live = this.mode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
       const animation = this.options.animation();
       this.view.setContent(
-        renderLoopHistory(trace, history, {
-          hideQuiet: this.hideQuiet,
-          live,
-          sizes: this.options.sizes(),
+        renderLoopHistory(loopScene(trace, history, { hideQuiet: this.hideQuiet, live, sizes: this.options.sizes() }), {
           vertical: this.vertical,
         }),
         "",

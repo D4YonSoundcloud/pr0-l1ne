@@ -1,0 +1,527 @@
+/**
+ * The loop history's scene: one loop's passes (trace/loopHistory.ts), and
+ * everything the loop view shows about them, worked out from the trace with
+ * no positions and no pixels.
+ *
+ * It says which containers and scalars are worth showing, which of them is a
+ * grid, the graph and linked structure (list or tree) in each row, which rows
+ * changed something, where runs of quiet passes collapse into one band and
+ * where unrecorded passes were skipped, each run's header, and each row's
+ * label, pointers and sizes. A renderer decides where it goes and how it
+ * looks (render/loopView.ts draws it as SVG). See docs/how-it-works.md,
+ * "Scenes and renderers".
+ */
+import { valueKey } from "../trace/diff";
+import {
+  findGraphs,
+  type GraphData,
+  type GraphLayout,
+  type GraphOverlay,
+  graphOverlay,
+  graphSignature,
+  layoutFor,
+  legendOverlaysFor,
+  type Scope,
+} from "../trace/graph";
+import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
+import { findLinkedTrack, type LinkedRow, type LinkedTrack, linkedRow, linkedSignature } from "../trace/linked";
+import { type LoopHistory, type LoopRow, runKey } from "../trace/loopHistory";
+import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
+import {
+  type HeapObject,
+  type LoopInfo,
+  liveFrames,
+  type SequenceObject,
+  type Trace,
+  type Value,
+} from "../trace/types";
+import { type Pointer, pointersFor } from "./pointers";
+
+// ---------------------------------------------------------------------------
+// Reading a row
+// ---------------------------------------------------------------------------
+
+export type ContainerObject = Extract<HeapObject, { kind: "list" | "tuple" | "set" | "dict" }>;
+
+export interface Cell {
+  key: string;
+  label: string;
+  value: Value;
+}
+
+export function isContainer(obj: HeapObject | undefined): obj is ContainerObject {
+  return !!obj && (obj.kind === "list" || obj.kind === "tuple" || obj.kind === "set" || obj.kind === "dict");
+}
+
+export function cellsOf(obj: ContainerObject): Cell[] {
+  switch (obj.kind) {
+    case "dict":
+      return obj.entries.map(([key, value]) => ({
+        key: valueKey(key),
+        label: key.kind === "prim" ? key.repr : "•",
+        value,
+      }));
+    case "set":
+      return obj.items.map((value) => ({ key: valueKey(value), label: "", value }));
+    default: {
+      // A long list's items are a window of it: keys and labels are real indices.
+      const offset = obj.offset ?? 0;
+      return obj.items.map((value, index) => ({ key: String(offset + index), label: String(offset + index), value }));
+    }
+  }
+}
+
+export function containerIn(row: LoopRow, name: string): ContainerObject | undefined {
+  const value = row.frame.locals.find(([n]) => n === name)?.[1];
+  if (value?.kind !== "ref") return undefined;
+  const obj = row.heap[value.id];
+  return isContainer(obj) ? obj : undefined;
+}
+
+/** Changes whenever the container or a list directly inside it changes. */
+export function signature(row: LoopRow, name: string): string {
+  const obj = containerIn(row, name);
+  if (!obj) return "";
+  return `${obj.id}|${cellsOf(obj)
+    .map((c) => {
+      const inner = c.value.kind === "ref" ? row.heap[c.value.id] : undefined;
+      const deep = isContainer(inner)
+        ? `[${cellsOf(inner)
+            .map((ic) => valueKey(ic.value))
+            .join(",")}]`
+        : "";
+      return `${c.key}=${valueKey(c.value)}${deep}`;
+    })
+    .join(",")}`;
+}
+
+export type Sequence = SequenceObject;
+
+/** A list of lists in this row, as its rows; null if it isn't one. */
+export function gridIn(row: LoopRow, name: string): Sequence[] | null {
+  const obj = containerIn(row, name);
+  if (!obj || (obj.kind !== "list" && obj.kind !== "tuple") || !obj.items.length) return null;
+  const rows: Sequence[] = [];
+  for (const item of obj.items) {
+    const inner = item.kind === "ref" ? row.heap[item.id] : undefined;
+    if (inner?.kind !== "list" && inner?.kind !== "tuple") return null;
+    rows.push(inner);
+  }
+  return rows;
+}
+
+export function scalarIn(row: LoopRow, name: string): Value | undefined {
+  const value = row.frame.locals.find(([n]) => n === name)?.[1];
+  return value?.kind === "prim" ? value : undefined;
+}
+
+/** Decide which containers and scalars are worth showing for this loop. */
+function pickVariables(
+  trace: Trace,
+  rows: LoopRow[],
+  hasTrack: boolean,
+  exclude: Set<string>,
+): { containers: string[]; scalars: string[] } {
+  const containerNames: string[] = [];
+  const scalarNames: string[] = [];
+  for (const row of rows) {
+    for (const [name, value] of row.frame.locals) {
+      if (value.kind === "ref" && isContainer(row.heap[value.id])) {
+        if (!containerNames.includes(name) && !exclude.has(name)) containerNames.push(name);
+      } else if (value.kind === "prim" && !scalarNames.includes(name)) {
+        scalarNames.push(name);
+      }
+    }
+  }
+
+  const changes = (read: (row: LoopRow) => string) => rows.some((row, i) => i > 0 && read(row) !== read(rows[i - 1]));
+  // An indexed list is worth showing even if it never changes, because its
+  // pointer markers (i, lo, hi...) move. Dicts and objects don't get pointer
+  // markers, so they're only shown when they change.
+  const isSequence = (name: string) =>
+    rows.some((row) => {
+      const kind = containerIn(row, name)?.kind;
+      return kind === "list" || kind === "tuple";
+    });
+  // `viz: show name` always includes it.
+  const shown = new Set(trace.viz?.show ?? []);
+  let containers = containerNames.filter(
+    (name) =>
+      shown.has(name) ||
+      (trace.indexNames[name] !== undefined && isSequence(name)) ||
+      changes((row) => signature(row, name)),
+  );
+  // With nothing else to show, fall back to every container. A linked track
+  // counts as something to show.
+  if (!containers.length && !hasTrack) containers = containerNames.slice(0, 4);
+
+  const lastLocals = new Map(rows[rows.length - 1].frame.locals);
+  const indexVars = new Set(
+    containers.flatMap((name) =>
+      [
+        ...pointersFor(name, trace.indexNames, lastLocals),
+        ...pointersFor(`${name}[]`, trace.indexNames, lastLocals),
+      ].map((p) => p.name),
+    ),
+  );
+  let scalars = scalarNames.filter(
+    (name) =>
+      shown.has(name) ||
+      indexVars.has(name) ||
+      changes((row) => {
+        const v = scalarIn(row, name);
+        return v ? valueKey(v) : "";
+      }),
+  );
+  if (!scalars.length) scalars = scalarNames.slice(0, 6);
+  return { containers, scalars };
+}
+
+// ---------------------------------------------------------------------------
+// Loop headers, items and linked chains
+// ---------------------------------------------------------------------------
+
+export type LoopItem =
+  | { kind: "row"; row: LoopRow; index: number }
+  /** Passes that changed nothing, collapsed. `run`: the loop run they're passes of. */
+  | { kind: "band"; from: number; to: number; run: string; name: string | null }
+  /** Passes that ran but weren't recorded (a sampled loop). */
+  | { kind: "gap"; from: number; to: number; name: string | null }
+  /** A run of a loop starts: its header as written, and with its values. */
+  | { kind: "header"; loop: string; call: string | undefined; depth: number };
+
+/** A loop's variable, from its header: "for j in ..." / "for (let j = ..." -> "j". Null for while loops. */
+export function loopVariable(info: LoopInfo | undefined): string | null {
+  if (info?.kind !== "for") return null;
+  const m = /^(?:async\s+)?for\s+\(?\s*(?:(?:let|const|var)\s+)?\[?\s*([A-Za-z_$][\w$]*)/.exec(info.header);
+  return m ? m[1] : null;
+}
+
+/**
+ * A loop's header with this run's values: Python's range as it was
+ * (`for j in range(0, 3)`), JavaScript's start and bound
+ * (`for (j = 0; j < 3; j++)`).
+ */
+export function evaluatedHeader(info: LoopInfo, call: string): string {
+  if (/^(async\s+)?for\s+\(/.test(info.header)) return `for (${call})`;
+  const at = info.header.lastIndexOf(" in ");
+  return at >= 0 ? `${info.header.slice(0, at)} in ${call}` : call;
+}
+
+/** The linked structure at every step of this run of the loop after the last row (up to 3,000 steps). */
+function laterRows(trace: Trace, history: LoopHistory, track: LinkedTrack): LinkedRow[] {
+  const ctx = history.context;
+  const last = history.rows[history.rows.length - 1];
+  const out: LinkedRow[] = [];
+  if (!last) return out;
+  for (let i = last.stepIndex + 1; i < Math.min(trace.steps.length, last.stepIndex + 3000); i++) {
+    const step = trace.steps[i];
+    if (!step.loops.some((c) => c.frame === ctx.frame && c.loop === ctx.loop && c.instance === ctx.instance)) break;
+    const frame = liveFrames(step).find((f) => f.id === ctx.frame);
+    if (frame) out.push(linkedRow(track, { locals: frame.locals, heap: step.heap }));
+  }
+  return out;
+}
+
+/**
+ * Separate lists: nodes joined by a link in any row are in the same chain,
+ * so a node stays on one line from row to row. Chains in the order their
+ * first node appears in the track.
+ */
+export function linkedChains(order: string[], rows: (LinkedRow | null)[]): string[][] {
+  const parent = new Map(order.map((id) => [id, id]));
+  const find = (id: string): string => {
+    let at = id;
+    while (parent.get(at) !== at) at = parent.get(at)!;
+    parent.set(id, at);
+    return at;
+  };
+  for (const row of rows) {
+    for (const [id, node] of row?.nodes ?? []) {
+      for (const target of node.links) {
+        if (target !== null && parent.has(target) && parent.has(id)) parent.set(find(id), find(target));
+      }
+    }
+  }
+  const chains = new Map<string, string[]>();
+  for (const id of order) {
+    const root = find(id);
+    if (!chains.has(root)) chains.set(root, []);
+    chains.get(root)!.push(id);
+  }
+  return [...chains.values()];
+}
+
+// ---------------------------------------------------------------------------
+// The scene
+// ---------------------------------------------------------------------------
+
+export interface LoopSceneOptions {
+  /** Collapse runs of passes that changed nothing into one band. */
+  hideQuiet: boolean;
+  /** Show each container's total memory size under its name. */
+  sizes?: SizeModel | null;
+  /**
+   * Animated mode: just the live state (`current`), compared with the
+   * previous step (`prev`), instead of a row per iteration. What to show
+   * still comes from the full history, so the picture stays steady from
+   * step to step.
+   */
+  live?: { prev: LoopRow; current: LoopRow };
+}
+
+/** The graph in view, drawn in every row with that row's state on it. */
+export interface LoopGraph {
+  /** The graph as first found: its name, and how to lay it out. */
+  first: GraphData;
+  layout: GraphLayout;
+  /** Every overlay the legend needs to explain, across the rows. */
+  overlays: GraphOverlay[];
+  /** Each row's graph and overlay (null where it isn't there), lined up with `all`. */
+  rows: ({ graph: GraphData; overlay: GraphOverlay } | null)[];
+}
+
+/** A linked list or binary tree in view, drawn in every row. */
+export interface LoopTrack {
+  track: LinkedTrack;
+  /** Each row's nodes and links, lined up with `all`. */
+  rows: LinkedRow[];
+  /** Separate lists (nodes ever linked together), over the loop's whole run, in the order they first appear. */
+  chains(): string[][];
+}
+
+export interface LoopScene {
+  history: LoopHistory;
+  /** The history's rows (passes). */
+  rows: LoopRow[];
+  /** Every row measured: the history's, then in animated mode the live previous and current. */
+  all: LoopRow[];
+  live: { prev: LoopRow; current: LoopRow } | null;
+  /** Containers worth showing (they change, are indexed, or are hinted), and which of them are grids. */
+  containers: string[];
+  grids: ReadonlySet<string>;
+  /** Scalars worth showing. */
+  scalars: string[];
+  graph: LoopGraph | null;
+  track: LoopTrack | null;
+  /** Anything to draw besides scalars. */
+  hasContent: boolean;
+  /** Per history row: did it change something since the row before? */
+  changed: boolean[];
+  /** What to draw, in order: rows, quiet bands, unrecorded gaps and run headers. */
+  items: LoopItem[];
+  /** Rows left out from the start (the history was too long). */
+  hiddenRows: number;
+  /** The row the first drawn row compares with (animated mode: the step before). */
+  before: { row: LoopRow; index: number } | null;
+  /** A row's label: "before", "#3", or with every loop together "j #3". */
+  label(row: LoopRow): string;
+  /** How deeply a row's loop is nested (0 unless every loop is shown together). */
+  depth(row: LoopRow): number;
+  /** A row's run header line, with its values when known (for measuring). */
+  header(row: LoopRow): string;
+  /** Is this row (by its index in `all`) the one running now? */
+  isCurrent(index: number): boolean;
+  /** Memory sizes at a row's own step, when they're shown. */
+  sizes(row: LoopRow): StepSizes | null;
+  /** Index pointers into a container in a row (`name[]`: a grid's columns). */
+  pointers(row: LoopRow, name: string, changedNames?: Set<string>): Pointer[];
+  /** The grid cell a row's step reads or writes. */
+  gridFocus(row: LoopRow, name: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
+  /** The loop's info, by id (the history's own when not given). */
+  info(loop?: string): LoopInfo | undefined;
+}
+
+/** Rows drawn at most; earlier ones are left out. */
+const MAX_ROWS = 120;
+
+/** Graphs found in each loop row, by step and frame: the same for the whole run. */
+const graphCache = new WeakMap<Trace, Map<string, GraphData[]>>();
+
+/** The scene for the loop history of one loop (or every loop together). */
+export function loopScene(trace: Trace, history: LoopHistory, options: LoopSceneOptions): LoopScene {
+  const { rows } = history;
+  const live = options.live ?? null;
+  // Every row that will be measured; in animated mode, plus the live ones.
+  const all = live ? [...rows, live.prev, live.current] : rows;
+  // A graph in view (the loop's variables, or globals): drawn in every row
+  // with that row's state on it. The first one found wins; hinted ones
+  // are found first.
+  const scopesOf = (row: LoopRow): Scope[] => {
+    const global = trace.steps[row.stepIndex]?.stack[0];
+    return global && global.id !== row.frame.id ? [global.locals, row.frame.locals] : [row.frame.locals];
+  };
+  let cache = graphCache.get(trace);
+  if (!cache) {
+    cache = new Map();
+    graphCache.set(trace, cache);
+  }
+  const found = all.map((row) => {
+    const key = `${row.stepIndex}:${row.frame.id}`;
+    let graphs = cache!.get(key);
+    if (!graphs) {
+      graphs = findGraphs(trace, scopesOf(row), row.heap);
+      cache!.set(key, graphs);
+    }
+    return graphs;
+  });
+  const graphId = found.flat()[0]?.id;
+  const graphRows = all.map((row, i) => {
+    const graph = graphId ? found[i].find((g) => g.id === graphId) : undefined;
+    return graph ? { graph, overlay: graphOverlay(trace, graph, scopesOf(row), row.heap) } : null;
+  });
+  const firstGraph = graphRows.find(Boolean)?.graph;
+  // The graph's own container isn't repeated as a row of cells.
+  const graphHosts = new Set(graphRows.flatMap((r) => (r ? [r.graph.hostId] : [])));
+  const exclude = new Set(
+    all.flatMap((row) =>
+      row.frame.locals
+        .filter(([, v]) => v.kind === "ref" && graphHosts.has(v.id) && !firstGraph?.objectNodes)
+        .map(([name]) => name),
+    ),
+  );
+
+  let track = findLinkedTrack(
+    all.map((row) => ({ locals: row.frame.locals, heap: row.heap })),
+    trace.viz?.linked,
+  );
+  if (track && firstGraph?.objectNodes && track.typeName === firstGraph.name) track = null;
+  const trackRows: (LinkedRow | null)[] = all.map((row) =>
+    track ? linkedRow(track, { locals: row.frame.locals, heap: row.heap }) : null,
+  );
+  const { containers, scalars } = pickVariables(trace, rows, !!track || !!firstGraph, exclude);
+  // A list of lists in every row where it has items: drawn as a grid.
+  const grids = new Set(
+    containers.filter((name) => {
+      const present = all.filter((row) => containerIn(row, name) && cellsOf(containerIn(row, name)!).length);
+      return present.length > 0 && present.every((row) => gridIn(row, name));
+    }),
+  );
+
+  const info = (loop?: string) => trace.loops.find((l) => l.id === (loop ?? history.info.id));
+  const runOf = (row: LoopRow) =>
+    row.loop !== undefined
+      ? runKey(row.loop, row.instance ?? 0)
+      : runKey(history.context.loop, history.context.instance);
+  const nameOf = (row: LoopRow) => (history.nested ? loopVariable(info(row.loop)) : null);
+  const hasContent = containers.length > 0 || !!track || !!firstGraph;
+
+  // Which rows changed something compared with the row before?
+  const trackSignature = (i: number) => (trackRows[i] ? linkedSignature(trackRows[i]!) : "");
+  const changed = rows.map(
+    (row, i) =>
+      i === 0 ||
+      containers.some((name) => signature(row, name) !== signature(rows[i - 1], name)) ||
+      trackSignature(i) !== trackSignature(i - 1) ||
+      graphSignature(graphRows[i]?.graph, graphRows[i]?.overlay) !==
+        graphSignature(graphRows[i - 1]?.graph, graphRows[i - 1]?.overlay),
+  );
+
+  // Collapse runs of quiet iterations into a single band, but only for loops
+  // that mutate data. In a read-only loop (a search, a scan) the moving
+  // indices are the story, so every row stays.
+  const mutates = changed.some((c, i) => c && i > 0);
+  let items: LoopItem[] = [];
+  const lastPass = new Map<string, number>();
+  rows.forEach((row, index) => {
+    const isLast = index === rows.length - 1;
+    const run = runOf(row);
+    // A run of a loop starts: its header, with its values when known. With
+    // every loop together, each inner run gets one, so you can see which
+    // range it covers.
+    if (!lastPass.has(run)) {
+      const call = history.calls.get(run);
+      if (call || (history.nested && (row.depth ?? 0) > 0))
+        items.push({
+          kind: "header",
+          loop: row.loop ?? history.info.id,
+          call,
+          depth: history.nested ? (row.depth ?? 0) : 0,
+        });
+    }
+    const before = lastPass.get(run);
+    lastPass.set(run, row.iteration);
+    const name = nameOf(row);
+    if (before !== undefined && row.iteration - before > 1)
+      items.push({ kind: "gap", from: before + 1, to: row.iteration - 1, name });
+    if (!options.hideQuiet || !mutates || changed[index] || isLast || !hasContent) {
+      items.push({ kind: "row", row, index });
+      return;
+    }
+    const prev = items[items.length - 1];
+    if (prev?.kind === "band" && prev.run === run) prev.to = row.iteration;
+    else items.push({ kind: "band", from: row.iteration, to: row.iteration, run, name });
+  });
+  let hiddenRows = 0;
+  const rowItems = items.filter((item) => item.kind === "row").length;
+  if (rowItems > MAX_ROWS) {
+    let toDrop = rowItems - MAX_ROWS;
+    while (toDrop > 0 && items.length) {
+      const dropped = items.shift()!;
+      if (dropped.kind === "row") {
+        toDrop--;
+        hiddenRows++;
+      }
+    }
+  }
+  let before: LoopScene["before"] = null;
+  if (live) {
+    // One row: the live state, compared with the step before it.
+    items = [{ kind: "row", row: live.current, index: all.length - 1 }];
+    before = { row: live.prev, index: all.length - 2 };
+  }
+
+  const tracked = track;
+  return {
+    history,
+    rows,
+    all,
+    live,
+    containers,
+    grids,
+    scalars,
+    graph: firstGraph
+      ? {
+          first: firstGraph,
+          layout: layoutFor(trace, firstGraph),
+          overlays: [...graphRows.flatMap((r) => (r ? [r.overlay] : [])), ...legendOverlaysFor(trace, firstGraph)],
+          rows: graphRows,
+        }
+      : null,
+    track: tracked
+      ? {
+          track: tracked,
+          rows: trackRows as LinkedRow[],
+          // Over the loop's whole run, not just up to this step, so a node
+          // that gets linked in later is on its list's line from the start.
+          chains: () => linkedChains(tracked.order, [...trackRows, ...laterRows(trace, history, tracked)]),
+        }
+      : null,
+    hasContent,
+    changed,
+    items,
+    hiddenRows,
+    before,
+    label: (row) => (row.iteration === 0 ? "before" : `${nameOf(row) ? `${nameOf(row)} ` : ""}#${row.iteration}`),
+    depth: (row) => (history.nested ? (row.depth ?? 0) : 0),
+    header(row) {
+      const loop = info(row.loop ?? history.info.id);
+      const call = history.calls.get(runOf(row));
+      return loop ? `${loop.header}${call ? `  →  ${evaluatedHeader(loop, call)}` : ""}` : "";
+    },
+    isCurrent: (index) => (live ? true : history.running && index === rows.length - 1),
+    sizes: (row) =>
+      options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null,
+    pointers: (row, name, changedNames) => pointersFor(name, trace.indexNames, new Map(row.frame.locals), changedNames),
+    gridFocus: (row, name, size) =>
+      gridFocus(
+        trace.gridAccesses,
+        name,
+        focusLines(trace, row.stepIndex),
+        new Map(row.frame.locals),
+        size,
+        trace.language === "python",
+      ),
+    info,
+  };
+}

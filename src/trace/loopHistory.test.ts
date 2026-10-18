@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
-import { evaluatedHeader, linkedChains, loopVariable } from "../render/loopView";
+import { evaluatedHeader, linkedChains, loopVariable } from "../scene/loopScene";
 import { buildLoopHistory, buildNestedHistory, nestedLoopsAt } from "./loopHistory";
 import type { LoopInfo } from "./types";
 

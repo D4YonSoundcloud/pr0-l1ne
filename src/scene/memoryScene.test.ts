@@ -61,9 +61,9 @@ describe("objects", () => {
     );
     // x is drawn inside Global, so its two arrows to shared start there.
     expect(pairs(nested.links)).toEqual([
-      "frame:0:Global -> obj:" + nested.objects[0].id,
-      "frame:0:Global -> obj:" + nested.objects[0].id,
-      "frame:0:Global -> obj:" + nested.objects[0].id,
+      `frame:0:Global -> obj:${nested.objects[0].id}`,
+      `frame:0:Global -> obj:${nested.objects[0].id}`,
+      `frame:0:Global -> obj:${nested.objects[0].id}`,
     ]);
   });
 });
@@ -106,9 +106,9 @@ a.neighbors.push(b, c); b.neighbors.push(c); c.neighbors.push(a);
     expect(scene.objects.map((o) => scene.step.heap[o.id].kind).sort()).toEqual(["class", "object"]);
     expect(scene.objects.map((o) => o.id)).toContain(host);
     expect(pairs(scene.links).filter((l) => l.endsWith(`obj:${host}`))).toEqual([
-      "frame:0:Global -> obj:" + host,
-      "frame:0:Global -> obj:" + host,
-      "frame:0:Global -> obj:" + host,
+      `frame:0:Global -> obj:${host}`,
+      `frame:0:Global -> obj:${host}`,
+      `frame:0:Global -> obj:${host}`,
     ]);
     expect([...scene.graphAlias.values()].every((id) => id === host)).toBe(true);
   });

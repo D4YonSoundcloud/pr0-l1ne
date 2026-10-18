@@ -246,6 +246,8 @@ pr0-l1ne/
     ├── scene/                  What a step shows, worked out from the trace (no positions, no DOM)
     │   ├── memoryScene.ts      The memory view's scene: boxes, nesting, graphs, trees, links, output
     │   ├── memoryScene.test.ts Scene tests (valid for any renderer)
+    │   ├── loopScene.ts        The loop history's scene: what to show, rows, bands, gaps, headers
+    │   ├── loopScene.test.ts   Loop scene tests
     │   ├── nesting.ts          Nested mode: which objects are drawn inside others
     │   ├── nesting.test.ts     Tests for choosing what to nest
     │   └── pointers.ts         Index pointers: which variables point into which lists
@@ -256,7 +258,8 @@ pr0-l1ne/
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
     │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
-    │   ├── loopView.ts         The loop history view (stacked or animated)
+    │   ├── loopView.ts         Draws a loop scene as SVG (stacked or animated, side by side or vertical)
+    │   ├── loopView.test.ts    The loop renderer drawing scenes, every JS and TS example
     │   ├── graphView.ts        Drawing a graph, for both views
     │   ├── animate.ts          FLIP tweening between two drawings
     │   ├── animate.test.ts     Animation tests (jsdom)
@@ -369,7 +372,7 @@ Say you want sets drawn as bubbles or tuples drawn differently:
 1. **Tracers**: add a branch to `Serializer.describe()` in `serialize.py` (Python) and in `inspector.ts` (JavaScript) that returns a new `kind`.
 2. **Types**: add the shape to the `HeapObject` union in `trace/types.ts`. TypeScript will then point out every `switch` that needs a case.
 3. **Diff**: teach `slotsOf()` in `diff.ts` what the object's slots are, so changes get highlighted.
-4. **Render**: add a shape builder in `memory.ts` (and, if it's a container, handle it in `cellsOf()` in `loopView.ts`).
+4. **Render**: add a shape builder in `render/memory.ts` (and, if it's a container, handle it in `cellsOf()` in `scene/loopScene.ts`).
 
 ### Add a structure-specific layout
 
