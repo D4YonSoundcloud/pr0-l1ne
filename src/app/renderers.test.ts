@@ -45,6 +45,10 @@ function recorder<S>() {
       button.addEventListener("click", onClick);
       return button;
     },
+    get viewport() {
+      return { pan: { x: 0, y: 0 }, zoom: 1 };
+    },
+    toSVG: () => "<svg/>",
     dispose: record("dispose"),
   };
   return { renderer, calls, scenes, called: (method: string) => calls.filter((c) => c.method === method) };
@@ -68,6 +72,8 @@ function fakeRenderers() {
         get hasMovedBoxes() {
           return moved;
         },
+        movedBoxes: new Map(),
+        moveBoxes: () => {},
       };
       return r;
     },

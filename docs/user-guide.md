@@ -110,6 +110,7 @@ Inside the canvas, **Memory** and **Loop history** are separate sections with a 
 
 | Section | What you can change |
 | --- | --- |
+| **Rendering** | Whether the windows are drawn with **SVG** (the default) or **Canvas 2D**. See [SVG or Canvas 2D](#svg-or-canvas-2d) below. |
 | **Theme** | A starting point: **Graph paper** (the default), **Whiteboard** (white, no grid), **Dot grid**, **Blueprint** (white lines on blue), **Night** (dark) and **High contrast**. Changing anything after that makes it **Custom**. **Reset all** goes back to Graph paper. |
 | **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. Its **duration**, from 0 (no animation) to 1000 ms. And how new things arrive: **Fade in** (on by default) and **Slide in** (from the left, with the window's easing; off by default), together, one or the other, or neither so they just appear. **Same as the memory window** copies all of it to the loop history. |
 | **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, memory sizes, the printed-output card and its text, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
@@ -119,6 +120,29 @@ Inside the canvas, **Memory** and **Loop history** are separate sections with a 
 **Previewing animation.** Next to the easing menu, a curve shows its shape. Click the track beside it and a dot slides across once, with your easing and duration (it stays still until you click). **▶ Replay this step** at the bottom redraws the previous step and animates into the current one, so you can watch the real thing. Bubble sort is a good example to try it on, since its swaps slide.
 
 The window headers (the strips with "Memory" and the Arrows | Nested switch) take their colors from each window's background, so a dark theme is dark all the way up.
+
+### SVG or Canvas 2D
+
+The **Rendering** section at the top of the Style panel picks how the two windows are drawn. Both draw exactly the same picture, from the same layout, in the same colors, with the same animations, dragging, hover highlights, Auto-fit and zooming. What differs is how the picture reaches the screen.
+
+| | SVG (the default) | Canvas 2D |
+| --- | --- | --- |
+| **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) on one canvas the size of the window, only what's in view |
+| **Stepping** | Quicker | A little slower: the canvas builds the same drawing as SVG, then paints it |
+| **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets |
+| **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming |
+| **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names |
+| **Save SVG** | Yes | Yes, the same file |
+
+Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG.
+
+A few small differences on the canvas: a box doesn't get a soft shadow while you hover over it, and a box being dimmed (by [Dim others](#printed-output)) fades each of its parts rather than the box as a whole, which can show a hint of the box's outline through its cells.
+
+## Saving a picture
+
+**Save SVG**, in each window's toolbar next to Auto-fit, saves what the window is showing as an SVG file: a vector picture that stays sharp at any size. It works with either renderer, and opens in a browser or a drawing app (Inkscape, Figma, Illustrator...) where you can edit it further. The file is named after the program, the window and the step (`bubble-sort-memory-step-12.svg`).
+
+The file carries its own colors, line widths and fonts, so it looks the same outside PR0L1NE, with the window's background color behind it and no grid. Text uses the diagram font from the Style panel; if the computer that opens the file doesn't have that font, it falls back to another monospace font.
 
 ## Moving around the canvas
 

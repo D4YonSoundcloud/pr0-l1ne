@@ -18,7 +18,9 @@ import { MeasureController } from "./app/measureController";
 import { MemoryController } from "./app/memoryController";
 import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
+import { RendererSwitch } from "./app/rendererSwitch";
 import { RunController } from "./app/runController";
+import { addSaveSvg, svgFileName } from "./app/saveSvg";
 import { installShortcuts } from "./app/shortcuts";
 import { AppStore } from "./app/state";
 import { StepView } from "./app/stepView";
@@ -26,7 +28,7 @@ import { StyleController } from "./app/styleController";
 import { createEditor } from "./editor";
 import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
 import { ProgramStore } from "./programs";
-import { createSettings } from "./settings";
+import { createSettings, type RendererKind } from "./settings";
 
 /** Everything remembered between visits (see settings.ts). */
 const settings = createSettings();
@@ -37,8 +39,27 @@ const programs = new ProgramStore(settings.programStorage());
 const app = new AppStore(settings, programs);
 const currentLanguage = () => app.get().language;
 const els = findElements();
-// What draws the two windows (see scene/renderer.ts): SVG.
-const renderers = SVG_RENDERERS;
+// What draws the two windows (see scene/renderer.ts): SVG, or Canvas 2D
+// (PixiJS), which is only downloaded when someone picks it. Windows start
+// with SVG, which is ready at once, and switch once the canvas is.
+const rendererSwitch = new RendererSwitch(
+  {
+    svg: () => SVG_RENDERERS,
+    canvas: () => import("./render/canvas/canvasRenderers").then((m) => m.CANVAS_RENDERERS),
+  },
+  { kind: "svg", factory: SVG_RENDERERS },
+);
+const renderers = rendererSwitch.factory;
+
+/** Draw with this renderer from now on (the Style panel's Rendering choice). */
+function useRenderer(kind: RendererKind): Promise<void> {
+  settings.renderer.set(kind);
+  return rendererSwitch.use(kind).catch((error: unknown) => {
+    // It couldn't start here: the windows are back on SVG, and stay there.
+    settings.renderer.set(rendererSwitch.active);
+    throw error;
+  });
+}
 
 const banner = new Banner(els.banner, {
   run: () => runNow(),
@@ -122,6 +143,12 @@ const loop: LoopController = new LoopController({
   redraw: (updateMarks) => view.render(updateMarks),
 });
 const view = new StepView({ app, els, memory, loop, editor, updateControls: () => playback.updateControls() });
+for (const [pane, renderer] of [
+  ["memory", memory.renderer],
+  ["loop", loop.renderer],
+] as const) {
+  addSaveSvg(renderer, () => svgFileName(app.get().program?.name ?? null, pane, app.get().stepIndex));
+}
 
 // ---------------------------------------------------------------- the panels (one open at a time)
 
@@ -133,6 +160,7 @@ const style: StyleController = new StyleController({
   animation: () => playback.animation,
   replay: () => playback.replay(),
   onOpen: () => closePanelsBut("style"),
+  rendering: { get: () => settings.renderer.get(), set: useRenderer },
 });
 const complexity = new ComplexityController({
   app,
@@ -203,6 +231,12 @@ const layout = new LayoutController(els, settings);
 
 view.render();
 runNow();
+// Canvas 2D last time: switch to it once it has loaded (SVG draws until then).
+if (settings.renderer.get() === "canvas") {
+  useRenderer("canvas").catch((error: unknown) => {
+    console.warn("The canvas renderer couldn't start; drawing with SVG.", error);
+  });
+}
 
 // Everything is wired up: drop the loading skeleton from index.html.
 document.documentElement.classList.remove("is-booting");

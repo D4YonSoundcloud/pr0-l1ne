@@ -68,7 +68,83 @@ export interface Enter {
 }
 
 /** How far new things slide in from, in pixels. */
-const ENTER_SLIDE = 10;
+export const ENTER_SLIDE = 10;
+
+/**
+ * What a step's animation does: things that moved slide from where they
+ * were, and new things arrive. Shared by both renderers: the SVG renderer
+ * plays it with the Web Animations API (transition, below), the canvas
+ * renderer with its own tweens (render/canvas/motion.ts).
+ */
+export type Move<E> = { el: E; kind: "slide"; dx: number; dy: number } | { el: E; kind: "arrive" };
+
+/** Where an element of a drawing is, and what it is, for planning (see `domItem`). */
+export interface Animatable<E> {
+  el: E;
+  flip?: { key: string; x: number; y: number; noFade: boolean };
+  cell?: { key: string; value: string; cx: number; cy: number };
+}
+
+/** Plan the moves from `before` to the drawing's elements (in drawing order). */
+export function plan<E>(before: Snapshot, items: Iterable<Animatable<E>>): Move<E>[] {
+  const moves: Move<E>[] = [];
+  const slide = (el: E, dx: number, dy: number) => {
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    moves.push({ el, kind: "slide", dx, dy });
+  };
+  const cells: Animatable<E>[] = [];
+  for (const item of items) {
+    if (item.cell) cells.push(item);
+    if (!item.flip) continue;
+    const was = before.flips.get(item.flip.key);
+    if (!was) {
+      if (!item.flip.noFade) moves.push({ el: item.el, kind: "arrive" });
+      continue;
+    }
+    slide(item.el, was.x - item.flip.x, was.y - item.flip.y);
+  }
+
+  // A value that left one slot of a container and arrived in another slid
+  // there: animate it from its old slot.
+  const used = new Set<string>();
+  for (const item of cells) {
+    const cell = item.cell!;
+    const [container, slot] = splitCell(cell.key);
+    const old = before.cells.get(container);
+    if (!old || old.get(slot)?.value === cell.value) continue;
+    let moved = false;
+    for (const [oldSlot, was] of old) {
+      const id = `${container}|${oldSlot}`;
+      if (oldSlot === slot || used.has(id) || was.value !== cell.value) continue;
+      used.add(id);
+      slide(item.el, was.spot.x - cell.cx, was.spot.y - cell.cy);
+      moved = true;
+      break;
+    }
+    // A slot the list didn't have a step ago (it grew): arrive like a new box.
+    if (!moved && !old.has(slot)) moves.push({ el: item.el, kind: "arrive" });
+  }
+  return moves;
+}
+
+/** The animatable elements of an SVG drawing, in document order. */
+function* domItems(root: ParentNode): Generator<Animatable<Element>> {
+  for (const el of root.querySelectorAll("[data-flip], [data-cell]")) {
+    const item: Animatable<Element> = { el };
+    const flip = el.getAttribute("data-flip");
+    if (flip !== null)
+      item.flip = { key: flip, x: num(el, "data-x"), y: num(el, "data-y"), noFade: el.hasAttribute("data-no-fade") };
+    const cell = el.getAttribute("data-cell");
+    if (cell !== null)
+      item.cell = {
+        key: cell,
+        value: el.getAttribute("data-value") ?? "",
+        cx: num(el, "data-cx"),
+        cy: num(el, "data-cy"),
+      };
+    yield item;
+  }
+}
 
 export function transition(
   before: Snapshot | null,
@@ -78,14 +154,15 @@ export function transition(
   enter: Enter = { fade: true, slide: false },
 ): void {
   if (!before || !root || duration <= 0) return;
-  const slide = (el: Element, dx: number, dy: number) => {
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0px, 0px)" }], {
-      duration,
-      easing,
-    });
-  };
-  const arrive = (el: Element) => {
+  for (const move of plan(before, domItems(root))) {
+    const el = move.el;
+    if (move.kind === "slide") {
+      el.animate([{ transform: `translate(${move.dx}px, ${move.dy}px)` }, { transform: "translate(0px, 0px)" }], {
+        duration,
+        easing,
+      });
+      continue;
+    }
     if (enter.fade)
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration * 0.6, easing: "ease-out", fill: "backwards" });
     if (enter.slide) {
@@ -95,35 +172,5 @@ export function transition(
         fill: "backwards",
       });
     }
-  };
-
-  for (const el of root.querySelectorAll("[data-flip]")) {
-    const was = before.flips.get(el.getAttribute("data-flip")!);
-    if (!was) {
-      if (!el.hasAttribute("data-no-fade")) arrive(el);
-      continue;
-    }
-    slide(el, was.x - num(el, "data-x"), was.y - num(el, "data-y"));
-  }
-
-  // A value that left one slot of a container and arrived in another slid
-  // there: animate it from its old slot.
-  const used = new Set<string>();
-  for (const el of root.querySelectorAll("[data-cell]")) {
-    const [container, slot] = splitCell(el.getAttribute("data-cell")!);
-    const value = el.getAttribute("data-value") ?? "";
-    const old = before.cells.get(container);
-    if (!old || old.get(slot)?.value === value) continue;
-    let moved = false;
-    for (const [oldSlot, cell] of old) {
-      const id = `${container}|${oldSlot}`;
-      if (oldSlot === slot || used.has(id) || cell.value !== value) continue;
-      used.add(id);
-      slide(el, cell.spot.x - num(el, "data-cx"), cell.spot.y - num(el, "data-cy"));
-      moved = true;
-      break;
-    }
-    // A slot the list didn't have a step ago (it grew): arrive like a new box.
-    if (!moved && !old.has(slot)) arrive(el);
   }
 }

@@ -48,6 +48,7 @@ describe("settings", () => {
     expect(s.speed.get()).toBeNull();
     expect(s.swapped.get()).toBe(false);
     expect(s.split.get()).toBeNull();
+    expect(s.renderer.get()).toBe("svg");
   });
 
   it("remember values under pr0l1ne: keys", () => {
@@ -59,6 +60,8 @@ describe("settings", () => {
     s.dimOutput.set(true);
     s.swapped.set(true);
     s.loopMode.set("animated");
+    s.renderer.set("canvas");
+    expect(storage.data.get("pr0l1ne:renderer")).toBe("canvas");
     expect(storage.data.get("pr0l1ne:language")).toBe("python");
     expect(storage.data.get("pr0l1ne:code:python")).toBe("print(1)");
     expect(storage.data.get("pr0l1ne:layout")).toBe("swapped");
@@ -69,6 +72,7 @@ describe("settings", () => {
     expect(again.dimOutput.get()).toBe(true);
     expect(again.swapped.get()).toBe(true);
     expect(again.loopMode.get()).toBe("animated");
+    expect(again.renderer.get()).toBe("canvas");
   });
 
   it("ignore saved values that don't make sense", () => {
@@ -79,8 +83,10 @@ describe("settings", () => {
         "pr0l1ne:memory-mode": "sideways",
         "pr0l1ne:speed": "fast",
         "pr0l1ne:split": "",
+        "pr0l1ne:renderer": "webgl",
       }),
     );
+    expect(s.renderer.get()).toBe("svg");
     expect(s.language.get()).toBeNull();
     expect(s.memoryMode.get()).toBe("arrows");
     expect(s.speed.get()).toBeNull();

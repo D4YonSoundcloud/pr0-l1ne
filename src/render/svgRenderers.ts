@@ -22,6 +22,8 @@ import type {
   StepStyle,
   ViewportChange,
 } from "../scene/renderer";
+import { ProbeStyles } from "./canvas/styles";
+import { standaloneSvg } from "./export";
 import { renderLoopHistory } from "./loopView";
 import { applyFocus, renderMemory } from "./memory";
 import { Viewport } from "./viewport";
@@ -73,6 +75,23 @@ abstract class SvgWindow {
     return this.view.addControl(label, title, onClick);
   }
 
+  get viewport(): { pan: Point; zoom: number } {
+    return this.view.view;
+  }
+
+  toSVG(): string | null {
+    const svg = this.el.querySelector<SVGSVGElement>(".viewport-layer > svg");
+    if (!svg) return null;
+    // Styles read with animations stopped (see export.ts), through a probe
+    // made for this export: the look may have changed since the last one.
+    const styles = new ProbeStyles(this.el);
+    try {
+      return standaloneSvg(svg, styles, getComputedStyle(this.el).backgroundColor);
+    } finally {
+      styles.dispose();
+    }
+  }
+
   dispose(): void {
     this.view.dispose();
   }
@@ -116,6 +135,15 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
 
   get hasMovedBoxes(): boolean {
     return this.positions.size > 0;
+  }
+
+  get movedBoxes(): ReadonlyMap<string, Point> {
+    return this.positions;
+  }
+
+  moveBoxes(positions: ReadonlyMap<string, Point>): void {
+    this.positions.clear();
+    for (const [key, at] of positions) this.positions.set(key, { ...at });
   }
 
   resetLayout(): void {

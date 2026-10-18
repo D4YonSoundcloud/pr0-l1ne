@@ -60,6 +60,26 @@ describe("SvgMemoryRenderer", () => {
     );
     r.resetLayout();
     expect(r.hasMovedBoxes).toBe(false);
+    r.moveBoxes(new Map([[scene.objects[0].key, { x: 3, y: 4 }]]));
+    expect(r.movedBoxes.get(scene.objects[0].key)).toEqual({ x: 3, y: 4 });
+  });
+
+  it("saves its drawing as a standalone SVG, and says where it's looking", async () => {
+    const el = windowEl();
+    const r = SVG_RENDERERS.memory(el, {});
+    expect(r.toSVG()).toBeNull();
+    r.render(sceneAt(await traceJavaScript("const a = [1];\n")), null);
+    const file = r.toSVG()!;
+    expect(file).toMatch(/^<\?xml/);
+    expect(new DOMParser().parseFromString(file, "image/svg+xml").documentElement.localName).toBe("svg");
+    expect(file).not.toContain("data-node-key");
+    // Read afresh each time (the look may have changed), and the probe goes once it's read.
+    expect(el.querySelector(".canvas-probe")).toBeNull();
+    r.render(sceneAt(await traceJavaScript("const a = [1];\n")), null);
+    expect(r.toSVG()).toBe(file);
+    r.setViewport({ pan: { x: 12, y: 34 }, zoom: 1.5 });
+    expect(r.viewport).toEqual({ pan: { x: 12, y: 34 }, zoom: 1.5 });
+    r.dispose();
   });
 
   it("hovering a box highlights it and its arrows, and keeps doing so across steps", async () => {

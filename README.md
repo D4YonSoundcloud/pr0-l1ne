@@ -16,6 +16,7 @@
 - **Big inputs.** Long loops are sampled and long lists drawn as color strips, so large programs still trace.
 - **Measure and complexity.** An estimate of time and space complexity from the code, checked against real runs at several input sizes.
 - **Hints.** `# viz:` and `// viz:` comments tell the canvas how to draw things when its automatic choices aren't what you want.
+- **SVG or Canvas 2D.** The diagrams are SVG by default, or drawn with [PixiJS](https://pixijs.com) on a canvas, which pans and zooms smoothly around big drawings (Style → Rendering). **Save SVG** saves either as a vector file.
 
 ![Dijkstra's algorithm on a small road map: done places filled in, the heap numbered in the order it pops, distances beside each place](docs/graph-dijkstra.png)
 

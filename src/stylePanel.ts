@@ -14,6 +14,37 @@ import {
   type PaneStyle,
   PRESETS,
 } from "./appearance";
+import type { RendererKind } from "./settings";
+
+/** The Rendering section's choice (see app/rendererSwitch.ts). */
+export interface RenderingChoice {
+  get(): RendererKind;
+  /** Switch renderers; resolves once the windows are drawn, rejects (switched back) if it couldn't. */
+  set(kind: RendererKind): Promise<void>;
+}
+
+/** What each renderer is like, in the person's terms (shown under the choice). */
+export const RENDERER_INFO: Record<RendererKind, { label: string; about: string }> = {
+  svg: {
+    label: "SVG",
+    about:
+      "Every box, arrow and value is part of the page. Stepping is quickest, it's sharp at any zoom, and screen readers can read the values. With very large drawings, panning and zooming can stutter.",
+  },
+  canvas: {
+    label: "Canvas 2D",
+    about:
+      "Drawn with PixiJS on one canvas the size of the window, only what's in view. Panning and zooming stay smooth however big the drawing gets, but each step takes a little longer to draw. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself.",
+  },
+};
+
+/** The two side by side: [question, SVG, Canvas 2D]. */
+export const RENDERER_COMPARISON: [string, string, string][] = [
+  ["Stepping", "Quicker", "A little slower"],
+  ["Panning and zooming big drawings", "Can stutter", "Smooth"],
+  ["Zoomed in", "Always sharp", "Sharp once you stop zooming"],
+  ["Screen readers", "Read the values", "Read only the window names"],
+  ["Save SVG", "Yes", "Yes, the same file"],
+];
 
 export interface StylePanelOptions {
   /** The panel is placed inside this element (the editor pane). */
@@ -27,6 +58,8 @@ export interface StylePanelOptions {
   replay(): void;
   /** Called when the panel opens, so other floating panels can close. */
   onOpen?(): void;
+  /** The Rendering section: SVG or Canvas 2D. Absent: not shown. */
+  rendering?: RenderingChoice;
 }
 
 type Child = Node | string | null | undefined | false;
@@ -53,7 +86,7 @@ export class StylePanel {
   private readonly body: HTMLElement;
   /** Re-read every control's value from the settings (after a preset or reset). */
   private syncs: (() => void)[] = [];
-  private readonly open = new Set<string>(["memory", "loop"]);
+  private readonly open = new Set<string>(["rendering", "memory", "loop"]);
 
   constructor(private readonly options: StylePanelOptions) {
     this.body = h("div", { class: "style-body" });
@@ -123,6 +156,9 @@ export class StylePanel {
     this.syncs = [];
     this.body.replaceChildren(
       this.themeRow(),
+      ...(this.options.rendering
+        ? [this.section("rendering", "Rendering", this.renderingControls(this.options.rendering))]
+        : []),
       this.section("memory", "Memory window", this.paneControls("memory")),
       this.section("loop", "Loop history window", this.paneControls("loop")),
       this.section("colors", "Colors", this.colorControls()),
@@ -166,6 +202,73 @@ export class StylePanel {
       this.sync();
     });
     return h("div", { class: "style-row style-theme" }, h("label", { for: id }, "Theme"), this.themeSelect, reset);
+  }
+
+  /** SVG or Canvas 2D, what each is like, and how the switch went. */
+  private renderingControls(rendering: RenderingChoice): HTMLElement {
+    const about = h("p", { class: "style-help" });
+    const status = h("p", { class: "style-status", role: "status", "aria-live": "polite" });
+    const kinds: RendererKind[] = ["svg", "canvas"];
+    const choice = this.choice<RendererKind>(
+      "Draw with",
+      kinds.map((value) => ({ label: RENDERER_INFO[value].label, value })),
+      () => rendering.get(),
+      (kind) => {
+        if (kind === rendering.get()) return;
+        status.textContent = kind === "canvas" ? "Starting the canvas renderer…" : "";
+        status.classList.remove("is-warning");
+        rendering
+          .set(kind)
+          .then(() => {
+            status.textContent = "";
+          })
+          .catch((error: unknown) => {
+            const reason = error instanceof Error && error.message ? ` (${error.message})` : "";
+            status.textContent = `The canvas renderer couldn't start in this browser${reason}, so it's still SVG.`;
+            status.classList.add("is-warning");
+          })
+          .finally(() => this.sync());
+        syncAbout();
+      },
+    );
+    const syncAbout = () => {
+      about.textContent = RENDERER_INFO[rendering.get()].about;
+    };
+    this.syncs.push(syncAbout);
+    const table = h(
+      "table",
+      { class: "style-compare" },
+      h(
+        "thead",
+        {},
+        h(
+          "tr",
+          {},
+          h("th", { scope: "col" }, ""),
+          ...kinds.map((k) => h("th", { scope: "col" }, RENDERER_INFO[k].label)),
+        ),
+      ),
+      h(
+        "tbody",
+        {},
+        ...RENDERER_COMPARISON.map(([what, svgSays, canvasSays]) =>
+          h("tr", {}, h("th", { scope: "row" }, what), h("td", {}, svgSays), h("td", {}, canvasSays)),
+        ),
+      ),
+    );
+    return h(
+      "div",
+      { class: "style-group" },
+      choice,
+      about,
+      status,
+      table,
+      h(
+        "p",
+        { class: "style-help" },
+        "Both draw exactly the same picture. Save SVG, in each window's toolbar, saves a vector file you can open in a drawing app, whichever you use.",
+      ),
+    );
   }
 
   // ---------------------------------------------------------- controls

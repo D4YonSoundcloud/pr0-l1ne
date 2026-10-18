@@ -113,6 +113,10 @@ function browserStorage(): KeyValueStorage | null {
 }
 
 export type SizeFamily = "python" | "javascript";
+
+/** The renderers the person can pick: SVG (the default) or Canvas 2D (PixiJS). */
+export const RENDERER_KINDS = ["svg", "canvas"] as const;
+export type RendererKind = (typeof RENDERER_KINDS)[number];
 export type Pane = "memory" | "loop";
 
 export function createSettings(storage: KeyValueStorage | null = browserStorage()) {
@@ -173,6 +177,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     autoFit: (pane: Pane) => text(`auto-fit:${pane}`),
     /** The Style panel's settings, as JSON (see appearance.ts). */
     appearance: text("appearance"),
+    /** What draws the memory and loop windows (see app/rendererSwitch.ts). */
+    renderer: choice("renderer", RENDERER_KINDS, "svg"),
 
     complexityLabels: flag("complexity-labels", true),
     /** Measure's time limit in milliseconds; null for the default. */

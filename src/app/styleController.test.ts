@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { parseAppearance } from "../appearance";
+import type { RendererKind } from "../settings";
+import { RENDERER_COMPARISON, RENDERER_INFO, type RenderingChoice } from "../stylePanel";
 import type { StepAnimation } from "./playbackController";
 import { StyleController, type StyledView } from "./styleController";
 import { makeApp, manualTimers } from "./testHelpers";
@@ -16,7 +18,7 @@ function fakeView() {
   return { view, calls };
 }
 
-function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
+function setup(storage?: ReturnType<typeof makeApp>["storage"], rendering?: RenderingChoice) {
   document.body.innerHTML = `
     <section id="editor-pane"></section><button id="style"></button>
     <div id="canvas"><section id="memory-section"></section><section id="loop-section"></section></div>`;
@@ -41,6 +43,7 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     animation: () => animation,
     replay: () => {},
     onOpen: () => opened.push("style"),
+    rendering,
     ...timers,
   });
   return {
@@ -103,5 +106,92 @@ describe("StyleController", () => {
     expect(style.panel.isOpen).toBe(true);
     style.close();
     expect(style.panel.isOpen).toBe(false);
+  });
+
+  describe("the Rendering section", () => {
+    function rendering(outcome: () => Promise<void> = () => Promise.resolve()) {
+      let kind: RendererKind = "svg";
+      const asked: RendererKind[] = [];
+      const choice: RenderingChoice = {
+        get: () => kind,
+        set: (next) => {
+          asked.push(next);
+          kind = next;
+          return outcome().catch((error: unknown) => {
+            kind = "svg"; // couldn't: back on SVG
+            throw error;
+          });
+        },
+      };
+      return { choice, asked };
+    }
+    const section = () =>
+      [...document.querySelectorAll<HTMLDetailsElement>(".style-section")].find(
+        (d) => d.querySelector("summary")?.textContent === "Rendering",
+      );
+    const button = (label: string) =>
+      [...section()!.querySelectorAll<HTMLButtonElement>(".segment")].find((b) => b.textContent === label)!;
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    it("isn't there without a choice to make", () => {
+      setup();
+      expect(section()).toBeUndefined();
+    });
+
+    it("shows the choice, what each is like, and the two side by side", () => {
+      const { choice } = rendering();
+      setup(undefined, choice);
+      const s = section()!;
+      expect(s.open).toBe(true);
+      expect(button("SVG").getAttribute("aria-pressed")).toBe("true");
+      expect(s.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.svg.about);
+      const rows = [...s.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => c.textContent));
+      expect(rows).toEqual(RENDERER_COMPARISON);
+      expect(s.textContent).toContain("Save SVG");
+    });
+
+    it("switches, saying so while the canvas starts", async () => {
+      let finish: () => void = () => {};
+      const { choice, asked } = rendering(() => new Promise<void>((r) => (finish = r)));
+      setup(undefined, choice);
+      button("Canvas 2D").click();
+      expect(asked).toEqual(["canvas"]);
+      const status = section()!.querySelector(".style-status")!;
+      expect(status.textContent).toBe("Starting the canvas renderer…");
+      expect(section()!.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.canvas.about);
+      expect(button("Canvas 2D").getAttribute("aria-pressed")).toBe("true");
+      finish();
+      await flush();
+      expect(status.textContent).toBe("");
+      button("Canvas 2D").click(); // already: nothing to do
+      expect(asked).toEqual(["canvas"]);
+      button("SVG").click();
+      expect(asked).toEqual(["canvas", "svg"]);
+      expect(status.textContent).toBe("");
+    });
+
+    it("says when the canvas can't start, and shows SVG chosen again", async () => {
+      const { choice } = rendering(() => Promise.reject(new Error("no 2D canvas")));
+      setup(undefined, choice);
+      button("Canvas 2D").click();
+      await flush();
+      const status = section()!.querySelector(".style-status")!;
+      expect(status.textContent).toBe(
+        "The canvas renderer couldn't start in this browser (no 2D canvas), so it's still SVG.",
+      );
+      expect(status.classList.contains("is-warning")).toBe(true);
+      expect(button("SVG").getAttribute("aria-pressed")).toBe("true");
+      expect(section()!.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.svg.about);
+    });
+
+    it("leaves out a reason it doesn't have", async () => {
+      const { choice } = rendering(() => Promise.reject("nope"));
+      setup(undefined, choice);
+      button("Canvas 2D").click();
+      await flush();
+      expect(section()!.querySelector(".style-status")!.textContent).toBe(
+        "The canvas renderer couldn't start in this browser, so it's still SVG.",
+      );
+    });
   });
 });

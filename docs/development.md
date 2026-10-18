@@ -106,6 +106,8 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/banner.ts` | The banner above the canvas, and its Run / Measure buttons |
 | `src/app/html.ts` | `escapeHtml`, for text put into the banner and panels |
 | `src/app/autoFit.ts` | Reads a window's remembered auto-fit setting |
+| `src/app/rendererSwitch.ts` | Switching renderers live (SVG or Canvas 2D, the Style panel's Rendering choice): stand-ins for each window that carry everything over to the new renderer |
+| `src/app/saveSvg.ts` | The Save SVG button in each window's toolbar, and the file's name |
 | `src/app/renderers.test.ts` | Both controllers against renderers that only record what they're asked: the renderer contract is all they use |
 | `src/app/testHelpers.ts` | Helpers for the controllers' tests: a storage stand-in, app state, tracing JavaScript, timers run by hand |
 
@@ -256,6 +258,16 @@ pr0-l1ne/
     ├── render/
     │   ├── svgRenderers.ts     The SVG renderers behind the contract (SVG_RENDERERS)
     │   ├── svgRenderers.test.ts  What each renderer call does to the window
+    │   ├── canvas/             The Canvas 2D renderers (PixiJS), drawing the same layout
+    │   │   ├── canvasRenderers.ts  The windows: canvas, viewport surface, hover, drag, tweens (CANVAS_RENDERERS)
+    │   │   ├── styles.ts       Styles from the page's CSS, through a hidden probe
+    │   │   ├── paint.ts        SVG drawing -> paint list: shapes and text, colors resolved
+    │   │   ├── pixiScene.ts    Paint list -> PixiJS Graphics, Text and Containers
+    │   │   ├── path.ts         Path data: parse, flatten, dash, end direction
+    │   │   ├── color.ts        Computed CSS colors as numbers
+    │   │   ├── motion.ts       CSS easings, and tweens run once a frame
+    │   │   └── *.test.ts       Tests (jsdom, with testing/fakePixi.ts and testing/canvasStyles.ts)
+    │   ├── export.ts           A drawing as a standalone SVG file (Save SVG)
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointer markers
     │   ├── memory.ts           Draws a memory scene as SVG (columns, draggable boxes, arrows)
     │   ├── memory.test.ts      The SVG renderer drawing scenes
@@ -265,9 +277,10 @@ pr0-l1ne/
     │   ├── loopView.ts         Draws a loop scene as SVG (stacked or animated, side by side or vertical)
     │   ├── loopView.test.ts    The loop renderer drawing scenes, every JS and TS example
     │   ├── graphView.ts        Drawing a graph, for both views
-    │   ├── animate.ts          FLIP tweening between two drawings
+    │   ├── animate.ts          What a step animates (plan), played as FLIP tweening for SVG
     │   ├── animate.test.ts     Animation tests (jsdom)
-    │   └── viewport.ts         Pan, zoom and node dragging for both sections
+    │   ├── viewport.ts         Pan, zoom and node dragging for both sections (an SVG, or a surface)
+    │   └── viewport.test.ts    The viewport with a surface (the canvas renderer)
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel): parse, then
     │   ├── analyze.ts            passes 1 and 2: blocks everywhere; what each statement sees
@@ -361,9 +374,9 @@ When something looks wrong in the canvas, `npm run instrument` is usually the qu
 
 Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build` and test the built worker in the browser.
 
-**Adding a renderer** (canvas, WebGL, WebGPU). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS`, then pass it as `renderers` in `main.ts`. Nothing else in the app changes. The scenes give you everything to draw and nothing about where; layout, routing, animation, pan and zoom, dragging and hover are yours. Copy the checks that keep the SVG renderer honest: draw every example's scenes and compare what you drew with the scene (boxes and links, rows and bands), as `layout.test.ts` and `loopView.test.ts` do, and run `src/app/renderers.test.ts`'s fake-renderer tests as a reminder of what the controllers call.
+**Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
-**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer.
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts` or `loopView.ts` reach both renderers at once. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
 
 **Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 

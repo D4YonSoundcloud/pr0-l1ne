@@ -6,7 +6,7 @@
 import { type Appearance, applyAppearance, parseAppearance } from "../appearance";
 import type { Renderer, StepStyle } from "../scene/renderer";
 import type { Settings } from "../settings";
-import { StylePanel } from "../stylePanel";
+import { type RenderingChoice, StylePanel } from "../stylePanel";
 import type { StepAnimation } from "./playbackController";
 import type { AppStore } from "./state";
 
@@ -36,6 +36,8 @@ export interface StyleOptions {
   replay(): void;
   /** The panel opened: close the other panels. */
   onOpen(): void;
+  /** The panel's Rendering choice (SVG or Canvas 2D). */
+  rendering?: RenderingChoice;
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;
 }
@@ -59,6 +61,7 @@ export class StyleController {
       set: (next) => this.set(next),
       replay: () => options.replay(),
       onOpen: () => options.onOpen(),
+      rendering: options.rendering,
     });
   }
 

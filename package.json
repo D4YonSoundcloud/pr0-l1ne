@@ -51,6 +51,7 @@
     "@babel/traverse": "^8.0.6",
     "@babel/types": "^8.0.6",
     "monaco-editor": "^0.57.0",
-    "path-browserify": "^1.0.1"
+    "path-browserify": "^1.0.1",
+    "pixi.js": "^8.22.0"
   }
 }

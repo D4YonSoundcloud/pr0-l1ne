@@ -8,9 +8,12 @@
  * animation, panning and zooming, boxes the person has dragged, and what
  * hovering shows. Nothing outside src/render/ touches the drawing itself.
  *
- * Today's renderers draw SVG (render/svgRenderers.ts). A canvas, WebGL or
- * WebGPU renderer implements the same interfaces, and the rest of the app
- * doesn't change. See docs/how-it-works.md, "Scenes and renderers".
+ * There are two: SVG (render/svgRenderers.ts) and Canvas 2D through PixiJS
+ * (render/canvas/canvasRenderers.ts). They share one layout, and the person
+ * picks one in the Style panel (app/rendererSwitch.ts swaps them live). A
+ * WebGL or WebGPU renderer would implement the same interfaces, and the
+ * rest of the app wouldn't change. See docs/how-it-works.md, "Scenes and
+ * renderers".
  */
 
 import type { LoopScene } from "./loopScene";
@@ -65,6 +68,12 @@ export type Hit = { kind: "box"; key: string } | { kind: "background" };
 
 export interface Renderer<S> {
   /**
+   * Resolves once the renderer can draw (a canvas renderer starts up
+   * asynchronously), and rejects if it can't work in this browser. Absent:
+   * ready at once. Calls made before then are kept and drawn when it is.
+   */
+  readonly ready?: Promise<void>;
+  /**
    * Draw a scene. `previous` is the scene drawn before (null for the
    * first), so a renderer can animate what changed.
    */
@@ -72,11 +81,18 @@ export interface Renderer<S> {
   /** Draw nothing, and say why ("" for a blank window). */
   showMessage(text: string): void;
   setViewport(change: ViewportChange): void;
+  /** Where the window is looking now (to hand over to another renderer). */
+  readonly viewport: { pan: Point; zoom: number };
   /** What's under a point, in the page's (client) coordinates; null if it's outside the window. */
   hitTest(x: number, y: number): Hit | null;
   setAppearance(style: RendererStyle): void;
   /** A button in the window's own toolbar (beside zoom and Auto-fit). */
   addControl(label: string, title: string, onClick: () => void): HTMLButtonElement;
+  /**
+   * The drawing on screen as a standalone SVG file (styles inlined), or
+   * null when nothing is drawn. Every renderer can: they share the layout.
+   */
+  toSVG(): string | null;
   /** Stop listening and let go of the window's element. */
   dispose(): void;
 }
@@ -98,6 +114,10 @@ export interface MemoryRenderer extends Renderer<MemoryScene> {
   resetLayout(): void;
   /** Has the person dragged any box? */
   readonly hasMovedBoxes: boolean;
+  /** Where the person has dragged boxes, by scene key (top-left corners, in diagram units). */
+  readonly movedBoxes: ReadonlyMap<string, Point>;
+  /** Put boxes where another renderer had them (the renderer setting changed). */
+  moveBoxes(positions: ReadonlyMap<string, Point>): void;
 }
 
 /** The loop history window. */

@@ -15,6 +15,7 @@
 
 import type { AutoFit } from "../scene/renderer";
 import { type Enter, snapshot, transition as transition_ } from "./animate";
+import { easing as easeOf } from "./canvas/motion";
 
 export interface Point {
   x: number;
@@ -31,6 +32,27 @@ export interface ViewportOptions {
   onNodeMove?(key: string, position: Point, done: boolean): void;
   /** Called when Auto-fit is turned on or off, or its mode changes. */
   onAutoFitChange?(state: AutoFit): void;
+  /**
+   * A drawing that isn't an SVG in the page (the canvas renderer): the
+   * viewport tells it where the view is instead of moving an SVG with CSS,
+   * and asks it which box is under the pointer.
+   */
+  surface?: ViewSurface;
+}
+
+/** Where the view is: the drawing's offset in the window, in pixels, and its zoom. */
+export interface View {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** What a drawing outside the DOM gives the viewport (see ViewportOptions.surface). */
+export interface ViewSurface {
+  /** The view moved (on every frame of a glide too): draw it there. */
+  onView(view: View): void;
+  /** The draggable box under a point (client coordinates), with its top-left corner in diagram units. */
+  nodeAt(clientX: number, clientY: number): { key: string; x: number; y: number } | null;
 }
 
 export type { AutoFit } from "../scene/renderer";
@@ -183,19 +205,43 @@ export class Viewport {
    */
   setContent(content: SVGSVGElement | null, emptyText = "", transition = 0, easing?: string, enter?: Enter): void {
     const before = transition > 0 && content ? snapshot(this.layer) : null;
-    if (content) {
-      this.contentW = Number(content.getAttribute("width")) || 0;
-      this.contentH = Number(content.getAttribute("height")) || 0;
-      this.layer.replaceChildren(content);
-    } else {
-      this.contentW = this.contentH = 0;
-      this.layer.replaceChildren();
-    }
-    this.empty.textContent = emptyText;
-    this.empty.hidden = !!content || !emptyText;
-    this.controls.hidden = !content;
+    if (content) this.layer.replaceChildren(content);
+    else this.layer.replaceChildren();
+    this.contentChanged(
+      content && {
+        width: Number(content.getAttribute("width")) || 0,
+        height: Number(content.getAttribute("height")) || 0,
+      },
+      emptyText,
+    );
     if (before) transition_(before, this.layer, transition, easing, enter);
-    if (this.autoFit.on && content) {
+    this.fitNew(!!content);
+  }
+
+  /**
+   * A drawing of this size is on the surface (the canvas renderer draws it
+   * and animates it itself), or none, with an explanation.
+   */
+  setDrawn(size: { width: number; height: number } | null, emptyText = ""): void {
+    this.contentChanged(size, emptyText);
+    this.fitNew(!!size);
+  }
+
+  /** The window's own layer, for elements that must sit where the SVG would (the canvas renderer's style probe). */
+  get contentLayer(): HTMLElement {
+    return this.layer;
+  }
+
+  private contentChanged(size: { width: number; height: number } | null, emptyText: string): void {
+    this.contentW = size?.width ?? 0;
+    this.contentH = size?.height ?? 0;
+    this.empty.textContent = emptyText;
+    this.empty.hidden = !!size || !emptyText;
+    this.controls.hidden = !size;
+  }
+
+  private fitNew(drawn: boolean): void {
+    if (this.autoFit.on && drawn) {
       this.refit(!this.snugNext, this.snugNext);
       this.snugNext = false;
     }
@@ -295,6 +341,10 @@ export class Viewport {
 
   /** Animate the view (and its graph paper) from where it was to where it is now. */
   private glide(from: { x: number; y: number; z: number }, duration: number, easing: string): void {
+    if (this.options.surface) {
+      this.glideFrames(from, duration, easing);
+      return;
+    }
     const grid = (z: number) => `${this.gridSize * z}px ${this.gridSize * z}px`;
     if (typeof this.layer.animate !== "function") return;
     this.glides = [
@@ -313,6 +363,28 @@ export class Viewport {
         { duration, easing },
       ),
     ];
+  }
+
+  private frame: number | null = null;
+
+  /** A glide drawn frame by frame, for a surface (there's no SVG for CSS to move). */
+  private glideFrames(from: View, duration: number, easing: string): void {
+    const to = { x: this.x, y: this.y, z: this.z };
+    const ease = easeOf(easing);
+    const start = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - start) / duration);
+      const k = t >= 1 ? 1 : ease(t);
+      this.show({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, z: from.z + (to.z - from.z) * k });
+      this.frame = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    this.show(from);
+    this.frame = requestAnimationFrame(step);
+  }
+
+  private stopGlide(): void {
+    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    this.frame = null;
   }
 
   /**
@@ -344,6 +416,7 @@ export class Viewport {
 
   /** Stop listening, and empty the element. */
   dispose(): void {
+    this.stopGlide();
     this.listening.abort();
     this.resizes?.disconnect();
     this.el.replaceChildren();
@@ -408,11 +481,18 @@ export class Viewport {
       this.x = clamp(this.x, KEEP_VISIBLE - this.contentW * this.z, this.viewW - KEEP_VISIBLE);
       this.y = clamp(this.y, KEEP_VISIBLE - this.contentH * this.z, this.viewH - KEEP_VISIBLE);
     }
-    this.layer.style.transform = `translate(${this.x}px, ${this.y}px) scale(${this.z})`;
-    const grid = this.gridSize * this.z;
-    this.el.style.backgroundSize = `${grid}px ${grid}px`;
-    this.el.style.backgroundPosition = `${this.x}px ${this.y}px`;
     this.zoomLabel.textContent = `${Math.round(this.z * 100)}%`;
+    if (this.options.surface) this.stopGlide(); // the view is wherever it was just put
+    this.show({ x: this.x, y: this.y, z: this.z });
+  }
+
+  /** Draw the view here: the SVG layer (or the surface) and the graph paper. */
+  private show(view: View): void {
+    const grid = this.gridSize * view.z;
+    this.el.style.backgroundSize = `${grid}px ${grid}px`;
+    this.el.style.backgroundPosition = `${view.x}px ${view.y}px`;
+    if (this.options.surface) this.options.surface.onView(view);
+    else this.layer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
   }
 
   private onPointerDown(e: PointerEvent): void {
@@ -427,15 +507,15 @@ export class Viewport {
     }
     if (this.pointers.size > 2) return;
 
-    const node = e.button === 0 && this.options.onNodeMove ? target.closest<SVGGElement>("[data-node-key]") : null;
+    const node = e.button === 0 && this.options.onNodeMove ? this.nodeAt(target, e.clientX, e.clientY) : null;
     if (node) {
       this.gesture = {
         kind: "node",
-        key: node.dataset.nodeKey!,
+        key: node.key,
         startX: e.clientX,
         startY: e.clientY,
-        nodeX: Number(node.dataset.x),
-        nodeY: Number(node.dataset.y),
+        nodeX: node.x,
+        nodeY: node.y,
         moved: false,
       };
     } else {
@@ -447,6 +527,13 @@ export class Viewport {
   }
 
   private pressMoved = false;
+
+  /** The draggable box under the pointer: an SVG <g data-node-key>, or what the surface says. */
+  private nodeAt(target: Element, clientX: number, clientY: number): { key: string; x: number; y: number } | null {
+    if (this.options.surface) return this.options.surface.nodeAt(clientX, clientY);
+    const node = target.closest<SVGGElement>("[data-node-key]");
+    return node ? { key: node.dataset.nodeKey!, x: Number(node.dataset.x), y: Number(node.dataset.y) } : null;
+  }
 
   private startPinch(): void {
     this.manual(() => {});
