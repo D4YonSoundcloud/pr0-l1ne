@@ -9,6 +9,7 @@
  * Only containers and scalars that change during the loop are shown (plus
  * anything used as an index), so unrelated variables stay out of the way.
  */
+import { pointersFor } from "../scene/pointers";
 import { valueKey } from "../trace/diff";
 import {
   findGraphs,
@@ -68,7 +69,6 @@ import {
   INDEX_H,
   POINTER_H,
   pointerMarkers,
-  pointersFor,
   rowPointerMarkers,
   rowPointersWidth,
   STRIP_H,

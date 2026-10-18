@@ -243,13 +243,19 @@ pr0-l1ne/
     │   ├── bigO.test.ts        Big-O tests
     │   ├── complexity.ts       Time and space estimates: the code's shape plus the run
     │   └── complexity.test.ts  Every example's complexity, in all three languages
+    ├── scene/                  What a step shows, worked out from the trace (no positions, no DOM)
+    │   ├── memoryScene.ts      The memory view's scene: boxes, nesting, graphs, trees, links, output
+    │   ├── memoryScene.test.ts Scene tests (valid for any renderer)
+    │   ├── nesting.ts          Nested mode: which objects are drawn inside others
+    │   ├── nesting.test.ts     Tests for choosing what to nest
+    │   └── pointers.ts         Index pointers: which variables point into which lists
     ├── render/
-    │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointers
-    │   ├── memory.ts           The memory view (arrows or nested, draggable boxes)
-    │   ├── memory.test.ts      Tests for choosing what to nest
+    │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointer markers
+    │   ├── memory.ts           Draws a memory scene as SVG (columns, draggable boxes, arrows)
+    │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
-    │   ├── layout.test.ts      Every example, every step: no overlaps or crossings
+    │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
     │   ├── loopView.ts         The loop history view (stacked or animated)
     │   ├── graphView.ts        Drawing a graph, for both views
     │   ├── animate.ts          FLIP tweening between two drawings
@@ -348,7 +354,7 @@ When something looks wrong in the canvas, `npm run instrument` is usually the qu
 
 Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build` and test the built worker in the browser.
 
-**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. Because rendering is a pure function of `(trace, stepIndex)`, you can paste a trace JSON into a test page or a unit test and render it without running any code.
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer.
 
 **Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 

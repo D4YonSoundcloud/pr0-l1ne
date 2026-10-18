@@ -6,8 +6,9 @@
  * whether output is shown on the canvas.
  */
 import type { LanguageId } from "../languages";
-import { applyFocus, type MemoryMode, type Point, renderMemory } from "../render/memory";
+import { applyFocus, type Point, renderMemory } from "../render/memory";
 import { Viewport } from "../render/viewport";
+import { type MemoryMode, memoryScene } from "../scene/memoryScene";
 import type { Settings } from "../settings";
 import { diffSteps } from "../trace/diff";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
@@ -207,14 +208,15 @@ export class MemoryController {
     const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
     const animation = this.options.animation();
     this.view.setContent(
-      renderMemory(trace, stepIndex, diff, {
-        positions: this.positions,
-        raise: this.dragging,
-        mode: this.mode,
-        sizes: this.sizes(),
-        output: this.outputOn,
-        dimForOutput: this.dimForOutput,
-      }),
+      renderMemory(
+        memoryScene(trace, stepIndex, diff, {
+          mode: this.mode,
+          sizes: this.sizes(),
+          output: this.outputOn,
+          dimForOutput: this.dimForOutput,
+        }),
+        { positions: this.positions, raise: this.dragging },
+      ),
       "",
       animation.duration,
       animation.easing,

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
-import { pointersFor } from "../render/draw";
+import { pointersFor } from "../scene/pointers";
 import { expandHeaps } from "./delta";
 import { evalIndex, focusLines, gridFocus } from "./gridFocus";
 import type { Trace, Value } from "./types";

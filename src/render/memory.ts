@@ -23,29 +23,13 @@
  *             thing ("container in container"). Shared objects and cycles
  *             still need arrows, so they stay separate. See chooseNested.
  */
-import { localKey, type StepDiff, slotsOf, valueKey } from "../trace/diff";
-import {
-  type GraphData,
-  type GraphOverlay,
-  graphOverlay,
-  graphsAt,
-  layoutFor,
-  legendOverlaysFor,
-  stepScopes,
-} from "../trace/graph";
-import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
-import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
-import { formatBytes, type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
-import { type Printed, printedAt } from "../trace/output";
-import {
-  type Frame,
-  type HeapObject,
-  liveFrames,
-  type SequenceObject,
-  type Step,
-  type Trace,
-  type Value,
-} from "../trace/types";
+import { type MemoryScene, nodeKey, type SceneGraph, type SceneTree } from "../scene/memoryScene";
+import type { Pointer } from "../scene/pointers";
+import { localKey, type StepDiff, valueKey } from "../trace/diff";
+import type { GridFocus } from "../trace/gridFocus";
+import { formatBytes, type StepSizes } from "../trace/memory";
+import type { Printed } from "../trace/output";
+import type { Frame, HeapObject, SequenceObject, Step, Value } from "../trace/types";
 import {
   arrowMarkers,
   CELL_H,
@@ -57,7 +41,6 @@ import {
   LABEL_H,
   POINTER_H,
   pointerMarkers,
-  pointersFor,
   ROW_H,
   rowPointerMarkers,
   rowPointersWidth,
@@ -84,7 +67,7 @@ interface OutRef {
   down?: boolean;
   exitDownY?: number;
 }
-type Pointers = { name: string; index: number; changed: boolean }[];
+type Pointers = Pointer[];
 
 interface Shape {
   w: number;
@@ -99,36 +82,12 @@ export interface Point {
   y: number;
 }
 
-export type MemoryMode = "arrows" | "nested";
-
 /** Where the person has dragged boxes, by node key, in diagram units. */
 export interface MemoryLayout {
   positions: ReadonlyMap<string, Point>;
   /** The node being dragged right now, drawn on top of the others. */
   raise?: string | null;
-  mode?: MemoryMode;
-  /** Show memory sizes under this model (see trace/memory.ts). */
-  sizes?: SizeModel | null;
-  /** On a step that prints, show what it printed (default true). */
-  output?: boolean;
-  /** ...and dim everything else (default false). */
-  dimForOutput?: boolean;
 }
-
-/**
- * Stable keys for draggable boxes. Frames are keyed by their position on the
- * stack and function name, so "the second factorial() call" keeps its place
- * across steps and re-runs. Objects are keyed by id, which both tracers keep
- * stable for the whole run and assign in the same order on every run.
- */
-export const nodeKey = {
-  frame: (index: number, func: string) => `frame:${index}:${func}`,
-  /** A paused frame keeps its identity (its id) wherever it resumes. */
-  paused: (id: string) => `paused:${id}`,
-  object: (id: string) => `obj:${id}`,
-  /** What a step printed. */
-  output: "output",
-};
 
 const COLUMN_GAP = 90;
 const STACK_GAP = 22;
@@ -142,67 +101,7 @@ const EXIT_LANE = 7;
 const TREE_GAP = 34;
 const LEVEL_GAP = 44;
 
-/** Nesting deeper than this switches back to arrows, so boxes stay readable. */
-export const MAX_NEST_DEPTH = 6;
 const NEST_PAD = 4;
-
-// ---------------------------------------------------------------------------
-// Choosing what to nest
-// ---------------------------------------------------------------------------
-
-/** Every value an object holds, including dict keys. */
-function valuesOf(obj: HeapObject): Value[] {
-  const values: Value[] = [];
-  if (obj.kind === "dict") for (const [key] of obj.entries) values.push(key);
-  values.push(...slotsOf(obj).values());
-  return values;
-}
-
-/** References an object holds that could be drawn inside it (not dict keys). */
-function nestableChildren(obj: HeapObject): string[] {
-  const ids: string[] = [];
-  for (const value of slotsOf(obj).values()) if (value.kind === "ref") ids.push(value.id);
-  return ids;
-}
-
-/**
- * Which objects to draw inside the thing that refers to them. An object is
- * nested when exactly one reference to it exists in this snapshot (from a
- * variable, a field, an item or the return value). Anything referenced twice
- * (aliasing), part of a cycle, or nested deeper than MAX_NEST_DEPTH stays a
- * separate box, because only an arrow can show "these point at the same
- * object".
- */
-export function chooseNested(step: Step): Set<string> {
-  const incoming = new Map<string, number>();
-  const count = (value: Value | undefined) => {
-    if (value?.kind === "ref") incoming.set(value.id, (incoming.get(value.id) ?? 0) + 1);
-  };
-  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) count(value);
-  count(step.returnValue);
-  for (const obj of Object.values(step.heap)) for (const value of valuesOf(obj)) count(value);
-
-  const nested = new Set<string>();
-  const visited = new Set<string>();
-  const tryNest = (id: string, depth: number) => {
-    const obj = step.heap[id];
-    if (!obj || visited.has(id) || incoming.get(id) !== 1 || depth > MAX_NEST_DEPTH) return;
-    visited.add(id);
-    nested.add(id);
-    for (const child of nestableChildren(obj)) tryNest(child, depth + 1);
-  };
-  // Start from the variables, then from every object that stayed separate,
-  // so things inside a shared object can still nest inside it.
-  for (const frame of liveFrames(step))
-    for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
-  if (step.returnValue?.kind === "ref") tryNest(step.returnValue.id, 1);
-  for (const [id, obj] of Object.entries(step.heap)) {
-    if (nested.has(id)) continue;
-    visited.add(id);
-    for (const child of nestableChildren(obj)) tryNest(child, 1);
-  }
-  return nested;
-}
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -818,115 +717,34 @@ function frameShape(frame: Frame, ctx: Ctx, isActive: boolean): Shape {
 // Layout
 // ---------------------------------------------------------------------------
 
-export function renderMemory(
-  trace: Trace,
-  stepIndex: number,
-  diff: StepDiff,
-  layout: MemoryLayout = { positions: new Map() },
-): SVGSVGElement {
-  const step = trace.steps[stepIndex];
+export function renderMemory(scene: MemoryScene, layout: MemoryLayout = { positions: new Map() }): SVGSVGElement {
+  const { step, graphAlias } = scene;
   const svg = s("svg", { class: "memory-svg", xmlns: "http://www.w3.org/2000/svg" });
   svg.append(arrowMarkers());
   const boxLayer = s("g", { class: "boxes" });
   const arrowLayer = s("g", { class: "arrows" });
   svg.append(boxLayer, arrowLayer);
 
-  const nested = layout.mode === "nested" ? chooseNested(step) : new Set<string>();
-
-  // Graphs are drawn as one box, in place of the dict or list that holds
-  // them (or, for graphs of objects, in place of all the node objects).
-  const graphs = graphBoxes(trace, stepIndex);
-  const graphAlias = new Map<string, string>();
-  for (const box of graphs.values()) {
-    nested.delete(box.graph.hostId);
-    if (!box.graph.objectNodes) continue;
-    for (const member of box.graph.members) {
-      nested.delete(member);
-      // Arrows to any node (or its neighbor list) go to the graph's box.
-      if (member !== box.graph.hostId) graphAlias.set(member, box.graph.hostId);
-    }
-  }
-  const outgoing = (id: string): Value[] => (graphs.has(id) ? [] : valuesOf(step.heap[id]));
-
-  // Index pointers (i, j, lo, hi...) belong to the variable that holds a list.
-  const pointerOwner = new Map<string, { name: string; frame: Frame }>();
-  for (const frame of liveFrames(step)) {
-    for (const [name, value] of frame.locals)
-      if (value.kind === "ref" && !pointerOwner.has(value.id)) pointerOwner.set(value.id, { name, frame });
-  }
-  // The running frame's names win over paused frames and callers.
-  for (const frame of step.stack) {
-    for (const [name, value] of frame.locals) if (value.kind === "ref") pointerOwner.set(value.id, { name, frame });
-  }
+  const graphs = graphBoxes(scene);
   const ctx: Ctx = {
     step,
-    diff,
-    sizes: layout.sizes ? stepSizes(step, layout.sizes) : null,
-    nested,
-    functionKeyword: trace.language === "python" ? "def" : "function",
-    pointersFor(id, level = 0) {
-      const owner = pointerOwner.get(id);
-      if (!owner) return [];
-      const changedNames = new Set(
-        owner.frame.locals.map(([n]) => n).filter((n) => diff.changedLocals.has(localKey(owner.frame.id, n))),
-      );
-      const name = level === 1 ? `${owner.name}[]` : owner.name;
-      return pointersFor(name, trace.indexNames, new Map(owner.frame.locals), changedNames);
-    },
-    gridFocus(id, size) {
-      const owner = pointerOwner.get(id);
-      if (!owner) return null;
-      return gridFocus(
-        trace.gridAccesses,
-        owner.name,
-        focusLines(trace, stepIndex),
-        new Map(owner.frame.locals),
-        size,
-        trace.language === "python",
-      );
-    },
+    diff: scene.changes,
+    sizes: scene.sizes,
+    nested: scene.nested,
+    functionKeyword: scene.functionKeyword,
+    pointersFor: (id, level) => scene.pointers(id, level),
+    gridFocus: (id, size) => scene.gridFocus(id, size),
   };
 
-  // References that leave a group of nested boxes: where its arrows go.
-  const exits = (values: Value[], out: string[] = []): string[] => {
-    for (const value of values) {
-      if (value.kind !== "ref" || !step.heap[value.id]) continue;
-      if (nested.has(value.id)) exits(outgoing(value.id), out);
-      else out.push(graphAlias.get(value.id) ?? value.id);
-    }
-    return out;
-  };
-
-  // Binary trees (arrows mode) are laid out top-down as one block: each node
-  // in its in-order slot, at the height of its depth. Found the same way as
-  // in the loop history, so `viz: tree` hints apply here too.
-  const blocks = findTreeBlocks(trace, step, layout.mode === "nested");
+  // Binary trees are laid out top-down as one block: each node in its
+  // in-order slot, at the height of its depth.
+  const blocks = scene.trees.map((tree): TreeBlock => ({ ...tree, slotW: 0, levelH: 0, w: 0, h: 0 }));
   const blockOf = new Map<string, TreeBlock>();
   for (const block of blocks) for (const id of block.nodes.keys()) blockOf.set(id, block);
 
-  // 1. Breadth-first walk from the stack assigns each separate box a column.
-  //    Nested objects aren't boxes of their own: their outgoing arrows count
-  //    as coming from the box they're drawn in.
-  const depth = new Map<string, number>();
-  const order: string[] = [];
-  const queue: string[] = [];
-  const enqueue = (id: string, d: number) => {
-    if (depth.has(id)) return;
-    // A tree's nodes all go in the column of the first one reached.
-    for (const member of blockOf.get(id)?.inOrder ?? [id]) {
-      if (depth.has(member)) continue;
-      depth.set(member, d);
-      order.push(member);
-      queue.push(member);
-    }
-  };
-  const roots = liveFrames(step).flatMap((frame) => frame.locals.map(([, value]) => value));
-  if (step.returnValue) roots.push(step.returnValue);
-  for (const id of exits(roots)) enqueue(id, 0);
-  while (queue.length) {
-    const id = queue.shift()!;
-    for (const child of exits(outgoing(id))) enqueue(child, depth.get(id)! + 1);
-  }
+  // 1. Each separate box goes in the column of its distance from the stack.
+  const depth = new Map(scene.objects.map((o) => [o.id, o.depth]));
+  const order = scene.objects.map((o) => o.id);
 
   // 2. Measure everything, then size the columns.
   const shapes = new Map<string, Shape>();
@@ -935,17 +753,16 @@ export function renderMemory(
     shapes.set(
       id,
       box
-        ? graphShape(box, step.heap[id], diff.newObjects.has(id), graphSize(box, ctx))
+        ? graphShape(box, step.heap[id], scene.changes.newObjects.has(id), graphSize(box, ctx))
         : objectShape(step.heap[id], ctx),
     );
   }
 
   // The call stack, then paused frames under it.
-  const frames = liveFrames(step);
-  const frameShapes = frames.map((frame, i) => frameShape(frame, ctx, i === step.stack.length - 1));
+  const frameShapes = scene.frames.map((f) => frameShape(f.frame, ctx, f.active));
   // A program that prints gets a stack column wide enough for its output
   // card (worked out from the whole run, so it doesn't change between steps).
-  const framesW = Math.max(160, ...frameShapes.map((f) => f.w), layout.output === false ? 0 : outputWidth(trace));
+  const framesW = Math.max(160, ...frameShapes.map((f) => f.w), outputWidth(scene.longestOutputLine));
   for (const block of blocks) measureBlock(block, shapes);
   const columnW: number[] = [];
   for (const id of order) {
@@ -967,9 +784,7 @@ export function renderMemory(
   // Boxes the person dragged stay exactly where they were put. Everything
   // else is placed automatically, moving down past anything already there,
   // so a new box is never hidden under another one.
-  const frameKeys = frames.map((frame, index) =>
-    frame.state === "suspended" ? nodeKey.paused(frame.id) : nodeKey.frame(index, frame.func),
-  );
+  const frameKeys = scene.frames.map((f) => f.key);
   const obstacles: Rect[] = [];
   frameShapes.forEach((shape, index) => {
     const moved = layout.positions.get(frameKeys[index]);
@@ -1076,17 +891,14 @@ export function renderMemory(
   // What this step printed: a node under the call stack (moving down past
   // anything in the way), with arrows to the objects it printed. Everything
   // else dims, so the output and what it's about stand out.
-  const printed = layout.output === false ? null : printedAt(trace, stepIndex);
-  if (printed) {
-    const targets = printed.refs
-      .map((id) => graphAlias.get(id) ?? id)
-      .filter((id, i, all) => rects.has(nodeKey.object(id)) && all.indexOf(id) === i);
+  if (scene.output) {
+    const { printed, targets } = scene.output;
     const shape = outputShape(printed, targets, framesW);
     const key = nodeKey.output;
     const moved = layout.positions.get(key);
     if (moved) drawNode(key, shape, moved.x, moved.y);
     else drawNode(key, shape, MARGIN, findFreeY(MARGIN, shape.w, shape.h, frameY, obstacles, STACK_GAP));
-    if (layout.dimForOutput) svg.classList.add("has-output");
+    if (scene.dim.on) svg.classList.add("has-output");
     for (const id of targets)
       boxLayer.querySelector(`.node[data-node-key="${CSS.escape(nodeKey.object(id))}"]`)?.classList.add("is-printed");
     const card = boxLayer.querySelector(`.node[data-node-key="${key}"]`);
@@ -1095,10 +907,8 @@ export function renderMemory(
     card?.setAttribute("data-no-fade", "");
   }
   // Dim in when printing starts, and back up the step after.
-  const printedBefore =
-    layout.output !== false && layout.dimForOutput === true && stepIndex > 0 && !!printedAt(trace, stepIndex - 1);
-  if (printed && layout.dimForOutput && !printedBefore) svg.classList.add("output-in");
-  if (!printed && printedBefore) svg.classList.add("output-out");
+  if (scene.dim.entering) svg.classList.add("output-in");
+  if (scene.dim.leaving) svg.classList.add("output-out");
 
   // Boxes the person placed sit on top of automatically placed ones, and the
   // box being dragged right now is on top of everything.
@@ -1184,17 +994,10 @@ const OUTPUT_LINE_H = 18;
 const OUTPUT_MAX_LINES = 12;
 
 const OUTPUT_MAX_W = 360;
-const outputWidths = new WeakMap<Trace, number>();
 
-/** How wide the output card needs to be for this run's longest printed line (0 if it prints nothing). */
-function outputWidth(trace: Trace): number {
-  let w = outputWidths.get(trace);
-  if (w === undefined) {
-    const longest = Math.max(0, ...trace.stdout.split("\n").map((l) => l.length));
-    w = trace.stdout ? Math.min(OUTPUT_MAX_W, Math.max(160, Math.ceil(longest * FONT * 0.6) + 24)) : 0;
-    outputWidths.set(trace, w);
-  }
-  return w;
+/** How wide the output card needs to be for the run's longest printed line (0 if it prints nothing, or output is off). */
+function outputWidth(longest: number | null): number {
+  return longest === null ? 0 : Math.min(OUTPUT_MAX_W, Math.max(160, Math.ceil(longest * FONT * 0.6) + 24));
 }
 
 /**
@@ -1289,37 +1092,23 @@ export function applyFocus(svg: SVGSVGElement | null, key: string | null): void 
 // Graphs
 // ---------------------------------------------------------------------------
 
-interface GraphBox {
-  graph: GraphData;
-  overlay: GraphOverlay;
+interface GraphBox extends SceneGraph {
   picture: GraphPicture;
 }
 
 /** Where a graph's picture starts inside its box. */
 const GRAPH_BODY_Y = HEADER_H + 4;
 
-/** The graphs at a step, by the heap id each one is drawn in place of. */
-function graphBoxes(trace: Trace, stepIndex: number): Map<string, GraphBox> {
-  const step = trace.steps[stepIndex];
-  const before = trace.steps[stepIndex - 1];
-  const prev = new Map(
-    (before ? graphsAt(trace, before) : []).map((graph) => [
-      graph.id,
-      {
-        graph,
-        overlay: graphOverlay(trace, graph, stepScopes(before), before.heap),
-      },
-    ]),
-  );
+/** The scene's graphs, each with its picture drawn, by the heap id each one is drawn in place of. */
+function graphBoxes(scene: MemoryScene): Map<string, GraphBox> {
   const boxes = new Map<string, GraphBox>();
-  for (const graph of graphsAt(trace, step)) {
-    const overlay = graphOverlay(trace, graph, stepScopes(step), step.heap);
-    const picture = graphPicture(graph, layoutFor(trace, graph), overlay, {
-      flipKey: `gptr:${graph.id}`,
-      prev: before ? (prev.get(graph.id) ?? null) : null,
-      legendOverlays: [overlay, ...legendOverlaysFor(trace, graph)],
+  for (const [hostId, graph] of scene.graphs) {
+    const picture = graphPicture(graph.graph, graph.layout, graph.overlay, {
+      flipKey: `gptr:${graph.graph.id}`,
+      prev: graph.previous,
+      legendOverlays: graph.legendOverlays,
     });
-    boxes.set(graph.hostId, { graph, overlay, picture });
+    boxes.set(hostId, { ...graph, picture });
   }
   return boxes;
 }
@@ -1377,48 +1166,13 @@ function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean, size: string
 // Trees
 // ---------------------------------------------------------------------------
 
-interface TreeBlock {
-  root: string;
-  /** Node id -> in-order index, depth, and its child node ids. */
-  nodes: Map<string, { index: number; depth: number; children: string[] }>;
-  inOrder: string[];
+/** A binary tree from the scene, with the room its nodes need (measureBlock) and where it went. */
+interface TreeBlock extends SceneTree {
   slotW: number;
   levelH: number;
   w: number;
   h: number;
   origin?: { x: number; y: number };
-}
-
-/** Binary trees in this step with at least two nodes, each one block. */
-function findTreeBlocks(trace: Trace, step: Step, nestedMode: boolean): TreeBlock[] {
-  if (nestedMode) return []; // nested mode draws trees as boxes in boxes
-  const row = { locals: liveFrames(step).flatMap((frame) => frame.locals), heap: step.heap };
-  const track = findLinkedTrack([row], trace.viz?.linked);
-  if (track?.shape !== "tree") return [];
-  const state = linkedRow(track, row);
-  const depths = treeDepths(state);
-  const blocks: TreeBlock[] = [];
-  const placed = new Set<string>();
-  for (const [id] of state.nodes) {
-    if (depths.get(id) !== 0 || placed.has(id)) continue;
-    const block: TreeBlock = { root: id, nodes: new Map(), inOrder: [], slotW: 0, levelH: 0, w: 0, h: 0 };
-    const visit = (nodeId: string | null, depth: number) => {
-      if (!nodeId || placed.has(nodeId) || !state.nodes.has(nodeId)) return;
-      placed.add(nodeId);
-      const [left, right] = state.nodes.get(nodeId)!.links;
-      visit(left, depth + 1);
-      block.nodes.set(nodeId, {
-        index: block.inOrder.length,
-        depth,
-        children: [left, right].filter((c): c is string => !!c),
-      });
-      block.inOrder.push(nodeId);
-      visit(right, depth + 1);
-    };
-    visit(id, 0);
-    if (block.inOrder.length >= 2) blocks.push(block);
-  }
-  return blocks;
 }
 
 function measureBlock(block: TreeBlock, shapes: Map<string, Shape>): void {

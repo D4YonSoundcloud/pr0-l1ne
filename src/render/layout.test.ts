@@ -1,20 +1,22 @@
 // @vitest-environment jsdom
 /**
  * Renders every example program at every step and checks the memory view's
- * layout: no box ever overlaps another, and no arrow passes through a box
- * it doesn't start or end at.
+ * layout: it draws the scene's boxes and links (scene/memoryScene.ts), no
+ * box ever overlaps another, and no arrow passes through a box it doesn't
+ * start or end at.
  */
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
+import { type MemoryMode, memoryScene } from "../scene/memoryScene";
 import { expandHeaps } from "../trace/delta";
 import { diffSteps } from "../trace/diff";
 import { applyHints } from "../trace/hints";
 import { SIZE_MODELS, type SizeModel } from "../trace/memory";
 import type { Trace } from "../trace/types";
-import { type MemoryMode, type Point, renderMemory } from "./memory";
+import { type Point, renderMemory } from "./memory";
 import { crosses, overlaps, type Rect } from "./route";
 
 function tracePython(source: string): Trace | null {
@@ -86,33 +88,42 @@ describe.each(programs)("%s: %s", (language, example, trace) => {
     [`arrows, ${first} sizes`, "arrows", first],
     [`nested, ${second} sizes`, "nested", second],
   ];
-  it.each(cases)("%s: no overlapping boxes, no arrows through boxes", async (_name, mode, sizes) => {
-    const raw = await trace(example.code);
-    if (!raw) return;
-    const t = applyHints(raw);
-    expect(t.error).toBeNull();
-    for (let i = 0; i < t.steps.length; i++) {
-      const { boxes, arrows } = read(
-        renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions: new Map(), mode, sizes }),
-      );
-      const list = [...boxes];
-      for (let a = 0; a < list.length; a++) {
-        for (let b = a + 1; b < list.length; b++) {
-          if (overlaps(list[a][1], list[b][1])) throw new Error(`step ${i + 1}: ${list[a][0]} overlaps ${list[b][0]}`);
+  it.each(cases)(
+    "%s: draws the scene, with no overlapping boxes and no arrows through boxes",
+    async (_name, mode, sizes) => {
+      const raw = await trace(example.code);
+      if (!raw) return;
+      const t = applyHints(raw);
+      expect(t.error).toBeNull();
+      for (let i = 0; i < t.steps.length; i++) {
+        const scene = memoryScene(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { mode, sizes });
+        const { boxes, arrows } = read(renderMemory(scene));
+        // The drawing has a box for every box in the scene, and an arrow for each of its links.
+        const keys = [...scene.frames.map((f) => f.key), ...scene.objects.map((o) => o.key)];
+        if (scene.output) keys.push("output");
+        expect([...boxes.keys()].sort(), `step ${i + 1}: boxes`).toEqual(keys.sort());
+        const pairs = (list: { from: string; to: string }[]) => list.map((l) => `${l.from} -> ${l.to}`).sort();
+        expect(pairs(arrows), `step ${i + 1}: arrows`).toEqual(pairs(scene.links));
+        const list = [...boxes];
+        for (let a = 0; a < list.length; a++) {
+          for (let b = a + 1; b < list.length; b++) {
+            if (overlaps(list[a][1], list[b][1]))
+              throw new Error(`step ${i + 1}: ${list[a][0]} overlaps ${list[b][0]}`);
+          }
         }
-      }
-      for (const arrow of arrows) {
-        for (let k = 1; k < arrow.points.length; k++) {
-          const [p, q] = [arrow.points[k - 1], arrow.points[k]];
-          for (const [key, rect] of boxes) {
-            if (key === arrow.from && k === 1) continue; // leaving its own box
-            if (crosses(p, q, rect))
-              throw new Error(`step ${i + 1}: arrow ${arrow.from} -> ${arrow.to} crosses ${key}`);
+        for (const arrow of arrows) {
+          for (let k = 1; k < arrow.points.length; k++) {
+            const [p, q] = [arrow.points[k - 1], arrow.points[k]];
+            for (const [key, rect] of boxes) {
+              if (key === arrow.from && k === 1) continue; // leaving its own box
+              if (crosses(p, q, rect))
+                throw new Error(`step ${i + 1}: arrow ${arrow.from} -> ${arrow.to} crosses ${key}`);
+            }
           }
         }
       }
-    }
-  });
+    },
+  );
 });
 
 describe("dragged boxes", () => {
@@ -120,13 +131,13 @@ describe("dragged boxes", () => {
     const code = JAVASCRIPT_EXAMPLES.find((e) => e.name === "Reverse a linked list")!.code;
     const t = await traceJavaScript(code, 3000);
     const last = t.steps.length - 1;
-    const auto = read(renderMemory(t, last, diffSteps(t.steps[last - 1], t.steps[last])));
+    const auto = read(renderMemory(memoryScene(t, last, diffSteps(t.steps[last - 1], t.steps[last]))));
     // Drop the Global frame exactly on top of every other box in turn.
     for (const [key, rect] of auto.boxes) {
       if (key.startsWith("frame:")) continue;
       const positions = new Map([["frame:0:Global", { x: rect.x, y: rect.y }]]);
       for (let i = 0; i < t.steps.length; i++) {
-        const { boxes } = read(renderMemory(t, i, diffSteps(t.steps[i - 1], t.steps[i]), { positions }));
+        const { boxes } = read(renderMemory(memoryScene(t, i, diffSteps(t.steps[i - 1], t.steps[i])), { positions }));
         const moved = boxes.get("frame:0:Global")!;
         for (const [other, r] of boxes) {
           if (other !== "frame:0:Global" && overlaps(moved, r))
