@@ -30,6 +30,8 @@ export class Container {
   };
 
   addChild<T extends Container>(child: T): T {
+    // As in PixiJS: a child added elsewhere moves.
+    if (child.parent) child.parent.children = child.parent.children.filter((c) => c !== child);
     child.parent = this;
     this.children.push(child);
     return child;

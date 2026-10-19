@@ -165,19 +165,16 @@ describe("paintDrawing: shapes", () => {
     expect(head.geometry.type === "path" && head.geometry.commands.map((c) => c.op)).toEqual(["M", "Q", "C", "Z"]);
   });
 
-  it("marks changed cells for the flash, only when --flash is on", () => {
-    const markup = `<g class="cell is-changed"><rect width="10" height="10"/></g><g class="cell"><rect width="10" height="10"/></g>`;
-    const on = paintDrawing(
+  it("marks changed cells' boxes for the flash (the scene draws it when --flash is on)", () => {
+    const markup = `<g class="cell is-changed"><rect width="10" height="10"/><text>1</text></g><g class="cell"><rect width="10" height="10"/></g>`;
+    const paint = paintDrawing(svgOf(markup), fakeStyles());
+    expect([...groups(paint.root)].flatMap((g) => shapes(g).map((s) => s.flash))).toEqual([true, false]);
+    // Nothing to flash without a fill.
+    const hollow = paintDrawing(
       svgOf(markup),
-      fakeStyles(() => ({}), { "--flash": "mark 450ms ease-out" }),
+      fakeStyles(() => ({ fill: "none", stroke: "rgb(0, 0, 0)" })),
     );
-    const flashes = [...groups(on.root)].flatMap((g) => shapes(g).map((s) => s.flash));
-    expect(flashes).toEqual([true, false]);
-    const off = paintDrawing(
-      svgOf(markup),
-      fakeStyles(() => ({}), { "--flash": "none" }),
-    );
-    expect([...groups(off.root)].flatMap((g) => shapes(g).map((s) => s.flash))).toEqual([false, false]);
+    expect([...groups(hollow.root)].flatMap((g) => shapes(g).map((s) => s.flash))).toEqual([false, false]);
   });
 });
 

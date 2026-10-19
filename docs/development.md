@@ -262,8 +262,9 @@ pr0-l1ne/
     │   ├── canvas/             The Canvas 2D renderers (PixiJS), drawing the same layout
     │   │   ├── canvasRenderers.ts  The windows: canvas, viewport surface, hover, drag, tweens (CANVAS_RENDERERS)
     │   │   ├── styles.ts       Styles from the page's CSS, through a hidden probe
-    │   │   ├── paint.ts        SVG drawing -> paint list: shapes and text, colors resolved
-    │   │   ├── pixiScene.ts    Paint list -> PixiJS Graphics, Text and Containers
+    │   │   ├── paint.ts        Drawing -> paint list: shapes and text, colors resolved (PaintCache)
+    │   │   ├── pixiScene.ts    Paint list -> PixiJS Graphics, Text and Containers, kept between steps (SceneCache)
+    │   │   ├── keep.test.ts    Kept paint and objects draw exactly what a fresh build draws
     │   │   ├── path.ts         Path data: parse, flatten, dash, end direction
     │   │   ├── color.ts        Computed CSS colors as numbers
     │   │   ├── motion.ts       CSS easings, and tweens run once a frame
@@ -287,7 +288,15 @@ pr0-l1ne/
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
     │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
-    │   ├── loopView.ts         Draws a loop scene as SVG (stacked or animated, side by side or vertical)
+    │   ├── loopView.ts         The loop view: loopDrawing(), renderLoopHistory() (SVG)
+    │   ├── loopView/           Its parts:
+    │   │   ├── shared.ts       Spacing, the column and track layouts, names and cells
+    │   │   ├── plan.ts         Where everything goes in a row (shared by every row)
+    │   │   ├── row.ts          One row: containers, variables, change arrows
+    │   │   ├── grid.ts         A list of lists, as a grid
+    │   │   ├── linked.ts       A linked list or a binary tree
+    │   │   ├── bands.ts        Loop headers, unrecorded passes, passes where nothing changed
+    │   │   └── layout.ts       The rows top to bottom: the whole drawing
     │   ├── loopView.test.ts    The loop renderer drawing scenes, every JS and TS example
     │   ├── graphView.ts        Drawing a graph, for both views
     │   ├── animate.ts          What a step animates (plan), played as FLIP tweening for SVG
@@ -389,7 +398,7 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 
 **Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
-**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/` or `loopView.ts` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/`, `loopView.ts` or `loopView/` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
 
 **Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 

@@ -9,13 +9,14 @@
  * layout for both renderers: they can't drift apart, and the SVG renderer
  * and SVG export stay exact. Turning the paint list into PixiJS objects is
  * pixiScene.ts's job; this file has no PixiJS in it, so it's tested in jsdom.
+ * What paints the same as last time is kept, not painted again (PaintCache).
  *
  * Supported, because the drawings use them: <g>, <rect>, <circle>, <line>,
  * <path> (with marker-end arrowheads from <defs>), <text> with <tspan>s,
  * and <title> tooltips. Groups keep the data-* attributes the animation
  * and dragging work from.
  */
-import type { DrawingNode } from "../drawing";
+import { type DrawingNode, Mark } from "../drawing";
 import { parseColor, type Rgba } from "./color";
 import { endDirection, type PathCommand, parsePath, pathBounds } from "./path";
 import type { ComputedPaint, StyleSource } from "./styles";
@@ -53,7 +54,7 @@ export interface PaintShape {
   geometry: Geometry;
   fill: FillPaint | null;
   stroke: StrokePaint | null;
-  /** The cell's changed-value flash (styles.css, @keyframes mark) plays on it. */
+  /** The cell's changed-value flash (styles.css, @keyframes mark) plays on it, when --flash is on. */
   flash: boolean;
 }
 
@@ -206,7 +207,10 @@ interface Marker {
 
 function readMarkers(svg: DrawingNode, styles: Map<DrawingNode, ComputedPaint>): Map<string, Marker> {
   const markers = new Map<string, Marker>();
-  for (const m of svg.querySelectorAll("marker[id]")) {
+  // Arrowheads live in the drawing's own <defs> (draw.ts arrowMarkers): look
+  // only there, not through the whole drawing.
+  const defs = [...svg.children].filter((c) => c.localName === "defs");
+  for (const m of defs.flatMap((d) => [...d.querySelectorAll("marker[id]")])) {
     const shape = m.querySelector("path");
     if (!shape) continue;
     const box = (m.getAttribute("viewBox") ?? "0 0 10 10").split(/[\s,]+/).map(Number);
@@ -264,7 +268,7 @@ function arrowhead(marker: Marker, commands: PathCommand[], strokeWidth: number,
   };
 }
 
-/** The flash plays on a changed cell's box (`.cell.is-changed rect`) when --flash is on. */
+/** The flash plays on a changed cell's box (`.cell.is-changed rect`), when --flash is on. */
 const flashes = (el: DrawingNode) => {
   if (el.localName !== "rect") return false;
   const classes = el.parentElement?.getAttribute("class") ?? "";
@@ -276,12 +280,73 @@ function hasClass(classes: string, name: string): boolean {
   return ` ${classes} `.includes(` ${name} `);
 }
 
-/** Turn an SVG drawing into a paint list. */
-/** Turn a drawing (drawing.ts: marks, or SVG elements) into a paint list. */
-export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
-  const styles = source.read(svg);
+/**
+ * Paint kept from one drawing to the next. Each step's drawing is new, but
+ * most of it is the same as the last one's: the boxes that didn't change,
+ * the loop rows already drawn. A group that's its own layer (a box, a row,
+ * a cell) paints the same whenever its marks are the same and the styles
+ * reaching it are (the same chain of classes above it), so its paint is
+ * kept under those, and its styles aren't even read again.
+ *
+ * Only for marks, and only with a style source that can say what decides an
+ * element's style (ProbeStyles). Clear it when the styles are cleared.
+ */
+export class PaintCache {
+  groups = new Map<string, PaintGroup>();
+
+  clear(): void {
+    this.groups.clear();
+  }
+}
+
+/** A group drawn as its own layer: its opacity is its own, and nothing above it changes how it paints. */
+const isLayer = (el: DrawingNode) =>
+  el.hasAttribute("data-flip") ||
+  el.hasAttribute("data-cell") ||
+  el.hasAttribute("data-node-key") ||
+  el.hasAttribute("data-top");
+
+/** Everything a mark and the marks in it say, as one string (`memo`: the ones worked out already). */
+function markSig(m: Mark, memo: Map<Mark, string>): string {
+  const known = memo.get(m);
+  if (known !== undefined) return known;
+  let out = `<${m.localName}`;
+  for (const [name, value] of m.attributeEntries()) out += ` ${name}=${value.length}:${value}`;
+  out += ">";
+  for (const child of m.childNodes) {
+    out += child instanceof Mark ? markSig(child, memo) : `"${child.textContent.length}:${child.textContent}`;
+  }
+  out += "/";
+  // Only groups are asked again (the layers inside a layer that wasn't kept).
+  if (m.localName === "g") memo.set(m, out);
+  return out;
+}
+
+/** Turn a drawing (drawing.ts: marks, or SVG elements) into a paint list, reusing what `cache` kept. */
+export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: PaintCache): Paint {
+  // Groups whose paint is kept: found while reading styles, so what's
+  // inside them isn't read.
+  const kept = new Map<DrawingNode, PaintGroup>();
+  const keys = new Map<DrawingNode, string>();
+  const next = new Map<string, PaintGroup>();
+  const sigs = new Map<Mark, string>();
+  const skip = cache
+    ? (el: DrawingNode, context: number) => {
+        if (el === svg || el.localName !== "g" || !(el instanceof Mark) || !isLayer(el)) return false;
+        const key = `${context}${markSig(el, sigs)}`;
+        const group = cache.groups.get(key);
+        // Two identical groups in one drawing: the second paints its own.
+        if (group && !next.has(key)) {
+          kept.set(el, group);
+          next.set(key, group);
+          return true;
+        }
+        keys.set(el, key);
+        return false;
+      }
+    : undefined;
+  const styles = source.read(svg, skip);
   const markers = readMarkers(svg, styles);
-  const flashOn = (source.variable("--flash") || "none") !== "none";
 
   /**
    * An invisible shape that still catches the pointer (a transparent fill:
@@ -336,7 +401,7 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
       if (catches) invisible = geometryBounds(geometry, null);
       return null;
     }
-    return { kind: "shape", geometry, fill, stroke, flash: flashOn && flashes(el) && !!fill };
+    return { kind: "shape", geometry, fill, stroke, flash: flashes(el) && !!fill };
   };
 
   const text = (el: DrawingNode, style: ComputedPaint, alpha: number): PaintText | null => {
@@ -391,7 +456,7 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
     const nodeKey = el.getAttribute("data-node-key");
     const flip = el.getAttribute("data-flip");
     const cell = el.getAttribute("data-cell");
-    const keyed = layer || flip !== null || cell !== null || nodeKey !== null;
+    const keyed = layer || flip !== null || cell !== null || nodeKey !== null || el.hasAttribute("data-top");
     const passDown = keyed ? 1 : inherited * own;
     const classes = el.getAttribute("class") ?? "";
     const out: PaintGroup = {
@@ -426,7 +491,13 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
       }
       if (!s || s.hidden || child.localName === "defs") continue;
       if (child.localName === "g") {
-        const g = group(child, passDown, classes, layered);
+        const known = kept.get(child);
+        // Kept paint: only its opacity (and what it's in) can differ.
+        const g = known
+          ? { ...known, alpha: passDown * s.opacity, parentClasses: classes }
+          : group(child, passDown, classes, layered);
+        const key = keys.get(child);
+        if (key !== undefined) next.set(key, g);
         if (g.children.length) {
           out.children.push(g);
           out.bounds = union(out.bounds, g.bounds);
@@ -477,6 +548,7 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
   };
 
   const root = group(svg, 1, "");
+  if (cache) cache.groups = next;
   return {
     width: num(svg, "width"),
     height: num(svg, "height"),

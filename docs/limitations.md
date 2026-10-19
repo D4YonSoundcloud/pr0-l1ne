@@ -82,7 +82,7 @@ Everything listed for JavaScript applies, plus:
 
 **The canvas renderer**
 
-- **Stepping is a little slower than with SVG.** The canvas renderer paints the same drawing the SVG renderer does, and for now builds all of its canvas objects afresh each step, so each step has more to do; what it saves is the browser handling thousands of elements, which is what makes panning and zooming smooth. On a program with 300 linked nodes, a step took about 335 ms against SVG's 250 ms in our tests (Chromium without a GPU), while every frame of panning and zooming took under 17 ms, against SVG's slowest frames of 100 to 150 ms.
+- **Small programs step a little slower than with SVG.** Each step the canvas is painted whole, and for a small drawing that costs more than the browser updating a few elements. Big drawings are the other way round: what didn't change is kept from step to step, so on a program with 300 linked nodes a step was on screen in about 200 ms against SVG's 315 ms in our tests (Chromium without a GPU), and every frame of panning and zooming took under 17 ms, against SVG's slowest frames of 100 to 150 ms.
 - **Screen readers can't read the diagram** with Canvas 2D on: it's a picture, not elements of the page. The windows' names are still announced. SVG (the default) can be read.
 - **No hover shadow, and dimming fades each part.** Hovering a box doesn't give it a soft shadow on the canvas. With Dim others on, a dimmed box fades each of its parts rather than the box as a whole, so its outline can show faintly through its cells.
 - **Text sharpens a moment after zooming.** While you zoom in, text is scaled from how it was last drawn; it's redrawn sharp once you stop.

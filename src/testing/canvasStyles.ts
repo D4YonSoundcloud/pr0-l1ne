@@ -37,13 +37,37 @@ export const DEFAULT_PAINT: ComputedPaint = {
 export function fakeStyles(
   rule: (el: Element) => Partial<ComputedPaint> = () => ({}),
   variables: Record<string, string> = {},
-): StyleSource & { reads: number } {
+  options: { contexts?: boolean } = {},
+): StyleSource & { reads: number; read: StyleSource["read"] } {
+  // With `contexts`, it says what decides each element's style, as the probe
+  // does: here, the tags, classes and presentation attributes from the root
+  // down (all `rule` may look at, for the rules tests use).
+  const contexts = new Map<string, number>();
+  const contextOf = (el: Element) => {
+    let key = "";
+    for (let at: Element | null = el; at; at = at.parentElement) {
+      key = `${at.localName}.${at.getAttribute("class") ?? ""}|${at.getAttribute("text-anchor") ?? ""}|${at.getAttribute("dominant-baseline") ?? ""}>${key}`;
+    }
+    let id = contexts.get(key);
+    if (id === undefined) {
+      id = contexts.size;
+      contexts.set(key, id);
+    }
+    return id;
+  };
   const source = {
     reads: 0,
-    read(root: SVGSVGElement) {
+    read(root: SVGSVGElement, skip?: (el: Element, context: number) => boolean) {
       source.reads++;
       const out = new Map<Element, ComputedPaint>();
-      for (const el of [root, ...root.querySelectorAll("*")]) {
+      const all: Element[] = [];
+      const walk = (el: Element) => {
+        all.push(el);
+        if (options.contexts && skip?.(el, contextOf(el))) return;
+        for (const child of el.children) walk(child);
+      };
+      walk(root);
+      for (const el of all) {
         const fromAttributes: Partial<ComputedPaint> = {};
         const anchor = el.closest("[text-anchor]")?.getAttribute("text-anchor");
         if (anchor) fromAttributes.textAnchor = anchor;

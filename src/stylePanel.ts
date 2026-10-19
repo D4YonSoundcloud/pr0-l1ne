@@ -28,18 +28,18 @@ export const RENDERER_INFO: Record<RendererKind, { label: string; about: string 
   svg: {
     label: "SVG",
     about:
-      "Every box, arrow and value is part of the page. Stepping is quickest, it's sharp at any zoom, and screen readers can read the values. With very large drawings, panning and zooming can stutter.",
+      "Every box, arrow and value is part of the page. Small programs step quickest, it's sharp at any zoom, and screen readers can read the values. With very large drawings, stepping slows down and panning and zooming can stutter.",
   },
   canvas: {
     label: "Canvas 2D",
     about:
-      "Drawn with PixiJS on one canvas the size of the window, only what's in view. Panning and zooming stay smooth however big the drawing gets, but each step takes a little longer to draw. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself.",
+      "Drawn with PixiJS on one canvas the size of the window, only what's in view. What didn't change is kept from step to step, so big drawings step quicker than with SVG, and panning and zooming stay smooth however big the drawing gets. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself.",
   },
 };
 
 /** The two side by side: [question, SVG, Canvas 2D]. */
 export const RENDERER_COMPARISON: [string, string, string][] = [
-  ["Stepping", "Quicker", "A little slower"],
+  ["Stepping", "Quicker on small programs", "Quicker on big ones"],
   ["Panning and zooming big drawings", "Can stutter", "Smooth"],
   ["Zoomed in", "Always sharp", "Sharp once you stop zooming"],
   ["Screen readers", "Read the values", "Read only the window names"],

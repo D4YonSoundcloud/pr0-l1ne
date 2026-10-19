@@ -248,9 +248,12 @@ describe("CanvasMemoryRenderer", () => {
     r.moveBoxes(new Map([[key, { x: 2000, y: 1500 }]]));
     r.setAppearance({ step: { ...MOVING, enter: { fade: false, slide: false } } });
     r.render(scene, scene);
-    expect(layers().some((c) => c.x < -1000)).toBe(true);
+    const sliding = layers().filter((c) => c.x < -1000);
+    expect(sliding.length).toBeGreaterThan(0);
     vi.advanceTimersByTime(500);
-    expect(layers().every((c) => c.x === 0 && c.y === 0)).toBe(true);
+    expect(sliding.every((c) => c.x === 0 && c.y === 0)).toBe(true);
+    // The box drew the same, so its objects were kept: shifted to the new place, not rebuilt.
+    expect(sliding.every((c) => c.children.every((body) => body.x > 1000 && body.y > 1000))).toBe(true);
     r.dispose();
   });
 

@@ -139,13 +139,13 @@ The **Rendering** section at the top of the Style panel picks how the two window
 | | SVG (the default) | Canvas 2D |
 | --- | --- | --- |
 | **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) on one canvas the size of the window, only what's in view |
-| **Stepping** | Quicker | A little slower: the canvas builds the same drawing as SVG, then paints it |
+| **Stepping** | Quicker on small programs | Quicker on big ones: what didn't change since the last step is kept, not drawn again |
 | **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets |
 | **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming |
 | **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names |
 | **Save SVG** | Yes | Yes, the same file |
 
-Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG.
+Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and stepping through it feels slow, or panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG.
 
 A few small differences on the canvas: a box doesn't get a soft shadow while you hover over it, and a box being dimmed (by [Dim others](#printed-output)) fades each of its parts rather than the box as a whole, which can show a hint of the box's outline through its cells.
 

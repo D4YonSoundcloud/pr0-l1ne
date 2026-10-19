@@ -6,10 +6,21 @@
  * loop history full of the same small numbers stays cheap. Every group the
  * animation can move (data-flip, data-cell) or the person can drag
  * (data-node-key) gets its own Container; other groups are flattened into
- * their parent.
+ * their parent. Those containers are kept from one build to the next when
+ * what they draw hasn't changed (SceneCache, below).
  */
 import { CanvasTextMetrics, Container, fontStringFromTextStyle, Graphics, Text, TextStyle } from "pixi.js";
-import type { FillPaint, Geometry, Paint, PaintGroup, PaintShape, PaintText, StrokePaint, TextRun } from "./paint";
+import type {
+  FillPaint,
+  Geometry,
+  Paint,
+  PaintGroup,
+  PaintItem,
+  PaintShape,
+  PaintText,
+  StrokePaint,
+  TextRun,
+} from "./paint";
 import { dash, flatten, type PathCommand } from "./path";
 
 export interface BuiltScene {
@@ -244,13 +255,187 @@ function drawText(container: Container, t: PaintText, resolution: number): void 
 
 const keyed = (g: PaintGroup) => !!(g.flip || g.cell || g.nodeKey || g.layer || g.current);
 
-/** Build a paint list as PixiJS objects. */
-export function buildScene(paint: Paint, options: BuildOptions): BuiltScene {
+/*
+ * Keeping objects between steps. Most of a drawing is the same from one
+ * step to the next: the boxes that didn't change, the loop rows already
+ * drawn. Building their Graphics and Text again, and throwing the old ones
+ * away, is most of what a step costs. So each keyed group (a box, a row, a
+ * cell, an arrow) is drawn into a body container, remembered by a
+ * signature of what it draws, measured from its own top-left corner. When
+ * the next drawing has a group with the same signature, its body is moved
+ * over, shifted to where the group is now: same picture, nothing rebuilt.
+ *
+ *   layer (fresh each build: the animation moves and fades it)
+ *     body (kept: the Graphics and Text, offset by where it was built)
+ *
+ * A changed cell's flash overlay is kept with its body too, and starts
+ * again from the top when the body is used again.
+ */
+
+/** A keyed group's body, kept for the next build. */
+interface Entry {
+  sig: string;
+  body: Container;
+  /** The group's layer (where its body is now). */
+  layer: Container;
+  /** The group's top-left corner when its body was built, in the body's own units. */
+  built: { x: number; y: number };
+  /** The keyed groups inside it, in drawing order. */
+  nested: Entry[];
+  /** Its own flash overlays (not its keyed groups'). */
+  overlays: Container[];
+}
+
+/** What one build keeps for the next. Pass the same cache to every build of a window. */
+export class SceneCache {
+  entries = new Map<string, Entry[]>();
+  resolution = 0;
+  /**
+   * Signatures of groups whose paint was kept (paint.ts PaintCache): the
+   * same children, so the same signature, without working it out again.
+   * One for builds with the flash, one without.
+   */
+  readonly sigs = [new WeakMap<PaintItem[], string>(), new WeakMap<PaintItem[], string>()];
+
+  /** Forget everything (the objects were destroyed, or fonts changed). */
+  clear(): void {
+    this.entries.clear();
+  }
+}
+
+/** Rounded for signatures: closer than this draws the same. */
+const q = (v: number) => Math.round(v * 100) / 100;
+
+const fillSig = (f: FillPaint | null) => (f ? `${f.color}/${f.alpha}` : "-");
+const strokeSig = (s: StrokePaint | null) =>
+  s ? `${s.color}/${s.alpha}/${s.width}/${s.dash.join(",")}/${s.dashOffset}/${s.cap}/${s.join}` : "-";
+
+function geometrySig(g: Geometry, ox: number, oy: number): string {
+  if (g.type === "rect") return `R${q(g.x - ox)},${q(g.y - oy)},${q(g.w)},${q(g.h)},${q(g.r)}`;
+  if (g.type === "circle") return `C${q(g.cx - ox)},${q(g.cy - oy)},${q(g.r)}`;
+  let out = "P";
+  for (const c of g.commands) {
+    switch (c.op) {
+      case "M":
+      case "L":
+        out += `${c.op}${q(c.x - ox)},${q(c.y - oy)}`;
+        break;
+      case "Q":
+        out += `Q${q(c.cx - ox)},${q(c.cy - oy)},${q(c.x - ox)},${q(c.y - oy)}`;
+        break;
+      case "C":
+        out += `C${q(c.c1x - ox)},${q(c.c1y - oy)},${q(c.c2x - ox)},${q(c.c2y - oy)},${q(c.x - ox)},${q(c.y - oy)}`;
+        break;
+      case "Z":
+        out += "Z";
+        break;
+    }
+  }
+  return out;
+}
+
+function textSig(t: PaintText, ox: number, oy: number): string {
+  let out = `T${q(t.x - ox)},${q(t.y - oy)},${t.anchor},${t.baseline},${t.alpha}`;
+  for (const r of t.runs) {
+    const f = r.font;
+    out += `[${r.text.length}:${r.text}|${r.dx}|${f.family}|${f.size}|${f.weight}|${f.style}|${f.letterSpacing}|${fillSig(r.fill)}|${strokeSig(r.stroke)}]`;
+  }
+  return out;
+}
+
+/** Where a keyed group is measured from. */
+const originOf = (g: PaintGroup) => ({ x: g.bounds?.x ?? 0, y: g.bounds?.y ?? 0 });
+
+/** The keyed groups directly in a group (looking through the plain groups it flattens). */
+function keyedChildren(group: PaintGroup, out: PaintGroup[] = []): PaintGroup[] {
+  for (const item of group.children) {
+    if (item.kind !== "group") continue;
+    if (keyed(item)) out.push(item);
+    else keyedChildren(item, out);
+  }
+  return out;
+}
+
+/** Build a paint list as PixiJS objects, reusing what `cache` kept from the last build. */
+export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCache = new SceneCache()): BuiltScene {
   const layers = new Map<PaintGroup, Container>();
   const flashes: Container[] = [];
   const root = new Container();
+  // Text is drawn at a resolution: kept text at another one won't do.
+  if (cache.resolution !== options.resolution) cache.clear();
+  cache.resolution = options.resolution;
+  const old = cache.entries;
+  const kept = new Map<string, Entry[]>();
+  /** Bodies taken from the last build, and everything they were in (which can't be taken now). */
+  const taken = new Set<Container>();
 
-  const add = (group: PaintGroup, into: Container) => {
+  // Signatures, memoized: a group's includes its keyed children's.
+  const sigs = new Map<PaintGroup, string>();
+  const known = cache.sigs[options.flash ? 1 : 0];
+  const sigOf = (group: PaintGroup): string => {
+    let sig = sigs.get(group) ?? known.get(group.children);
+    if (sig !== undefined) return sig;
+    const { x, y } = originOf(group);
+    sig = itemsSig(group, x, y);
+    sigs.set(group, sig);
+    known.set(group.children, sig);
+    return sig;
+  };
+  const itemsSig = (group: PaintGroup, ox: number, oy: number): string => {
+    let out = "";
+    for (const item of group.children) {
+      if (item.kind === "shape") {
+        const flash = item.flash && options.flash ? "!" : "";
+        out += `${geometrySig(item.geometry, ox, oy)}${fillSig(item.fill)}${strokeSig(item.stroke)}${flash};`;
+      } else if (item.kind === "text") out += `${textSig(item, ox, oy)};`;
+      else if (keyed(item)) {
+        const at = originOf(item);
+        out += `<${q(at.x - ox)},${q(at.y - oy)}:${sigOf(item)}>`;
+      } else out += `{${itemsSig(item, ox, oy)}}`;
+    }
+    return out;
+  };
+
+  const keep = (entry: Entry) => {
+    const list = kept.get(entry.sig);
+    if (list) list.push(entry);
+    else kept.set(entry.sig, [entry]);
+  };
+  const markTaken = (entry: Entry) => {
+    taken.add(entry.body);
+    for (const inner of entry.nested) markTaken(inner);
+  };
+  const take = (sig: string): Entry | null => {
+    const list = old.get(sig);
+    while (list?.length) {
+      const entry = list.pop()!;
+      if (taken.has(entry.body)) continue;
+      // What it was in can't be kept whole now: one of its parts is gone.
+      for (let at = entry.body.parent; at; at = at.parent) taken.add(at);
+      markTaken(entry);
+      return entry;
+    }
+    return null;
+  };
+  /** A kept body is drawn for `group`: its keyed groups' layers are the ones inside it. */
+  const adopt = (group: PaintGroup, entry: Entry) => {
+    keep(entry);
+    for (const overlay of entry.overlays) {
+      overlay.alpha = 1;
+      flashes.push(overlay);
+    }
+    keyedChildren(group).forEach((inner, i) => {
+      const e = entry.nested[i];
+      const layer = e.layer;
+      layer.position.set(0, 0);
+      layer.alpha = inner.alpha;
+      layer.visible = true;
+      layers.set(inner, layer);
+      adopt(inner, e);
+    });
+  };
+
+  const add = (group: PaintGroup, into: Container, entry: Pick<Entry, "nested" | "overlays">) => {
     let shapes: Graphics | null = null;
     for (const item of group.children) {
       if (item.kind === "shape") {
@@ -263,6 +448,7 @@ export function buildScene(paint: Paint, options: BuildOptions): BuiltScene {
           const overlay = flashOverlay(item);
           into.addChild(overlay);
           flashes.push(overlay);
+          entry.overlays.push(overlay);
           shapes = null; // later shapes go above the flash
         }
       } else if (item.kind === "text") {
@@ -273,16 +459,37 @@ export function buildScene(paint: Paint, options: BuildOptions): BuiltScene {
         if (item.alpha < 1) layer.alpha = item.alpha;
         layers.set(item, layer);
         into.addChild(layer);
-        add(item, layer);
+        entry.nested.push(place(item, layer));
         shapes = null;
       } else {
         // Shapes after a plain group must still draw above it: start a new Graphics.
-        add(item, into);
+        add(item, into, entry);
         shapes = null;
       }
     }
   };
-  add(paint.root, root);
+  /** A keyed group's body in its layer: kept from the last build if it draws the same, or built. */
+  const place = (group: PaintGroup, layer: Container): Entry => {
+    const sig = sigOf(group);
+    const at = originOf(group);
+    const reused = take(sig);
+    if (reused) {
+      layer.addChild(reused.body);
+      reused.body.position.set(at.x - reused.built.x, at.y - reused.built.y);
+      reused.layer = layer;
+      adopt(group, reused);
+      return reused;
+    }
+    const body = new Container();
+    layer.addChild(body);
+    const entry: Entry = { sig, body, layer, built: at, nested: [], overlays: [] };
+    add(group, body, entry);
+    keep(entry);
+    return entry;
+  };
+
+  add(paint.root, root, { nested: [], overlays: [] });
+  cache.entries = kept;
   // Each Text listens to its style for changes. These styles are shared and
   // never change, and with thousands of texts on one style, unsubscribing
   // them one by one when the scene is replaced costs more than drawing it

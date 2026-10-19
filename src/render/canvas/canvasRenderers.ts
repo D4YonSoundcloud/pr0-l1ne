@@ -11,7 +11,9 @@
  * So the two renderers draw the same picture, and what's different is only
  * how it reaches the screen: one canvas the size of the window, redrawn
  * when something moves, instead of thousands of elements for the browser
- * to style, lay out and paint.
+ * to style, lay out and paint. From one step to the next, each window keeps
+ * the paint (PaintCache) and the PixiJS objects (SceneCache) of whatever
+ * didn't change, so a step builds only what did.
  *
  * The viewport (viewport.ts) is the same too: it tells the canvas where the
  * view is (ViewSurface) instead of moving an SVG with CSS. Things the SVG
@@ -46,8 +48,8 @@ import { loopDrawing } from "../loopView";
 import { applyFocus, memoryDrawing } from "../memory";
 import { type View, Viewport } from "../viewport";
 import { easing, Tweens } from "./motion";
-import { groups, type Paint, type PaintGroup, paintDrawing, type Rect } from "./paint";
-import { type BuiltScene, buildScene, forgetFonts } from "./pixiScene";
+import { groups, type Paint, PaintCache, type PaintGroup, paintDrawing, type Rect } from "./paint";
+import { type BuiltScene, buildScene, forgetFonts, SceneCache } from "./pixiScene";
 import { ProbeStyles, type StyleProbe } from "./styles";
 
 /** How the canvas renderers read styles (tests give their own: jsdom can't resolve the app's CSS). */
@@ -89,6 +91,9 @@ abstract class CanvasWindow {
   private pixi: PixiRenderer | null = null;
   private readonly stage: Container = new PixiContainer();
   private built: BuiltScene | null = null;
+  /** What's kept of the scene from one build to the next (pixiScene.ts), and of the paint (paint.ts). */
+  private readonly kept = new SceneCache();
+  private readonly keptPaint = new PaintCache();
   /** Boxes and rows that can be skipped when they're out of view. */
   private cullable: { layer: Container; bounds: Rect }[] = [];
   private at: View = { x: 0, y: 0, z: 1 };
@@ -145,6 +150,7 @@ abstract class CanvasWindow {
       "loadingdone",
       () => {
         forgetFonts();
+        this.kept.clear();
         this.repaint();
       },
       { signal },
@@ -224,7 +230,7 @@ abstract class CanvasWindow {
     const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
     this.drawing = drawing;
-    this.paint = paintDrawing(drawing, this.styles);
+    this.paint = paintDrawing(drawing, this.styles, this.keptPaint);
     const effects = motion !== null && !prefersReducedMotion() && !this.el.classList.contains("is-dragging-node");
     this.build(effects);
     this.view.setDrawn({ width: this.paint.width, height: this.paint.height });
@@ -237,7 +243,7 @@ abstract class CanvasWindow {
   protected repaint(): void {
     if (!this.drawing) return;
     this.checkLooks();
-    this.paint = paintDrawing(this.drawing, this.styles);
+    this.paint = paintDrawing(this.drawing, this.styles, this.keptPaint);
     this.build(false);
     this.drawNow();
   }
@@ -246,10 +252,14 @@ abstract class CanvasWindow {
     if (!this.paint) return;
     this.tweens.clear();
     const old = this.built;
-    this.built = buildScene(this.paint, {
-      resolution: (window.devicePixelRatio || 1) * this.textScale,
-      flash: flash && !!parseAnimation(this.styles.variable("--flash")),
-    });
+    this.built = buildScene(
+      this.paint,
+      {
+        resolution: (window.devicePixelRatio || 1) * this.textScale,
+        flash: flash && !!parseAnimation(this.styles.variable("--flash")),
+      },
+      this.kept,
+    );
     this.stage.removeChildren();
     this.stage.addChild(this.built.root);
     old?.root.destroy({ children: true });
@@ -266,6 +276,7 @@ abstract class CanvasWindow {
     if (looks === this.looks) return false;
     this.looks = looks;
     this.styles.clear();
+    this.keptPaint.clear();
     return true;
   }
 
@@ -377,6 +388,8 @@ abstract class CanvasWindow {
     this.stage.removeChildren();
     this.built?.root.destroy({ children: true });
     this.built = null;
+    this.kept.clear();
+    this.keptPaint.clear();
     this.cullable = [];
     this.view.setDrawn(null, text);
     this.drawNow();
@@ -425,6 +438,7 @@ abstract class CanvasWindow {
     this.resizes?.disconnect();
     this.styles.dispose();
     this.built?.root.destroy({ children: true });
+    this.kept.clear();
     this.pixi?.destroy();
     this.pixi = null;
     this.el.classList.remove("is-canvas");

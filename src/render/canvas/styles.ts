@@ -44,8 +44,14 @@ export interface ComputedPaint {
 
 /** Something that can say how each element of a drawing is styled. */
 export interface StyleSource {
-  /** Every element of `root` (and root itself), with its style. */
-  read(root: DrawingNode): Map<DrawingNode, ComputedPaint>;
+  /**
+   * Every element of `root` (and root itself), with its style. `skip`, if
+   * the source can say what decides an element's style (the chain of tags,
+   * classes and attributes above it): asked for each element with that
+   * context, and true leaves out everything inside the element (the canvas
+   * renderer already knows how it paints, see PaintCache).
+   */
+  read(root: DrawingNode, skip?: (el: DrawingNode, context: number) => boolean): Map<DrawingNode, ComputedPaint>;
   /** A CSS custom property's value on the drawing ("" when unset), e.g. --flash. */
   variable(name: string): string;
 }
@@ -183,7 +189,7 @@ export class ProbeStyles implements StyleProbe {
   private probes: Element[] = [];
   private computed: ComputedPaint[] = [];
 
-  read(root: DrawingNode): Map<DrawingNode, ComputedPaint> {
+  read(root: DrawingNode, skip?: (el: DrawingNode, context: number) => boolean): Map<DrawingNode, ComputedPaint> {
     const ids = new Map<DrawingNode, number>();
     const fresh: number[] = [];
     // First build every chain not seen before, then read them all, so the
@@ -208,6 +214,7 @@ export class ProbeStyles implements StyleProbe {
         fresh.push(id);
       } else probe = this.probes[id];
       ids.set(el, id);
+      if (skip?.(el, id)) return;
       for (const child of el.children) visit(child, id, probe);
     };
     visit(root, -1, this.container);

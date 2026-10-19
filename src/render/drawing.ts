@@ -201,25 +201,50 @@ export class Mark {
   }
 
   querySelector(selector: string): Mark | null {
-    const compounds = parseSelector(selector);
-    for (const mark of descendants(this)) if (compounds.some((c) => matchesCompound(mark, c))) return mark;
-    return null;
+    return find(this, parseSelector(selector), true)[0] ?? null;
   }
 
   querySelectorAll(selector: string): Mark[] {
-    const compounds = parseSelector(selector);
-    return [...descendants(this)].filter((mark) => compounds.some((c) => matchesCompound(mark, c)));
+    return find(this, parseSelector(selector), false);
   }
 }
 
-/** Every mark under `root`, in document order (not root itself). */
-export function* descendants(root: Mark): Generator<Mark> {
-  for (const child of root.childNodes) {
-    if (child instanceof Mark) {
-      yield child;
-      yield* descendants(child);
+/** The marks under `root` that match, in document order; `first`: stop at the first. */
+function find(root: Mark, compounds: Compound[], first: boolean): Mark[] {
+  const out: Mark[] = [];
+  // A stack of children lists still to go through, walked by hand: a
+  // recursive generator costs a step per level for every mark it yields.
+  const lists: (Mark | TextMark)[][] = [root.childNodes];
+  const at: number[] = [0];
+  while (lists.length) {
+    const top = lists.length - 1;
+    const list = lists[top];
+    const i = at[top]++;
+    if (i >= list.length) {
+      lists.pop();
+      at.pop();
+      continue;
+    }
+    const node = list[i];
+    if (!(node instanceof Mark)) continue;
+    for (const c of compounds) {
+      if (matchesCompound(node, c)) {
+        out.push(node);
+        if (first) return out;
+        break;
+      }
+    }
+    if (node.childNodes.length) {
+      lists.push(node.childNodes);
+      at.push(0);
     }
   }
+  return out;
+}
+
+/** Every mark under `root`, in document order (not root itself). */
+export function descendants(root: Mark): Mark[] {
+  return find(root, [{ tag: null, classes: [], id: null, attrs: [] }], false);
 }
 
 /** Make a mark: mark("rect", { x: 0, class: "cell" }, ...children). Attributes that are null, undefined or false are left out. */
@@ -328,7 +353,10 @@ function matchesCompound(m: Mark, c: Compound): boolean {
   if (c.tag !== null && m.localName !== c.tag) return false;
   if (c.id !== null && m.id !== c.id) return false;
   if (c.classes.length) {
-    const cls = ` ${m.getAttribute("class") ?? ""} `.replace(/\s+/g, " ");
+    const raw = m.getAttribute("class");
+    if (!raw) return false;
+    // Classes are nearly always one space apart; tidy them only when not.
+    const cls = /[^\S ]| {2}/.test(raw) ? ` ${raw.replace(/\s+/g, " ")} ` : ` ${raw} `;
     for (const name of c.classes) if (!cls.includes(` ${name} `)) return false;
   }
   for (const a of c.attrs) {
