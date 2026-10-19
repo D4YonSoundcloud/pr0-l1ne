@@ -1,34 +1,21 @@
 /**
- * Low-level SVG drawing shared by the memory view and the loop view.
+ * Low-level drawing shared by the memory view and the loop view: SVG
+ * elements as marks (drawing.ts), which a renderer then turns into SVG or
+ * paints on a canvas.
  *
  * Everything is measured arithmetically instead of with getBBox(), because
  * all text inside cells uses a monospace font (each character is 0.6em wide).
  * That keeps layout fast, deterministic, and testable outside a browser.
  */
 import type { PrimValue, Value } from "../trace/types";
+import { type Mark, mark } from "./drawing";
 
-const NS = "http://www.w3.org/2000/svg";
-
-type AttrValue = string | number | null | undefined | false;
-type Child = SVGElement | string | null | undefined | false;
-
-/** Create an SVG element: s("rect", { x: 0, class: "cell" }, ...children) */
-export function s<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, AttrValue> = {},
-  ...children: Child[]
-): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(NS, tag);
-  for (const [name, value] of Object.entries(attrs)) {
-    if (value === null || value === undefined || value === false) continue;
-    el.setAttribute(name, String(value));
-  }
-  for (const child of children) {
-    if (child === null || child === undefined || child === false) continue;
-    el.append(typeof child === "string" ? document.createTextNode(child) : child);
-  }
-  return el;
-}
+/**
+ * Make one mark of the drawing (drawing.ts): s("rect", { x: 0, class: "cell" }, ...children).
+ * Marks are the SVG elements the layout means, as plain data; a renderer
+ * turns them into SVG or paints them.
+ */
+export const s = mark;
 
 // ---------------------------------------------------------------------------
 // Metrics
@@ -99,7 +86,7 @@ export interface CellOptions {
  * Draw one value in a box. Returns the group, plus the center of the
  * reference dot when the value is a pointer (so the caller can draw an arrow).
  */
-export function valueCell(value: Value, opts: CellOptions): { el: SVGGElement; dot?: { x: number; y: number } } {
+export function valueCell(value: Value, opts: CellOptions): { el: Mark; dot?: { x: number; y: number } } {
   const h = opts.h ?? CELL_H;
   const classes = ["cell", opts.variant, opts.changed && "is-changed"].filter(Boolean).join(" ");
   const g = s("g", { class: classes });
@@ -124,7 +111,7 @@ export function valueCell(value: Value, opts: CellOptions): { el: SVGGElement; d
 // Arrows
 // ---------------------------------------------------------------------------
 
-export function arrowMarkers(): SVGDefsElement {
+export function arrowMarkers(): Mark {
   const marker = (id: string, cls: string) =>
     s(
       "marker",
@@ -160,7 +147,7 @@ export function arrowMarkers(): SVGDefsElement {
 }
 
 /** A "this changed" arrow between two stacked rows of the loop view. */
-export function changeArrow(from: { x: number; y: number }, to: { x: number; y: number }): SVGPathElement {
+export function changeArrow(from: { x: number; y: number }, to: { x: number; y: number }): Mark {
   const dy = to.y - from.y;
   const d =
     from.x === to.x
@@ -193,7 +180,7 @@ export function pointerMarkers(
   y: number,
   length: number,
   flip?: FlipInfo,
-): SVGGElement {
+): Mark {
   const g = s("g", { class: "pointers" });
   const byIndex = new Map<number, { name: string; changed: boolean }[]>();
   for (const p of pointers) {
@@ -228,7 +215,7 @@ export function rowPointerMarkers(
   x: number,
   rows: number,
   flip?: FlipInfo,
-): SVGGElement {
+): Mark {
   const g = s("g", { class: "pointers row-pointers" });
   const byIndex = new Map<number, { name: string; changed: boolean }[]>();
   for (const p of pointers) {
@@ -297,7 +284,7 @@ export interface StripInfo {
  * list; a bracket shows where the cells below are, and ticks show the
  * index variables. Drawn at (x, y), up to `room` wide (at most STRIP_MAX_W), STRIP_H tall.
  */
-export function stripBar(info: StripInfo, x: number, y: number, room: number, key: string): SVGGElement {
+export function stripBar(info: StripInfo, x: number, y: number, room: number, key: string): Mark {
   const { values, min, max, length } = info;
   // An overview: no wider than a glance, even when the cells run on.
   const w = Math.max(120, Math.min(room, STRIP_MAX_W));

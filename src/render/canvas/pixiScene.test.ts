@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
 import { CanvasTextMetrics, type Container, Graphics, Text } from "../../testing/fakePixi";
-import { paintSvg } from "./paint";
+import { paintDrawing } from "./paint";
 import { buildScene, forgetFonts } from "./pixiScene";
 import type { ComputedPaint } from "./styles";
 
@@ -22,7 +22,7 @@ const build = (
   rule: (el: Element) => Partial<ComputedPaint> = ink,
   flash = false,
   variables: Record<string, string> = {},
-) => asFake(buildScene(paintSvg(svgOf(markup), fakeStyles(rule, variables)), { resolution: 2, flash }));
+) => asFake(buildScene(paintDrawing(svgOf(markup), fakeStyles(rule, variables)), { resolution: 2, flash }));
 const kids = (c: Container) => c.children;
 
 describe("buildScene: shapes", () => {
@@ -109,7 +109,7 @@ describe("buildScene: shapes", () => {
 
 describe("buildScene: groups", () => {
   it("gives keyed groups their own container, and flattens the rest in order", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<rect width="1" height="1"/><g class="node" data-flip="a"><rect width="2" height="2"/></g>
              <g><rect width="3" height="3"/></g><rect width="4" height="4"/>`),
       fakeStyles((el) => (el.classList.contains("node") ? { ...ink(), opacity: 0.5 } : ink())),

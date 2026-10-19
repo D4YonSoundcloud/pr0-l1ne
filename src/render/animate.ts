@@ -32,10 +32,15 @@ export interface Snapshot {
   cells: Map<string, Map<string, { value: string; spot: Spot }>>;
 }
 
-const num = (el: Element, name: string) => Number(el.getAttribute(name) ?? 0);
+const num = (el: { getAttribute(name: string): string | null }, name: string) => Number(el.getAttribute(name) ?? 0);
 
 /** Remember where everything is in a rendered diagram. */
-export function snapshot(root: ParentNode | null): Snapshot | null {
+/** What snapshot() reads: the SVG on screen, or a drawing (drawing.ts). */
+interface Findable {
+  querySelectorAll(selector: string): Iterable<{ getAttribute(name: string): string | null }>;
+}
+
+export function snapshot(root: Findable | null): Snapshot | null {
   if (!root) return null;
   const flips = new Map<string, Spot>();
   for (const el of root.querySelectorAll("[data-flip]")) {

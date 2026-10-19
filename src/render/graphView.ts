@@ -16,6 +16,7 @@
  */
 import { type GraphData, type GraphLayout, type GraphOverlay, nodeSignature } from "../trace/graph";
 import { s, textWidth, uiTextWidth } from "./draw";
+import type { Mark } from "./drawing";
 
 const NODE_H = 30;
 const DOT = 18; // an object node with nothing to show
@@ -31,7 +32,7 @@ export interface GraphPicture {
   h: number;
   /** Center of each node, relative to the picture's top-left corner. */
   centers: Map<string, { x: number; y: number }>;
-  draw(x: number, y: number, layer: SVGGElement): void;
+  draw(x: number, y: number, layer: Mark): void;
 }
 
 export interface GraphPictureOptions {

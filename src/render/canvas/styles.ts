@@ -12,6 +12,8 @@
  * costs a lookup per element, and they're dropped when the look changes.
  */
 
+import { type DrawingNode, Mark } from "../drawing";
+
 const NS = "http://www.w3.org/2000/svg";
 
 /** The computed values the canvas needs, from one element. */
@@ -43,7 +45,7 @@ export interface ComputedPaint {
 /** Something that can say how each element of a drawing is styled. */
 export interface StyleSource {
   /** Every element of `root` (and root itself), with its style. */
-  read(root: SVGSVGElement): Map<Element, ComputedPaint>;
+  read(root: DrawingNode): Map<DrawingNode, ComputedPaint>;
   /** A CSS custom property's value on the drawing ("" when unset), e.g. --flash. */
   variable(name: string): string;
 }
@@ -125,8 +127,13 @@ export function fromComputed(style: CSSStyleDeclaration): ComputedPaint {
 const IS_PRESENTATION = new Set<string>(PRESENTATION);
 
 /** One step's part of an element's key: its tag, classes and presentation attributes. */
-function ownKey(el: Element): string {
+function ownKey(el: DrawingNode): string {
   let key = `${el.localName}.${el.getAttribute("class") ?? ""}`;
+  // A mark's attributes, read in place.
+  if (el instanceof Mark) {
+    for (const [name, value] of el.attributeEntries()) if (IS_PRESENTATION.has(name)) key += `|${name}=${value}`;
+    return key;
+  }
   // Through the element's few attributes, not a lookup for every possible one.
   const attributes = el.attributes;
   for (let i = 0; i < attributes.length; i++) {
@@ -176,12 +183,12 @@ export class ProbeStyles implements StyleProbe {
   private probes: Element[] = [];
   private computed: ComputedPaint[] = [];
 
-  read(root: SVGSVGElement): Map<Element, ComputedPaint> {
-    const ids = new Map<Element, number>();
+  read(root: DrawingNode): Map<DrawingNode, ComputedPaint> {
+    const ids = new Map<DrawingNode, number>();
     const fresh: number[] = [];
     // First build every chain not seen before, then read them all, so the
     // browser works out styles once rather than once per new chain.
-    const visit = (el: Element, parent: number, parentProbe: Element) => {
+    const visit = (el: DrawingNode, parent: number, parentProbe: Element) => {
       if (SKIP.has(el.localName)) return;
       const key = `${parent}>${ownKey(el)}`;
       let id = this.chains.get(key);
@@ -206,7 +213,7 @@ export class ProbeStyles implements StyleProbe {
     visit(root, -1, this.container);
     this.rootProbe = this.probes[ids.get(root)!] ?? null;
     for (const id of fresh) this.computed[id] = fromComputed(getComputedStyle(this.probes[id]));
-    const out = new Map<Element, ComputedPaint>();
+    const out = new Map<DrawingNode, ComputedPaint>();
     for (const [el, id] of ids) out.set(el, this.computed[id]);
     return out;
   }

@@ -17,7 +17,7 @@ import { buildLoopHistory } from "../../trace/loopHistory";
 import type { Trace } from "../../trace/types";
 import { renderMemory } from "../memory";
 import { CanvasLoopRenderer, CanvasMemoryRenderer, canvasRenderers } from "./canvasRenderers";
-import { groups, paintSvg } from "./paint";
+import { groups, paintDrawing } from "./paint";
 import type { ComputedPaint } from "./styles";
 
 vi.mock("pixi.js", () => import("../../testing/fakePixi"));
@@ -28,9 +28,17 @@ beforeAll(() => {
 
 /** Black lines on white boxes; what's dimmed by printed output, at 0.28, as styles.css says. */
 function rule(el: Element): Partial<ComputedPaint> {
+  // .memory-svg.has-output .boxes > .node:not(.is-output):not(.is-printed), and
+  // .memory-svg.has-output .arrows > .ref-arrow:not(.print-arrow) (works on marks and elements)
+  const has = (e: Element | null, name: string) => ` ${e?.getAttribute("class") ?? ""} `.includes(` ${name} `);
+  let root: Element | null = el;
+  while (root?.parentElement) root = root.parentElement;
+  const output = has(root, "memory-svg") && has(root, "has-output");
+  const parent = el.parentElement;
   const dimmed =
-    el.matches(".memory-svg.has-output .boxes > .node:not(.is-output):not(.is-printed)") ||
-    el.matches(".memory-svg.has-output .arrows > .ref-arrow:not(.print-arrow)");
+    output &&
+    ((has(parent, "boxes") && has(el, "node") && !has(el, "is-output") && !has(el, "is-printed")) ||
+      (has(parent, "arrows") && has(el, "ref-arrow") && !has(el, "print-arrow")));
   const base: Partial<ComputedPaint> =
     el.localName === "text" || el.localName === "tspan"
       ? { fill: "rgb(0, 0, 0)" }
@@ -437,7 +445,7 @@ describe("CanvasLoopRenderer", () => {
     const scene = loopScene(t, history, { hideQuiet: false });
     r.render(scene, null);
     const titled = [
-      ...groups(paintSvg((await import("../loopView")).renderLoopHistory(scene), fakeStyles(rule)).root),
+      ...groups(paintDrawing((await import("../loopView")).renderLoopHistory(scene), fakeStyles(rule)).root),
     ].find((g) => g.title && g.bounds);
     if (titled?.bounds) {
       const canvas = el.querySelector("canvas")!;

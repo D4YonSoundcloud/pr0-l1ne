@@ -1,10 +1,11 @@
 /**
- * From an SVG drawing to a paint list: what the canvas renderer draws.
+ * From a drawing to a paint list: what the canvas renderer draws.
  *
  * The canvas renderer doesn't lay anything out itself. It takes the very
- * SVG that render/memory.ts and render/loopView.ts build (never attached to
- * the page), reads each element's computed style (styles.ts), and turns it
- * into plain shapes and text with their colors resolved. This keeps one
+ * drawing that render/memory.ts and render/loopView.ts lay out (drawing.ts:
+ * marks, the SVG elements they mean; SVG elements work too), reads each
+ * element's computed style (styles.ts), and turns it into plain shapes and
+ * text with their colors resolved. This keeps one
  * layout for both renderers: they can't drift apart, and the SVG renderer
  * and SVG export stay exact. Turning the paint list into PixiJS objects is
  * pixiScene.ts's job; this file has no PixiJS in it, so it's tested in jsdom.
@@ -14,6 +15,7 @@
  * and <title> tooltips. Groups keep the data-* attributes the animation
  * and dragging work from.
  */
+import type { DrawingNode } from "../drawing";
 import { parseColor, type Rgba } from "./color";
 import { endDirection, type PathCommand, parsePath, pathBounds } from "./path";
 import type { ComputedPaint, StyleSource } from "./styles";
@@ -127,7 +129,7 @@ export interface Paint {
   classes: string;
 }
 
-const num = (el: Element, name: string, fallback = 0) => {
+const num = (el: DrawingNode, name: string, fallback = 0) => {
   const v = Number.parseFloat(el.getAttribute(name) ?? "");
   return Number.isFinite(v) ? v : fallback;
 };
@@ -202,7 +204,7 @@ interface Marker {
   fill: FillPaint | null;
 }
 
-function readMarkers(svg: SVGSVGElement, styles: Map<Element, ComputedPaint>): Map<string, Marker> {
+function readMarkers(svg: DrawingNode, styles: Map<DrawingNode, ComputedPaint>): Map<string, Marker> {
   const markers = new Map<string, Marker>();
   for (const m of svg.querySelectorAll("marker[id]")) {
     const shape = m.querySelector("path");
@@ -263,7 +265,7 @@ function arrowhead(marker: Marker, commands: PathCommand[], strokeWidth: number,
 }
 
 /** The flash plays on a changed cell's box (`.cell.is-changed rect`) when --flash is on. */
-const flashes = (el: Element) => {
+const flashes = (el: DrawingNode) => {
   if (el.localName !== "rect") return false;
   const classes = el.parentElement?.getAttribute("class") ?? "";
   return hasClass(classes, "cell") && hasClass(classes, "is-changed");
@@ -275,7 +277,8 @@ function hasClass(classes: string, name: string): boolean {
 }
 
 /** Turn an SVG drawing into a paint list. */
-export function paintSvg(svg: SVGSVGElement, source: StyleSource): Paint {
+/** Turn a drawing (drawing.ts: marks, or SVG elements) into a paint list. */
+export function paintDrawing(svg: DrawingNode, source: StyleSource): Paint {
   const styles = source.read(svg);
   const markers = readMarkers(svg, styles);
   const flashOn = (source.variable("--flash") || "none") !== "none";
@@ -288,7 +291,7 @@ export function paintSvg(svg: SVGSVGElement, source: StyleSource): Paint {
    */
   let invisible: Rect | null = null;
 
-  const shape = (el: Element, style: ComputedPaint, alpha: number): PaintShape | null => {
+  const shape = (el: DrawingNode, style: ComputedPaint, alpha: number): PaintShape | null => {
     invisible = null;
     let geometry: Geometry;
     switch (el.localName) {
@@ -336,7 +339,7 @@ export function paintSvg(svg: SVGSVGElement, source: StyleSource): Paint {
     return { kind: "shape", geometry, fill, stroke, flash: flashOn && flashes(el) && !!fill };
   };
 
-  const text = (el: Element, style: ComputedPaint, alpha: number): PaintText | null => {
+  const text = (el: DrawingNode, style: ComputedPaint, alpha: number): PaintText | null => {
     const runs: TextRun[] = [];
     const pre = style.whiteSpace.startsWith("pre");
     const runOf = (value: string, s: ComputedPaint, dx: number): TextRun => ({
@@ -355,9 +358,10 @@ export function paintSvg(svg: SVGSVGElement, source: StyleSource): Paint {
     for (const child of el.childNodes) {
       if (child.nodeType === 3) {
         if (child.textContent) runs.push(runOf(child.textContent, style, 0));
-      } else if (child instanceof Element && child.localName === "tspan") {
-        const s = styles.get(child) ?? style;
-        if (!s.hidden && child.textContent) runs.push(runOf(child.textContent, s, num(child, "dx")));
+      } else if (child.nodeType === 1 && (child as unknown as DrawingNode).localName === "tspan") {
+        const span = child as unknown as DrawingNode;
+        const s = styles.get(span) ?? style;
+        if (!s.hidden && child.textContent) runs.push(runOf(child.textContent, s, num(span, "dx")));
       }
     }
     if (!pre && runs.length) {
@@ -378,7 +382,7 @@ export function paintSvg(svg: SVGSVGElement, source: StyleSource): Paint {
     };
   };
 
-  const group = (el: Element, inherited: number, parentClasses: string, layer = false): PaintGroup => {
+  const group = (el: DrawingNode, inherited: number, parentClasses: string, layer = false): PaintGroup => {
     const style = styles.get(el);
     // A group with data-flip / data-cell / a node key is drawn as its own
     // layer, so its opacity is its own; others pass theirs down.

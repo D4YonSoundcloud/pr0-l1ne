@@ -270,7 +270,19 @@ pr0-l1ne/
     │   │   └── *.test.ts       Tests (jsdom, with testing/fakePixi.ts and testing/canvasStyles.ts)
     │   ├── export.ts           A drawing as a standalone SVG file (Save SVG)
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointer markers
-    │   ├── memory.ts           Draws a memory scene as SVG (columns, draggable boxes, arrows)
+    │   ├── drawing.ts          The drawing model: marks (SVG elements as data), toSvg()
+    │   ├── drawing.test.ts     Marks behave like the DOM: attribute order, classes, styles, selectors
+    │   ├── memory.ts           The memory view: memoryDrawing(), renderMemory() (SVG), applyFocus
+    │   ├── memoryView/         Its parts:
+    │   │   ├── shapes.ts       Shape, View, OutRef and the context they share
+    │   │   ├── tables.ts       Frames, dicts, objects, functions, classes (title + rows)
+    │   │   ├── sequences.ts    Lists, tuples, sets; grids of nested lists
+    │   │   ├── objects.ts      Any heap object as a shape; what goes in a value slot
+    │   │   ├── graphs.ts       A graph's box, with its picture
+    │   │   ├── trees.ts        Binary trees as one block
+    │   │   ├── output.ts       The printed-output card
+    │   │   ├── layout.ts       Columns, placement, routing: the whole drawing
+    │   │   └── focus.ts        Hover focus
     │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
@@ -377,7 +389,7 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 
 **Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
-**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts` or `loopView.ts` reach both renderers at once. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/` or `loopView.ts` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
 
 **Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 
@@ -392,11 +404,11 @@ Say you want sets drawn as bubbles or tuples drawn differently:
 1. **Tracers**: add a branch to `Serializer.describe()` in `serialize.py` (Python) and in `inspector.ts` (JavaScript) that returns a new `kind`.
 2. **Types**: add the shape to the `HeapObject` union in `trace/types.ts`. TypeScript will then point out every `switch` that needs a case.
 3. **Diff**: teach `slotsOf()` in `diff.ts` what the object's slots are, so changes get highlighted.
-4. **Render**: add a shape builder in `render/memory.ts` (and, if it's a container, handle it in `cellsOf()` in `scene/loopScene.ts`).
+4. **Render**: add a shape builder in `render/memoryView/` and pick it in `objectShape()` (objects.ts) (and, if it's a container, handle it in `cellsOf()` in `scene/loopScene.ts`).
 
 ### Add a structure-specific layout
 
-Binary trees (`findTreeBlocks()` in `memory.ts`) and graphs (`graphBoxes()`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. For bigger graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) could replace `computeLayout()` in `graph.ts`. Everything downstream only needs a position per node.
+Binary trees (`measureBlock()` in `memoryView/trees.ts`) and graphs (`graphBoxes()` in `memoryView/graphs.ts`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. For bigger graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) could replace `computeLayout()` in `graph.ts`. Everything downstream only needs a position per node.
 
 ### Teach graphs a new kind of state
 

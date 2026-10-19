@@ -9,19 +9,21 @@
  * Only containers and scalars that change during the loop are shown (plus
  * anything used as an index), so unrelated variables stay out of the way.
  */
+
 import { type Cell, cellsOf, containerIn, evaluatedHeader, gridIn, type LoopScene, scalarIn } from "../scene/loopScene";
 import { valueKey } from "../trace/diff";
 import type { GraphOverlay } from "../trace/graph";
 import { type LinkedRow, type LinkedTrack, treeDepths } from "../trace/linked";
 import type { LoopRow } from "../trace/loopHistory";
 import { formatBytes } from "../trace/memory";
+import { type Mark, toSvg } from "./drawing";
 import { type GraphPicture, graphPicture } from "./graphView";
 
 /**
  * A name to the left of a row's content, with its size under it when sizes
  * are shown (in their own color), so storage growth reads down the rows.
  */
-function nameLabel(g: SVGGElement, x: number, midY: number, name: string, size: string | null): void {
+function nameLabel(g: Mark, x: number, midY: number, name: string, size: string | null): void {
   g.append(
     s(
       "text",
@@ -118,8 +120,8 @@ const EMPTY: Value = { kind: "prim", type: "none", repr: "" };
 
 /** One row of the linked track: nodes in fixed columns, links as arrows. */
 function drawTrack(
-  g: SVGGElement,
-  arrowLayer: SVGGElement,
+  g: Mark,
+  arrowLayer: Mark,
   layout: TrackLayout,
   state: LinkedRow,
   prev: LinkedRow | null,
@@ -233,7 +235,7 @@ function drawTrack(
 
 /** One row's list of lists, as a grid, with i/j pointers and changes. */
 function drawGrid(
-  g: SVGGElement,
+  g: Mark,
   column: ContainerColumn,
   row: LoopRow,
   prevRow: LoopRow | null,
@@ -330,7 +332,7 @@ function drawGrid(
  * (the same in every row), y is its depth.
  */
 function drawTree(
-  g: SVGGElement,
+  g: Mark,
   layout: TrackLayout,
   state: LinkedRow,
   prev: LinkedRow | null,
@@ -428,14 +430,20 @@ export interface LoopViewOptions {
 const LANE_GAP = 16;
 
 /** Mark a cell so a value moving between slots can slide (render/animate.ts). */
-function markCell(el: SVGGElement, container: string, slot: string, value: Value, cx: number): void {
+function markCell(el: Mark, container: string, slot: string, value: Value, cx: number): void {
   el.setAttribute("data-cell", `${container}|${slot}`);
   el.setAttribute("data-value", valueKey(value));
   el.setAttribute("data-cx", String(Math.round(cx)));
   el.setAttribute("data-cy", "0");
 }
 
+/** The loop history as SVG (for the SVG renderer, and tests): the drawing, made into elements. */
 export function renderLoopHistory(scene: LoopScene, options: LoopViewOptions = {}): SVGSVGElement {
+  return toSvg(loopDrawing(scene, options)) as SVGSVGElement;
+}
+
+/** Lay out a loop scene as a drawing (drawing.ts). */
+export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Mark {
   const { rows, all, live, containers, scalars, history } = scene;
   const firstGraph = scene.graph?.first;
   const graphRows = scene.graph?.rows ?? [];

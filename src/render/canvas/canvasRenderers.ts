@@ -4,9 +4,10 @@
  * renderer contract as the SVG ones (scene/renderer.ts).
  *
  * They share the SVG renderers' layout: each step, render/memory.ts or
- * render/loopView.ts builds its SVG as usual, but it's never put in the
- * page. paint.ts reads it (with its styles from the real CSS, styles.ts)
- * into shapes and text, and pixiScene.ts turns those into PixiJS objects.
+ * render/loopView.ts lays out a drawing (drawing.ts: the SVG elements it
+ * means, as plain marks). The SVG renderer makes it SVG; here paint.ts reads
+ * it (with its styles from the real CSS, styles.ts) into shapes and text,
+ * and pixiScene.ts turns those into PixiJS objects, with no DOM in between.
  * So the two renderers draw the same picture, and what's different is only
  * how it reaches the screen: one canvas the size of the window, redrawn
  * when something moves, instead of thousands of elements for the browser
@@ -39,12 +40,13 @@ import type {
   ViewportChange,
 } from "../../scene/renderer";
 import { type Animatable, DEFAULT_EASING, ENTER_SLIDE, plan, type Snapshot, snapshot } from "../animate";
+import { type Mark, toSvg } from "../drawing";
 import { standaloneSvg } from "../export";
-import { renderLoopHistory } from "../loopView";
-import { applyFocus, renderMemory } from "../memory";
+import { loopDrawing } from "../loopView";
+import { applyFocus, memoryDrawing } from "../memory";
 import { type View, Viewport } from "../viewport";
 import { easing, Tweens } from "./motion";
-import { groups, type Paint, type PaintGroup, paintSvg, type Rect } from "./paint";
+import { groups, type Paint, type PaintGroup, paintDrawing, type Rect } from "./paint";
 import { type BuiltScene, buildScene, forgetFonts } from "./pixiScene";
 import { ProbeStyles, type StyleProbe } from "./styles";
 
@@ -81,8 +83,8 @@ abstract class CanvasWindow {
   /** Resolves once PixiJS can draw; rejects if it can't start here. */
   readonly ready: Promise<void>;
   protected step: StepStyle = STILL;
-  /** The SVG behind the picture on screen (never in the page), and what it was painted into. */
-  protected svg: SVGSVGElement | null = null;
+  /** The drawing on screen (drawing.ts: the layout, as marks), and what it was painted into. */
+  protected drawing: Mark | null = null;
   protected paint: Paint | null = null;
   private pixi: PixiRenderer | null = null;
   private readonly stage: Container = new PixiContainer();
@@ -218,11 +220,11 @@ abstract class CanvasWindow {
    * Draw an SVG drawing. `motion`: animate from the drawing before (the
    * step changed); null: just show it (a hover, a redraw for new styles).
    */
-  protected show(svg: SVGSVGElement, motion: StepStyle | null): void {
-    const before = motion && motion.duration > 0 && this.svg ? snapshot(this.svg) : null;
+  protected show(drawing: Mark, motion: StepStyle | null): void {
+    const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
-    this.svg = svg;
-    this.paint = paintSvg(svg, this.styles);
+    this.drawing = drawing;
+    this.paint = paintDrawing(drawing, this.styles);
     const effects = motion !== null && !prefersReducedMotion() && !this.el.classList.contains("is-dragging-node");
     this.build(effects);
     this.view.setDrawn({ width: this.paint.width, height: this.paint.height });
@@ -233,9 +235,9 @@ abstract class CanvasWindow {
 
   /** Paint the drawing on screen again (styles or fonts changed, or a hover), without animating. */
   protected repaint(): void {
-    if (!this.svg) return;
+    if (!this.drawing) return;
     this.checkLooks();
-    this.paint = paintSvg(this.svg, this.styles);
+    this.paint = paintDrawing(this.drawing, this.styles);
     this.build(false);
     this.drawNow();
   }
@@ -370,7 +372,7 @@ abstract class CanvasWindow {
 
   showMessage(text: string): void {
     this.tweens.clear();
-    this.svg = null;
+    this.drawing = null;
     this.paint = null;
     this.stage.removeChildren();
     this.built?.root.destroy({ children: true });
@@ -410,8 +412,8 @@ abstract class CanvasWindow {
   }
 
   toSVG(): string | null {
-    if (!this.svg) return null;
-    return standaloneSvg(this.svg, this.styles, getComputedStyle(this.el).backgroundColor);
+    if (!this.drawing) return null;
+    return standaloneSvg(toSvg(this.drawing) as SVGSVGElement, this.styles, getComputedStyle(this.el).backgroundColor);
   }
 
   dispose(): void {
@@ -490,14 +492,14 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
   }
 
   render(scene: MemoryScene, _previous: MemoryScene | null): void {
-    const svg = renderMemory(scene, { positions: this.positions, raise: this.dragging });
-    this.refreshFocus(false, svg);
-    this.show(svg, this.step);
+    const drawing = memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+    this.refreshFocus(false, drawing);
+    this.show(drawing, this.step);
   }
 
   /** Highlight the hovered (or dragged) box's arrows; `redraw` to show it now. */
-  private refreshFocus(redraw: boolean, svg = this.svg): void {
-    applyFocus(svg, this.dragging ?? this.hovered);
+  private refreshFocus(redraw: boolean, drawing = this.drawing): void {
+    applyFocus(drawing, this.dragging ?? this.hovered);
     if (redraw) this.repaint();
   }
 
@@ -576,9 +578,9 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   render(scene: LoopScene, _previous: LoopScene | null): void {
     // Only animated mode (one live row) animates; stacked rows just appear.
     const motion = scene.live ? this.step : { ...this.step, duration: 0 };
-    this.show(renderLoopHistory(scene, { vertical: this.vertical }), motion);
+    this.show(loopDrawing(scene, { vertical: this.vertical }), motion);
     // As you step, keep the iteration that's running in view.
-    const current = this.svg?.querySelector(".loop-row.is-current");
+    const current = this.drawing?.querySelector(".loop-row.is-current");
     if (current)
       this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   }

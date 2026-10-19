@@ -5,14 +5,14 @@ import { memoryScene } from "../../scene/memoryScene";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
 import { diffSteps } from "../../trace/diff";
 import { renderMemory } from "../memory";
-import { groups, type PaintGroup, type PaintShape, type PaintText, paintSvg } from "./paint";
+import { groups, type PaintGroup, type PaintShape, type PaintText, paintDrawing } from "./paint";
 
 const shapes = (g: PaintGroup) => g.children.filter((c): c is PaintShape => c.kind === "shape");
 const texts = (g: PaintGroup) => g.children.filter((c): c is PaintText => c.kind === "text");
 
-describe("paintSvg: shapes", () => {
+describe("paintDrawing: shapes", () => {
   it("turns rects, circles, lines and paths into shapes with resolved colors", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<rect class="a" x="1" y="2" width="30" height="20" rx="3"/>
              <circle class="b" cx="5" cy="6" r="4"/>
              <line class="c" x1="0" y1="0" x2="10" y2="0"/>
@@ -40,7 +40,7 @@ describe("paintSvg: shapes", () => {
   });
 
   it("takes the corner radius from CSS before the attribute, and never more than half the box", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<rect class="css" width="40" height="20" rx="2"/><rect width="40" height="20" rx="99"/>`),
       fakeStyles((el) => (el.classList.contains("css") ? { rx: 5 } : {})),
     );
@@ -50,7 +50,7 @@ describe("paintSvg: shapes", () => {
   });
 
   it("skips what draws nothing", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<rect width="0" height="5"/><circle r="0"/><path d=""/><rect class="none" width="5" height="5"/>
              <rect class="hidden" width="5" height="5"/><rect class="clear" width="5" height="5"/>
              <rect class="thin" width="5" height="5"/><ellipse rx="3" ry="3"/>`),
@@ -67,7 +67,7 @@ describe("paintSvg: shapes", () => {
   });
 
   it("counts an invisible but transparent-filled shape in its group's bounds, as SVG's hit test does", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<g class="node" data-node-key="a"><rect class="hit" x="0" y="0" width="50" height="40"/><rect x="10" y="20" width="5" height="5"/></g>
              <g class="node" data-node-key="b"><rect class="none" x="100" y="0" width="50" height="40"/><rect x="110" y="20" width="5" height="5"/></g>`),
       fakeStyles((el) =>
@@ -85,7 +85,7 @@ describe("paintSvg: shapes", () => {
   });
 
   it("keeps dashes, caps and joins", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<path d="M0,0 H10" />`),
       fakeStyles(() => ({
         fill: "none",
@@ -105,7 +105,7 @@ describe("paintSvg: shapes", () => {
       cap: "round",
       join: "bevel",
     });
-    const odd = paintSvg(
+    const odd = paintDrawing(
       svgOf(`<path d="M0,0 H10" />`),
       fakeStyles(() => ({ fill: "none", stroke: "red", cap: "weird", join: "odd" })),
     );
@@ -121,7 +121,7 @@ describe("paintSvg: shapes", () => {
       <path class="arrow" d="M0,0 L100,0" marker-end="url(#m)"/>
       <path class="arrow" d="M0,0 L0,100" marker-end="url(#fixed)"/>
       <path class="arrow" d="M0,0 L0,50" marker-end="url(#missing)"/>`);
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svg,
       fakeStyles((el) =>
         el.classList.contains("arrow")
@@ -157,7 +157,7 @@ describe("paintSvg: shapes", () => {
     const svg = svgOf(`<defs><marker id="c" viewBox="0 0 10 10" refX="0" refY="0" markerWidth="10">
         <path class="head" d="M0,0 Q5,5 10,0 C10,2 8,4 0,0 Z"/></marker></defs>
       <path class="arrow" d="M0,0 L10,0" marker-end="url(#c)"/>`);
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svg,
       fakeStyles((el) => (el.classList.contains("arrow") ? { fill: "none", stroke: "rgb(0, 0, 0)" } : {})),
     );
@@ -167,13 +167,13 @@ describe("paintSvg: shapes", () => {
 
   it("marks changed cells for the flash, only when --flash is on", () => {
     const markup = `<g class="cell is-changed"><rect width="10" height="10"/></g><g class="cell"><rect width="10" height="10"/></g>`;
-    const on = paintSvg(
+    const on = paintDrawing(
       svgOf(markup),
       fakeStyles(() => ({}), { "--flash": "mark 450ms ease-out" }),
     );
     const flashes = [...groups(on.root)].flatMap((g) => shapes(g).map((s) => s.flash));
     expect(flashes).toEqual([true, false]);
-    const off = paintSvg(
+    const off = paintDrawing(
       svgOf(markup),
       fakeStyles(() => ({}), { "--flash": "none" }),
     );
@@ -181,9 +181,9 @@ describe("paintSvg: shapes", () => {
   });
 });
 
-describe("paintSvg: text", () => {
+describe("paintDrawing: text", () => {
   it("reads runs, tspans with dx, the anchor and the baseline", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(
         `<text x="10" y="20" text-anchor="middle" dominant-baseline="central">for i<tspan class="arrow" dx="10">→</tspan><tspan dx="4"> 3 </tspan></text>`,
       ),
@@ -200,7 +200,7 @@ describe("paintSvg: text", () => {
   });
 
   it("collapses white space as SVG does, unless it's pre", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<text>  a   b\n c </text><text class="pre">a   b\tc</text><text>   </text>`),
       fakeStyles((el) => (el.classList.contains("pre") ? { whiteSpace: "pre" } : {})),
     );
@@ -208,7 +208,7 @@ describe("paintSvg: text", () => {
   });
 
   it("draws a halo for paint-order: stroke, and other baselines and anchors", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<text class="halo" text-anchor="end" dominant-baseline="hanging">x</text>
              <text dominant-baseline="middle">y</text><text dominant-baseline="text-before-edge">z</text>
              <text dominant-baseline="mathematical">w</text><text><tspan class="gone">h</tspan>v</text>`),
@@ -231,7 +231,7 @@ describe("paintSvg: text", () => {
   });
 
   it("drops text with nothing to show", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<text class="clear">x</text>`),
       fakeStyles(() => ({ fill: "none" })),
     );
@@ -239,9 +239,9 @@ describe("paintSvg: text", () => {
   });
 });
 
-describe("paintSvg: groups", () => {
+describe("paintDrawing: groups", () => {
   it("keeps what dragging and animation need from data attributes, and tooltips", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(`<g class="node" data-node-key="obj:1" data-flip="obj:1" data-x="5" data-y="6"><title>A box</title><rect x="5" y="6" width="10" height="10"/></g>
              <g class="cell" data-cell="list|0" data-value="3" data-cx="1" data-cy="2" data-no-fade=""><rect width="1" height="1"/></g>
              <g class="loop-row" data-top="10" data-bottom="40"><rect width="1" height="1"/></g>`),
@@ -262,7 +262,7 @@ describe("paintSvg: groups", () => {
   });
 
   it("gives keyed groups their opacity, and passes other groups' opacity down", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(
         `<g class="faded"><g class="node" data-flip="a"><rect width="5" height="5"/></g><rect class="r" width="5" height="5"/></g>`,
       ),
@@ -279,7 +279,7 @@ describe("paintSvg: groups", () => {
   });
 
   it("puts each thing in the arrows layer in a layer of its own, carrying its opacity", () => {
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svgOf(
         `<g class="arrows"><path class="ref-arrow" d="M0,0 L5,0"/><g class="pointer"><path d="M0,0 L1,1"/></g><text>t</text></g>`,
       ),
@@ -299,18 +299,21 @@ describe("paintSvg: groups", () => {
   });
 
   it("drops empty groups and leaves out defs and titles", () => {
-    const paint = paintSvg(svgOf(`<g><g/></g><defs><rect width="5" height="5"/></defs><title>x</title>`), fakeStyles());
+    const paint = paintDrawing(
+      svgOf(`<g><g/></g><defs><rect width="5" height="5"/></defs><title>x</title>`),
+      fakeStyles(),
+    );
     expect(paint.root.children).toEqual([]);
     expect(paint.root.title).toBe("x");
   });
 });
 
-describe("paintSvg: a real memory drawing", () => {
+describe("paintDrawing: a real memory drawing", () => {
   it("has a group for every box, keyed as the SVG is", async () => {
     const trace = await traceJavaScript("const a = [1, 2];\nconst b = { a };\nlet c = b;\n");
     const i = trace.steps.length - 1;
     const svg = renderMemory(memoryScene(trace, i, diffSteps(trace.steps[i - 1], trace.steps[i])));
-    const paint = paintSvg(
+    const paint = paintDrawing(
       svg,
       fakeStyles(() => ({ stroke: "rgb(0, 0, 0)" })),
     );
