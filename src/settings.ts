@@ -202,6 +202,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     split: number("split"),
     /** The memory window's share of the canvas height, in percent; null for the default. */
     canvasSplit: number("canvas-split"),
+    /** On a phone, the one or two windows shown, as "editor,memory" (see app/mobileViews.ts); null for the default. */
+    mobileViews: text("mobile-views"),
 
     /**
      * The storage saved programs live in (programs.ts), or null when it's

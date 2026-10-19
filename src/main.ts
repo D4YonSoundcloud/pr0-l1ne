@@ -16,6 +16,7 @@ import { LayoutController } from "./app/layout";
 import { LoopController } from "./app/loopController";
 import { MeasureController } from "./app/measureController";
 import { MemoryController } from "./app/memoryController";
+import { MobileViewsController } from "./app/mobileViews";
 import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
 import { RendererSwitch } from "./app/rendererSwitch";
@@ -228,6 +229,8 @@ installShortcuts({
   step: (event) => playback.handleKey(event),
 });
 const layout = new LayoutController(els, settings);
+// On a phone: which one or two windows show (styles.css lays them out).
+new MobileViewsController(els, settings.mobileViews);
 
 view.render();
 runNow();

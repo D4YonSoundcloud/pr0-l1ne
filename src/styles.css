@@ -86,6 +86,10 @@ body {
 
 .visually-hidden {
   position: absolute;
+  /* Pinned to the corner: at its natural place (say, just under the app) it
+     would stick out of the page by its one pixel. */
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -120,6 +124,20 @@ body {
   width: 13rem;
   max-width: 100%;
   text-overflow: ellipsis;
+}
+/* The toolbar's buttons are wrapped (for a phone, where they scroll as one
+   row), but on a wide screen the wrapper isn't there for layout. The status
+   sits between Live and the panel buttons. */
+.toolbar-actions {
+  display: contents;
+}
+.toolbar > .status {
+  order: 1;
+}
+#complexity,
+#style,
+#swap {
+  order: 2;
 }
 /* The status takes only the room left over, so a long message never pushes buttons off screen. */
 .status {
@@ -1778,32 +1796,234 @@ select {
   }
 }
 
-@media (max-width: 820px) {
-  .workspace {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(220px, 40%) 0 1fr;
+/* Phones (upright or on their side) and narrow windows. The editor, memory view and loop history can't
+   all fit: the view switch (app/mobileViews.ts) picks one or two, stacked,
+   from the workspace's shows-* classes. Rows that don't fit scroll sideways
+   rather than wrap, so the windows keep their height. */
+.view-switch {
+  display: none;
+}
+
+@media (max-width: 820px), (max-height: 500px) {
+  .app {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
   }
-  .workspace.is-swapped {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 0 minmax(220px, 40%);
+
+  /* The toolbar: the name, then the buttons in one row that scrolls
+     sideways (Run first), and the status on a line of its own. */
+  .toolbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 4px 10px;
+    padding: 8px 10px 6px;
   }
-  .section-hint {
+  .brand {
+    margin: 0;
+    font-size: 16px;
+  }
+  .toolbar-actions {
+    /* Positioned, so absolutely placed things inside (the visually hidden
+       "unsaved" label) scroll with the row instead of widening the page. */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .toolbar-actions::-webkit-scrollbar {
     display: none;
+  }
+  .toolbar-actions > * {
+    flex: none;
+  }
+  #run {
+    order: -1;
+  }
+  #complexity,
+  #style {
+    order: 0;
+  }
+  #swap {
+    display: none;
+  }
+  #programs {
+    width: 9.5rem;
+  }
+  .toolbar > .status {
+    grid-column: 1 / -1;
+    order: 0;
+    margin: 0;
+    font-size: 12.5px;
+    text-align: left;
+  }
+
+  /* Which windows: up to two of Code, Memory and Loops. */
+  .view-switch {
+    display: flex;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #262d42;
+  }
+  .view-choice {
+    flex: 1 1 0;
+    min-height: 36px;
+    padding: 4px 8px;
+    border: 1px solid #343c55;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--chrome-muted);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .view-choice[aria-pressed="true"] {
+    background: #2b3450;
+    border-color: var(--highlight);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* The windows shown share the height equally. A pane that's hidden takes
+     no row; the editor pane stays in the page (out of the layout) so the
+     Style, Complexity and Measure panels inside it still open. */
+  .workspace,
+  .workspace.is-swapped {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(0, 1fr);
   }
   .divider {
     display: none;
   }
-  .toolbar {
-    flex-wrap: wrap;
+  .workspace:not(.shows-editor) > .editor-pane {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
   }
-  .status {
-    margin-left: 0;
-    flex-basis: 100%;
-    text-align: left;
+  .workspace:not(.shows-editor) > .editor-pane > :not(.style-panel) {
+    display: none;
+  }
+  .workspace:not(.shows-memory):not(.shows-loop) > .canvas-pane {
+    display: none;
+  }
+  .workspace:not(.shows-memory) #memory-section,
+  .workspace:not(.shows-loop) #loop-section {
+    display: none;
+  }
+  /* One canvas window: it gets the whole canvas, with no divider. */
+  .workspace:not(.shows-memory.shows-loop) .canvas {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .workspace:not(.shows-memory.shows-loop) #canvas-divider {
+    display: none;
+  }
+  .canvas .divider.horizontal {
+    display: block;
+  }
+
+  /* Printed output stays inside the editor, and small. */
+  .console {
+    max-height: 22dvh;
+  }
+
+  /* The Style, Complexity and Measure panels cover the screen. */
+  .style-panel {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    max-height: none;
+  }
+
+  /* Window headers: one row, scrolling sideways. */
+  .section-head {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 5px 10px;
+  }
+  .section-head::-webkit-scrollbar {
+    display: none;
+  }
+  .section-head > *,
+  .loop-tabs {
+    flex: none;
+  }
+  .loop-tabs {
+    flex-wrap: nowrap;
+  }
+  .section-hint {
+    display: none;
+  }
+
+  /* The timeline: the buttons, then the scrubber and the step on their own lines. */
+  .timeline {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .scrubber {
+    order: 10;
+    flex: 1 1 100%;
+    width: auto;
   }
   .step-label {
-    width: 26ch;
+    order: 11;
+    flex: 1 1 100%;
+    width: auto;
+    font-size: 12.5px;
+  }
+}
+
+/* A phone on its side: the two windows go side by side, and the bars get
+   thinner, since height is what's short. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .workspace,
+  .workspace.is-swapped {
+    grid-template-rows: minmax(0, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  .workspace.shows-memory.shows-loop .canvas {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 2px;
+    background: var(--paper-edge);
+  }
+  .workspace.shows-memory.shows-loop #canvas-divider {
+    display: none;
+  }
+  .toolbar {
+    padding-block: 5px 3px;
+  }
+  .view-switch {
+    padding-block: 4px;
+  }
+  .view-choice {
+    min-height: 30px;
     font-size: 13px;
+  }
+  .timeline {
+    flex-wrap: nowrap;
+    padding-block: 5px calc(5px + env(safe-area-inset-bottom));
+  }
+  .scrubber {
+    order: 0;
+    flex: 1 1 0;
+    width: 0;
+  }
+  .step-label {
+    order: 0;
+    flex: none;
+    width: 24ch;
   }
 }
 

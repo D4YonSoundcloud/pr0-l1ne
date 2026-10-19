@@ -102,10 +102,11 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
 | `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
 | `src/app/layout.ts` | The two dividers (drag, arrow keys, double-click to reset) and swapping the editor and canvas sides |
+| `src/app/mobileViews.ts` | On a phone: which one or two of the editor, memory view and loop history show (the Code / Memory / Loops bar); styles.css lays them out under "Phones and narrow windows" |
 | `src/app/shortcuts.ts` | The keys that work anywhere outside the editor: Run, Measure, Save, Save as, and the stepping keys |
 | `src/app/banner.ts` | The banner above the canvas, and its Run / Measure buttons |
 | `src/app/html.ts` | `escapeHtml`, for text put into the banner and panels |
-| `src/app/autoFit.ts` | Reads a window's remembered auto-fit setting |
+| `src/app/autoFit.ts` | Reads a window's remembered auto-fit setting (on by default for the memory view on a phone) |
 | `src/app/rendererSwitch.ts` | Switching renderers live (SVG or Canvas 2D, the Style panel's Rendering choice): stand-ins for each window that carry everything over to the new renderer |
 | `src/app/saveSvg.ts` | The Save SVG button in each window's toolbar, and the file's name |
 | `src/app/renderers.test.ts` | Both controllers against renderers that only record what they're asked: the renderer contract is all they use |

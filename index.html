@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PR0L1NE</title>
     <meta name="description" content="See your code run. Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <!-- Link previews (Open Graph, X/Twitter). The image is public/og-image.png, 1200 × 630. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PR0L1NE" />
+    <meta property="og:title" content="PR0L1NE: see your code run" />
+    <meta property="og:description" content="Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <meta property="og:url" content="https://pr0l1ne.pages.dev/" />
+    <meta property="og:image" content="https://pr0l1ne.pages.dev/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="PR0L1NE over a memory diagram of a route planner: variables, a graph of places and arrows between them." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PR0L1NE: see your code run" />
+    <meta name="twitter:description" content="Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <meta name="twitter:image" content="https://pr0l1ne.pages.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="PR0L1NE over a memory diagram of a route planner: variables, a graph of places and arrows between them." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,6 +32,8 @@
     <div class="app">
       <header class="toolbar">
         <h1 class="brand">PR0L1NE</h1>
+        <!-- Laid out as part of the toolbar on a wide screen (display: contents); one row that scrolls sideways on a phone. -->
+        <div class="toolbar-actions">
         <label class="field">
           <span class="visually-hidden">Language</span>
           <select id="language" aria-label="Language"></select>
@@ -39,11 +57,19 @@
         <label class="toggle" title="Re-run automatically as you type">
           <input id="live" type="checkbox" checked /> Live
         </label>
-        <span id="status" class="status" role="status" aria-live="polite">Loading…</span>
         <button id="complexity" class="button cx-chip" type="button" aria-expanded="false" aria-controls="complexity-panel">Complexity</button>
         <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
+        </div>
+        <span id="status" class="status" role="status" aria-live="polite">Loading…</span>
       </header>
+
+      <!-- On a phone: which one or two windows show (app/mobileViews.ts). Hidden on a wide screen. -->
+      <nav id="view-switch" class="view-switch" aria-label="Windows to show, up to two">
+        <button type="button" class="view-choice" data-view="editor" aria-pressed="true" title="Show or hide the code editor">Code</button>
+        <button type="button" class="view-choice" data-view="memory" aria-pressed="true" title="Show or hide the memory view">Memory</button>
+        <button type="button" class="view-choice" data-view="loop" aria-pressed="false" title="Show or hide the loop history">Loops</button>
+      </nav>
 
       <main class="workspace" id="workspace">
         <section class="editor-pane" id="editor-pane" aria-label="Code editor">

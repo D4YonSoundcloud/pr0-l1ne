@@ -98,9 +98,20 @@ If you're mid-edit and the code has a syntax error, the canvas keeps showing the
 
 The **⇄** button at the right end of the toolbar swaps the editor and canvas, so the canvas can be on the left if you prefer. It's also in the command palette as "AlgoViz: Swap Editor and Canvas". Your choice is remembered.
 
-Drag the divider between the panels to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the default size. The editor keeps its width when you swap sides, and the width is remembered too. On narrow screens the panels stack vertically, and swapping puts the canvas on top.
+Drag the divider between the panels to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the default size. The editor keeps its width when you swap sides, and the width is remembered too.
 
 Inside the canvas, **Memory** and **Loop history** are separate sections with a divider of their own. It works the same way: drag it, use `↑`/`↓` when it's focused, or double-click to reset. Its position is remembered.
+
+### On a phone
+
+A phone screen can't fit the editor, the memory view and the loop history at once, so a bar under the toolbar picks which show: **Code**, **Memory** and **Loops**. Up to two show at a time, one above the other (side by side when the phone is on its side):
+
+- Tap a window that's hidden to show it. If two were already showing, the one you picked longest ago makes room.
+- Tap one of two that are showing to hide it, and the other fills the screen.
+
+It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. The memory view starts with [Auto-fit](#auto-fit) on, so the whole diagram fits; the loop history doesn't (its rows would get too small to read), and keeps the running iteration in view as you step.
+
+This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
 
 ## Styling the canvas
 

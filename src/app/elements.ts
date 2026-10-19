@@ -36,6 +36,7 @@ export function findElements(doc: Document = document) {
     scrubber: byId<HTMLInputElement>("scrubber"),
     stepLabel: byId<HTMLSpanElement>("step-label"),
     workspace: byId<HTMLElement>("workspace"),
+    viewSwitch: byId<HTMLElement>("view-switch"),
     divider: byId<HTMLDivElement>("divider"),
     canvasDivider: byId<HTMLDivElement>("canvas-divider"),
     modeArrows: byId<HTMLButtonElement>("mode-arrows"),
