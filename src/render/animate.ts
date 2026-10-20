@@ -1,9 +1,9 @@
 /**
  * Tweening between two renders of a diagram (the FLIP technique).
  *
- * Every step draws a fresh SVG. To animate, we remember where things were
- * in the old drawing, then animate each element in the new drawing from
- * there to where it is now. Positions are read from data attributes the
+ * Each step changes the SVG into the new drawing (patch.ts). To animate, we
+ * remember where things were in the old drawing, then animate each element
+ * in the new drawing from there to where it is now. Positions are read from data attributes the
  * renderers write (diagram units), never measured from the page, so a step
  * never forces a layout. Only `transform` and `opacity` are animated, which
  * browsers can do without repainting the rest of the diagram.

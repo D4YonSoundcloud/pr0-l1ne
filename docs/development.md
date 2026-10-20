@@ -273,6 +273,8 @@ pr0-l1ne/
     │   ├── draw.ts             SVG helpers, metrics, cells, arrows, pointer markers
     │   ├── drawing.ts          The drawing model: marks (SVG elements as data), toSvg()
     │   ├── drawing.test.ts     Marks behave like the DOM: attribute order, classes, styles, selectors
+    │   ├── patch.ts            Redrawing SVG: change the SVG on screen into the next drawing (SvgPatcher)
+    │   ├── patch.test.ts       Every step of the examples patches to exactly what toSvg() makes
     │   ├── memory.ts           The memory view: memoryDrawing(), renderMemory() (SVG), applyFocus
     │   ├── memoryView/         Its parts:
     │   │   ├── shapes.ts       Shape, View, OutRef and the context they share

@@ -219,6 +219,23 @@ export class Viewport {
   }
 
   /**
+   * Show an SVG that's changed in place (render/patch.ts): `update` makes it
+   * show the new drawing and returns it. Like setContent, but the snapshot
+   * for the animation is taken before the change.
+   */
+  updateContent(update: () => SVGSVGElement, transition = 0, easing?: string, enter?: Enter): void {
+    const before = transition > 0 ? snapshot(this.layer) : null;
+    const content = update();
+    if (content.parentNode !== this.layer || this.layer.childNodes.length !== 1) this.layer.replaceChildren(content);
+    this.contentChanged(
+      { width: Number(content.getAttribute("width")) || 0, height: Number(content.getAttribute("height")) || 0 },
+      "",
+    );
+    if (before) transition_(before, this.layer, transition, easing, enter);
+    this.fitNew(true);
+  }
+
+  /**
    * A drawing of this size is on the surface (the canvas renderer draws it
    * and animates it itself), or none, with an explanation.
    */

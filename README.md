@@ -17,7 +17,7 @@
 - **Measure and complexity.** An estimate of time and space complexity from the code, checked against real runs at several input sizes.
 - **Hints.** `# viz:` and `// viz:` comments tell the canvas how to draw things when its automatic choices aren't what you want.
 - **Works on a phone.** Pick which one or two of the code, memory view and loop history to see.
-- **SVG or Canvas 2D.** The diagrams are SVG by default, or drawn with [PixiJS](https://pixijs.com) on a canvas, which steps quicker through big drawings and pans and zooms around them smoothly (Style → Rendering). **Save SVG** saves either as a vector file.
+- **SVG or Canvas 2D.** The diagrams are SVG by default, or drawn with [PixiJS](https://pixijs.com) on a canvas, which pans and zooms smoothly around big drawings (Style → Rendering). **Save SVG** saves either as a vector file.
 
 ![Dijkstra's algorithm on a small road map: done places filled in, the heap numbered in the order it pops, distances beside each place](docs/graph-dijkstra.png)
 

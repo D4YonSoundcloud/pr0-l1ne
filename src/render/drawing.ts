@@ -102,6 +102,11 @@ export class Mark {
     return [...this.attrs].map(([name, value]) => ({ name, value }));
   }
 
+  /** How many attributes it has. */
+  get attributeCount(): number {
+    return this.attrs.size;
+  }
+
   /** The attributes as [name, value] pairs, without copying (for toSvg and the style probe). */
   attributeEntries(): IterableIterator<[string, string]> {
     return this.attrs.entries();

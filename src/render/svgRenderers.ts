@@ -1,8 +1,10 @@
 /**
  * The SVG renderers: the memory and loop windows drawn as SVG, behind the
- * renderer contract (scene/renderer.ts). Each draws its scene with
+ * renderer contract (scene/renderer.ts). Each lays its scene out with
  * render/memory.ts or render/loopView.ts, in a pannable, zoomable window
- * (viewport.ts) that animates from one step to the next (animate.ts).
+ * (viewport.ts) that animates from one step to the next (animate.ts). The
+ * SVG isn't made anew each step: the window's SvgPatcher (patch.ts) changes
+ * the one on screen into the new drawing, touching only what differs.
  *
  * Everything that depends on the drawing being SVG stays here: dragging a
  * box by its <g data-node-key>, highlighting a hovered box's arrows,
@@ -24,8 +26,9 @@ import type {
 } from "../scene/renderer";
 import { ProbeStyles } from "./canvas/styles";
 import { standaloneSvg } from "./export";
-import { renderLoopHistory } from "./loopView";
-import { applyFocus, renderMemory } from "./memory";
+import { loopDrawing } from "./loopView";
+import { applyFocus, memoryDrawing } from "./memory";
+import { SvgPatcher } from "./patch";
 import { Viewport } from "./viewport";
 
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
@@ -34,6 +37,8 @@ const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, 
 abstract class SvgWindow {
   protected readonly view: Viewport;
   protected step: StepStyle = STILL;
+  /** The SVG on screen, and the drawing it shows. */
+  protected readonly patcher = new SvgPatcher();
 
   constructor(
     protected readonly el: HTMLElement,
@@ -49,6 +54,7 @@ abstract class SvgWindow {
   }
 
   showMessage(text: string): void {
+    this.patcher.reset();
     this.view.setContent(null, text);
   }
 
@@ -111,7 +117,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
       events.onLayoutChange?.();
     });
     // Hovering a box (or dragging it) highlights its arrows and the boxes they
-    // connect to. The SVG is redrawn on every step, so the focus is re-applied.
+    // connect to. The focus is part of each step's drawing too (see render()).
     const signal = this.listening.signal;
     el.addEventListener(
       "pointerover",
@@ -152,18 +158,17 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
 
   render(scene: MemoryScene, _previous: MemoryScene | null): void {
     const { duration, easing, enter } = this.step;
-    this.view.setContent(
-      renderMemory(scene, { positions: this.positions, raise: this.dragging }),
-      "",
-      duration,
-      easing,
-      enter,
-    );
-    this.refreshFocus();
+    const drawing = memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+    // The focus is part of the drawing, so the patch carries it over.
+    applyFocus(drawing, this.dragging ?? this.hovered);
+    this.view.updateContent(() => this.patcher.show(drawing), duration, easing, enter);
   }
 
+  /** Hovering changed: another box in focus, on screen and in the drawing (so they stay the same). */
   private refreshFocus(): void {
-    applyFocus(this.el.querySelector<SVGSVGElement>(".memory-svg"), this.dragging ?? this.hovered);
+    const key = this.dragging ?? this.hovered;
+    applyFocus(this.patcher.current, key);
+    applyFocus(this.patcher.element, key);
   }
 
   override dispose(): void {
@@ -185,14 +190,9 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
 
   render(scene: LoopScene, _previous: LoopScene | null): void {
     const { duration, easing, enter } = this.step;
+    const drawing = loopDrawing(scene, { vertical: this.vertical });
     // Only animated mode (one live row) animates; stacked rows just appear.
-    this.view.setContent(
-      renderLoopHistory(scene, { vertical: this.vertical }),
-      "",
-      scene.live ? duration : 0,
-      easing,
-      enter,
-    );
+    this.view.updateContent(() => this.patcher.show(drawing), scene.live ? duration : 0, easing, enter);
     // As you step, keep the iteration that's running in view.
     const current = this.el.querySelector(".loop-row.is-current");
     if (current)
