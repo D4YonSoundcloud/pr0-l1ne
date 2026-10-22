@@ -73,50 +73,78 @@ for (const [language, code] of Object.entries(PROGRAMS)) {
   });
 }
 
+/** Each way out the worker test tries, run inside the runner's worker. */
+const WAYS_OUT = [
+  "fetch another site",
+  "fetch the app",
+  "fetch the app, no-cors",
+  "websocket",
+  "beacon",
+  "import()",
+  "EventSource",
+] as const;
+
 test("inside the worker, every way out is blocked", async ({ page, browserName }) => {
   await open(page, "javascript", "let a = 1;\n");
   await finished(page);
+  // One attempt at a time. A browser may answer a blocked attempt by stopping
+  // the worker altogether (Firefox can, reporting it as an error in the
+  // worker: the app then replaces it as a crashed one). That attempt didn't
+  // get out either: note it, and try the next one in the fresh worker.
+  const results: Record<string, string> = {};
+  for (const name of WAYS_OUT) {
+    const worker = await runnerWorker(page, browserName);
+    results[name] = await worker
+      .evaluate(
+        async ([name, app]) => {
+          const ways: Record<string, () => Promise<unknown>> = {
+            "fetch another site": () => fetch("https://example.com/"),
+            "fetch the app": () => fetch(`${app}/`),
+            "fetch the app, no-cors": () => fetch(`${app}/`, { mode: "no-cors" }),
+            websocket: () =>
+              new Promise((resolve, reject) => {
+                const ws = new WebSocket("wss://example.com/");
+                ws.onopen = resolve;
+                ws.onerror = reject;
+              }),
+            beacon: async () => {
+              if (!navigator.sendBeacon("https://example.com/", "x")) throw new Error("not sent");
+            },
+            "import()": () => {
+              const script = "https://example.com/x.js";
+              return import(/* @vite-ignore */ script);
+            },
+            EventSource: () =>
+              new Promise((resolve, reject) => {
+                const es = new EventSource("https://example.com/");
+                es.onopen = resolve;
+                es.onerror = reject;
+              }),
+          };
+          try {
+            await Promise.race([
+              ways[name](),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 3000)),
+            ]);
+            return "GOT OUT";
+          } catch {
+            return "blocked";
+          }
+        },
+        [name, APP] as const,
+      )
+      .catch((error: Error) => {
+        if (!/context was destroyed|Target closed|has been closed/i.test(error.message)) throw error;
+        return "blocked (the browser stopped the worker)";
+      });
+  }
   const worker = await runnerWorker(page, browserName);
-  const results = await worker.evaluate(async (app) => {
-    const out: Record<string, string> = {};
-    const attempt = async (name: string, f: () => Promise<unknown>) => {
-      try {
-        await Promise.race([f(), new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 3000))]);
-        out[name] = "GOT OUT";
-      } catch {
-        out[name] = "blocked";
-      }
-    };
-    await attempt("fetch another site", () => fetch("https://example.com/"));
-    await attempt("fetch the app", () => fetch(`${app}/`));
-    await attempt("fetch the app, no-cors", () => fetch(`${app}/`, { mode: "no-cors" }));
-    await attempt(
-      "websocket",
-      () =>
-        new Promise((resolve, reject) => {
-          const ws = new WebSocket("wss://example.com/");
-          ws.onopen = resolve;
-          ws.onerror = reject;
-        }),
-    );
-    await attempt("beacon", async () => {
-      if (!navigator.sendBeacon("https://example.com/", "x")) throw new Error("not sent");
-    });
-    const script = "https://example.com/x.js";
-    await attempt("import()", () => import(/* @vite-ignore */ script));
-    await attempt(
-      "EventSource",
-      () =>
-        new Promise((resolve, reject) => {
-          const es = new EventSource("https://example.com/");
-          es.onopen = resolve;
-          es.onerror = reject;
-        }),
-    );
-    out["the app's window"] = "parent" in self || "top" in self ? "reachable" : "blocked";
-    return out;
-  }, APP);
-  expect(Object.entries(results).filter(([, v]) => v !== "blocked")).toEqual([]);
+  results["the app's window"] = await worker.evaluate(() =>
+    "parent" in self || "top" in self ? "reachable" : "blocked",
+  );
+  // Shown in the test output, so it's visible which attempts a browser stops the worker for.
+  console.log(`[${browserName}] ways out:`, JSON.stringify(results));
+  expect(Object.entries(results).filter(([, v]) => !v.startsWith("blocked"))).toEqual([]);
 });
 
 test("a program's own attempts to get out are blocked", async ({ page }) => {
@@ -230,6 +258,12 @@ test("only the app may embed the runner", async ({ page }) => {
   await page.setContent(`<iframe src="${RUNNER}/runner.html"></iframe>`);
   await page.waitForTimeout(2000);
   const frame = page.frames().find((f) => f !== page.mainFrame());
-  const title = await frame?.evaluate(() => document.title).catch(() => "blocked");
+  // Where the browser refused the frame, there may be nothing to run code in:
+  // Firefox's error page never answers. No answer, or an error, means the
+  // runner isn't there.
+  const title = await Promise.race([
+    frame ? frame.evaluate(() => document.title).catch(() => "blocked") : Promise.resolve("blocked"),
+    new Promise<string>((resolve) => setTimeout(() => resolve("blocked (no answer)"), 5000)),
+  ]);
   expect(title).not.toBe("PR0L1NE code runner");
 });
