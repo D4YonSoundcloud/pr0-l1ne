@@ -27,3 +27,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# The code runner's build (npm run build:runner)
+dist-runner/

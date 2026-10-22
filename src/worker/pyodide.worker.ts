@@ -2,12 +2,14 @@
 /**
  * Runs in a Web Worker so user code can never freeze the page.
  *
- * Loads Pyodide (CPython compiled to WebAssembly) from the jsDelivr CDN,
+ * Loads Pyodide (CPython compiled to WebAssembly) from the runner's own
+ * site (vite.runner.config.ts copies it there from the pyodide package),
  * loads the tracer's modules into it (pythonModules.ts), then answers "run"
  * messages with a Trace and "measure" messages with a Measurement.
  */
 import { expandHeaps } from "../trace/delta";
 import type { Trace } from "../trace/types";
+import { workerChannel } from "./channel";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
 import { loadPythonTracer, type PyodideFiles } from "./pythonModules";
 
@@ -18,10 +20,13 @@ const PYTHON_FILES = import.meta.glob<string>(["./*.py", "!./test_*.py"], {
   eager: true,
 });
 
-// Pyodide 0.27.x ships CPython 3.12. The npm package on jsDelivr contains the
-// core interpreter and standard library, which is all the tracer needs.
-export const PYODIDE_VERSION = "0.27.8";
-const INDEX_URL = `https://cdn.jsdelivr.net/npm/pyodide@${PYODIDE_VERSION}/`;
+// Pyodide 0.27.x ships CPython 3.12. The npm package contains the core
+// interpreter and standard library, which is all the tracer needs. The
+// runner serves it under a path with its version in it, so it can be cached
+// for good (vite.runner.config.ts), and the worker may fetch nothing from
+// any other site (sandbox/origins.ts).
+export const PYODIDE_VERSION: string = import.meta.env.VITE_PYODIDE_VERSION ?? "0.27.8";
+const INDEX_URL = new URL(`/pyodide/${PYODIDE_VERSION}/`, self.location.href).href;
 
 /** The small part of the Pyodide API we use. */
 interface Pyodide extends PyodideFiles {
@@ -31,8 +36,8 @@ interface Pyodide extends PyodideFiles {
 type RunTrace = (source: string, maxSteps: number, maxSeconds: number, samplingJson: string) => string;
 type RunMeasure = (source: string, limitMs: number, report: (json: string) => void, overridesJson?: string) => string;
 
-const ctx = self as unknown as DedicatedWorkerGlobalScope;
-const post = (message: FromWorker) => ctx.postMessage(message);
+const channel = workerChannel();
+const post = (message: FromWorker) => channel.post(message);
 
 let runTrace: RunTrace | null = null;
 let runMeasure: RunMeasure | null = null;
@@ -91,5 +96,5 @@ function handle(message: ToWorker): void {
   }
 }
 
-ctx.onmessage = (event: MessageEvent<ToWorker>) => handle(event.data);
+channel.listen(handle);
 boot();

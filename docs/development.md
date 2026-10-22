@@ -5,7 +5,7 @@
 ## Requirements
 
 - **Node.js 22 or newer** and npm (check with `node --version`; the repo's `.nvmrc` says 22).
-- **An internet connection** the first time you use Python. The page downloads Pyodide (about 6 MB compressed) from the jsDelivr CDN, and your browser caches it after that. JavaScript and TypeScript need no download.
+- **No network needed for Python.** Pyodide comes from the `pyodide` npm package, and the code runner serves it (about 6 MB compressed, cached by the browser after the first time). JavaScript and TypeScript need no download.
 - **A modern browser**: recent Chrome, Edge, Firefox or Safari. Code runs in ES module workers, which need Firefox 114+ or Safari 15+.
 - **Optional: Python 3.12** if you want to run the Python tracer's tests or inspect Python traces from the command line. The app itself doesn't need Python installed, because Python runs inside the browser.
 
@@ -18,15 +18,16 @@ npm ci
 npm run dev
 ```
 
-Open the URL Vite prints (usually http://localhost:5173). The bubble sort example runs automatically.
+Open the URL it prints for PR0L1NE (http://localhost:5173). The bubble sort example runs automatically. `npm run dev` starts two dev servers: the app, and the code runner (http://127.0.0.1:5174) that programs run in. They're two sites, as they are when deployed; see [Security](how-it-works.md#security-running-other-peoples-code) in how-it-works.md.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Starts the dev server with hot reload. |
-| `npm run build` | Type-checks, then builds a static site into `dist/`. |
-| `npm run preview` | Serves the built `dist/` folder locally. |
+| `npm run dev` | Starts the dev servers with hot reload: the app (http://localhost:5173) and the code runner (http://127.0.0.1:5174). |
+| `npm run build` | Type-checks, then builds the app into `dist/`. |
+| `npm run build:runner` | Builds the code runner into `dist-runner/`: its page, the three language workers, Pyodide, and its `_headers`. |
+| `npm run preview` | Serves both builds locally: the app (http://localhost:4173) and the runner (http://127.0.0.1:4174). Run both builds first. Built anywhere but Cloudflare, the app talks to this local runner. |
 | `npm run typecheck` | Runs the TypeScript compiler without building. |
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
 | `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
@@ -41,7 +42,7 @@ Open the URL Vite prints (usually http://localhost:5173). The bubble sort exampl
 | `npm run lint` | Checks formatting and lint rules: Biome for TypeScript, JavaScript, JSON, CSS and HTML, then Ruff and Pyright (types) for Python. Changes nothing. |
 | `npm run format` | Fixes what can be fixed automatically: formats every file and applies safe lint fixes. |
 
-The output of `npm run build` is plain static files. You can host `dist/` anywhere that serves static content (GitHub Pages, Netlify, an S3 bucket, `python3 -m http.server`).
+Both builds are plain static files. You can host them anywhere that serves static content (GitHub Pages, Netlify, an S3 bucket), as long as they're on **two different sites** (two registrable domains, not two subdomains of one) and the runner's files are served with its headers (`dist-runner/_headers` lists them). Build the app with `VITE_RUNNER_URL` set to where the runner is, and the runner with `RUNNER_APP_ORIGINS` set to where the app is (see `src/sandbox/origins.ts`).
 
 
 
@@ -163,16 +164,20 @@ A rule that's wrong for one line is silenced on that line with a reason, for exa
 
 ## Deploying
 
-The site is hosted on [Cloudflare Pages](https://developers.cloudflare.com/pages/), connected to this GitHub repo. Cloudflare builds and deploys on its own:
+The site is hosted on [Cloudflare Pages](https://developers.cloudflare.com/pages/), as two projects connected to this one GitHub repo: the app, and the code runner programs run in (on another site, for safety: see [Security](how-it-works.md#security-running-other-peoples-code)). Cloudflare builds and deploys both on its own:
 
-| Event | Where it goes |
-| --- | --- |
-| Push to `main` | Production: https://pr0l1ne.pages.dev |
-| Any other branch, or a pull request | A preview at `https://<branch>.pr0l1ne.pages.dev`, linked on the PR |
+| Event | The app | The runner |
+| --- | --- | --- |
+| Push to `main` | Production: https://pr0l1ne.com (also `pr0l1ne.pages.dev`) | https://pr0l1ne-run.pages.dev |
+| Any other branch, or a pull request | A preview at `https://<branch>.pr0l1ne.pages.dev`, linked on the PR | `https://<branch>.pr0l1ne-run.pages.dev`, which that preview of the app talks to |
+
+Each build works out which runner it talks to, and who may embed it, from where it's built (`CF_PAGES_BRANCH`; see `src/sandbox/origins.ts`), so nothing needs setting per branch. A branch name becomes its preview's name lowercased, with anything but letters and digits made a hyphen. If Cloudflare ever names a preview differently (a very long branch name, say), set `VITE_RUNNER_URL` on the app project's preview environment to the runner preview's address.
+
+The two projects deploy separately, so for a minute after a push one can be newer than the other. If a change makes them unable to talk (a new `PROTOCOL_VERSION` or `SANDBOX_VERSION`), people with the app open see "PR0L1NE was updated since this page loaded. Reload the page" until both are deployed.
 
 Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` runs them (and the same build) on every pull request and push to `main`. Requiring that check before merging into `main` (Settings → Rules → Rulesets) means only tested code reaches the live site.
 
-`public/_headers` sets caching (built files are kept for a year, the page itself is re-checked on every visit) and basic security headers.
+`public/_headers` sets the app's caching (built files are kept for a year, the page itself is re-checked on every visit) and security headers, including its Content-Security-Policy (report-only for now). The runner's `_headers` is written by its build from `src/sandbox/origins.ts`.
 
 ### One-time setup
 
@@ -189,26 +194,53 @@ Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` run
     | Environment variable | `NODE_VERSION` = `22` |
 
 3. **Save and Deploy.** The first build takes a few minutes; later ones redeploy on every push.
-4. If something goes wrong after a deploy, open the project's **Deployments** list and use **Rollback** on the last good one.
+4. Under **Custom domains**, add `pr0l1ne.com`.
+5. **The runner:** create a second Pages project from the same repo, the same way:
 
-If the name `pr0l1ne` is taken, Cloudflare gives a slightly different address: update the links in this file and the README.
+    | Setting | Value |
+    | --- | --- |
+    | Project name | `pr0l1ne-run` (gives `pr0l1ne-run.pages.dev`) |
+    | Production branch | `main` |
+    | Framework preset | None |
+    | Build command | `npm run build:runner` |
+    | Build output directory | `dist-runner` |
+    | Environment variable | `NODE_VERSION` = `22` |
+
+    It needs no custom domain: nobody visits it, and `pages.dev` is already a site of its own.
+6. If something goes wrong after a deploy, open the project's **Deployments** list and use **Rollback** on the last good one (for both projects, if the change touched both).
+
+If a name is taken, Cloudflare gives a slightly different address: change `APP_PROJECT` or `RUNNER_PROJECT` in `src/sandbox/origins.ts`, the `frame-src` in `public/_headers`, and the links in this file and the README.
 
 ## Project structure
 
 ```
 pr0-l1ne/
 ├── index.html                  Page layout: toolbar, editor, canvas, timeline
+├── runner.html                 The code runner's page (its own site; see src/runner/)
 ├── package.json
 ├── tsconfig.json               TypeScript config for the app
 ├── tsconfig.node.json          ...and for Node-only code (the CLI, Node-run tests)
-├── vite.config.ts
+├── vite.config.ts              The app's build (dist/)
+├── vite.runner.config.ts       The runner's build (dist-runner/): workers, Pyodide, its headers
+├── vite.shared.ts              What both builds share
 ├── docs/                       Images used in this README
 ├── scripts/
+│   ├── dev.mjs                 npm run dev: the app's and the runner's dev servers
+│   ├── preview.mjs             npm run preview: both builds, served locally
 │   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
 └── src/
     ├── main.ts                 Creates the state and controllers and connects them
     ├── app/                    The app's state and controllers (see "How the app is put together")
     ├── languages.ts            Per-language worker, Monaco mode and examples
+    ├── sandbox/                Running programs on another site (see "Security" in how-it-works.md)
+    │   ├── origins.ts          Where the runner is, who may embed it, its headers
+    │   ├── messages.ts         Setting up a run: the handshake between app, runner page and worker
+    │   ├── sandboxWorker.ts    The app's side: a Worker stand-in, really a hidden iframe of the runner
+    │   └── *.test.ts           Tests (jsdom)
+    ├── runner/                 The runner page
+    │   ├── runner.ts           Its entry: the three workers, and the relay
+    │   ├── relay.ts            Checks who's asking, starts the worker, hands it the app's port
+    │   └── relay.test.ts       The relay with a fake page and workers
     ├── programs.ts             Saved programs (localStorage)
     ├── programs.test.ts        Saved program tests
     ├── monaco.ts               Lean Monaco build: editor features + 3 languages
@@ -341,6 +373,7 @@ pr0-l1ne/
     │   └── measure.test.ts     Measure tests
     └── worker/
         ├── protocol.ts         Message types between page and workers
+        ├── channel.ts          How a worker talks to the app: directly, or through the runner's port
         ├── runner.ts           Starts a worker, runs code, watchdog; the four ways a run can fail
         ├── runner.test.ts      The runner against a fake worker
         ├── pyodide.worker.ts   Loads Pyodide and the tracer, answers runs
@@ -396,13 +429,13 @@ npm run test:js
 
 When something looks wrong in the canvas, `npm run instrument` is usually the quickest way to see why: the output is readable, and every `__av.` call corresponds to one recorded event. For TypeScript, it also shows you the JavaScript the types were stripped down to.
 
-Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build` and test the built worker in the browser.
+Node can hide browser-only problems. Node has `process` and real built-in modules, and a browser doesn't, so a dependency that leans on them works in tests but fails in the worker. When you add or upgrade dependencies used by a worker, run `npm run build && npm run build:runner`, then `npm run preview`, and test the built worker in the browser.
 
 **Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
 **Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/`, `loopView.ts` or `loopView/` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
 
-**Upgrading Pyodide.** Change `PYODIDE_VERSION` in `pyodide.worker.ts`. Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
+**Upgrading Pyodide.** Change the `pyodide` version in `package.json`: the runner's build copies that package's files to `/pyodide/<version>/` and tells the worker the version, and `npm run test:pyodide` tests the same package. (The `PYODIDE_VERSION` fallback in `pyodide.worker.ts` is only for the type checker.) Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 
 ---
 

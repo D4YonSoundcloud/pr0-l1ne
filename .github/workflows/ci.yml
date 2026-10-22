@@ -40,6 +40,7 @@ jobs:
       # CPython and under Pyodide.
       - run: npm test
 
-      # The same build Cloudflare runs, so a build that would fail there
-      # fails here first.
+      # The same builds Cloudflare runs (the app, and the code runner), so a
+      # build that would fail there fails here first.
       - run: npm run build
+      - run: npm run build:runner

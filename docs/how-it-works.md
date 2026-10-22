@@ -5,45 +5,45 @@
 ## The big picture
 
 ```
-┌──────────── main thread ─────────────┐        ┌────────── Web Worker ──────────┐
-│                                       │        │                                │
-│  editor.ts ──code──▶ runner.ts ───────┼─run───▶│  pyodide.worker.ts   (Python)  │
-│  (Monaco)            (watchdog,       │        │    └─ Pyodide (CPython/WASM)   │
-│                       one per         │        │         └─ tracer.py           │
-│                       language)       │        │            sys.settrace + ast  │
-│                      ◀────────────────┼─trace──┤                                │
-│                                       │  JSON  │  javascript.worker.ts  (JS)    │
-│  app state holds { trace, stepIndex } │        │    ├─ instrument.ts  (Babel)   │
-│                                       │        │    └─ runtime.ts  (recorder)   │
-│                                       │        │                                │
-│                                       │        │  typescript.worker.ts  (TS)    │
-│                                       │        │    ├─ typescript.ts  (strip)   │
-│                                       │        │    └─ then same as JS          │
-│                                       │        └────────────────────────────────┘
-│     │                                 │
+┌──── the app: pr0l1ne.com, main thread ─┐      ┌── the runner: pr0l1ne-run.pages.dev ──┐
+│                                         │      │  (hidden iframe; another site)        │
+│  editor.ts ──code──▶ runner.ts ─────────┼─run─▶│  Web Worker                           │
+│  (Monaco)            (watchdog,         │      │  pyodide.worker.ts   (Python)         │
+│                       one per language, │      │    └─ Pyodide (CPython/WASM)          │
+│                       each a            │      │         └─ tracer.py                  │
+│                       SandboxWorker)    │      │            sys.settrace + ast         │
+│                      ◀──────────────────┼trace─┤                                       │
+│                                         │      │  javascript.worker.ts  (JS)           │
+│  app state holds { trace, stepIndex }   │      │    ├─ instrument.ts  (Babel)          │
+│                                         │      │    └─ runtime.ts  (recorder)          │
+│                                         │      │                                       │
+│                                         │      │  typescript.worker.ts  (TS)           │
+│                                         │      │    ├─ typescript.ts  (strip)          │
+│                                         │      │    └─ then same as JS                 │
+│                                         │      └───────────────────────────────────────┘
+│     │
 │     ├─ trace/hints.ts        parse and apply viz: comments
 │     ├─ trace/diff.ts         what changed between step N-1 and N
 │     ├─ trace/loopHistory.ts  which steps are which loop iteration
 │     ├─ render/memory.ts      snapshot ─▶ drawing (frames, heap, arrows)
 │     ├─ render/loopView.ts    loop rows ─▶ drawing (stacked or live row)
 │     └─ render/animate.ts     tween old drawing ─▶ new drawing
-└───────────────────────────────────────┘
+└─────────────────────────────────────────┘
 ```
-
 The design rule that holds this together: **each layer only talks to the next through data.** The tracers know nothing about drawing. The renderer knows nothing about Python or JavaScript. The contract between them is the trace format in [`src/trace/types.ts`](../src/trace/types.ts). That's why adding JavaScript didn't require any new rendering code, only two small tweaks (JavaScript's primitive type names, and `function` instead of `def` in function titles), and why TypeScript needed none at all.
 
 ## 1. Running code without freezing the page
 
-User code runs in a **Web Worker**, a separate thread, so even a `while True:` can't lock up the editor.
+User code runs in a **Web Worker**, a separate thread, so even a `while True:` can't lock up the editor. And the worker runs on **another site** (the code runner, `pr0l1ne-run.pages.dev`), in a hidden iframe, so a program can't reach anything of PR0L1NE's: see [Security](#security-running-other-peoples-code) below.
 
 There's one worker per language, and both speak the same small protocol, defined in [`protocol.ts`](../src/worker/protocol.ts): the page sends `run` with the source code, and the worker answers with `ready`, then a `result` holding a trace. `ready` says which version of the protocol the worker speaks (`PROTOCOL_VERSION`); the page refuses a worker that speaks another one, such as a worker cached from before a deploy talking to a newer page, and asks for a reload instead of misreading its messages. Raise the version whenever a message changes shape.
 
-- [`pyodide.worker.ts`](../src/worker/pyodide.worker.ts) imports Pyodide from jsDelivr, loads the tracer into it, and then answers runs. Vite bundles every `.py` file in `src/worker/` except the tests as text (`import.meta.glob` with `?raw`). [`pythonModules.ts`](../src/worker/pythonModules.ts) writes each one into Pyodide's virtual file system and imports `tracer` and `measure` the normal way, so the modules import each other as they do on your machine. The Node tests load them the same way (`src/testing/pythonTracer.ts`).
+- [`pyodide.worker.ts`](../src/worker/pyodide.worker.ts) imports Pyodide from the runner's own site (the build copies it there from the `pyodide` package), loads the tracer into it, and then answers runs. Vite bundles every `.py` file in `src/worker/` except the tests as text (`import.meta.glob` with `?raw`). [`pythonModules.ts`](../src/worker/pythonModules.ts) writes each one into Pyodide's virtual file system and imports `tracer` and `measure` the normal way, so the modules import each other as they do on your machine. The Node tests load them the same way (`src/testing/pythonTracer.ts`).
 - [`javascript.worker.ts`](../src/js/javascript.worker.ts) and [`typescript.worker.ts`](../src/js/typescript.worker.ts) are one-line entry points into [`serve.ts`](../src/js/serve.ts), which handles the protocol. They're ready immediately, and call `traceJavaScript()` or `traceTypeScript()` for each run. Keeping them as separate workers means only the TypeScript one contains Babel's core.
 
-[`languages.ts`](../src/languages.ts) lists each language's worker, Monaco language mode and examples, so everything language-specific in the UI comes from one place.
+[`languages.ts`](../src/languages.ts) lists each language's worker, Monaco language mode and examples, so everything language-specific in the UI comes from one place. Each worker is a `SandboxWorker` ([`sandbox/sandboxWorker.ts`](../src/sandbox/sandboxWorker.ts)): the same interface as a `Worker` (`postMessage`, `onmessage`, `onerror`, `terminate`), but behind it an iframe of the runner page, which starts the real worker on its own site.
 
-[`runner.ts`](../src/worker/runner.ts) is the main-thread side. There's one runner per language, created the first time that language is used, so someone writing JavaScript never downloads Python. It keeps one run in flight at a time, and the run controller ([`app/runController.ts`](../src/app/runController.ts)) drops intermediate edits so only the newest code runs after the current run finishes. It also has a **watchdog**: if a run takes longer than 10 seconds, it terminates the worker and starts a fresh one. (The tracer's own step budget, below, catches almost every runaway loop first. The watchdog is the fallback for code stuck inside a single long C call, like `sum(range(10**12))`, which never produces a trace event.)
+[`runner.ts`](../src/worker/runner.ts) is the main-thread side. There's one runner per language, created the first time that language is used, so someone writing JavaScript never downloads Python. It keeps one run in flight at a time, and the run controller ([`app/runController.ts`](../src/app/runController.ts)) drops intermediate edits so only the newest code runs after the current run finishes. It also has a **watchdog**: if a run takes longer than 10 seconds, it terminates the worker (removing its iframe, which ends everything in it) and starts a fresh one. (The tracer's own step budget, below, catches almost every runaway loop first. The watchdog is the fallback for code stuck inside a single long C call, like `sum(range(10**12))`, which never produces a trace event.)
 
 **How a run can fail.** The runner turns everything that can happen at the boundary into one of four outcomes, and the run controller shows each its own way (a message, and a colour on the banner):
 
@@ -55,6 +55,51 @@ There's one worker per language, and both speak the same small protocol, defined
 | The language runtime didn't load (usually the network), or the worker speaks another protocol version | `unavailable` | nothing ran: try again, or reload the page |
 
 A run waiting when the runtime fails to load ends at once as `unavailable`, and the next run tries a fresh worker. Only a `crash` goes to `reportCrash` (`RunOptions` and `MeasureOptions`), where error reporting will plug in; the other three are the program's doing or the network's. `src/worker/runner.test.ts` drives the runner with a fake worker through each of these, plus results arriving out of order, a run that never answers, and two languages' runners at once.
+
+## Security: running other people's code
+
+Everyone runs their own code today, but a shared link would run someone else's in your browser. So programs never run on PR0L1NE's own site. A program in a worker on `pr0l1ne.com` could fetch the site with your cookies (once there are accounts), read its storage, and talk to other sites; the browser only keeps those apart between *sites*. So the workers run on another site, the **code runner**, with nothing on it to reach and no way out.
+
+```
+pr0l1ne.com (the app)                         pr0l1ne-run.pages.dev (the runner)
+  <iframe sandbox="allow-scripts               runner.html: checks who's asking,
+          allow-same-origin" hidden>  ──────▶  starts the language's worker, hands
+                                               it the app's port
+  ◀═════════ one port: the protocol ═════════▶ the worker: runs the program
+```
+
+**Why it holds.** `pr0l1ne-run.pages.dev` is another site from `pr0l1ne.com` (and from `pr0l1ne.pages.dev`: Cloudflare lists `pages.dev` on the Public Suffix List, so each project is a site of its own). The browser gives the runner none of the app's cookies, storage or pages, whatever its code does. On top of that, every file the runner serves carries its own Content-Security-Policy ([`sandbox/origins.ts`](../src/sandbox/origins.ts), written into `dist-runner/_headers` by the build):
+
+| Directive | Means |
+| --- | --- |
+| `default-src 'none'` | nothing unless allowed below |
+| `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'` | its own scripts only; `new Function()` runs JavaScript programs, Pyodide is WebAssembly |
+| `worker-src 'self'` | workers from its own files |
+| `connect-src 'self'` | fetch its own files only (Pyodide's standard library): no other site, no WebSockets, no beacons |
+| `frame-ancestors https://pr0l1ne.com ...` | only the app's pages may embed it |
+| `base-uri 'none'`, `form-action 'none'` | no other way out |
+
+The runner keeps nothing: no cookies, no storage, no API. If a program takes over everything it can reach, it has an empty site that can only answer the app through one port, and the app treats what arrives as data. The iframe's `sandbox` attribute takes away the rest: the runner page can't navigate the app's tab, open popups, show dialogs, submit forms or start downloads. (`allow-same-origin` gives it its own origin, which its workers need; on another site, that's no way into the app's.) The program runs in a worker inside the iframe, not in the page itself, so it has no DOM and no WebRTC either, and a stuck program can't freeze a browser that runs the iframe on the app's own thread (Firefox and Safari may).
+
+**Language-level blocking isn't the wall.** Deleting `fetch` and the like before running a program would leak: JavaScript has many ways back to a fresh copy, and Python reaches all of it through Pyodide (`import js`). The wall is the browser's: another site, and a policy it enforces however the program tries.
+
+**Setting up a run** ([`sandbox/messages.ts`](../src/sandbox/messages.ts)). The app makes two `MessageChannel`s and posts a `connect` message to the iframe with their far ends, addressed to the runner's origin only (if anything else were in the frame, it would never get the ports). The runner page ([`runner/relay.ts`](../src/runner/relay.ts)) answers only the page that embeds it, only from the app's sites (`originAllowed`, matching as CSP does), and only once. It starts the language's worker, named so the worker knows to wait for its port ([`worker/channel.ts`](../src/worker/channel.ts)), and hands it the data port. From then on runs go straight between the app and the worker, so a trace is copied once, not twice through the page. The control port stays with the page, which says `hello` when it's set up, or `error` when the worker can't start or dies. A runner from another deploy answers `hello` with another version, which the app treats like a worker of another protocol version: reload. If the page never answers (no network, or something blocking it), the app reports that the runtime couldn't load after 20 seconds. Stopping a worker removes its iframe.
+
+**Which runner, and who may embed it.** Both are decided when building ([`sandbox/origins.ts`](../src/sandbox/origins.ts)):
+
+| Built | The app talks to | The runner may be embedded by |
+| --- | --- | --- |
+| On Cloudflare, `main` | `https://pr0l1ne-run.pages.dev/` | `pr0l1ne.com`, `www.pr0l1ne.com`, `pr0l1ne.pages.dev`, `*.pr0l1ne.pages.dev` (branch previews) |
+| On Cloudflare, a branch | that branch's runner preview, `https://<branch>.pr0l1ne-run.pages.dev/` | the same |
+| Anywhere else | the runner on this machine, `http://127.0.0.1:4174/` (`npm run preview`; `npm run dev` uses `:5174`) | the app on this machine, `http://localhost:*` and `http://127.0.0.1:*` |
+
+`VITE_RUNNER_URL` and `RUNNER_APP_ORIGINS` override them. Locally the app is `localhost` and the runner `127.0.0.1`: two sites, as in production (a site ignores the port, so two ports on `localhost` would be one).
+
+**What a program can still do.** Use the CPU until the watchdog stops it, and memory until the browser stops the runner (where the browser gives cross-site iframes their own process, that's the runner's process, not the app's). Tamper with its own trace: it runs in the same worker as the tracer, so what arrives is checked as untrusted data, never used as HTML (the banner escapes everything quoted from a program). Nothing it does can follow you off the page: if you copy someone's program to run on your own machine, that's outside any sandbox.
+
+**The app's own policy.** `public/_headers` sends the app a Content-Security-Policy too, report-only for now: it blocks nothing, but the console warns about anything it would block, so it can be made enforcing once a few days of use show nothing unexpected. Since programs don't run on the app's site, it needs no `unsafe-eval`.
+
+[`sandbox/*.test.ts`](../src/sandbox/), [`runner/relay.test.ts`](../src/runner/relay.test.ts) and [`worker/channel.test.ts`](../src/worker/channel.test.ts) test each piece; in a browser, programs in each language were checked to run on the runner's site, and fetches to other sites and to the app, WebSockets, beacons, `import()`, `importScripts` and `EventSource` from inside the worker, and reaching, navigating or popping up over the app from the runner page, were all blocked.
 
 ## 2. Tracing Python with `sys.settrace`
 

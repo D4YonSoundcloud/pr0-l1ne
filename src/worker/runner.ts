@@ -7,8 +7,12 @@
  * trace event. For that, the watchdog terminates the worker and starts a
  * fresh one. Restarting is slower than an interrupt, but needs no special
  * server headers. See the README's "Limitations" section.
+ *
+ * The worker is a SandboxWorker (sandbox/sandboxWorker.ts): it runs on the
+ * runner's site, not the app's, behind the same interface as a Worker.
  */
 
+import type { WorkerLike } from "../sandbox/sandboxWorker";
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
@@ -88,7 +92,7 @@ interface PendingMeasure {
 }
 
 export class Runner {
-  private worker!: Worker;
+  private worker: WorkerLike | null = null;
   private nextRunId = 1;
   private pending: Pending | null = null;
   private measuring: PendingMeasure | null = null;
@@ -100,7 +104,7 @@ export class Runner {
   status: RunnerStatus = { kind: "loading" };
 
   constructor(
-    private readonly createWorker: () => Worker,
+    private readonly createWorker: () => WorkerLike,
     private readonly onStatus: (status: RunnerStatus) => void,
     private readonly timeoutMs = 10_000,
   ) {
@@ -116,9 +120,15 @@ export class Runner {
     this.isReady = false;
     this.failure = null;
     this.setStatus({ kind: "loading" });
-    this.worker = this.createWorker();
-    this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
-    this.worker.onerror = (event) => {
+    // One that failed to load is still there: end it before starting another.
+    this.worker?.terminate();
+    const worker = this.createWorker();
+    this.worker = worker;
+    worker.onmessage = (event: MessageEvent<FromWorker>) => {
+      if (worker === this.worker) this.receive(event.data);
+    };
+    worker.onerror = (event) => {
+      if (worker !== this.worker) return;
       event.preventDefault?.();
       if (this.isReady) {
         // It loaded, then died: an error the worker's own code didn't catch.
@@ -143,7 +153,7 @@ export class Runner {
   /** The worker died after loading: whatever was running crashed with it. Start a fresh one. */
   private crashed(message: string): void {
     const outcome = { kind: "crash" as const, message };
-    this.worker.terminate();
+    this.worker?.terminate();
     if (this.pending) this.settle(this.pending.runId, outcome);
     this.settleMeasure(outcome);
     this.start();
@@ -153,7 +163,7 @@ export class Runner {
     switch (message.type) {
       case "ready":
         if (message.protocolVersion !== PROTOCOL_VERSION) {
-          this.worker.terminate();
+          this.worker?.terminate();
           this.fail("version", OUTDATED_MESSAGE);
           break;
         }
@@ -198,7 +208,12 @@ export class Runner {
    * schema), so it costs them nothing.
    */
   private async settleChecked(runId: number, trace: Trace, elapsedMs: number): Promise<void> {
-    const problems = (await checkTrace?.(trace)) ?? [];
+    // If the checker itself can't load (the dev server reloading), don't hold the run up.
+    const problems =
+      (await checkTrace?.(trace).catch((error) => {
+        console.warn("Couldn't check the trace against the schema:", error);
+        return [];
+      })) ?? [];
     if (!problems.length) {
       this.settle(runId, { kind: "trace", trace, elapsedMs });
       return;
@@ -244,14 +259,14 @@ export class Runner {
       this.measuring = { runId, resolve, progress, timer };
       if (this.isReady) this.setStatus({ kind: "running" });
       const message: ToWorker = { type: "measure", runId, source, limitMs, ...(overrides ? { overrides } : {}) };
-      this.worker.postMessage(message);
+      this.worker?.postMessage(message);
     });
   }
 
   /** Stop a Measure run now: the worker is busy running the program, so it's restarted. */
   stopMeasure(reason: "person" | "unresponsive" = "person"): void {
     if (!this.measuring) return;
-    this.worker.terminate();
+    this.worker?.terminate();
     this.settleMeasure({ kind: "stopped", reason });
     this.start();
   }
@@ -278,7 +293,7 @@ export class Runner {
       // Pyodide to load, so give it extra time while not ready.
       const limit = this.isReady ? this.timeoutMs : this.timeoutMs + 60_000;
       const timer = window.setTimeout(() => {
-        this.worker.terminate();
+        this.worker?.terminate();
         this.pending = null;
         resolve({ kind: "timeout", seconds: Math.round(this.timeoutMs / 1000) });
         this.start();
@@ -286,7 +301,7 @@ export class Runner {
       this.pending = { runId, resolve, timer };
       if (this.isReady) this.setStatus({ kind: "running" });
       const message: ToWorker = { type: "run", runId, source, maxSteps, maxSeconds, sampling };
-      this.worker.postMessage(message);
+      this.worker?.postMessage(message);
     });
   }
 }

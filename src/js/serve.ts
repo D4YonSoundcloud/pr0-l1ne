@@ -7,7 +7,8 @@
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
-import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "../worker/protocol";
+import { workerChannel } from "../worker/channel";
+import { PROTOCOL_VERSION, type ToWorker } from "../worker/protocol";
 
 type Measure = (
   source: string,
@@ -21,12 +22,12 @@ export function serve(
   trace: (source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy) => Promise<Trace>,
   measure: Measure,
 ): void {
-  const ctx = self as unknown as DedicatedWorkerGlobalScope;
-  const post = (message: FromWorker) => ctx.postMessage(message);
+  const channel = workerChannel();
+  const post = channel.post;
 
-  ctx.onmessage = async (event: MessageEvent<ToWorker>) => {
-    if (event.data.type === "measure") {
-      const { runId, source, limitMs, overrides } = event.data;
+  channel.listen(async (message: ToWorker) => {
+    if (message.type === "measure") {
+      const { runId, source, limitMs, overrides } = message;
       try {
         const result = await measure(
           source,
@@ -40,7 +41,7 @@ export function serve(
       }
       return;
     }
-    const { runId, source, maxSteps, maxSeconds, sampling } = event.data;
+    const { runId, source, maxSteps, maxSeconds, sampling } = message;
     const started = performance.now();
     try {
       post({
@@ -52,7 +53,7 @@ export function serve(
     } catch (error) {
       post({ type: "crash", runId, message: error instanceof Error ? error.message : String(error) });
     }
-  };
+  });
 
   // No interpreter to download: the browser already runs JavaScript.
   post({ type: "ready", label, protocolVersion: PROTOCOL_VERSION });

@@ -12,8 +12,17 @@
 /index.html
   Cache-Control: no-cache
 
-# Safe defaults for every response. A Content-Security-Policy comes later
+# Safe defaults for every response.
+#
+# The Content-Security-Policy is report-only for now: it blocks nothing, but
+# the browser's console warns about anything it would block, so it can be
+# made enforcing once a few days of use show nothing unexpected. Programs
+# don't run here (they run on the runner's site, pr0l1ne-run.pages.dev,
+# with its own strict policy: see src/sandbox/origins.ts), so this page
+# needs no eval of its own; frame-src lets it embed the runner (and a
+# branch's preview of it).
 /*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-src https://pr0l1ne-run.pages.dev https://*.pr0l1ne-run.pages.dev; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()

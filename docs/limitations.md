@@ -96,7 +96,7 @@ Everything listed for JavaScript applies, plus:
 
 **A box I moved is somewhere strange after editing.** Your edit probably changed the order objects are created in, so its saved position now belongs to a different object (see [Rearranging the memory view](user-guide.md#rearranging-the-memory-view)). Click **Reset layout**.
 
-**Stuck on "Downloading Python (6 MB)…"** The page can't reach `cdn.jsdelivr.net`. Check your connection, and check whether a corporate proxy or content blocker is blocking it. The browser's developer tools (Network tab, filtered to the worker) show the failing request. If you need to work offline, you can download the `pyodide` npm package, serve its files from your own server or Vite's `public/` folder, and point `INDEX_URL` in `pyodide.worker.ts` at that location.
+**Stuck on "Downloading Python (6 MB)…", or "couldn't load … the code runner didn't answer".** Programs run on PR0L1NE's code runner, `pr0l1ne-run.pages.dev`, which the page loads in a hidden frame (see [Security](how-it-works.md#security-running-other-peoples-code)); Python also downloads from there. Check your connection, and whether a corporate proxy, content blocker or privacy extension blocks that address or frames from other sites. The browser's developer tools (Network tab) show the failing request.
 
 **"Couldn't load the language runtime: …" in the status bar (Python).** Usually a failed or partial download. Reload the page. If it persists, try another browser to rule out an extension.
 

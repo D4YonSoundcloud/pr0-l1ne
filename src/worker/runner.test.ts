@@ -13,7 +13,7 @@ import { OUTDATED_MESSAGE, Runner, type RunnerStatus } from "./runner";
 /** A worker the test drives: it records what it's sent and says what the test tells it to. */
 class FakeWorker {
   onmessage: ((event: MessageEvent<FromWorker>) => void) | null = null;
-  onerror: ((event: ErrorEvent) => void) | null = null;
+  onerror: ((event: { message: string; preventDefault?(): void }) => void) | null = null;
   sent: ToWorker[] = [];
   terminated = false;
   postMessage(message: ToWorker) {
@@ -31,7 +31,7 @@ class FakeWorker {
   }
   /** An error the worker's own code didn't catch (or its script failing to load). */
   fail(message = "") {
-    this.onerror?.({ message, preventDefault() {} } as ErrorEvent);
+    this.onerror?.({ message, preventDefault() {} });
   }
   get lastRunId(): number {
     return this.sent[this.sent.length - 1].runId;
@@ -50,7 +50,7 @@ function setup(timeoutMs = 10_000) {
     () => {
       const worker = new FakeWorker();
       workers.push(worker);
-      return worker as unknown as Worker;
+      return worker;
     },
     (status) => statuses.push(status),
     timeoutMs,

@@ -4,7 +4,7 @@
 
 **See your code run.** Write Python, JavaScript or TypeScript, and PR0L1NE draws every variable, list, object and scope as it changes, step by step, right in your browser.
 
-**[Try it: pr0l1ne.pages.dev](https://pr0l1ne.pages.dev)**. Nothing to install and no account; your code never leaves your browser.
+**[Try it: pr0l1ne.com](https://pr0l1ne.com)**. Nothing to install and no account; your code never leaves your browser.
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)
 
