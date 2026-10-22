@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { pythonTracer, type TracePython } from "../testing/pythonTracer";
 import { POLICY, type SamplingPolicy } from "../trace/policy";
+import { traceProblem } from "./checkTrace";
 import { CASES } from "./conformance.cases";
 import { shapeOf, type TraceShape } from "./shape";
 import { traceProblems } from "./validate";
@@ -30,6 +31,9 @@ describe("tracer conformance: Python and JavaScript agree", () => {
       const js = await traceJavaScript(c.javascript, MAX_STEPS, seconds);
       expect(traceProblems(py), "the Python trace matches the schema").toEqual([]);
       expect(traceProblems(js), "the JavaScript trace matches the schema").toEqual([]);
+      // ...and passes the app's own check of what the runner sends.
+      expect(traceProblem(py), "the app accepts the Python trace").toBeNull();
+      expect(traceProblem(js), "the app accepts the JavaScript trace").toBeNull();
       const shape = (trace: typeof py): Partial<TraceShape> => {
         const s: Partial<TraceShape> = shapeOf(trace, { ignore: c.ignore });
         for (const part of c.skip ?? []) delete s[part];

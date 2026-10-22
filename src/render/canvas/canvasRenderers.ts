@@ -26,6 +26,10 @@
  * picks the canvas renderer.
  */
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
+// PixiJS builds some of its code with new Function(), which the app's
+// Content-Security-Policy doesn't allow (public/_headers): this swaps in
+// versions that don't.
+import "pixi.js/unsafe-eval";
 import { prefersReducedMotion } from "../../appearance";
 import type { LoopScene } from "../../scene/loopScene";
 import type { MemoryScene } from "../../scene/memoryScene";

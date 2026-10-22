@@ -253,6 +253,61 @@ describe("the protocol version", () => {
   });
 });
 
+describe("what the runner sends is checked", () => {
+  it("ignores messages that aren't part of the protocol", async () => {
+    const { runner, worker } = setup();
+    worker().ready();
+    const outcome = runner.run("code", 100, 1, POLICY.sampling);
+    const w = worker();
+    for (const junk of [
+      null,
+      42,
+      "result",
+      { type: "result" },
+      { type: "result", runId: w.lastRunId },
+      { type: "nonsense" },
+    ]) {
+      w.onmessage?.({ data: junk } as MessageEvent<FromWorker>);
+    }
+    w.onmessage?.({
+      data: { type: "crash", runId: w.lastRunId, message: "x".repeat(20_000) },
+    } as MessageEvent<FromWorker>);
+    await settle();
+    let settled = false;
+    void outcome.then(() => (settled = true));
+    await settle();
+    expect(settled).toBe(false);
+    w.say({ type: "result", runId: w.lastRunId, trace, elapsedMs: 1 });
+    expect(await outcome).toMatchObject({ kind: "trace" });
+  });
+
+  it("turns down a trace that doesn't fit the format, as a crash naming why", async () => {
+    const { runner, worker } = setup();
+    worker().ready();
+    const outcome = runner.run("code", 100, 1, POLICY.sampling);
+    const tampered = { ...structuredClone(trace), surprise: true } as unknown as Trace;
+    worker().say({ type: "result", runId: worker().lastRunId, trace: tampered, elapsedMs: 1 });
+    expect(await outcome).toEqual({
+      kind: "crash",
+      message:
+        "the trace doesn't match the trace format: the trace: has \"surprise\", which isn't part of the trace format",
+    });
+  });
+
+  it("turns down a measurement that isn't plain data", async () => {
+    const { runner, worker } = setup();
+    worker().ready();
+    const outcome = runner.measure("code", 2_000, vi.fn());
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    worker().say({ type: "measured", runId: worker().lastRunId, result: cyclic as never });
+    expect(await outcome).toEqual({
+      kind: "crash",
+      message: "the measurement isn't one the app can use: it refers to itself (a cycle)",
+    });
+  });
+});
+
 describe("Measure", () => {
   const measure = (runner: Runner, progress = vi.fn()) => runner.measure("code", 2_000, progress, { n: 5 });
 

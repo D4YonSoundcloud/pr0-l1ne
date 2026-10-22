@@ -44,3 +44,27 @@ jobs:
       # build that would fail there fails here first.
       - run: npm run build
       - run: npm run build:runner
+
+  sandbox:
+    name: Sandbox in Chromium, Firefox and WebKit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Both builds, served locally (npm run preview) by the tests themselves.
+      - run: npm run build
+      - run: npm run build:runner
+
+      - run: npx playwright install --with-deps chromium firefox webkit
+
+      # e2e/sandbox.e2e.ts: programs run on the runner's site, and nothing
+      # they (or a page that isn't the app) try gets out.
+      - run: npm run test:e2e
+

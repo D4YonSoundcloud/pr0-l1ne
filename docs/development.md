@@ -32,6 +32,7 @@ Open the URL it prints for PR0L1NE (http://localhost:5173). The bubble sort exam
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
 | `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
+| `npm run test:e2e` | Browser tests of the sandbox and the app's security policy (`e2e/`, Playwright), against both builds: run `npm run build && npm run build:runner` first, and `npx playwright install` once for the browsers. `--project=chromium` for one browser. |
 | `npm run test:pyodide` | Runs the same tests (the tracer's and Measure's) inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
@@ -175,7 +176,7 @@ Each build works out which runner it talks to, and who may embed it, from where 
 
 The two projects deploy separately, so for a minute after a push one can be newer than the other. If a change makes them unable to talk (a new `PROTOCOL_VERSION` or `SANDBOX_VERSION`), people with the app open see "PR0L1NE was updated since this page loaded. Reload the page" until both are deployed.
 
-Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` runs them (and the same build) on every pull request and push to `main`. Requiring that check before merging into `main` (Settings → Rules → Rulesets) means only tested code reaches the live site.
+Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` runs them (and the same builds) on every pull request and push to `main`, and in a second job the browser tests (`npm run test:e2e`) in Chromium, Firefox and WebKit. Requiring that check before merging into `main` (Settings → Rules → Rulesets) means only tested code reaches the live site.
 
 `public/_headers` sets the app's caching (built files are kept for a year, the page itself is re-checked on every visit) and security headers, including its Content-Security-Policy (report-only for now). The runner's `_headers` is written by its build from `src/sandbox/origins.ts`.
 
@@ -223,7 +224,11 @@ pr0-l1ne/
 ├── vite.config.ts              The app's build (dist/)
 ├── vite.runner.config.ts       The runner's build (dist-runner/): workers, Pyodide, its headers
 ├── vite.shared.ts              What both builds share
+├── playwright.config.ts        Browser tests: Chromium, Firefox, WebKit, against npm run preview
 ├── docs/                       Images used in this README
+├── e2e/
+│   ├── sandbox.e2e.ts          What a hostile program or page would try, in real browsers
+│   └── csp.e2e.ts              The app under its own Content-Security-Policy
 ├── scripts/
 │   ├── dev.mjs                 npm run dev: the app's and the runner's dev servers
 │   ├── preview.mjs             npm run preview: both builds, served locally
@@ -277,6 +282,8 @@ pr0-l1ne/
     │   ├── memory.test.ts      Memory size tests
     │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
     │   ├── bigO.test.ts        Big-O tests
+    │   ├── checkTrace.ts       Checking what the runner sends: limits, then the schema (no eval)
+    │   ├── schemaErrors.ts     Schema errors as readable lines naming the field
     │   ├── complexity.ts       Time and space estimates: the code's shape plus the run
     │   └── complexity.test.ts  Every example's complexity, in all three languages
     ├── scene/                  What a step shows, worked out from the trace (no positions, no DOM)

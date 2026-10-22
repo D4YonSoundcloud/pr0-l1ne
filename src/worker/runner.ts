@@ -13,6 +13,7 @@
  */
 
 import type { WorkerLike } from "../sandbox/sandboxWorker";
+import { dataLimitProblem, MESSAGE_LIMITS, traceProblem } from "../trace/checkTrace";
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
@@ -60,14 +61,38 @@ export type MeasureOutcome =
 /** Shown when a worker speaks another protocol version than the page. */
 export const OUTDATED_MESSAGE = "PR0L1NE was updated since this page loaded. Reload the page to use the new version.";
 
+/** Labels and error messages are shown in the page: a sane length. */
+const MAX_TEXT = 10_000;
+
 /**
- * Development builds only: what's wrong with a trace, per the trace schema.
- * `null` in production builds, where the bundler drops it together with the
- * validator and the schema.
+ * Is a message one the protocol has, with the fields it needs? The worker
+ * runs the program being traced, on another site, and the program can send
+ * anything (see trace/checkTrace.ts): what doesn't fit is ignored, and a
+ * trace or measurement is checked in full before it's used.
  */
-const checkTrace = import.meta.env.DEV
-  ? async (trace: Trace) => (await import("../trace/validate")).traceProblems(trace)
-  : null;
+function wellFormed(message: unknown): message is FromWorker {
+  if (typeof message !== "object" || message === null) return false;
+  const m = message as Record<string, unknown>;
+  const text = (v: unknown) => typeof v === "string" && v.length <= MAX_TEXT;
+  const id = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  switch (m.type) {
+    case "ready":
+      // Any version, or none: receive() turns away one that isn't this page's.
+      return text(m.label);
+    case "loadError":
+      return text(m.message);
+    case "result":
+      return id(m.runId) && id(m.elapsedMs) && typeof m.trace === "object" && m.trace !== null;
+    case "crash":
+      return id(m.runId) && text(m.message);
+    case "measureProgress":
+      return id(m.runId) && typeof m.progress === "object" && m.progress !== null;
+    case "measured":
+      return id(m.runId) && typeof m.result === "object" && m.result !== null;
+    default:
+      return false;
+  }
+}
 
 /** Extra time a Measure run gets past its own limit, for the untouched timing run and reporting. */
 const MEASURE_GRACE_MS = 15_000;
@@ -125,7 +150,7 @@ export class Runner {
     const worker = this.createWorker();
     this.worker = worker;
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
-      if (worker === this.worker) this.receive(event.data);
+      if (worker === this.worker && wellFormed(event.data)) this.receive(event.data);
     };
     worker.onerror = (event) => {
       if (worker !== this.worker) return;
@@ -175,19 +200,27 @@ export class Runner {
         this.fail("load", `Couldn't load the language runtime: ${message.message}`, message.message);
         break;
       case "result":
-        if (checkTrace) void this.settleChecked(message.runId, message.trace, message.elapsedMs);
-        else this.settle(message.runId, { kind: "trace", trace: message.trace, elapsedMs: message.elapsedMs });
+        this.settleChecked(message.runId, message.trace, message.elapsedMs);
         break;
       case "crash":
         if (this.measuring?.runId === message.runId) this.settleMeasure({ kind: "crash", message: message.message });
         else this.settle(message.runId, { kind: "crash", message: message.message });
         break;
       case "measureProgress":
-        if (this.measuring?.runId === message.runId) this.measuring.progress(message.progress);
+        if (this.measuring?.runId === message.runId && !dataLimitProblem(message.progress, MESSAGE_LIMITS)) {
+          this.measuring.progress(message.progress);
+        }
         break;
-      case "measured":
-        if (this.measuring?.runId === message.runId) this.settleMeasure({ kind: "measured", result: message.result });
+      case "measured": {
+        if (this.measuring?.runId !== message.runId) break;
+        const problem = dataLimitProblem(message.result, MESSAGE_LIMITS);
+        this.settleMeasure(
+          problem
+            ? { kind: "crash", message: `the measurement isn't one the app can use: ${problem}` }
+            : { kind: "measured", result: message.result },
+        );
         break;
+      }
     }
   }
 
@@ -201,28 +234,21 @@ export class Runner {
   }
 
   /**
-   * Development builds only: check the trace against the trace schema
-   * before using it, so a tracer that sends the wrong shape fails here,
-   * naming the field, rather than somewhere deep in the renderer.
-   * Production builds leave this out entirely (with the validator and the
-   * schema), so it costs them nothing.
+   * Check the trace before anything uses it (trace/checkTrace.ts): its
+   * limits, and the trace schema. A tracer that sends the wrong shape, or a
+   * program that tampers with its trace, then fails here, naming the field,
+   * rather than somewhere deep in the renderer.
    */
-  private async settleChecked(runId: number, trace: Trace, elapsedMs: number): Promise<void> {
-    // If the checker itself can't load (the dev server reloading), don't hold the run up.
-    const problems =
-      (await checkTrace?.(trace).catch((error) => {
-        console.warn("Couldn't check the trace against the schema:", error);
-        return [];
-      })) ?? [];
-    if (!problems.length) {
+  private settleChecked(runId: number, trace: Trace, elapsedMs: number): void {
+    if (!this.pending || this.pending.runId !== runId) return;
+    const problem = traceProblem(trace);
+    if (!problem) {
       this.settle(runId, { kind: "trace", trace, elapsedMs });
       return;
     }
-    console.error("Trace doesn't match the trace format (schema/trace.schema.json):", problems, trace);
-    this.settle(runId, {
-      kind: "crash",
-      message: `the trace doesn't match the trace format (checked in development builds): ${problems.join(" · ")}`,
-    });
+    if (import.meta.env.DEV)
+      console.error("Trace doesn't match the trace format (schema/trace.schema.json):", problem, trace);
+    this.settle(runId, { kind: "crash", message: `the trace doesn't match the trace format: ${problem}` });
   }
 
   private settleMeasure(outcome: MeasureOutcome): void {

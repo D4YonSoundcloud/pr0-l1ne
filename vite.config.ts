@@ -6,10 +6,12 @@
  */
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { DEV_RUNNER, runnerUrlFor } from "./src/sandbox/origins";
-import { nodePathAlias } from "./vite.shared";
+import { DEV_RUNNER, PREVIEW_RUNNER, runnerUrlFor } from "./src/sandbox/origins";
+import { appHeaders, nodePathAlias, traceValidators } from "./vite.shared";
 
 export default defineConfig(({ command }) => ({
+  // The trace schema as plain functions, for checking what the runner sends (trace/checkTrace.ts).
+  plugins: [traceValidators()],
   define: {
     // The dev server talks to the runner `npm run dev` starts; a build, to
     // the one for where it's built (runnerUrlFor: live, a branch preview, or
@@ -58,6 +60,8 @@ export default defineConfig(({ command }) => ({
       reportsDirectory: "coverage/js",
     },
   },
+  // `npm run preview`: the headers the live app gets, so it runs under its real policy here too.
+  preview: { headers: appHeaders(new URL(PREVIEW_RUNNER).origin) },
   build: {
     // Monaco alone is about 4 MB, so silence the generic 500 kB warning.
     chunkSizeWarningLimit: 5000,

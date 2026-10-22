@@ -95,11 +95,28 @@ The runner keeps nothing: no cookies, no storage, no API. If a program takes ove
 
 `VITE_RUNNER_URL` and `RUNNER_APP_ORIGINS` override them. Locally the app is `localhost` and the runner `127.0.0.1`: two sites, as in production (a site ignores the port, so two ports on `localhost` would be one).
 
-**What a program can still do.** Use the CPU until the watchdog stops it, and memory until the browser stops the runner (where the browser gives cross-site iframes their own process, that's the runner's process, not the app's). Tamper with its own trace: it runs in the same worker as the tracer, so what arrives is checked as untrusted data, never used as HTML (the banner escapes everything quoted from a program). Nothing it does can follow you off the page: if you copy someone's program to run on your own machine, that's outside any sandbox.
+**What a program can still do.** Use the CPU until the watchdog stops it, and memory until the browser stops the runner (where the browser gives cross-site iframes their own process, that's the runner's process, not the app's). Tamper with its own trace: it runs in the same worker as the tracer, so it can change what's sent. So what arrives is checked before anything uses it, and never used as HTML (the banner escapes everything quoted from a program). Nothing it does can follow you off the page: if you copy someone's program to run on your own machine, that's outside any sandbox.
 
-**The app's own policy.** `public/_headers` sends the app a Content-Security-Policy too, report-only for now: it blocks nothing, but the console warns about anything it would block, so it can be made enforcing once a few days of use show nothing unexpected. Since programs don't run on the app's site, it needs no `unsafe-eval`.
+**Checking what arrives** ([`trace/checkTrace.ts`](../src/trace/checkTrace.ts), in [`worker/runner.ts`](../src/worker/runner.ts)). Every message from the runner is checked before it's used. A message that isn't part of the protocol, or has the wrong fields, is ignored. A trace then goes through two passes, and one that fails ends the run as a crash naming the problem ("the trace doesn't match the trace format: steps[3].line: should be number"):
 
-[`sandbox/*.test.ts`](../src/sandbox/), [`runner/relay.test.ts`](../src/runner/relay.test.ts) and [`worker/channel.test.ts`](../src/worker/channel.test.ts) test each piece; in a browser, programs in each language were checked to run on the runner's site, and fetches to other sites and to the app, WebSockets, beacons, `import()`, `importScripts` and `EventSource` from inside the worker, and reaching, navigating or popping up over the app from the runner page, were all blocked.
+1. **Limits:** plain data only (objects, arrays, strings, numbers, booleans, null: no `Map`s, `Date`s or class instances, which structured cloning could carry), no cycles, no `__proto__` keys (a key by that name, merged carelessly, could reach every object's prototype), at most 5 million objects nested at most 100 deep, and at most 200 million characters of text. One pass, without recursion, over each object once however often it's shared.
+2. **The schema** (`schema/trace.schema.json`), compiled into plain functions when building (`traceValidators` in `vite.shared.ts`), since Ajv's usual compile needs `eval` and the app's policy allows none. Steps share most of their heap objects (on the 300-node stress program, 932 objects are referred to 350,000 times across 2,000 steps), so the steps are checked without their heap objects, and then each heap object once. That takes about 90 ms on that program and a few milliseconds on ordinary ones, where checking every reference took over 500.
+
+A Measure result or its progress gets the limits pass. The tests' own check (`trace/validate.ts`, which lists every problem) is the same schema; every golden and conformance trace passes both.
+
+**The app's own policy.** `public/_headers` sends the app a Content-Security-Policy too: its own scripts only (no inline scripts, no `eval`), styles and fonts from itself and Google Fonts, connections to itself only, and frames from the runner only. It's the backstop if a bug ever let a string be read as HTML: no script it brought could run. Since programs don't run on the app's site, the app needs no `unsafe-eval`; PixiJS builds some of its code with `new Function()`, so the canvas renderer imports `pixi.js/unsafe-eval`, which swaps in versions that don't. `npm run preview` sends the same headers (`appHeaders` in `vite.shared.ts`), so the app is tried locally under the policy it has live.
+
+[`sandbox/*.test.ts`](../src/sandbox/), [`runner/relay.test.ts`](../src/runner/relay.test.ts), [`worker/channel.test.ts`](../src/worker/channel.test.ts) and [`trace/checkTrace.test.ts`](../src/trace/checkTrace.test.ts) test each piece. **In real browsers**, [`e2e/sandbox.e2e.ts`](../e2e/sandbox.e2e.ts) (`npm run test:e2e`, Playwright; CI runs it in Chromium, Firefox and WebKit) tries what a hostile program or page would:
+
+- programs in each language run on the runner's site, and the app's only worker is the editor's
+- from inside the runner's worker, fetches to other sites and to the app, WebSockets, beacons, `import()` and `EventSource` are blocked, and the app's window is out of reach
+- a program's own attempts (`fetch`, `importScripts`) are blocked
+- the runner page can't read the app's page, navigate it, open popups or show dialogs
+- a program that rewrites its own trace on its way out is refused, not drawn
+- an endless loop is stopped; a program stuck inside one call is cut off and gets a fresh runner
+- the runner sends its policy with its page and its workers, and a page that isn't the app can't embed it
+
+[`e2e/csp.e2e.ts`](../e2e/csp.e2e.ts) uses the app under its own policy, the canvas renderer included, and expects no violations. Where a browser's automation can't see workers inside a cross-site frame, the checks that need to run code in one are skipped there (Chromium runs them all).
 
 ## 2. Tracing Python with `sys.settrace`
 

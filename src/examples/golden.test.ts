@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
 import { pythonTracer, type TracePython } from "../testing/pythonTracer";
+import { traceProblem } from "../trace/checkTrace";
 import { goldenText, slug } from "../trace/golden";
 import { POLICY } from "../trace/policy";
 import { traceProblems } from "../trace/validate";
@@ -31,6 +32,7 @@ describe("golden traces: JavaScript", () => {
     it(example.name, async () => {
       const trace = await traceJavaScript(example.code, MAX_STEPS, MAX_SECONDS);
       expect(traceProblems(trace), "matches the trace schema").toEqual([]);
+      expect(traceProblem(trace), "the app accepts it").toBeNull();
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("javascript", example));
     });
   }
@@ -41,6 +43,7 @@ describe("golden traces: TypeScript", () => {
     it(example.name, async () => {
       const trace = await traceTypeScript(example.code, MAX_STEPS, MAX_SECONDS);
       expect(traceProblems(trace), "matches the trace schema").toEqual([]);
+      expect(traceProblem(trace), "the app accepts it").toBeNull();
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("typescript", example));
     });
   }
@@ -57,6 +60,7 @@ describe("golden traces: Python (in Pyodide)", () => {
     it(example.name, async () => {
       const trace = tracePython(example.code, MAX_STEPS, MAX_SECONDS);
       expect(traceProblems(trace), "matches the trace schema").toEqual([]);
+      expect(traceProblem(trace), "the app accepts it").toBeNull();
       await expect(goldenText(trace)).toMatchFileSnapshot(fixture("python", example));
     });
   }

@@ -2,12 +2,16 @@
  * Checks a trace against the trace schema (schema/trace.schema.json,
  * generated from types.ts by `npm run schema`).
  *
- * Used by the tests (every golden trace and every conformance trace) and,
- * in development builds only, by worker/runner.ts on every trace a worker
- * sends. Production builds never load this module or the schema.
+ * Used by the tests (every golden trace and every conformance trace), with
+ * every problem explained. The app checks what the runner sends with
+ * checkTrace.ts instead: the same schema, compiled when building (Ajv's
+ * compile here needs eval), and quicker on traces that share heap objects.
  */
 import Ajv, { type ErrorObject } from "ajv";
 import schema from "../../schema/trace.schema.json";
+import { describe } from "./schemaErrors";
+
+export { fieldPath } from "./schemaErrors";
 
 let check: ReturnType<Ajv["compile"]> | null = null;
 
@@ -50,33 +54,4 @@ function relevant(errors: ErrorObject[]): ErrorObject[] {
   // Every kind was rejected: its `kind` itself is wrong.
   const anyOf = errors.find((e) => e.keyword === "anyOf");
   return anyOf ? [{ ...anyOf, message: 'isn\'t any kind the trace format knows (check its "kind")' }] : errors;
-}
-
-/** A JSON pointer as JavaScript-ish access: /steps/3/heap/o4 -> steps[3].heap.o4 */
-export function fieldPath(pointer: string): string {
-  const parts = pointer.split("/").slice(1);
-  if (!parts.length) return "the trace";
-  return parts
-    .map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~"))
-    .map((part, i) => (/^\d+$/.test(part) ? `[${part}]` : i === 0 ? part : `.${part}`))
-    .join("");
-}
-
-function describe(error: ErrorObject): string {
-  const where = fieldPath(error.instancePath);
-  const p = error.params as Record<string, unknown>;
-  switch (error.keyword) {
-    case "required":
-      return `${where}: needs "${String(p.missingProperty)}"`;
-    case "additionalProperties":
-      return `${where}: has "${String(p.additionalProperty)}", which isn't part of the trace format`;
-    case "const":
-      return `${where}: should be ${JSON.stringify(p.allowedValue)}`;
-    case "enum":
-      return `${where}: should be one of ${(p.allowedValues as unknown[]).map((v) => JSON.stringify(v)).join(", ")}`;
-    case "type":
-      return `${where}: should be ${String(p.type)}`;
-    default:
-      return `${where}: ${error.message ?? "doesn't match the trace format"}`;
-  }
 }
