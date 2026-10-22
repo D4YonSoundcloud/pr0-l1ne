@@ -48,6 +48,14 @@ The program's name sits in the toolbar next to the **Open…** menu. A yellow do
 
 Saved programs are stored in your browser (in `localStorage`), separately for each language. They survive reloads and restarts, but they belong to this browser on this machine, and clearing the site's data removes them. Separately from saving, PR0L1NE always keeps whatever is in the editor, saved or not, so a reload never loses work in progress.
 
+## Sharing a program
+
+**Share** in the toolbar copies a link to the code in the editor. Whoever opens it sees that program, in its language, ready to run. The program travels inside the link itself (the part after `#`), so it's never sent to or stored on any server: the link works as long as PR0L1NE does, and anyone who has it can open the code.
+
+Opening a link shows the program as a **Shared program** with a note that it's someone else's code. Nothing runs until you press **Run it** (or Run), so you can read it first, and when it runs, it runs in the [sandbox](how-it-works.md#security-running-other-peoples-code) like any program. **Save to my programs** keeps it. Your own work is left alone: your saved programs, and the unsaved code you had in that language, are as they were until you edit the shared program. Once you do, it's your unsaved code, as if you'd typed it, and the link leaves the address bar.
+
+Programs up to about 30 KB once packed fit in a link (every example takes under 1.5 KB). A link can't be changed or deleted after it's shared: change the code and share again for a new link. If the browser can't copy to the clipboard, the link is shown in the banner to copy by hand.
+
 ## Examples
 
 The **Open…** menu has 37 to 39 examples per language, grouped by topic. Each one is short enough to step through, and each shows off a different part of the canvas:

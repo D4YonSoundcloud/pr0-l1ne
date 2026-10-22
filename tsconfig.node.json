@@ -21,7 +21,8 @@
     "src/app/elements.test.ts",
     "e2e/**/*.ts",
     "playwright.config.ts",
-    "src/trace/virtual-trace-validators.d.ts"
+    "src/trace/virtual-trace-validators.d.ts",
+    "src/share/link.test.ts"
   ],
   "exclude": []
 }

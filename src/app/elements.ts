@@ -12,6 +12,7 @@ export function findElements(doc: Document = document) {
     programDirtyLabel: byId<HTMLSpanElement>("program-dirty-label"),
     save: byId<HTMLButtonElement>("save"),
     delete: byId<HTMLButtonElement>("delete"),
+    share: byId<HTMLButtonElement>("share"),
     saveDialog: byId<HTMLDialogElement>("save-dialog"),
     saveForm: byId<HTMLFormElement>("save-form"),
     saveName: byId<HTMLInputElement>("save-name"),

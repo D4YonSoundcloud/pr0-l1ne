@@ -40,6 +40,12 @@ export interface AppState {
   readonly stale: boolean;
   /** Measure (or a growth run) is using the runner; traced runs wait until it's done. */
   readonly measuring: boolean;
+  /**
+   * The editor holds a program from a share link, unedited and not saved
+   * (see shareController.ts). It's nobody's saved program, and nothing is
+   * remembered or run until the person edits it, runs it or saves it.
+   */
+  readonly shared: boolean;
 }
 
 export class AppStore extends Store<AppState> {
@@ -61,6 +67,7 @@ export class AppStore extends Store<AppState> {
       tracedCode: null,
       stale: false,
       measuring: false,
+      shared: false,
     });
   }
 
@@ -82,6 +89,7 @@ export class AppStore extends Store<AppState> {
       tracedCode: null,
       stale: false,
       stepIndex: 0,
+      shared: false,
     });
   }
 
@@ -117,6 +125,28 @@ export class AppStore extends Store<AppState> {
   /** The saved program now open (null: the code isn't a saved program). */
   setProgram(program: Program | null): void {
     this.settings.openProgram(this.get().language).set(program?.id ?? "");
-    this.update("setProgram", { program });
+    this.update("setProgram", { program, shared: false });
+  }
+
+  /**
+   * A program from a share link is in the editor (in the current language).
+   * No saved program is open, and none of the person's own is forgotten:
+   * which program they had open isn't remembered as closed. The picture
+   * goes, since it was of other code.
+   */
+  openShared(): void {
+    this.update("openShared", {
+      program: null,
+      shared: true,
+      trace: null,
+      tracedCode: null,
+      stale: false,
+      stepIndex: 0,
+    });
+  }
+
+  /** The shared program was edited: it's ordinary unsaved code now. */
+  keepShared(): void {
+    if (this.get().shared) this.update("keepShared", { shared: false });
   }
 }

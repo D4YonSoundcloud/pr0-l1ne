@@ -93,6 +93,17 @@ describe("ProgramsController", () => {
     expect(optionLabels(menu)).toContain(LANGUAGES.javascript.examples[0].name);
   });
 
+  it("calls a program from a share link a shared program, unsaved, and asks before replacing it", () => {
+    const { $, app, choose, confirm, loaded } = setup();
+    app.openShared();
+    expect($("name").textContent).toBe("Shared program");
+    expect($("dirty").hidden).toBe(false);
+    confirm.mockReturnValueOnce(false);
+    choose("example:1");
+    expect(confirm).toHaveBeenCalledWith("Discard the shared program?");
+    expect(loaded).toEqual([]);
+  });
+
   it("marks edited code as unsaved", () => {
     const { $, editor, controller } = setup();
     editor.code = "let mine = 1;";

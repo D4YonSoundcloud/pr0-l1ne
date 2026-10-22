@@ -32,7 +32,7 @@ Open the URL it prints for PR0L1NE (http://localhost:5173). The bubble sort exam
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
 | `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
-| `npm run test:e2e` | Browser tests of the sandbox and the app's security policy (`e2e/`, Playwright), against both builds: run `npm run build && npm run build:runner` first, and `npx playwright install` once for the browsers. `--project=chromium` for one browser. |
+| `npm run test:e2e` | Browser tests of the sandbox, the app's security policy and share links (`e2e/`, Playwright), against both builds: run `npm run build && npm run build:runner` first, and `npx playwright install` once for the browsers. `--project=chromium` for one browser. |
 | `npm run test:pyodide` | Runs the same tests (the tracer's and Measure's) inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
@@ -95,6 +95,7 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/state.ts` | The app's state (`language`, the open `program`, `stepIndex`, `playing`, `speed`, the `trace` on screen, the `tracedCode` it came from, whether it's `stale`, and whether Measure is `measuring`) and its actions (`setLanguage`, `setProgram`, `setStep`, `setPlaying`, `setSpeed`, `showTrace`, `markStale`, `setMeasuring`), which also save what's remembered |
 | `src/app/elements.ts` | Finds the page's elements (`index.html`) once, by id |
 | `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
+| `src/app/shareController.ts` | Share links: the Share button, and opening a link as a shared program that runs nothing until asked |
 | `src/app/playbackController.ts` | Moving through the steps: first / previous / next / last, the scrubber, Play and the speed menu, and the stepping keys (arrows, Home / End, Space, F10, Ctrl/Cmd + Enter) |
 | `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
 | `src/app/measureController.ts` | Measure and growth runs: the Measure and results buttons, the Measure panel and its growth section, the time limit, the editor's count labels, and the last measurement (shown only in its language, and only while the code still matches) |
@@ -228,6 +229,7 @@ pr0-l1ne/
 ├── docs/                       Images used in this README
 ├── e2e/
 │   ├── sandbox.e2e.ts          What a hostile program or page would try, in real browsers
+│   ├── share.e2e.ts            Share links: open, run, edit, save, a broken link, Share
 │   └── csp.e2e.ts              The app under its own Content-Security-Policy
 ├── scripts/
 │   ├── dev.mjs                 npm run dev: the app's and the runner's dev servers
@@ -247,6 +249,9 @@ pr0-l1ne/
     │   ├── relay.ts            Checks who's asking, starts the worker, hands it the app's port
     │   └── relay.test.ts       The relay with a fake page and workers
     ├── programs.ts             Saved programs (localStorage)
+    ├── share/
+    │   ├── link.ts             Share links: a program packed after the #, and opening one carefully
+    │   └── link.test.ts        Round trips, and every way a link can be wrong
     ├── programs.test.ts        Saved program tests
     ├── monaco.ts               Lean Monaco build: editor features + 3 languages
     ├── editor.ts               Monaco setup, theme, commands and line markers

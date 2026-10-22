@@ -16,6 +16,7 @@
 - **Big inputs.** Long loops are sampled and long lists drawn as color strips, so large programs still trace.
 - **Measure and complexity.** An estimate of time and space complexity from the code, checked against real runs at several input sizes.
 - **Hints.** `# viz:` and `// viz:` comments tell the canvas how to draw things when its automatic choices aren't what you want.
+- **Share links.** **Share** copies a link with your program inside it: whoever opens it sees the code, ready to run in their browser's sandbox. Nothing is stored on a server.
 - **Works on a phone.** Pick which one or two of the code, memory view and loop history to see.
 - **SVG or Canvas 2D.** The diagrams are SVG by default, or drawn with [PixiJS](https://pixijs.com) on a canvas, which pans and zooms smoothly around big drawings (Style → Rendering). **Save SVG** saves either as a vector file.
 

@@ -857,6 +857,22 @@ select {
   border-left-color: var(--ink-faint);
   background: var(--cell-alt);
 }
+.banner[data-tone="shared"] {
+  border-left-color: var(--v-const);
+  border-left-width: 6px;
+}
+/* A share link to copy by hand, when the clipboard isn't available (app/shareController.ts). */
+.banner-input {
+  font-family: var(--font-code);
+  font-size: 12px;
+  width: min(100%, 36em);
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--ink-faint);
+  border-radius: 4px;
+  background: var(--cell);
+  color: inherit;
+}
 .banner[data-tone="tracer"] {
   border-left-color: var(--path);
   border-left-style: double;

@@ -118,6 +118,26 @@ A Measure result or its progress gets the limits pass. The tests' own check (`tr
 
 [`e2e/csp.e2e.ts`](../e2e/csp.e2e.ts) uses the app under its own policy, the canvas renderer included, and expects no violations. Where a browser's automation can't see workers inside a cross-site frame, the checks that need to run code in one are skipped there (Chromium runs them all).
 
+## Share links
+
+**Share** copies a link with the program inside it ([`share/link.ts`](../src/share/link.ts)):
+
+```
+https://pr0l1ne.com/#v1.bVJLbsIwEN1zitkAkvA...
+                    └┬┘└───────── the program, packed ─────────┘
+                  version
+```
+
+Packing: `{"language": "python", "code": "..."}` as JSON, compressed with the browser's own deflate (`CompressionStream("deflate-raw")`), then written in base64url, whose letters, digits, `-` and `_` go in a link as they are. Base64 adds back a third of what compression saves, so short programs barely shrink, but every example's link is under 1,500 characters, and code repeats enough that long programs pack to under half. Links are capped at 32,000 characters (`MAX_FRAGMENT`), which chat apps and forms keep whole.
+
+**Why after the `#`.** The fragment is the one part of a link the browser never sends: opening `pr0l1ne.com/#v1....` asks Cloudflare for `pr0l1ne.com/` only. So the program goes from the person who shared it straight to whoever opens it, and nothing is stored, logged or moderated anywhere. The cost: a link can't be edited or deleted (the program *is* the link), and link previews in chat apps are the standard PR0L1NE card, since they can't see the program either. Short links stored on a server, later, would add both.
+
+**Opening one is careful** (`decodeShare`), because the link came from someone else: the version (only `v1.`; a later format would be `v2.`, and `v1.` keeps working), the characters, the length, the size after decompressing (read as it streams, stopping at 1 MB, so a tiny link can't unpack into gigabytes), valid UTF-8, a JSON object, a language the app has, and code that's text. Fields a later `v1` might add are ignored. Any failure is a `ShareLinkError` saying what's wrong in the person's words.
+
+**What the app does with it** ([`app/shareController.ts`](../src/app/shareController.ts)). At start-up, before running anything, `openFromLocation()` looks for `#v1.` in the address; a link pasted into an open page's address bar is caught by `hashchange` (asking first if there's unsaved work). A program that opens is put in the editor, switching language if needed, as a **shared program** (`AppState.shared`, `app.openShared()`): no saved program open, the picture cleared, and a banner saying it's someone else's code, with Run and Save buttons. Nothing runs until the person asks; when it does, it runs in the runner like anything else. The editor's change handler asks `isUnedited()` first, so putting the program there isn't remembered as the person's own code and doesn't start a Live run: their saved programs, and their unsaved code in that language, stay as they were. The first real edit makes it ordinary unsaved code (`keepShared()`) and takes the link out of the address (`history.replaceState`), so a reload doesn't bring the original back over their edits. The code only ever goes into the editor as text; the banner escapes what it quotes.
+
+[`share/link.test.ts`](../src/share/link.test.ts) checks round trips (Unicode, line endings, empty code) and every way a link can be wrong; [`app/shareController.test.ts`](../src/app/shareController.test.ts) the button and opening; [`e2e/share.e2e.ts`](../e2e/share.e2e.ts) the whole flow in browsers.
+
 ## 2. Tracing Python with `sys.settrace`
 
 [`tracer.py`](../src/worker/tracer.py) is plain CPython, and the core trick fits in a few lines. Python lets you install a function that the interpreter calls on every event:

@@ -21,6 +21,24 @@ describe("AppStore", () => {
     expect(makeApp(storage).app.get().language).toBe("python");
   });
 
+  it("a shared program clears the picture and the open program, without forgetting which one was open", () => {
+    const { app, settings, storage } = makeApp();
+    settings.openProgram("javascript").set("p1");
+    app.showTrace(trace, "code", 2);
+    app.openShared();
+    expect(app.get()).toMatchObject({ shared: true, program: null, trace: null, tracedCode: null, stepIndex: 0 });
+    expect(makeApp(storage).settings.openProgram("javascript").get()).toBe("p1");
+    app.keepShared();
+    expect(app.get().shared).toBe(false);
+    // Saving it, or opening something else, or switching language, ends it too.
+    app.openShared();
+    app.setProgram(null);
+    expect(app.get().shared).toBe(false);
+    app.openShared();
+    app.setLanguage("python");
+    expect(app.get().shared).toBe(false);
+  });
+
   it("measuring is part of the state, so runs can wait for it", () => {
     const { app } = makeApp();
     const seen: boolean[] = [];

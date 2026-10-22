@@ -66,6 +66,10 @@ export class ProgramsController {
       (s) => s.program,
       () => this.updateUI(),
     );
+    app.watch(
+      (s) => s.shared,
+      () => this.updateUI(),
+    );
     this.fillMenu();
     this.updateUI();
   }
@@ -82,8 +86,9 @@ export class ProgramsController {
     return LANGUAGES[this.language].examples;
   }
 
-  /** Unsaved work: edits to a saved program, or code that's neither saved nor an example. */
+  /** Unsaved work: edits to a saved program, code that's neither saved nor an example, or a shared program. */
   hasUnsavedChanges(): boolean {
+    if (this.options.app.get().shared) return true;
     const code = this.options.editor.getCode();
     if (this.open) return code !== this.open.code;
     return code.trim() !== "" && !this.examples().some((example) => example.code === code);
@@ -93,8 +98,9 @@ export class ProgramsController {
   updateUI(): void {
     const { els } = this.options;
     const open = this.open;
-    els.programName.textContent = open?.name ?? "Untitled";
-    els.programName.title = open?.name ?? "Not saved yet";
+    const shared = this.options.app.get().shared;
+    els.programName.textContent = open?.name ?? (shared ? "Shared program" : "Untitled");
+    els.programName.title = open?.name ?? (shared ? "From a share link: not saved" : "Not saved yet");
     els.programName.classList.toggle("is-untitled", !open);
     const dirty = this.hasUnsavedChanges();
     els.programDirty.hidden = !dirty;
@@ -212,7 +218,11 @@ export class ProgramsController {
     if (program && program.id === this.open?.id && !this.hasUnsavedChanges()) return;
 
     if (this.hasUnsavedChanges()) {
-      const what = this.open ? `your changes to "${this.open.name}"` : "your unsaved program";
+      const what = this.open
+        ? `your changes to "${this.open.name}"`
+        : this.options.app.get().shared
+          ? "the shared program"
+          : "your unsaved program";
       if (!this.confirm(`Discard ${what}?`)) return;
     }
     app.setProgram(program ?? null); // before the code changes, so the dirty dot is right

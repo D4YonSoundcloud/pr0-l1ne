@@ -22,6 +22,7 @@ import { ProgramsController } from "./app/programsController";
 import { RendererSwitch } from "./app/rendererSwitch";
 import { RunController } from "./app/runController";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
+import { ShareController } from "./app/shareController";
 import { installShortcuts } from "./app/shortcuts";
 import { AppStore } from "./app/state";
 import { StepView } from "./app/stepView";
@@ -66,6 +67,7 @@ const banner = new Banner(els.banner, {
   run: () => runNow(),
   measure: () => void measure.measure(),
   reload: () => window.location.reload(),
+  "save-shared": () => programsController.saveAs(),
 });
 const setBanner = (html: string | null, tone?: BannerTone) => banner.show(html, tone);
 
@@ -77,6 +79,11 @@ const editor = createEditor(
   {
     onChange(code) {
       playback.setPlaying(false);
+      // A program from a share link, just put there: nothing to remember or run until it's edited.
+      if (shares.isUnedited(code)) {
+        programsController.updateUI();
+        return;
+      }
       settings.code(currentLanguage()).set(code);
       programsController.updateUI();
       if (els.live.checked) runs.scheduleLive(code);
@@ -219,6 +226,36 @@ els.language.addEventListener("change", () => {
 
 // ---------------------------------------------------------------- the rest of the page
 
+// ---------------------------------------------------------------- share links
+
+const shares = new ShareController({
+  app,
+  els,
+  editor,
+  setBanner,
+  isLanguage: isLanguageId,
+  languageLabel: (id) => (isLanguageId(id) ? LANGUAGES[id].label : id),
+  hasUnsavedChanges: () => programsController.hasUnsavedChanges(),
+  open(program) {
+    if (!isLanguageId(program.language)) return;
+    playback.setPlaying(false);
+    // A different program: start its picture afresh.
+    memory.reset();
+    loop.reset();
+    if (program.language !== currentLanguage()) {
+      app.setLanguage(program.language);
+      els.language.value = program.language;
+      app.openShared(); // before the code changes, so the editor's change is seen as the link's
+      editor.setLanguage(LANGUAGES[program.language].monacoId, program.code);
+    } else {
+      app.openShared();
+      editor.setCode(program.code);
+    }
+    programsController.updateUI();
+    view.render();
+  },
+});
+
 els.run.addEventListener("click", () => runNow());
 installShortcuts({
   run: runNow,
@@ -233,7 +270,10 @@ const layout = new LayoutController(els, settings);
 new MobileViewsController(els, settings.mobileViews);
 
 view.render();
-runNow();
+// Opened with a share link: show its program, and run nothing until asked. Otherwise run what's in the editor.
+void shares.openFromLocation().then((opened) => {
+  if (!opened) runNow();
+});
 // Canvas 2D last time: switch to it once it has loaded (SVG draws until then).
 if (settings.renderer.get() === "canvas") {
   useRenderer("canvas").catch((error: unknown) => {

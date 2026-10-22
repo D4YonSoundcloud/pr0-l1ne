@@ -10,8 +10,9 @@
  * - tracer   PR0L1NE itself failed: a bug, worth reporting
  * - runtime  the language couldn't load (the network, or an outdated page)
  * - hint     a `viz:` hint that couldn't be applied
+ * - shared   a program from a share link: someone else's code, not run yet
  */
-export type BannerTone = "program" | "budget" | "tracer" | "runtime" | "hint";
+export type BannerTone = "program" | "budget" | "tracer" | "runtime" | "hint" | "shared";
 
 export class Banner {
   constructor(
