@@ -30,3 +30,6 @@ Thumbs.db
 
 # The code runner's build (npm run build:runner)
 dist-runner/
+
+# The docs site's build cache (npm run docs:build, docs:dev)
+docs/.vitepress/cache/

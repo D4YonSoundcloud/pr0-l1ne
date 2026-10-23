@@ -68,7 +68,7 @@ export class MemoryController {
       },
       onAutoFitChange: (state) => settings.autoFit("memory").set(JSON.stringify(state)),
     });
-    this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("memory"), true) });
+    this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("memory")) });
     this.resetButton = this.renderer.addControl("Reset layout", "Put every box back in its automatic position", () => {
       this.renderer.resetLayout();
       this.render();

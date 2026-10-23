@@ -2,7 +2,7 @@
  * What both builds share (vite.config.ts builds the app, vite.runner.config.ts
  * the code runner).
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Alias, Plugin } from "vite";
 
@@ -66,12 +66,16 @@ export function traceValidators(): Plugin {
 }
 
 /**
- * The app's headers for every page, from public/_headers (what Cloudflare
- * sends), for `vite preview`, so the app is tried locally under the policy
- * it has live. `frameSrc` adds the local runner the preview embeds.
+ * The app's headers for every page, as Cloudflare sends them, for `vite
+ * preview`, so the app (and the docs) are tried locally under the policy
+ * they have live: from the build's dist/_headers (with the docs' scripts
+ * allowed, see scripts/docs-headers.mjs), or public/_headers before a build.
+ * `frameSrc` adds the local runner the preview embeds.
  */
 export function appHeaders(frameSrc: string): Record<string, string> {
-  const text = readFileSync(fileURLToPath(new URL("./public/_headers", import.meta.url)), "utf8");
+  const built = fileURLToPath(new URL("./dist/_headers", import.meta.url));
+  const source = fileURLToPath(new URL("./public/_headers", import.meta.url));
+  const text = readFileSync(existsSync(built) ? built : source, "utf8");
   const headers: Record<string, string> = {};
   let inAll = false;
   for (const line of text.split("\n")) {

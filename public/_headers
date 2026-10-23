@@ -20,8 +20,11 @@
 # here (they run on the runner's site, pr0l1ne-run.pages.dev, with its own
 # strict policy: see src/sandbox/origins.ts), so this page needs no eval of
 # its own; frame-src lets it embed the runner (and a branch's preview of
-# it). `npm run preview` sends these same headers (vite.config.ts), and
-# e2e/csp.e2e.ts checks the app runs under them.
+# it). The docs (VitePress, at /docs) have a few small inline scripts: the
+# build adds each one's hash to script-src (scripts/docs-headers.mjs), which
+# lets exactly those scripts run and nothing else. `npm run preview` sends
+# the built headers (vite.shared.ts), and e2e/csp.e2e.ts checks the app runs
+# under them.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-src https://pr0l1ne-run.pages.dev https://*.pr0l1ne-run.pages.dev; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff

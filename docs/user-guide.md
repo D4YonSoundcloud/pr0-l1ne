@@ -4,7 +4,7 @@
 
 ## Overview
 
-PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, each iteration is stacked under the last one with red arrows showing exactly what changed. Or switch to animated mode and press **Play** to watch values slide into place step by step.
+PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, the loop history animates its current pass in place, so you can press **Play** to watch values slide into place step by step. Or switch to stacked mode, and each iteration is stacked under the last one with red arrows showing exactly what changed.
 
 Binary trees are drawn top-down. Graphs (adjacency lists, matrices, tries, graphs of objects) are drawn as nodes and edges, with your algorithm's own state on them: the visited set filled in, the queue numbered, distances labeled, the search tree in green. Generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
 
@@ -117,7 +117,7 @@ A phone screen can't fit the editor, the memory view and the loop history at onc
 - Tap a window that's hidden to show it. If two were already showing, the one you picked longest ago makes room.
 - Tap one of two that are showing to hide it, and the other fills the screen.
 
-It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. The memory view starts with [Auto-fit](#auto-fit) on, so the whole diagram fits; the loop history doesn't (its rows would get too small to read), and keeps the running iteration in view as you step.
+It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
 
 This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
 
@@ -181,7 +181,7 @@ Zooming centers on the pointer, so you can zoom into the part you're looking at.
 
 ### Auto-fit
 
-**Auto-fit**, next to the zoom buttons, keeps the whole diagram in view on every step. When a step needs a different zoom (a new object appears, a tree grows a level, the loop history gains a row), the canvas glides there with the same easing and duration as that window's step animation in the [Style panel](#styling-the-canvas). The memory view and the loop history each have their own Auto-fit, and both are remembered.
+**Auto-fit**, next to the zoom buttons, keeps the whole diagram in view on every step. When a step needs a different zoom (a new object appears, a tree grows a level, the loop history gains a row), the canvas glides there with the same easing and duration as that window's step animation in the [Style panel](#styling-the-canvas). The memory view and the loop history each have their own Auto-fit. It's on to begin with, and turning it off (or changing its mode) is remembered.
 
 The **▾** next to it picks how it zooms:
 
@@ -278,8 +278,8 @@ Arrows are drawn as straight runs with rounded corners, and they travel through 
 
 The **Arrows | Nested** switch in the Memory header changes how references are drawn. Your choice is remembered, and `F1` → "AlgoViz: Toggle Nested Memory View" switches it too.
 
-- **Arrows** (the default) draws every object as its own box, with an arrow for every reference.
-- **Nested** draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, and an object's fields hold their sub-objects. A list of lists becomes a **grid**: rows stacked, column numbers along the top, row numbers down the side. If your code indexes it as `grid[i][j]`, `i` is marked beside its row, `j` under its column, and the cell the step works on gets a dashed outline. That cell comes from the code itself: the `grid[a][b]` on the line that just ran (or, if that line doesn't touch the grid, the one about to run), with `a` and `b` worked out from the variables at that step. In a spiral traversal, `results.append(matrix[up][col])` outlines `matrix[up][col]`, even with `down`, `left`, `right` and `row` all pointing somewhere too; on lines that don't index the grid, nothing is outlined. Names like `left`, `right`, `lo` and `hi` that the code only uses for columns are drawn only under columns, and the same for rows.
+- **Arrows** draws every object as its own box, with an arrow for every reference.
+- **Nested** (the default) draws an object *inside* the thing that refers to it, as long as nothing else refers to it. A list in a variable sits right in the variable's row, and an object's fields hold their sub-objects. A list of lists becomes a **grid**: rows stacked, column numbers along the top, row numbers down the side. If your code indexes it as `grid[i][j]`, `i` is marked beside its row, `j` under its column, and the cell the step works on gets a dashed outline. That cell comes from the code itself: the `grid[a][b]` on the line that just ran (or, if that line doesn't touch the grid, the one about to run), with `a` and `b` worked out from the variables at that step. In a spiral traversal, `results.append(matrix[up][col])` outlines `matrix[up][col]`, even with `down`, `left`, `right` and `row` all pointing somewhere too; on lines that don't index the grid, nothing is outlined. Names like `left`, `right`, `lo` and `hi` that the code only uses for columns are drawn only under columns, and the same for rows.
 
 ![A binary search tree in nested mode](nested-memory.png)
 
@@ -430,8 +430,8 @@ When a loop works on several things at once (a list and a linked list, two array
 
 The **Stacked | Animated** switch in the Loop history header picks between two views of the same loop. Your choice is remembered.
 
-- **Stacked** (the default) is the history described above: one row per iteration, so you can compare any iteration with any other.
-- **Animated** shows a single row: the loop's state at the current step. As you step or [play](#playing-a-program), cells change in place and values slide between cells, so a sort visibly shuffles its values into order and a linked list's arrows turn around one by one. Cells that changed on that step are yellow. The row keeps the same layout (columns, cell widths, tree shape) as the stacked view, so nothing jumps around between steps.
+- **Stacked** is the history described above: one row per iteration, so you can compare any iteration with any other.
+- **Animated** (the default) shows a single row: the loop's state at the current step. As you step or [play](#playing-a-program), cells change in place and values slide between cells, so a sort visibly shuffles its values into order and a linked list's arrows turn around one by one. Cells that changed on that step are yellow. The row keeps the same layout (columns, cell widths, tree shape) as the stacked view, so nothing jumps around between steps.
 
 Stacked is better for seeing the whole story at once, and Animated for following what a single step does.
 

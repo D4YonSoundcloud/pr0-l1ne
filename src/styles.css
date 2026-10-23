@@ -648,6 +648,12 @@ body {
 .button:hover {
   background: #2b3450;
 }
+/* A link that looks like the toolbar's buttons (Docs). */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
 .button:disabled {
   opacity: 0.4;
   cursor: default;

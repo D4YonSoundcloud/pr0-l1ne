@@ -167,7 +167,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     /** The saved program open in each language, by id; "" or null when none. */
     openProgram: (language: LanguageId) => text(`open:${language}`),
 
-    memoryMode: choice("memory-mode", ["arrows", "nested"] as const, "arrows"),
+    /** Nested by default: objects only one thing refers to are drawn inside it (see scene/nesting.ts). */
+    memoryMode: choice("memory-mode", ["arrows", "nested"] as const, "nested"),
     showOutput: flag("show-output", true),
     dimOutput: flag("dim-output", false),
     sizes: flag("sizes", false),
@@ -187,7 +188,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     /** Growth runs kept for comparison, per language, as JSON (see growthView.ts). */
     growthKept: (language: LanguageId) => text(`growth-kept:${language}`),
 
-    loopMode: choice("loop-mode", ["stacked", "animated"] as const, "stacked"),
+    /** Animated by default: the running pass, changing in place as you step. */
+    loopMode: choice("loop-mode", ["stacked", "animated"] as const, "animated"),
     loopVertical: flag("loop-vertical", false),
     /** Playback speed in steps per second; null for the default. */
     speed: number("speed"),

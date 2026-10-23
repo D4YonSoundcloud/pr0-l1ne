@@ -39,6 +39,8 @@ Then open the address it prints (usually http://localhost:5173). `npm test` runs
 
 ## Documentation
 
+Read it on the site, with search: **[pr0l1ne.com/docs](https://pr0l1ne.com/docs/)**. The same pages are in [`docs/`](docs/).
+
 | | |
 | --- | --- |
 | [User guide](docs/user-guide.md) | Every feature in detail |

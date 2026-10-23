@@ -62,6 +62,7 @@
         <button id="complexity" class="button cx-chip" type="button" aria-expanded="false" aria-controls="complexity-panel">Complexity</button>
         <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
+        <a id="docs" class="button quiet docs-link" href="/docs/user-guide.html" target="_blank" rel="noopener" title="The user guide and how PR0L1NE works (opens in a new tab)">Docs</a>
         </div>
         <span id="status" class="status" role="status" aria-live="polite">Loading…</span>
       </header>
@@ -103,8 +104,8 @@
               <div class="section-head">
                 <h2 class="section-title" id="memory-title">Memory</h2>
                 <div class="segmented" role="group" aria-label="How references are drawn">
-                  <button type="button" id="mode-arrows" class="segment" aria-pressed="true" title="Every object is its own box, connected by arrows">Arrows</button>
-                  <button type="button" id="mode-nested" class="segment" aria-pressed="false" title="Objects only one thing refers to are drawn inside it">Nested</button>
+                  <button type="button" id="mode-arrows" class="segment" aria-pressed="false" title="Every object is its own box, connected by arrows">Arrows</button>
+                  <button type="button" id="mode-nested" class="segment" aria-pressed="true" title="Objects only one thing refers to are drawn inside it">Nested</button>
                 </div>
                 <div class="segmented" role="group" aria-label="Printed output">
                   <button type="button" id="show-output" class="segment" aria-pressed="true" title="On a step that prints, show what was printed">Output</button>
@@ -124,8 +125,8 @@
               <div class="section-head">
                 <h2 class="section-title" id="loop-title">Loop history</h2>
                 <div class="segmented" role="group" aria-label="How iterations are shown">
-                  <button type="button" id="loop-stacked" class="segment" aria-pressed="true" title="One row per iteration, stacked">Stacked</button>
-                  <button type="button" id="loop-animated" class="segment" aria-pressed="false" title="One live row that changes as you step">Animated</button>
+                  <button type="button" id="loop-stacked" class="segment" aria-pressed="false" title="One row per iteration, stacked">Stacked</button>
+                  <button type="button" id="loop-animated" class="segment" aria-pressed="true" title="One live row that changes as you step">Animated</button>
                 </div>
                 <div id="loop-tabs" class="loop-tabs" role="tablist" aria-label="Choose a loop"></div>
                 <label class="toggle small">

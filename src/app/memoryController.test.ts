@@ -18,6 +18,8 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     <span id="memory-total"></span>`;
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const { app, settings, storage: store } = makeApp(storage);
+  // These tests start from arrows (a first visit starts nested: see its own test).
+  if (!storage) settings.memoryMode.set("arrows");
   let redraws = 0;
   const memory = new MemoryController({
     app,
@@ -52,6 +54,10 @@ describe("MemoryController", () => {
     memory.render();
     expect($("memory").querySelector(".memory-svg")).not.toBeNull();
     expect($("memory").querySelectorAll(".node").length).toBeGreaterThan(0);
+  });
+
+  it("starts nested on a first visit", () => {
+    expect(makeApp().settings.memoryMode.get()).toBe("nested");
   });
 
   it("switches between arrows and nested objects, and remembers", async () => {

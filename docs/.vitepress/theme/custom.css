@@ -1,0 +1,25 @@
+/* PR0L1NE's look for the docs: the app's ink, ballpoint blue and fonts (src/styles.css). */
+:root {
+  --vp-font-family-base: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --vp-font-family-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --vp-c-brand-1: #2f6fb0;
+  --vp-c-brand-2: #285f98;
+  --vp-c-brand-3: #2f6fb0;
+  --vp-c-brand-soft: rgba(47, 111, 176, 0.14);
+  --vp-c-text-1: #1d2b45;
+  --vp-c-text-2: #5b6b85;
+  --vp-c-bg-alt: #e8edf1;
+}
+.dark {
+  --vp-c-brand-1: #7fb0e6;
+  --vp-c-brand-2: #a3c6ee;
+  --vp-c-brand-3: #2f6fb0;
+  --vp-c-brand-soft: rgba(127, 176, 230, 0.16);
+  --vp-c-text-1: #e8edf1;
+  --vp-c-text-2: #b3c0d1;
+}
+/* Screenshots: a little room, a soft edge. */
+.vp-doc img {
+  border-radius: 6px;
+  border: 1px solid var(--vp-c-divider);
+}

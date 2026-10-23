@@ -36,14 +36,14 @@ describe("settings", () => {
     const s = createSettings(fakeStorage());
     expect(s.language.get()).toBeNull();
     expect(s.code("python").get()).toBeNull();
-    expect(s.memoryMode.get()).toBe("arrows");
+    expect(s.memoryMode.get()).toBe("nested");
     expect(s.showOutput.get()).toBe(true);
     expect(s.dimOutput.get()).toBe(false);
     expect(s.sizes.get()).toBe(false);
     expect(s.complexityLabels.get()).toBe(true);
     expect(s.measureLabels.get()).toBe(true);
     expect(s.measureLimit.get()).toBeNull();
-    expect(s.loopMode.get()).toBe("stacked");
+    expect(s.loopMode.get()).toBe("animated");
     expect(s.loopVertical.get()).toBe(false);
     expect(s.speed.get()).toBeNull();
     expect(s.swapped.get()).toBe(false);
@@ -88,7 +88,7 @@ describe("settings", () => {
     );
     expect(s.renderer.get()).toBe("svg");
     expect(s.language.get()).toBeNull();
-    expect(s.memoryMode.get()).toBe("arrows");
+    expect(s.memoryMode.get()).toBe("nested");
     expect(s.speed.get()).toBeNull();
     expect(s.split.get()).toBeNull();
   });

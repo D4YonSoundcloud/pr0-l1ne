@@ -25,7 +25,9 @@ Open the URL it prints for PR0L1NE (http://localhost:5173). The bubble sort exam
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Starts the dev servers with hot reload: the app (http://localhost:5173) and the code runner (http://127.0.0.1:5174). |
-| `npm run build` | Type-checks, then builds the app into `dist/`. |
+| `npm run build` | Type-checks, then builds the app into `dist/`, with the docs site in `dist/docs/`. |
+| `npm run docs:dev` | Serves the docs site with hot reload (http://localhost:5175/docs/). Edit any page in `docs/` and it updates. |
+| `npm run docs:build` | Builds only the docs site into `dist/docs/`, and allows its inline scripts in `dist/_headers` (see Deploying). `npm run build` runs it. |
 | `npm run build:runner` | Builds the code runner into `dist-runner/`: its page, the three language workers, Pyodide, and its `_headers`. |
 | `npm run preview` | Serves both builds locally: the app (http://localhost:4173) and the runner (http://127.0.0.1:4174). Run both builds first. Built anywhere but Cloudflare, the app talks to this local runner. |
 | `npm run typecheck` | Runs the TypeScript compiler without building. |
@@ -181,6 +183,8 @@ Cloudflare only builds; it doesn't run the tests. `.github/workflows/ci.yml` run
 
 `public/_headers` sets the app's caching (built files are kept for a year, the page itself is re-checked on every visit) and security headers, including its Content-Security-Policy (report-only for now). The runner's `_headers` is written by its build from `src/sandbox/origins.ts`.
 
+**The docs site.** The pages in `docs/` are also a [VitePress](https://vitepress.dev/) site, built into `dist/docs/` by `npm run build`, so it deploys with the app at https://pr0l1ne.com/docs/ and needs nothing set up in Cloudflare. Its configuration is `docs/.vitepress/config.mts`: the sidebar, search, and the colours and fonts of the app (`docs/.vitepress/theme/custom.css`). The pages stay plain Markdown that reads the same on GitHub; links from a page to the code (`../src/...`) are sent to GitHub. VitePress puts three small scripts inside its pages (dark mode, and the list of page files), which the app's Content-Security-Policy would block: `scripts/docs-headers.mjs` hashes them after each build and adds the hashes to `script-src` in `dist/_headers`, so they, and nothing else inline, are allowed. One of them changes whenever the docs do, which is why it's done at build time. A new page goes in the `sidebar` in `config.mts`.
+
 ### One-time setup
 
 1. In the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect to Git**, and authorize GitHub for `D4YonSoundcloud/pr0-l1ne`.
@@ -226,7 +230,8 @@ pr0-l1ne/
 ├── vite.runner.config.ts       The runner's build (dist-runner/): workers, Pyodide, its headers
 ├── vite.shared.ts              What both builds share
 ├── playwright.config.ts        Browser tests: Chromium, Firefox, WebKit, against npm run preview
-├── docs/                       Images used in this README
+├── docs/                       The documentation, and the images it uses: also the docs site (pr0l1ne.com/docs)
+│   └── .vitepress/             The docs site's configuration and theme
 ├── e2e/
 │   ├── sandbox.e2e.ts          What a hostile program or page would try, in real browsers
 │   ├── share.e2e.ts            Share links: open, run, edit, save, a broken link, Share
@@ -234,6 +239,7 @@ pr0-l1ne/
 ├── scripts/
 │   ├── dev.mjs                 npm run dev: the app's and the runner's dev servers
 │   ├── preview.mjs             npm run preview: both builds, served locally
+│   ├── docs-headers.mjs        After the docs build: allows its inline scripts by hash in dist/_headers
 │   └── test-pyodide.mjs        Runs the Python tracer's tests inside Pyodide
 └── src/
     ├── main.ts                 Creates the state and controllers and connects them

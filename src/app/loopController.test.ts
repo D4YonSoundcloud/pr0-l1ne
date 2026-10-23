@@ -33,6 +33,8 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     <button id="loop-stacked"></button><button id="loop-animated"></button>`;
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const { app, settings, storage: store } = makeApp(storage);
+  // These tests start from stacked rows (a first visit starts animated: see its own test).
+  if (!storage) settings.loopMode.set("stacked");
   const redraws: boolean[] = [];
   const loop = new LoopController({
     app,
@@ -59,6 +61,10 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
 }
 
 describe("LoopController", () => {
+  it("starts animated on a first visit", () => {
+    expect(makeApp().settings.loopMode.get()).toBe("animated");
+  });
+
   it("explains itself before any loop runs", async () => {
     const { app, loop, $ } = setup();
     await showJavaScript(app, NESTED, 2);
