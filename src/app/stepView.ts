@@ -2,7 +2,7 @@
  * Drawing the step on screen: the step label under the timeline, the memory
  * view and loop history, the output printed so far, and the editor's line
  * marks (yellow for the line that ran, blue for the next one, red for the
- * error at the end). Called after every move and every run.
+ * error at the end; for SQL, yellow is the clause the step shows). Called after every move and every run.
  */
 import type { LineMarks } from "../editor";
 import { compact } from "../trace/measurement";
@@ -82,7 +82,9 @@ export class StepView {
     const prev = trace.steps[stepIndex - 1];
     // The label has a fixed width (so the scrubber never resizes); the full
     // text is in its tooltip when it doesn't fit.
-    els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${describe(step, prev)}`;
+    // SQL: the stage's clause (its step shows what the clause did).
+    const stage = trace.sql?.stages[stepIndex];
+    els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${stage ? stage.clause : describe(step, prev)}`;
     els.stepLabel.title = els.stepLabel.textContent;
     const skipped = (step.skipped ?? 0) + (stepIndex === trace.steps.length - 1 ? (step.skippedAfter ?? 0) : 0);
     if (skipped) {
@@ -104,7 +106,17 @@ export class StepView {
       els.output.append(span);
     }
 
-    if (updateMarks) {
+    if (updateMarks && stage) {
+      // A SQL step shows what its clause did: that line is the one that ran.
+      editor.setMarks({
+        next: null,
+        prev: stage.line,
+        error:
+          atEnd && trace.error
+            ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` }
+            : null,
+      });
+    } else if (updateMarks) {
       const nextLine = step.event === "call" && step.line < 1 ? null : step.line;
       editor.setMarks({
         next: nextLine,

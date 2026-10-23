@@ -17,7 +17,8 @@
           "enum": [
             "python",
             "javascript",
-            "typescript"
+            "typescript",
+            "sql"
           ],
           "description": "Which tracer produced this. Affects small details like \"def\" vs \"function\"."
         },
@@ -124,6 +125,10 @@
         "viz": {
           "$ref": "#/definitions/VizHints",
           "description": "The hints, parsed and applied (added by applyHints, not by tracers)."
+        },
+        "sql": {
+          "$ref": "#/definitions/SqlTrace",
+          "description": "SQL only: what each step shows, a table at each stage of a query (steps[i] is stages[i]). Its steps have no variables or heap: the tables are here."
         }
       },
       "required": [
@@ -1293,6 +1298,281 @@
         "edgelist"
       ],
       "description": "Options a `viz: graph` hint can carry."
+    },
+    "SqlTrace": {
+      "type": "object",
+      "properties": {
+        "database": {
+          "type": "string",
+          "description": "The sample database it ran on (`-- viz: database shop`), if any."
+        },
+        "statements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlStatement"
+          }
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlStage"
+          },
+          "description": "One per step."
+        }
+      },
+      "required": [
+        "statements",
+        "stages"
+      ],
+      "additionalProperties": false
+    },
+    "SqlStatement": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "\"SELECT\", \"CREATE TABLE\", \"INSERT\"..."
+        },
+        "line": {
+          "type": "number",
+          "description": "Its first line, and its text on one line (shortened)."
+        },
+        "text": {
+          "type": "string"
+        },
+        "unsupported": {
+          "type": "string",
+          "description": "Why it's shown as its result rather than stepped through, if it is."
+        }
+      },
+      "required": [
+        "kind",
+        "line",
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "A statement of the script, in order."
+    },
+    "SqlStage": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/SqlStageKind"
+        },
+        "clause": {
+          "type": "string",
+          "description": "The clause as written, on one line: \"WHERE age > 3\"."
+        },
+        "summary": {
+          "type": "string",
+          "description": "What it did, in a few words: \"kept 4 of 7 rows\"."
+        },
+        "statement": {
+          "type": "number",
+          "description": "Which statement (an index into SqlTrace.statements)."
+        },
+        "line": {
+          "type": "number",
+          "description": "The line the clause is on."
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlTable"
+          }
+        },
+        "rows": {
+          "type": "number",
+          "description": "Rows left after this stage (in the pipeline, between stages)."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Anything worth knowing about it (\"No ORDER BY: ...\")."
+        }
+      },
+      "required": [
+        "kind",
+        "clause",
+        "summary",
+        "statement",
+        "line",
+        "tables"
+      ],
+      "additionalProperties": false,
+      "description": "One step: a stage of a statement."
+    },
+    "SqlStageKind": {
+      "type": "string",
+      "enum": [
+        "tables",
+        "from",
+        "where",
+        "select",
+        "distinct",
+        "order",
+        "limit",
+        "statement",
+        "result"
+      ]
+    },
+    "SqlTable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "\"pets\", or \"result\"."
+        },
+        "alias": {
+          "type": "string",
+          "description": "How the query names it, when that differs (\"p\" in `FROM pets AS p`)."
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlColumn"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlRow"
+          }
+        },
+        "more": {
+          "type": "number",
+          "description": "Rows there are but not drawn (a step draws at most a hundred)."
+        },
+        "cuts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "before": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "before",
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Lines across the table (LIMIT, OFFSET) before the row at `before`."
+        }
+      },
+      "required": [
+        "name",
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "description": "A table drawn at a SQL step."
+    },
+    "SqlColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "Postgres's name for its type: \"integer\", \"text\", \"numeric\"..."
+        },
+        "numeric": {
+          "type": "boolean",
+          "description": "Numbers are drawn right-aligned."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "computed",
+            "check",
+            "result",
+            "sort"
+          ],
+          "description": "What the column is at this step (absent: a column of the table):   computed  made by an expression in SELECT (`expr`)   check     part of the WHERE condition, worked out for each row (`expr`)   result    the whole WHERE condition for each row: is it kept?   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)"
+        },
+        "expr": {
+          "type": "string",
+          "description": "The expression, as written (one line)."
+        },
+        "sort": {
+          "type": "object",
+          "properties": {
+            "rank": {
+              "type": "number"
+            },
+            "desc": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rank",
+            "desc"
+          ],
+          "additionalProperties": false,
+          "description": "ORDER BY sorts on this column: its place among the sort keys (1 first), and which way."
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "A column of a table drawn at a SQL step."
+    },
+    "SqlRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The same row has the same id at every step of a statement (\"pets:0,3\": its table and where Postgres keeps it), so it can be followed (and animated) from step to step."
+        },
+        "label": {
+          "type": "string",
+          "description": "Its place in its table, \"#3\": how the text names it."
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": "Each column's value as Postgres writes it; null is SQL's NULL."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "removed",
+            "added",
+            "changed"
+          ],
+          "description": "removed  this step takes it out: WHERE's condition isn't true, a          duplicate DISTINCT drops, past LIMIT, skipped by OFFSET, or          deleted added    a new row (INSERT) changed  a row changed by UPDATE"
+        },
+        "note": {
+          "type": "string",
+          "description": "Why, in words: \"age > 3 is NULL: unknown, so not kept\"."
+        },
+        "tie": {
+          "type": "boolean",
+          "description": "ORDER BY: its sort keys equal the row before's, so the two could come either way."
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "values"
+      ],
+      "additionalProperties": false,
+      "description": "A row of a table drawn at a SQL step."
     }
   }
 }

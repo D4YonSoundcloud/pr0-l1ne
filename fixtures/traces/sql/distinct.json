@@ -1,0 +1,895 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": " city\n-------\n Hull\n Leeds\n York\n(3 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "school",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database school"
+        },
+        {
+          "kind": "SELECT",
+          "line": 3,
+          "text": "SELECT DISTINCT city FROM students ORDER BY city"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database school",
+          "summary": "3 tables: students, courses, enrollments",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "students",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "year",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "gpa",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "city",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "students:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Maya",
+                    "2",
+                    "3.80",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Omar",
+                    "1",
+                    "3.20",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Priya",
+                    "3",
+                    "3.80",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Tom",
+                    "1",
+                    null,
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Zoe",
+                    "2",
+                    "2.90",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Ivan",
+                    "4",
+                    "3.50",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Lena",
+                    "3",
+                    null,
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Kofi",
+                    "2",
+                    "3.95",
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Sara",
+                    "1",
+                    "2.40",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Ben",
+                    "4",
+                    "3.10",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Nina",
+                    "3",
+                    "3.50",
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Raj",
+                    "1",
+                    "3.65",
+                    "Leeds"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "courses",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "title",
+                  "type": "text"
+                },
+                {
+                  "name": "department",
+                  "type": "text"
+                },
+                {
+                  "name": "credits",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "courses:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Databases",
+                    "Computing",
+                    "15"
+                  ]
+                },
+                {
+                  "id": "courses:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Algorithms",
+                    "Computing",
+                    "15"
+                  ]
+                },
+                {
+                  "id": "courses:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Statistics",
+                    "Maths",
+                    "10"
+                  ]
+                },
+                {
+                  "id": "courses:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Linear Algebra",
+                    "Maths",
+                    "15"
+                  ]
+                },
+                {
+                  "id": "courses:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Ethics",
+                    "Philosophy",
+                    "10"
+                  ]
+                },
+                {
+                  "id": "courses:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Logic",
+                    "Philosophy",
+                    "10"
+                  ]
+                },
+                {
+                  "id": "courses:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Networks",
+                    "Computing",
+                    "10"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "enrollments",
+              "columns": [
+                {
+                  "name": "student_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "course_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "grade",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "enrollments:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "A"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,2",
+                  "label": "#2",
+                  "values": [
+                    "1",
+                    "2",
+                    "B"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,3",
+                  "label": "#3",
+                  "values": [
+                    "2",
+                    "1",
+                    "C"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,4",
+                  "label": "#4",
+                  "values": [
+                    "3",
+                    "3",
+                    "A"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,5",
+                  "label": "#5",
+                  "values": [
+                    "3",
+                    "4",
+                    "A"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,6",
+                  "label": "#6",
+                  "values": [
+                    "4",
+                    "5",
+                    null
+                  ]
+                },
+                {
+                  "id": "enrollments:0,7",
+                  "label": "#7",
+                  "values": [
+                    "5",
+                    "2",
+                    "B"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,8",
+                  "label": "#8",
+                  "values": [
+                    "6",
+                    "1",
+                    "B"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,9",
+                  "label": "#9",
+                  "values": [
+                    "6",
+                    "6",
+                    "A"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,10",
+                  "label": "#10",
+                  "values": [
+                    "8",
+                    "2",
+                    "A"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,11",
+                  "label": "#11",
+                  "values": [
+                    "8",
+                    "4",
+                    "B"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,12",
+                  "label": "#12",
+                  "values": [
+                    "9",
+                    "3",
+                    null
+                  ]
+                },
+                {
+                  "id": "enrollments:0,13",
+                  "label": "#13",
+                  "values": [
+                    "10",
+                    "5",
+                    "C"
+                  ]
+                },
+                {
+                  "id": "enrollments:0,14",
+                  "label": "#14",
+                  "values": [
+                    "11",
+                    "6",
+                    "B"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM students",
+          "summary": "students: 12 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "students",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "year",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "gpa",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "city",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "students:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Maya",
+                    "2",
+                    "3.80",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Omar",
+                    "1",
+                    "3.20",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Priya",
+                    "3",
+                    "3.80",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Tom",
+                    "1",
+                    null,
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Zoe",
+                    "2",
+                    "2.90",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Ivan",
+                    "4",
+                    "3.50",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Lena",
+                    "3",
+                    null,
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Kofi",
+                    "2",
+                    "3.95",
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Sara",
+                    "1",
+                    "2.40",
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Ben",
+                    "4",
+                    "3.10",
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Nina",
+                    "3",
+                    "3.50",
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Raj",
+                    "1",
+                    "3.65",
+                    "Leeds"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 12
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT city",
+          "summary": "1 column, 12 rows",
+          "line": 3,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "city",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "students:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,2",
+                  "label": "#2",
+                  "values": [
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,5",
+                  "label": "#5",
+                  "values": [
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,6",
+                  "label": "#6",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,7",
+                  "label": "#7",
+                  "values": [
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,8",
+                  "label": "#8",
+                  "values": [
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,9",
+                  "label": "#9",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,10",
+                  "label": "#10",
+                  "values": [
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,11",
+                  "label": "#11",
+                  "values": [
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,12",
+                  "label": "#12",
+                  "values": [
+                    "Leeds"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 12
+        },
+        {
+          "statement": 1,
+          "kind": "distinct",
+          "clause": "SELECT DISTINCT",
+          "summary": "3 different rows of 12",
+          "line": 3,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "city",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "students:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,2",
+                  "label": "#2",
+                  "values": [
+                    "York"
+                  ]
+                },
+                {
+                  "id": "students:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Leeds"
+                  ],
+                  "status": "removed",
+                  "note": "same as #1"
+                },
+                {
+                  "id": "students:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,5",
+                  "label": "#5",
+                  "values": [
+                    "York"
+                  ],
+                  "status": "removed",
+                  "note": "same as #2"
+                },
+                {
+                  "id": "students:0,6",
+                  "label": "#6",
+                  "values": [
+                    "Leeds"
+                  ],
+                  "status": "removed",
+                  "note": "same as #1"
+                },
+                {
+                  "id": "students:0,7",
+                  "label": "#7",
+                  "values": [
+                    "York"
+                  ],
+                  "status": "removed",
+                  "note": "same as #2"
+                },
+                {
+                  "id": "students:0,8",
+                  "label": "#8",
+                  "values": [
+                    "Hull"
+                  ],
+                  "status": "removed",
+                  "note": "same as #4"
+                },
+                {
+                  "id": "students:0,9",
+                  "label": "#9",
+                  "values": [
+                    "Leeds"
+                  ],
+                  "status": "removed",
+                  "note": "same as #1"
+                },
+                {
+                  "id": "students:0,10",
+                  "label": "#10",
+                  "values": [
+                    "York"
+                  ],
+                  "status": "removed",
+                  "note": "same as #2"
+                },
+                {
+                  "id": "students:0,11",
+                  "label": "#11",
+                  "values": [
+                    "Hull"
+                  ],
+                  "status": "removed",
+                  "note": "same as #4"
+                },
+                {
+                  "id": "students:0,12",
+                  "label": "#12",
+                  "values": [
+                    "Leeds"
+                  ],
+                  "status": "removed",
+                  "note": "same as #1"
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY city",
+          "summary": "sorted by city",
+          "line": 5,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "city",
+                  "type": "text",
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "students:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Hull"
+                  ]
+                },
+                {
+                  "id": "students:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Leeds"
+                  ]
+                },
+                {
+                  "id": "students:0,2",
+                  "label": "#2",
+                  "values": [
+                    "York"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":3,"stack":[{"id":"f0","func":"Global","line":3,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":3,"stack":[{"id":"f0","func":"Global","line":3,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":43,"loops":[]}
+  ]
+}

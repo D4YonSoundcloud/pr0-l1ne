@@ -15,4 +15,5 @@ export interface Example {
 
 export { JAVASCRIPT_EXAMPLES } from "./javascript";
 export { PYTHON_EXAMPLES } from "./python";
+export { SQL_EXAMPLES } from "./sql";
 export { TYPESCRIPT_EXAMPLES } from "./typescript";

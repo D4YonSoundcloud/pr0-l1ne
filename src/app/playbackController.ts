@@ -45,7 +45,8 @@ export interface PlaybackOptions {
 /**
  * The first step worth showing. Every trace starts with "called Global" and
  * "next is line 1", which both show an empty program, so the timeline starts
- * at the third step: the state after line 1 ran.
+ * at the third step: the state after line 1 ran. (Not SQL: its first step
+ * is the first stage. See PlaybackController.firstStep.)
  */
 const SKIPPED_STEPS = 2;
 
@@ -96,6 +97,8 @@ export class PlaybackController {
 
   /** The first step worth showing. */
   firstStep(): number {
+    // Every step of a SQL trace is a stage worth seeing, the first included.
+    if (this.options.app.get().trace?.sql) return 0;
     return firstStepFor(this.options.stepCount());
   }
 

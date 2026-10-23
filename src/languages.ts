@@ -6,10 +6,16 @@
  * The workers themselves run on the runner's site, not here (see
  * sandbox/origins.ts): runner/runner.ts has one for each of these ids.
  */
-import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./examples/index";
+import {
+  type Example,
+  JAVASCRIPT_EXAMPLES,
+  PYTHON_EXAMPLES,
+  SQL_EXAMPLES,
+  TYPESCRIPT_EXAMPLES,
+} from "./examples/index";
 import { SandboxWorker, type WorkerLike } from "./sandbox/sandboxWorker";
 
-export type LanguageId = "python" | "javascript" | "typescript";
+export type LanguageId = "python" | "javascript" | "typescript" | "sql";
 
 export interface Language {
   id: LanguageId;
@@ -19,6 +25,11 @@ export interface Language {
   examples: Example[];
   /** A worker for this language, in the runner. */
   createWorker(): WorkerLike;
+  /**
+   * What it's traced as: a program, line by line (variables, loops,
+   * complexity, Measure), or a SQL script, clause by clause (tables).
+   */
+  kind: "program" | "query";
 }
 
 export const LANGUAGES: Record<LanguageId, Language> = {
@@ -28,6 +39,7 @@ export const LANGUAGES: Record<LanguageId, Language> = {
     monacoId: "python",
     examples: PYTHON_EXAMPLES,
     createWorker: () => new SandboxWorker("python"),
+    kind: "program",
   },
   javascript: {
     id: "javascript",
@@ -35,6 +47,7 @@ export const LANGUAGES: Record<LanguageId, Language> = {
     monacoId: "javascript",
     examples: JAVASCRIPT_EXAMPLES,
     createWorker: () => new SandboxWorker("javascript"),
+    kind: "program",
   },
   typescript: {
     id: "typescript",
@@ -42,6 +55,15 @@ export const LANGUAGES: Record<LanguageId, Language> = {
     monacoId: "typescript",
     examples: TYPESCRIPT_EXAMPLES,
     createWorker: () => new SandboxWorker("typescript"),
+    kind: "program",
+  },
+  sql: {
+    id: "sql",
+    label: "SQL",
+    monacoId: "pgsql",
+    examples: SQL_EXAMPLES,
+    createWorker: () => new SandboxWorker("sql"),
+    kind: "query",
   },
 };
 

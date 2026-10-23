@@ -20,6 +20,10 @@
 │                                         │      │  typescript.worker.ts  (TS)           │
 │                                         │      │    ├─ typescript.ts  (strip)          │
 │                                         │      │    └─ then same as JS                 │
+│                                         │      │                                       │
+│                                         │      │  sql.worker.ts  (SQL)                 │
+│                                         │      │    ├─ PGlite (Postgres/WASM)          │
+│                                         │      │    └─ libpg_query (its parser)        │
 │                                         │      └───────────────────────────────────────┘
 │     │
 │     ├─ trace/hints.ts        parse and apply viz: comments
@@ -644,3 +648,32 @@ A loop of unknown length can't know its last passes until it ends, so its passes
 - **Fitting** is least squares on a log scale: for each curve x^d (log x)^l, the best scale is the mean of log(y) − log(curve), and the error is what's left. A more complex curve has to fit clearly better (30% less error) to win, since four points with some constant overhead can't tell n from n log n by a hair. The slope on the log-log plot is reported too.
 - **The code's estimate** is tied to the sizes by `staticGrowth()`: a size in the estimate grows if it's named like a growing variable (`k`), or if its value in the traced run equals that variable's (`len(nums)` was 40,000 when n was). Its degree is then the largest sum of those sizes' powers in any term. `compareGrowth()` says whether the two agree, differ by a log factor, or disagree, and how.
 - **Charts** are hand-drawn SVG: log axes with ticks at powers of ten (and 2 and 5 between them for narrow ranges), points, a fitted curve per series, and the estimate dashed through the largest size. Kept series are stored per language in `localStorage`.
+
+## 22. Tracing SQL
+
+SQL is a different kind of language from the other three: a query doesn't run line by line, and has no variables or loops. It says what result it wants, and Postgres decides how to get it. So a SQL trace isn't a program's steps. It's a query's clauses, in the order they give it meaning (FROM, WHERE, SELECT, DISTINCT, ORDER BY, LIMIT), each step a table. The code is in [`src/sql/`](../src/sql/); see [SQL](sql.md) for what it looks like.
+
+**The engine.** [`sql.worker.ts`](../src/sql/sql.worker.ts) runs in the runner like every language worker. It starts [PGlite](https://pglite.dev) (Postgres 18 compiled to WebAssembly: a real Postgres, so every value, error and rule is Postgres's own) and [libpg_query](https://github.com/pganalyze/libpg_query) (Postgres's own parser, also WebAssembly). [`engine.ts`](../src/sql/engine.ts) asks for every value as the text Postgres writes it, so what's drawn is exactly what `psql` would print.
+
+**A run** ([`trace.ts`](../src/sql/trace.ts)) is one transaction, rolled back at the end, so nothing a program does outlives it. It loads the sample database the program names ([`databases.ts`](../src/sql/databases.ts)), then runs the script's statements in order, each in a savepoint so a failed step's query doesn't stop the run. A statement that isn't a query (CREATE TABLE, INSERT...) is one step, showing the table it changed ([`statements.ts`](../src/sql/statements.ts)): rows are told apart before and after by where Postgres keeps them (`ctid`).
+
+**A query** ([`select.ts`](../src/sql/select.ts)) is run first as written, so its errors and its result are Postgres's own. Then it's stepped through, from its parse tree: a smaller query for each clause, written from the tree's own pieces with the deparser ([`pgsql-deparser`](https://www.npmjs.com/package/pgsql-deparser)):
+
+| Step | The query it runs |
+| --- | --- |
+| FROM | `SELECT t.*, t.ctid FROM <from> ORDER BY t.ctid`: every row, and where Postgres keeps it, which is its id from here on |
+| WHERE | The condition (and each part AND, OR and NOT join) as columns, for every row |
+| SELECT | The query's own select list, with the id, for the rows WHERE kept |
+| DISTINCT | Worked out from SELECT's rows: the first of each set of identical rows stays |
+| ORDER BY | The select list and the id, in the query's own ORDER BY, so `ORDER BY 2` and a name from SELECT mean what they mean in the query |
+| LIMIT / OFFSET | The two numbers, worked out; the rows outside them dropped |
+
+The id is what ties the steps together: it's how a row in the ORDER BY step is the same row as in FROM (and the same element on screen, which is why it slides). Rows keep the same place while a statement only reads, so the id stays put.
+
+**The check.** The last step's rows must be the query's own result: in the same order when there's an ORDER BY without ties, and in any order otherwise. If they aren't (some corner of SQL the steps get wrong), the steps are dropped and the result is shown instead, saying it couldn't be stepped through. A wrong picture would be worse than none. Every SQL example's trace is a golden trace ([`src/examples/golden.test.ts`](../src/examples/golden.test.ts)), checked to be stepped through in full.
+
+**What isn't stepped through yet** (joins, GROUP BY, subqueries...) is found from the parse tree by `unsupported()`, and the query is shown as its result, saying what it uses.
+
+**Errors** keep Postgres's message, and [`explain.ts`](../src/sql/explain.ts) adds what usually causes it, by its SQLSTATE code, using what the run knows: the tables there are, their columns, and the names the query gives columns with AS.
+
+**The trace.** A SQL trace is an ordinary trace (one step per stage, at the clause's line, so the timeline, the editor's marks, share links and the output all work as they do for any language), with the tables in `Trace.sql`. The two windows draw it with their own scenes ([`scene/sqlScene.ts`](../src/scene/sqlScene.ts)) and drawings ([`render/sqlView.ts`](../src/render/sqlView.ts)), through the same renderers as everything else: rows are groups keyed by their id, so the animation of section 13 slides them between steps.

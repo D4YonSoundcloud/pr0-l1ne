@@ -12,6 +12,7 @@ import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
 import { findElements } from "./app/elements";
 import { escapeHtml } from "./app/html";
+import { showLanguageKind } from "./app/languageKind";
 import { LayoutController } from "./app/layout";
 import { LoopController } from "./app/loopController";
 import { MeasureController } from "./app/measureController";
@@ -40,7 +41,10 @@ const savedCode = (id: LanguageId) => settings.code(id).get() ?? LANGUAGES[id].e
 const programs = new ProgramStore(settings.programStorage());
 const app = new AppStore(settings, programs);
 const currentLanguage = () => app.get().language;
+/** Measure (and Complexity) are for programs, not SQL queries. */
+const measurable = () => LANGUAGES[currentLanguage()].kind === "program";
 const els = findElements();
+showLanguageKind(LANGUAGES[currentLanguage()].kind);
 // What draws the two windows (see scene/renderer.ts): SVG, or Canvas 2D
 // (PixiJS), which is only downloaded when someone picks it. Windows start
 // with SVG, which is ready at once, and switch once the canvas is.
@@ -65,7 +69,9 @@ function useRenderer(kind: RendererKind): Promise<void> {
 
 const banner = new Banner(els.banner, {
   run: () => runNow(),
-  measure: () => void measure.measure(),
+  measure: () => {
+    if (measurable()) void measure.measure();
+  },
   reload: () => window.location.reload(),
   "save-shared": () => programsController.saveAs(),
 });
@@ -102,8 +108,12 @@ const editor = createEditor(
       swapPanels: () => layout.toggleSwapped(),
       togglePlay: () => playback.togglePlay(),
       playOrRewind: () => playback.playOrRewind(),
-      measure: () => measure.measure(),
-      measureGrowth: () => measure.measureGrowth(),
+      measure: () => {
+        if (measurable()) void measure.measure();
+      },
+      measureGrowth: () => {
+        if (measurable()) void measure.measureGrowth();
+      },
       toggleNested: () => memory.toggleNested(),
     },
   },
@@ -217,6 +227,7 @@ els.language.addEventListener("change", () => {
   if (!isLanguageId(els.language.value) || els.language.value === currentLanguage()) return;
   // The controllers catch up themselves (app.watch): the trace, Measure, the canvas, the Open menu...
   app.setLanguage(els.language.value);
+  showLanguageKind(LANGUAGES[currentLanguage()].kind);
   editor.setLanguage(LANGUAGES[currentLanguage()].monacoId, savedCode(currentLanguage()));
   programsController.updateUI(); // the unsaved-changes dot, for this language's code
   setBanner(null);
@@ -244,6 +255,7 @@ const shares = new ShareController({
     loop.reset();
     if (program.language !== currentLanguage()) {
       app.setLanguage(program.language);
+      showLanguageKind(LANGUAGES[program.language].kind);
       els.language.value = program.language;
       app.openShared(); // before the code changes, so the editor's change is seen as the link's
       editor.setLanguage(LANGUAGES[program.language].monacoId, program.code);
@@ -259,7 +271,9 @@ const shares = new ShareController({
 els.run.addEventListener("click", () => runNow());
 installShortcuts({
   run: runNow,
-  measure: () => void measure.measure(),
+  measure: () => {
+    if (measurable()) void measure.measure();
+  },
   save: () => programsController.save(),
   saveAs: () => programsController.saveAs(),
   dialogOpen: () => els.saveDialog.open,

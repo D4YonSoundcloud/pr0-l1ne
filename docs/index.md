@@ -4,7 +4,7 @@ layout: home
 hero:
   name: PR0L1NE
   text: See your code run
-  tagline: Step through Python, JavaScript and TypeScript, and watch memory, loops and complexity change, right in your browser.
+  tagline: Step through Python, JavaScript and TypeScript, and watch memory, loops and complexity change. Or step through a SQL query, clause by clause. All right in your browser.
   actions:
     - theme: brand
       text: Read the user guide
@@ -24,6 +24,9 @@ features:
   - title: Measure and complexity
     details: An estimate of time and space complexity from the code, checked against real runs at growing sizes.
     link: /user-guide#time-and-space-complexity
+  - title: SQL, clause by clause
+    details: Queries run on a real Postgres in your browser, drawn as the table at each clause, every row kept or dropped and why.
+    link: /sql
   - title: Hints
     details: "viz: comments tell the canvas how to draw things when its own choices aren't what you want."
     link: /hints

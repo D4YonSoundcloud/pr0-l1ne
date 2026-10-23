@@ -1,13 +1,15 @@
 /**
- * Loop history: each pass of the loop that's running, one row per pass, built
+ * Loop history: each pass of the loop that's running, one row per pass (for
+ * SQL, the statement's stages: scene/sqlScene.ts), built
  * as a scene (scene/loopScene.ts) and drawn by the window's renderer
  * (scene/renderer.ts; SVG today, render/svgRenderers.ts). Tabs pick which loop
  * when there are several (or all of a function's nested loops together).
  * Its toolbar picks stacked rows or one animated row, hiding variables that
  * don't change, and stacking containers vertically.
  */
-import { type LoopScene, loopScene } from "../scene/loopScene";
-import type { LoopRenderer, RendererFactory } from "../scene/renderer";
+import { loopScene } from "../scene/loopScene";
+import type { LoopRenderer, LoopWindowScene, RendererFactory } from "../scene/renderer";
+import { sqlPipelineScene } from "../scene/sqlScene";
 import type { Settings } from "../settings";
 import {
   ALL_LOOPS,
@@ -65,7 +67,7 @@ export function liveRows(t: Trace, index: number, history: LoopHistory): { prev:
 export class LoopController {
   readonly renderer: LoopRenderer;
   /** The scene last drawn, for the renderer to animate from. */
-  private drawn: LoopScene | null = null;
+  private drawn: LoopWindowScene | null = null;
   /** The loop picked in the tabs (ALL_LOOPS: nested loops together), or null for the innermost running. */
   private selected: string | null = null;
   private hideQuiet: boolean;
@@ -136,6 +138,16 @@ export class LoopController {
     const { trace, stepIndex } = this.options.app.get();
     if (!trace?.steps.length) return;
     const { els } = this.options;
+    // SQL: the statement's stages, in the order they run.
+    if (trace.sql) {
+      els.loopTabs.replaceChildren();
+      const scene = sqlPipelineScene(trace, stepIndex);
+      if (!scene) return;
+      this.renderer.setAppearance({ step: this.options.animation() });
+      this.renderer.render(scene, this.drawn);
+      this.drawn = scene;
+      return;
+    }
     // Nested loops are drawn together unless one loop is picked (animated
     // mode always shows one: the live state of a single loop).
     const { contexts } = availableLoops(trace, stepIndex);

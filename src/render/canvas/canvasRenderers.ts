@@ -31,13 +31,13 @@ import { autoDetectRenderer, type Container, Container as PixiContainer, type Re
 // versions that don't.
 import "pixi.js/unsafe-eval";
 import { prefersReducedMotion } from "../../appearance";
-import type { LoopScene } from "../../scene/loopScene";
-import type { MemoryScene } from "../../scene/memoryScene";
 import type {
   Hit,
   LoopRenderer,
+  LoopWindowScene,
   MemoryRenderer,
   MemoryRendererEvents,
+  MemoryWindowScene,
   Point,
   RendererEvents,
   RendererFactory,
@@ -50,6 +50,7 @@ import { type Mark, toSvg } from "../drawing";
 import { standaloneSvg } from "../export";
 import { loopDrawing } from "../loopView";
 import { applyFocus, memoryDrawing } from "../memory";
+import { sqlPipelineDrawing, sqlTableDrawing } from "../sqlView";
 import { type View, Viewport } from "../viewport";
 import { easing, Tweens } from "./motion";
 import { groups, type Paint, PaintCache, type PaintGroup, paintDrawing, type Rect } from "./paint";
@@ -509,8 +510,11 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
     this.positions.clear();
   }
 
-  render(scene: MemoryScene, _previous: MemoryScene | null): void {
-    const drawing = memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+  render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
+    const drawing =
+      "kind" in scene
+        ? sqlTableDrawing(scene)
+        : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
     this.refreshFocus(false, drawing);
     this.show(drawing, this.step);
   }
@@ -593,10 +597,14 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
     this.vertical = layout.vertical;
   }
 
-  render(scene: LoopScene, _previous: LoopScene | null): void {
-    // Only animated mode (one live row) animates; stacked rows just appear.
-    const motion = scene.live ? this.step : { ...this.step, duration: 0 };
-    this.show(loopDrawing(scene, { vertical: this.vertical }), motion);
+  render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
+    // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
+    if ("kind" in scene) {
+      this.show(sqlPipelineDrawing(scene), { ...this.step, duration: 0 });
+    } else {
+      const motion = scene.live ? this.step : { ...this.step, duration: 0 };
+      this.show(loopDrawing(scene, { vertical: this.vertical }), motion);
+    }
     // As you step, keep the iteration that's running in view.
     const current = this.drawing?.querySelector(".loop-row.is-current");
     if (current)

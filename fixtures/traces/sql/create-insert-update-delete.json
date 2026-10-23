@@ -1,0 +1,450 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": "CREATE TABLE\nINSERT 0 4\nUPDATE 2\nDELETE 1\n name  | age\n-------+-----\n Bella |   8\n Rex   |   4\n Kiwi  |   1\n(3 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "statements": [
+        {
+          "kind": "CREATE TABLE",
+          "line": 3,
+          "text": "CREATE TABLE pets ( name text, kind text, age integer )"
+        },
+        {
+          "kind": "INSERT",
+          "line": 9,
+          "text": "INSERT INTO pets VALUES ('Rex', 'dog', 3), ('Tom', 'cat', NULL), ('Ki…"
+        },
+        {
+          "kind": "UPDATE",
+          "line": 15,
+          "text": "UPDATE pets SET age = age + 1 WHERE kind = 'dog'"
+        },
+        {
+          "kind": "DELETE",
+          "line": 17,
+          "text": "DELETE FROM pets WHERE age IS NULL"
+        },
+        {
+          "kind": "SELECT",
+          "line": 19,
+          "text": "SELECT name, age FROM pets ORDER BY age DESC"
+        }
+      ],
+      "stages": [
+        {
+          "clause": "CREATE TABLE pets ( name text, kind text, age integer )",
+          "statement": 0,
+          "line": 3,
+          "kind": "statement",
+          "summary": "made the table pets",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": []
+            }
+          ]
+        },
+        {
+          "clause": "INSERT INTO pets VALUES ('Rex', 'dog', 3), ('Tom', 'cat', N…",
+          "statement": 1,
+          "line": 9,
+          "kind": "statement",
+          "summary": "added 4 rows",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "3"
+                  ],
+                  "status": "added",
+                  "note": "new"
+                },
+                {
+                  "id": "pets:0,2",
+                  "label": "#2",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null
+                  ],
+                  "status": "added",
+                  "note": "new"
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ],
+                  "status": "added",
+                  "note": "new"
+                },
+                {
+                  "id": "pets:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "7"
+                  ],
+                  "status": "added",
+                  "note": "new"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "clause": "UPDATE pets SET age = age + 1 WHERE kind = 'dog'",
+          "statement": 2,
+          "line": 15,
+          "kind": "statement",
+          "summary": "changed 2 rows",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,2",
+                  "label": "#1",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null
+                  ]
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#2",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#3",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "4"
+                  ],
+                  "status": "changed",
+                  "note": "updated"
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "8"
+                  ],
+                  "status": "changed",
+                  "note": "updated"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "clause": "DELETE FROM pets WHERE age IS NULL",
+          "statement": 3,
+          "line": 17,
+          "kind": "statement",
+          "summary": "removed 1 row",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,2",
+                  "label": "#1",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null
+                  ],
+                  "status": "removed",
+                  "note": "deleted"
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#2",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#3",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "8"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 4,
+          "kind": "from",
+          "clause": "FROM pets",
+          "summary": "pets: 3 rows",
+          "line": 20,
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,3",
+                  "label": "#1",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#2",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#3",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "8"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 4,
+          "kind": "select",
+          "clause": "SELECT name, age",
+          "summary": "2 columns, 3 rows",
+          "line": 19,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,3",
+                  "label": "#1",
+                  "values": [
+                    "Kiwi",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#2",
+                  "values": [
+                    "Rex",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#3",
+                  "values": [
+                    "Bella",
+                    "8"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 4,
+          "kind": "order",
+          "clause": "ORDER BY age DESC",
+          "summary": "sorted by age (descending)",
+          "line": 21,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true,
+                  "sort": {
+                    "rank": 1,
+                    "desc": true
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,6",
+                  "label": "#3",
+                  "values": [
+                    "Bella",
+                    "8"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#2",
+                  "values": [
+                    "Rex",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#1",
+                  "values": [
+                    "Kiwi",
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":3,"stack":[{"id":"f0","func":"Global","line":3,"locals":[]}],"stdoutLength":13,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":24,"loops":[]},
+    {"event":"line","line":15,"stack":[{"id":"f0","func":"Global","line":15,"locals":[]}],"stdoutLength":33,"loops":[]},
+    {"event":"line","line":17,"stack":[{"id":"f0","func":"Global","line":17,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":20,"stack":[{"id":"f0","func":"Global","line":20,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":19,"stack":[{"id":"f0","func":"Global","line":19,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f0","func":"Global","line":21,"locals":[]}],"stdoutLength":118,"loops":[]}
+  ]
+}

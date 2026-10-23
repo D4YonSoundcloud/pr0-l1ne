@@ -2,7 +2,7 @@
   "name": "pr0l1ne",
   "private": true,
   "version": "0.1.0",
-  "description": "See your code run: step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change.",
+  "description": "See your code run: step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, or SQL queries clause by clause.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "engines": {
@@ -55,8 +55,11 @@
     "@babel/plugin-transform-typescript": "^8.0.6",
     "@babel/traverse": "^8.0.6",
     "@babel/types": "^8.0.6",
+    "@electric-sql/pglite": "^0.5.11",
+    "libpg-query": "^18.1.5",
     "monaco-editor": "^0.57.0",
     "path-browserify": "^1.0.1",
+    "pgsql-deparser": "^18.3.12",
     "pixi.js": "^8.22.0",
     "pyodide": "0.27.8"
   }

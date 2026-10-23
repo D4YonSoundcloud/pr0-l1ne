@@ -4,7 +4,7 @@
 
 ## Overview
 
-PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor. Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, the loop history animates its current pass in place, so you can press **Play** to watch values slide into place step by step. Or switch to stacked mode, and each iteration is stacked under the last one with red arrows showing exactly what changed.
+PR0L1NE is a split-screen tool for seeing your code's data while you write it. Python, JavaScript or TypeScript goes in the editor (or SQL: see [SQL](sql.md), which has a page of its own). Next to it, a graph-paper canvas draws every variable, list, dict, object, function and scope as SVG. When your code is inside a loop, the loop history animates its current pass in place, so you can press **Play** to watch values slide into place step by step. Or switch to stacked mode, and each iteration is stacked under the last one with red arrows showing exactly what changed.
 
 Binary trees are drawn top-down. Graphs (adjacency lists, matrices, tries, graphs of objects) are drawn as nodes and edges, with your algorithm's own state on them: the visited set filled in, the queue numbered, distances labeled, the search tree in green. Generators and `async` functions get their own frames that pause and resume, and `# viz:` / `// viz:` comments let you tell the canvas how to draw things when its automatic choices aren't what you want.
 
@@ -16,7 +16,9 @@ It runs entirely in your browser, so there's no server to set up. Python execute
 
 ## Choosing a language
 
-The menu at the left of the toolbar switches between **Python**, **JavaScript** and **TypeScript**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python; the status in the toolbar reads "Downloading Python (6 MB)…" until it's ready, and your browser keeps a copy after that.
+The menu at the left of the toolbar switches between **Python**, **JavaScript**, **TypeScript** and **SQL**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python; the status in the toolbar reads "Downloading Python (6 MB)…" until it's ready, and your browser keeps a copy after that. SQL's database (PostgreSQL, about 8 MB) is downloaded the same way, the first time you pick SQL.
+
+SQL is drawn differently from the other three: a query is stepped through one clause at a time, with the table at each step, instead of variables and loops. [SQL](sql.md) has the details. Everything below is about Python, JavaScript and TypeScript, except where it says otherwise.
 
 The visuals are the same for every language, but JavaScript's semantics show through in a few places (all of these apply to TypeScript too):
 
@@ -58,7 +60,7 @@ Programs up to about 30 KB once packed fit in a link (every example takes under 
 
 ## Examples
 
-The **Open…** menu has 37 to 39 examples per language, grouped by topic. Each one is short enough to step through, and each shows off a different part of the canvas:
+The **Open…** menu has 37 to 39 examples per language, grouped by topic (SQL has its own: see [SQL examples](sql.md#examples)). Each one is short enough to step through, and each shows off a different part of the canvas:
 
 | Group | Examples |
 | --- | --- |

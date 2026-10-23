@@ -34,7 +34,7 @@ Open the URL it prints for PR0L1NE (http://localhost:5173). The bubble sort exam
 | `npm test` | Runs all tests: the TypeScript ones, then the Python tracer's under your Python and under Pyodide. |
 | `npm run test:js` | Runs the Vitest suites: the JavaScript and TypeScript tracers (including generators, `async` and timers), hints, graphs, memory sizes, complexity estimates (every example, in all three languages), arrow routing, layout of every example, nesting, linked structures, animation and saved programs. |
 | `npm run test:tracer` | Runs the Python tracer's unit tests (needs Python 3.12). |
-| `npm run test:e2e` | Browser tests of the sandbox, the app's security policy and share links (`e2e/`, Playwright), against both builds: run `npm run build && npm run build:runner` first, and `npx playwright install` once for the browsers. `--project=chromium` for one browser. |
+| `npm run test:e2e` | Browser tests of the sandbox, the app's security policy, share links and SQL (`e2e/`, Playwright), against both builds: run `npm run build && npm run build:runner` first, and `npx playwright install` once for the browsers. `--project=chromium` for one browser. |
 | `npm run test:pyodide` | Runs the same tests (the tracer's and Measure's) inside Pyodide, the Python the browser runs, loaded from the `pyodide` npm package in Node. No local Python needed. |
 | `npm run trace -- file.py` | Prints the JSON trace for a Python file (needs Python 3.12). |
 | `npm run trace:js -- file.js` | Prints the JSON trace for a JavaScript or TypeScript file (`.ts` files are treated as TypeScript). |
@@ -235,6 +235,7 @@ pr0-l1ne/
 ├── e2e/
 │   ├── sandbox.e2e.ts          What a hostile program or page would try, in real browsers
 │   ├── share.e2e.ts            Share links: open, run, edit, save, a broken link, Share
+│   ├── sql.e2e.ts              SQL: a query stepped through, the page's windows, an error explained
 │   └── csp.e2e.ts              The app under its own Content-Security-Policy
 ├── scripts/
 │   ├── dev.mjs                 npm run dev: the app's and the runner's dev servers
@@ -354,7 +355,20 @@ pr0-l1ne/
     │   ├── animate.ts          What a step animates (plan), played as FLIP tweening for SVG
     │   ├── animate.test.ts     Animation tests (jsdom)
     │   ├── viewport.ts         Pan, zoom and node dragging for both sections (an SVG, or a surface)
-    │   └── viewport.test.ts    The viewport with a surface (the canvas renderer)
+    │   ├── viewport.test.ts    The viewport with a surface (the canvas renderer)
+    │   ├── sqlView.ts          SQL: a stage's tables, and a statement's stages, as drawings
+    │   └── sqlView.test.ts     Every SQL example, every step: rows keyed, patched as drawn fresh
+    ├── sql/                    SQL, stepped through clause by clause (how-it-works.md, section 22)
+    │   ├── sql.worker.ts       Entry point for the SQL worker: PGlite and the parser, answers runs
+    │   ├── engine.ts           Postgres (PGlite), values as Postgres's text, its errors
+    │   ├── parser.ts           Postgres's parser (libpg_query) and the deparser
+    │   ├── script.ts           Byte offsets to characters and lines; the database hint
+    │   ├── trace.ts            traceSql(): the run, statement by statement, as a Trace
+    │   ├── select.ts           A SELECT's steps: a smaller query per clause; what isn't stepped yet
+    │   ├── statements.ts       CREATE, INSERT, UPDATE, DELETE: the table each changed
+    │   ├── explain.ts          Postgres's errors, explained
+    │   ├── databases.ts        The sample databases (shop, school, company)
+    │   └── sql.test.ts         The SQL tracer on PGlite in Node
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel): parse, then
     │   ├── analyze.ts            passes 1 and 2: blocks everywhere; what each statement sees
@@ -452,6 +466,10 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 **Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
 **Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/`, `loopView.ts` or `loopView/` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
+
+**Changing the SQL tracer.** Everything in `src/sql/` except the worker entry point runs in Node, on the same PGlite the browser runs: `npx vitest run src/sql` tests it, and the SQL examples are golden traces like the other languages'. A new sample database goes in `databases.ts`, under 15 rows a table; never change one that programs and share links may name, add a new one instead. A new kind of step goes in `select.ts`, with its query written from the parse tree's own pieces (`parser.deparse`), and the check at the end of `selectStages()` keeps a wrong picture from being shown.
+
+**Upgrading PGlite or the parser.** Change `@electric-sql/pglite`, `libpg-query` or `pgsql-deparser` in `package.json`, then run `npx vitest run src/sql src/examples/golden.test.ts` and the browser tests. Keep the parser's Postgres version (libpg-query's major version) the same as PGlite's: a newer parser accepts syntax the database doesn't. Vite copies PGlite's files and the parser's `.wasm` into the runner's build (with hashes in their names); `src/sql/parser.ts` points the parser at its copy.
 
 **Upgrading Pyodide.** Change the `pyodide` version in `package.json`: the runner's build copies that package's files to `/pyodide/<version>/` and tells the worker the version, and `npm run test:pyodide` tests the same package. (The `PYODIDE_VERSION` fallback in `pyodide.worker.ts` is only for the type checker.) Check which Python version the new release ships, run the tracer tests under that version, and keep the "use Python 3.X locally" note above in sync.
 

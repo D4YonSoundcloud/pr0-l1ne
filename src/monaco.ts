@@ -1,11 +1,11 @@
 /**
- * A lean Monaco build: the full VS Code editing experience, three languages.
+ * A lean Monaco build: the full VS Code editing experience, four languages.
  *
  * `import "monaco-editor"` pulls in every language Monaco supports plus the
  * TypeScript, CSS, HTML and JSON language services (about 14 MB built). This
  * file imports the same editor features as Monaco's own editor.main.js
  * (find/replace, multi-cursor, command palette, go to line, folding, line
- * operations...) but only the Python, JavaScript and TypeScript tokenizers,
+ * operations...) but only the Python, JavaScript, TypeScript and PostgreSQL tokenizers,
  * which comes to about 4 MB.
  *
  * `monaco-esm/` is a Vite alias for node_modules/monaco-editor/esm/vs/ (see
@@ -103,6 +103,7 @@ import "monaco-esm/base/browser/ui/codicons/codicon/codicon-modifiers.css";
 import "monaco-esm/languages/definitions/python/register.js";
 import "monaco-esm/languages/definitions/javascript/register.js";
 import "monaco-esm/languages/definitions/typescript/register.js";
+import "monaco-esm/languages/definitions/pgsql/register.js";
 
 // Monaco runs some work (diffing, word-based suggestions, link detection) in
 // a worker. Without this, it falls back to the main thread and logs a warning.

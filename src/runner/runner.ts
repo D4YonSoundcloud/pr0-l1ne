@@ -4,7 +4,8 @@
  * relay.ts for what it does and sandbox/origins.ts for why it's elsewhere.
  *
  * The workers are built here, not in the app: everything that runs a
- * program (Pyodide, the JavaScript instrumenter, the TypeScript compiler)
+ * program (Pyodide, the JavaScript instrumenter, the TypeScript compiler,
+ * Postgres)
  * only ever loads on this site.
  */
 import { startRelay } from "./relay";
@@ -20,5 +21,6 @@ startRelay({
     python: (name) => new Worker(new URL("../worker/pyodide.worker.ts", import.meta.url), { type: "module", name }),
     javascript: (name) => new Worker(new URL("../js/javascript.worker.ts", import.meta.url), { type: "module", name }),
     typescript: (name) => new Worker(new URL("../js/typescript.worker.ts", import.meta.url), { type: "module", name }),
+    sql: (name) => new Worker(new URL("../sql/sql.worker.ts", import.meta.url), { type: "module", name }),
   },
 });

@@ -1,13 +1,15 @@
 /**
- * The memory view: the step's variables, objects and scopes, built as a scene
+ * The memory view: the step's variables, objects and scopes (for SQL, the
+ * tables at the step's stage of a query: scene/sqlScene.ts), built as a scene
  * (scene/memoryScene.ts) and drawn by the window's renderer (scene/renderer.ts;
  * SVG today, render/svgRenderers.ts). Boxes can be dragged (Reset layout puts
  * them back). Its toolbar picks arrows or nested objects, memory sizes and
  * their model, and whether output is shown on the canvas.
  */
 import type { LanguageId } from "../languages";
-import { type MemoryMode, type MemoryScene, memoryScene } from "../scene/memoryScene";
-import type { MemoryRenderer, RendererFactory } from "../scene/renderer";
+import { type MemoryMode, memoryScene } from "../scene/memoryScene";
+import type { MemoryRenderer, MemoryWindowScene, RendererFactory } from "../scene/renderer";
+import { sqlTableScene } from "../scene/sqlScene";
 import type { Settings } from "../settings";
 import { diffSteps } from "../trace/diff";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
@@ -44,7 +46,7 @@ const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript
 export class MemoryController {
   readonly renderer: MemoryRenderer;
   /** The scene last drawn, for the renderer to animate from. */
-  private drawn: MemoryScene | null = null;
+  private drawn: MemoryWindowScene | null = null;
   /** Arrows, or objects drawn inside the thing that refers to them. */
   private mode: MemoryMode;
   private sizesOn: boolean;
@@ -185,6 +187,16 @@ export class MemoryController {
   render(): void {
     const { trace, stepIndex } = this.options.app.get();
     if (!trace?.steps.length) return;
+    // SQL: the tables at this stage of the query.
+    if (trace.sql) {
+      const scene = sqlTableScene(trace, stepIndex);
+      if (!scene) return;
+      this.renderer.setAppearance({ step: this.options.animation() });
+      this.renderer.render(scene, this.drawn);
+      this.drawn = scene;
+      this.updateTotal();
+      return;
+    }
     const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
     const scene = memoryScene(trace, stepIndex, diff, {
       mode: this.mode,
@@ -203,7 +215,7 @@ export class MemoryController {
     const { memoryTotal } = this.options.els;
     const { trace, stepIndex } = this.options.app.get();
     const model = this.sizes();
-    const step = trace?.steps[stepIndex];
+    const step = trace?.sql ? undefined : trace?.steps[stepIndex];
     memoryTotal.hidden = !model || !step;
     if (!model || !step) return;
     const sizes = stepSizes(step, model);

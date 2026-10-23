@@ -1,0 +1,112 @@
+// @vitest-environment jsdom
+/**
+ * The SQL drawings (sqlView.ts), at every step of every SQL example: each
+ * row drawn once, keyed by its id so it can be followed between steps; the
+ * pipeline marks the step's stage; and patching the SVG from step to step
+ * leaves what a fresh drawing makes.
+ */
+import { beforeAll, describe, expect, it } from "vitest";
+import { SQL_EXAMPLES } from "../examples/index";
+import { sqlPipelineScene, sqlTableScene } from "../scene/sqlScene";
+import { PgliteEngine } from "../sql/engine";
+import { loadParser } from "../sql/parser";
+import { traceSql } from "../sql/trace";
+import type { Trace } from "../trace/types";
+import { type Mark, toSvg } from "./drawing";
+import { SvgPatcher } from "./patch";
+import { sqlPipelineDrawing, sqlTableDrawing } from "./sqlView";
+
+let engine: PgliteEngine;
+beforeAll(async () => {
+  engine = await PgliteEngine.create();
+}, 60_000);
+
+const traceOf = async (code: string): Promise<Trace> => traceSql(code, engine, await loadParser());
+/** Elements of a drawing, made into SVG (marks only take simple selectors). */
+const all = (root: Mark, selector: string) => [...toSvg(root).querySelectorAll(selector)];
+
+describe("SQL drawings of the examples", () => {
+  it.each(SQL_EXAMPLES.map((e) => [e.name, e.code] as const))("%s", async (_name, code) => {
+    const trace = await traceOf(code);
+    const tables = new SvgPatcher();
+    const pipeline = new SvgPatcher();
+    trace.steps.forEach((_step, i) => {
+      const stage = trace.sql!.stages[i];
+      const drawing = sqlTableDrawing(sqlTableScene(trace, i)!);
+      // Each row once, keyed by its id, one below another.
+      const rows = all(drawing, ".sql-row");
+      const expected = stage.tables.reduce((n, t) => n + t.rows.length, 0);
+      expect(rows).toHaveLength(expected);
+      const keys = rows.map((r) => r.getAttribute("data-flip"));
+      expect(new Set(keys).size).toBe(keys.length);
+      // Removed rows are struck through; the rest aren't.
+      for (const row of rows) {
+        expect(row.querySelector(".sql-strike") !== null).toBe(row.getAttribute("class")?.includes("is-removed"));
+      }
+      expect(Number(drawing.getAttribute("width"))).toBeGreaterThan(100);
+      expect(tables.show(drawing).outerHTML, `tables, step ${i + 1}`).toBe(toSvg(drawing).outerHTML);
+
+      const steps = sqlPipelineDrawing(sqlPipelineScene(trace, i)!);
+      const cards = all(steps, ".sql-stage");
+      expect(cards.length).toBe(trace.sql!.stages.filter((s) => s.statement === stage.statement).length);
+      expect(all(steps, ".sql-stage.is-current")).toHaveLength(1);
+      expect(pipeline.show(steps).outerHTML, `pipeline, step ${i + 1}`).toBe(toSvg(steps).outerHTML);
+    });
+  });
+});
+
+describe("the table drawing", () => {
+  it("marks sort keys, computed columns and the condition's columns", async () => {
+    const trace = await traceOf(
+      "-- viz: database shop\nSELECT name, price * 2 AS twice FROM products WHERE price > 9 AND stock > 0 ORDER BY twice DESC, name;",
+    );
+    const at = (kind: string) => trace.sql!.stages.findIndex((s) => s.kind === kind);
+    const where = sqlTableDrawing(sqlTableScene(trace, at("where"))!);
+    expect(all(where, ".sql-head.is-check").map((h) => h.querySelector("title")?.textContent)).toEqual([
+      "price > 9 (boolean)",
+      "stock > 0 (boolean)",
+    ]);
+    expect(all(where, ".sql-divider")).toHaveLength(1);
+    const order = sqlTableDrawing(sqlTableScene(trace, at("order"))!);
+    const heads = all(order, ".sql-head").map((h) => h.firstChild?.textContent);
+    expect(heads).toEqual(["name ▲2", "twice ▼1"]);
+    expect(all(order, ".sql-head.is-computed")).toHaveLength(1);
+  });
+
+  it("draws LIMIT's and OFFSET's cuts, and NULL as NULL", async () => {
+    const trace = await traceOf(
+      "-- viz: database school\nSELECT name, gpa FROM students ORDER BY name LIMIT 3 OFFSET 2;",
+    );
+    const last = sqlTableDrawing(sqlTableScene(trace, trace.steps.length - 1)!);
+    expect(all(last, ".sql-cut text").map((t) => t.textContent)).toEqual(["OFFSET 2", "LIMIT 3"]);
+    const from = sqlTableDrawing(sqlTableScene(trace, 1)!);
+    expect(all(from, ".value.v-none").map((t) => t.textContent)).toEqual(["NULL", "NULL"]);
+  });
+
+  it("shortens long values to fit their column", async () => {
+    const trace = await traceOf(`SELECT repeat('x', 200) AS long;`);
+    const drawing = sqlTableDrawing(sqlTableScene(trace, 0)!);
+    const value = all(drawing, ".sql-row .value")[0].textContent ?? "";
+    expect(value.length).toBeLessThan(40);
+    expect(value.endsWith("…")).toBe(true);
+  });
+});
+
+describe("the pipeline drawing", () => {
+  it("numbers the statements, leaving out the sample database", async () => {
+    const trace = await traceOf("-- viz: database shop\nSELECT 1;\nSELECT name FROM products;");
+    const title = (i: number) =>
+      all(sqlPipelineDrawing(sqlPipelineScene(trace, i)!), ".sql-pipeline-title")[0].textContent;
+    expect(title(0)).toBe("The sample database");
+    expect(title(1)).toBe("Statement 1 of 2");
+    expect(title(trace.steps.length - 1)).toBe("Statement 2 of 2");
+  });
+
+  it("marks stages before and after this one", async () => {
+    const trace = await traceOf("-- viz: database shop\nSELECT name FROM products WHERE price > 9 ORDER BY name;");
+    const states = all(sqlPipelineDrawing(sqlPipelineScene(trace, 2)!), ".sql-stage").map(
+      (g) => /is-(done|current|next)/.exec(g.getAttribute("class") ?? "")?.[1],
+    );
+    expect(states).toEqual(["done", "current", "next", "next"]);
+  });
+});

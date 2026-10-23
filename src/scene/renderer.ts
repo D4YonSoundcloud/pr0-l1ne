@@ -18,6 +18,7 @@
 
 import type { LoopScene } from "./loopScene";
 import type { MemoryScene } from "./memoryScene";
+import type { SqlPipelineScene, SqlTableScene } from "./sqlScene";
 
 export interface Point {
   x: number;
@@ -108,8 +109,14 @@ export interface MemoryRendererEvents extends RendererEvents {
   onLayoutChange?(): void;
 }
 
+/** What the memory window draws: a step's memory, or a SQL step's tables. */
+export type MemoryWindowScene = MemoryScene | SqlTableScene;
+
+/** What the loop window draws: a loop's history, or a SQL statement's stages. */
+export type LoopWindowScene = LoopScene | SqlPipelineScene;
+
 /** The memory window: boxes can be dragged, and hovering one highlights its arrows. */
-export interface MemoryRenderer extends Renderer<MemoryScene> {
+export interface MemoryRenderer extends Renderer<MemoryWindowScene> {
   /** Put every dragged box back in its automatic place. */
   resetLayout(): void;
   /** Has the person dragged any box? */
@@ -121,7 +128,7 @@ export interface MemoryRenderer extends Renderer<MemoryScene> {
 }
 
 /** The loop history window. */
-export interface LoopRenderer extends Renderer<LoopScene> {
+export interface LoopRenderer extends Renderer<LoopWindowScene> {
   /** Each container on its own line, one above another, instead of side by side. */
   setLayout(layout: { vertical: boolean }): void;
 }

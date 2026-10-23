@@ -2617,3 +2617,178 @@ select {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------ SQL (render/sqlView.ts) */
+
+/* A query has no variables, loops or lines to count: the controls for them go (app/languageKind.ts). */
+[data-kind="query"]
+:is(
+  .measure-group,
+  #complexity,
+  #memory-section .section-head > :not(.section-title),
+  #loop-section .section-head > :not(.section-title)
+) {
+  display: none !important;
+}
+
+.sql-clause {
+  font-family: var(--font-code);
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--paper-ink);
+}
+.sql-summary {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  fill: var(--paper-ink-soft);
+}
+.sql-stage-note {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-style: italic;
+  fill: var(--paper-ink-soft);
+}
+
+.sql-head-bg {
+  fill: var(--cell-alt);
+}
+.sql-head-line,
+.sql-divider {
+  stroke: var(--ink-faint);
+  stroke-width: 1;
+}
+.sql-head {
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+.sql-head.is-computed,
+.sql-head.is-sort {
+  fill: var(--ballpoint);
+}
+.sql-head.is-check {
+  font-weight: 400;
+  fill: var(--ink-soft);
+}
+.sql-head.is-sorted {
+  fill: var(--ballpoint);
+}
+.sql-col-bg {
+  fill: color-mix(in srgb, var(--ballpoint) 7%, transparent);
+}
+
+.sql-row-bg {
+  fill: transparent;
+}
+.sql-row.is-odd .sql-row-bg {
+  fill: color-mix(in srgb, var(--cell-alt) 70%, transparent);
+}
+.sql-label {
+  font-size: 11px;
+  fill: var(--ink-faint);
+}
+.sql-row.is-tie .sql-label {
+  fill: var(--frontier);
+}
+.sql-row.is-removed > :not(.sql-row-note) {
+  opacity: 0.38;
+}
+.sql-strike {
+  stroke: var(--redpen);
+  stroke-width: 1.25;
+}
+.sql-row.is-added .sql-row-bg,
+.sql-row.is-changed .sql-row-bg {
+  fill: var(--highlight-soft);
+}
+.sql-row-note {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-style: italic;
+  fill: var(--paper-ink-soft);
+}
+.sql-row.is-removed .sql-row-note {
+  fill: var(--redpen);
+}
+.value.sql-true {
+  fill: var(--v-const);
+  font-style: normal;
+}
+.value.sql-false {
+  fill: var(--redpen);
+  font-style: normal;
+}
+.value.sql-unknown {
+  fill: var(--frontier);
+}
+
+.sql-cut line {
+  stroke: var(--redpen);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.sql-cut text {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--redpen);
+}
+
+/* The pipeline: one card per stage of the statement. */
+.sql-pipeline-title {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  fill: var(--paper-ink-soft);
+}
+.sql-pipeline-code {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  fill: var(--paper-ink);
+}
+.sql-stage-card {
+  fill: var(--cell);
+  stroke: var(--ink-faint);
+  stroke-width: var(--border-width);
+}
+.sql-stage.is-current .sql-stage-card {
+  stroke: var(--ballpoint);
+  stroke-width: 2.25;
+}
+.sql-stage.is-next {
+  opacity: 0.45;
+}
+.sql-stage-chip {
+  fill: var(--header);
+}
+.sql-stage.is-current .sql-stage-chip {
+  fill: var(--ballpoint);
+}
+.sql-stage-keyword {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+.sql-stage.is-current .sql-stage-keyword {
+  fill: var(--cell);
+}
+.sql-stage-clause {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  fill: var(--ink);
+}
+.sql-stage-summary,
+.sql-stage-rows {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  fill: var(--ink-soft);
+}
+.sql-stage-rows {
+  font-weight: 700;
+}
+.sql-stage-arrow {
+  fill: none;
+  stroke: var(--paper-ink-faint);
+  stroke-width: 1.5;
+}

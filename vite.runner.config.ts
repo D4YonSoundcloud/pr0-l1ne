@@ -1,6 +1,6 @@
 /**
- * The code runner's build: runner.html and the three language workers, with
- * Pyodide, into dist-runner/, for its own site (pr0l1ne-run.pages.dev). See
+ * The code runner's build: runner.html and the four language workers, with
+ * Pyodide and Postgres, into dist-runner/, for its own site (pr0l1ne-run.pages.dev). See
  * src/sandbox/origins.ts for why programs run on another site, and
  * src/runner/ for the page.
  *
@@ -100,7 +100,10 @@ export default defineConfig(({ command }) => {
     // In development, find the workers' dependencies (Babel) at startup: one
     // found when a worker first loads makes Vite re-bundle, and that worker fail.
     optimizeDeps: {
-      entries: ["runner.html", "src/js/*.worker.ts", "src/worker/*.worker.ts"],
+      entries: ["runner.html", "src/js/*.worker.ts", "src/worker/*.worker.ts", "src/sql/*.worker.ts"],
+      // PGlite loads its WebAssembly from beside its own files: pre-bundled
+      // into Vite's cache, it would look in the wrong place.
+      exclude: ["@electric-sql/pglite"],
       include: [
         "@babel/parser",
         "@babel/traverse",

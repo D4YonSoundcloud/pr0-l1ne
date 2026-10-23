@@ -59,6 +59,7 @@ const PROGRAMS: Record<string, string> = {
   python: "a = [3, 1, 2]\na.sort()\nprint(a)\n",
   javascript: "const a = [3, 1, 2];\na.sort();\nconsole.log(a);\n",
   typescript: "const a: number[] = [3, 1, 2];\nlet total: number = 0;\nfor (const x of a) total += x;\n",
+  sql: "-- viz: database shop\nSELECT name FROM products WHERE price < 10;\n",
 };
 
 for (const [language, code] of Object.entries(PROGRAMS)) {

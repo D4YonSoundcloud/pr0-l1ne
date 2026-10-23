@@ -380,7 +380,7 @@ export interface TraceError {
 export interface Trace {
   version: 1;
   /** Which tracer produced this. Affects small details like "def" vs "function". */
-  language?: "python" | "javascript" | "typescript";
+  language?: "python" | "javascript" | "typescript" | "sql";
   steps: Step[];
   loops: LoopInfo[];
   /**
@@ -423,4 +423,128 @@ export interface Trace {
   cost?: CostInfo;
   /** The hints, parsed and applied (added by applyHints, not by tracers). */
   viz?: VizHints;
+  /**
+   * SQL only: what each step shows, a table at each stage of a query
+   * (steps[i] is stages[i]). Its steps have no variables or heap: the
+   * tables are here.
+   */
+  sql?: SqlTrace;
+}
+
+// ---------------------------------------------------------------------------
+// SQL (src/sql/): a query stepped through clause by clause, in the order
+// Postgres gives them meaning (FROM, WHERE, SELECT, DISTINCT, ORDER BY,
+// LIMIT), each step a table.
+// ---------------------------------------------------------------------------
+
+/** A column of a table drawn at a SQL step. */
+export interface SqlColumn {
+  name: string;
+  /** Postgres's name for its type: "integer", "text", "numeric"... */
+  type: string;
+  /** Numbers are drawn right-aligned. */
+  numeric?: boolean;
+  /**
+   * What the column is at this step (absent: a column of the table):
+   *   computed  made by an expression in SELECT (`expr`)
+   *   check     part of the WHERE condition, worked out for each row (`expr`)
+   *   result    the whole WHERE condition for each row: is it kept?
+   *   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)
+   */
+  role?: "computed" | "check" | "result" | "sort";
+  /** The expression, as written (one line). */
+  expr?: string;
+  /** ORDER BY sorts on this column: its place among the sort keys (1 first), and which way. */
+  sort?: { rank: number; desc: boolean };
+}
+
+/** A row of a table drawn at a SQL step. */
+export interface SqlRow {
+  /**
+   * The same row has the same id at every step of a statement ("pets:0,3":
+   * its table and where Postgres keeps it), so it can be followed (and
+   * animated) from step to step.
+   */
+  id: string;
+  /** Its place in its table, "#3": how the text names it. */
+  label: string;
+  /** Each column's value as Postgres writes it; null is SQL's NULL. */
+  values: (string | null)[];
+  /**
+   * removed  this step takes it out: WHERE's condition isn't true, a
+   *          duplicate DISTINCT drops, past LIMIT, skipped by OFFSET, or
+   *          deleted
+   * added    a new row (INSERT)
+   * changed  a row changed by UPDATE
+   */
+  status?: "removed" | "added" | "changed";
+  /** Why, in words: "age > 3 is NULL: unknown, so not kept". */
+  note?: string;
+  /** ORDER BY: its sort keys equal the row before's, so the two could come either way. */
+  tie?: boolean;
+}
+
+/** A table drawn at a SQL step. */
+export interface SqlTable {
+  /** "pets", or "result". */
+  name: string;
+  /** How the query names it, when that differs ("p" in `FROM pets AS p`). */
+  alias?: string;
+  columns: SqlColumn[];
+  rows: SqlRow[];
+  /** Rows there are but not drawn (a step draws at most a hundred). */
+  more?: number;
+  /** Lines across the table (LIMIT, OFFSET) before the row at `before`. */
+  cuts?: { before: number; label: string }[];
+}
+
+export type SqlStageKind =
+  /** The sample database's tables, before the first statement. */
+  | "tables"
+  | "from"
+  | "where"
+  | "select"
+  | "distinct"
+  | "order"
+  | "limit"
+  /** A statement that isn't a query (CREATE TABLE, INSERT...): the table it changed. */
+  | "statement"
+  /** A query that isn't stepped through (yet): its result. */
+  | "result";
+
+/** One step: a stage of a statement. */
+export interface SqlStage {
+  kind: SqlStageKind;
+  /** The clause as written, on one line: "WHERE age > 3". */
+  clause: string;
+  /** What it did, in a few words: "kept 4 of 7 rows". */
+  summary: string;
+  /** Which statement (an index into SqlTrace.statements). */
+  statement: number;
+  /** The line the clause is on. */
+  line: number;
+  tables: SqlTable[];
+  /** Rows left after this stage (in the pipeline, between stages). */
+  rows?: number;
+  /** Anything worth knowing about it ("No ORDER BY: ..."). */
+  notes?: string[];
+}
+
+/** A statement of the script, in order. */
+export interface SqlStatement {
+  /** "SELECT", "CREATE TABLE", "INSERT"... */
+  kind: string;
+  /** Its first line, and its text on one line (shortened). */
+  line: number;
+  text: string;
+  /** Why it's shown as its result rather than stepped through, if it is. */
+  unsupported?: string;
+}
+
+export interface SqlTrace {
+  /** The sample database it ran on (`-- viz: database shop`), if any. */
+  database?: string;
+  statements: SqlStatement[];
+  /** One per step. */
+  stages: SqlStage[];
 }

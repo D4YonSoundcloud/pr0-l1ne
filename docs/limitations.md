@@ -4,7 +4,7 @@
 
 ## Limitations
 
-**Both languages**
+**Python, JavaScript and TypeScript**
 
 - **Printed output is shown in the memory window only.** The loop history isn't dimmed or labeled with what each iteration printed. Output written another way (`sys.stdout.write`, `print(..., file=sys.stderr)`) shows in the card when it reaches the output pane, but without arrows to objects; output to stderr doesn't appear at all.
 
@@ -87,6 +87,14 @@ Everything listed for JavaScript applies, plus:
 - **No hover shadow, and dimming fades each part.** Hovering a box doesn't give it a soft shadow on the canvas. With Dim others on, a dimmed box fades each of its parts rather than the box as a whole, so its outline can show faintly through its cells.
 - **Text sharpens a moment after zooming.** While you zoom in, text is scaled from how it was last drawn; it's redrawn sharp once you stop.
 - **Fonts in saved SVG files.** A saved file names the diagram font from the Style panel. If the computer opening it doesn't have that font, text falls back to another monospace font and can be a little wider or narrower.
+
+**SQL**
+
+- **One table at a time.** Queries on one table are stepped through clause by clause. Joins, GROUP BY and aggregates, subqueries, WITH, UNION and window functions run, but are shown as their result in one step (see [SQL](sql.md#not-stepped-through-yet)).
+- **Up to a hundred rows a step.** A table with more is drawn to its hundredth row, with the rest counted. The output pane prints up to 200 rows of a result.
+- **UPDATE moves rows.** Postgres keeps an updated row in a new place, so after an UPDATE the row has a new number (`#4`) and isn't followed from its old one.
+- **A query that never finishes** (a huge `generate_series`, say) is stopped by the same time limit as a program, and Postgres starts again.
+- **No files, no transactions.** `COPY` can't read or write files, and `BEGIN`, `COMMIT` and `ROLLBACK` aren't allowed: each run starts from a fresh database and is thrown away at the end.
 
 ---
 

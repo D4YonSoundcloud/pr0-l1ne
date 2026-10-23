@@ -108,4 +108,26 @@ describe("StepView", () => {
     expect($("label").textContent).toBe("Step 2 of 2: Ran line 1, next is line 2 (2.5K steps skipped)");
     expect($("label").title).toContain("2,500 steps ran just before this one without being recorded");
   });
+
+  it("labels a SQL step with its clause, and marks that clause's line as the one that ran", () => {
+    const { app, view, $, marks } = setup();
+    const stage = (clause: string, line: number) => ({
+      kind: "where",
+      clause,
+      summary: "",
+      statement: 0,
+      line,
+      tables: [],
+    });
+    const trace = {
+      steps: [step("line", 2), step("line", 3)],
+      stdout: "",
+      error: null,
+      sql: { statements: [], stages: [stage("FROM pets", 2), stage("WHERE age > 3", 3)] },
+    };
+    app.showTrace(trace as unknown as Trace, "", 1);
+    view.render();
+    expect($("label").textContent).toBe("Step 2 of 2: WHERE age > 3");
+    expect(marks.at(-1)).toEqual({ next: null, prev: 3, error: null });
+  });
 });

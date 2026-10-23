@@ -176,6 +176,13 @@ export function parseHints(raw: RawHint[]): VizHints {
  * `trace.viz` for the renderers.
  */
 export function applyHints(trace: Trace): Trace {
+  // SQL has one hint of its own (`-- viz: database shop`, read by its tracer), which leaves it only the rest to warn about.
+  if (trace.language === "sql") {
+    const viz = emptyHints();
+    for (const { line, text } of trace.hints ?? [])
+      viz.warnings.push({ line, message: `Unknown hint "${text || "(empty)"}". SQL has one: viz: database <name>.` });
+    return { ...trace, viz };
+  }
   const viz = parseHints(trace.hints ?? []);
   if (!trace.hints?.length) return { ...trace, viz };
 

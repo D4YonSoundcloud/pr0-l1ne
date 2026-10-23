@@ -10,13 +10,13 @@
  * box by its <g data-node-key>, highlighting a hovered box's arrows,
  * keeping the running row in view by its data-top / data-bottom.
  */
-import type { LoopScene } from "../scene/loopScene";
-import type { MemoryScene } from "../scene/memoryScene";
 import type {
   Hit,
   LoopRenderer,
+  LoopWindowScene,
   MemoryRenderer,
   MemoryRendererEvents,
+  MemoryWindowScene,
   Point,
   RendererEvents,
   RendererFactory,
@@ -29,6 +29,7 @@ import { standaloneSvg } from "./export";
 import { loopDrawing } from "./loopView";
 import { applyFocus, memoryDrawing } from "./memory";
 import { SvgPatcher } from "./patch";
+import { sqlPipelineDrawing, sqlTableDrawing } from "./sqlView";
 import { Viewport } from "./viewport";
 
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
@@ -156,9 +157,12 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
     this.positions.clear();
   }
 
-  render(scene: MemoryScene, _previous: MemoryScene | null): void {
+  render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
     const { duration, easing, enter } = this.step;
-    const drawing = memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+    const drawing =
+      "kind" in scene
+        ? sqlTableDrawing(scene)
+        : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
     // The focus is part of the drawing, so the patch carries it over.
     applyFocus(drawing, this.dragging ?? this.hovered);
     this.view.updateContent(() => this.patcher.show(drawing), duration, easing, enter);
@@ -188,11 +192,12 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     this.vertical = layout.vertical;
   }
 
-  render(scene: LoopScene, _previous: LoopScene | null): void {
+  render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
     const { duration, easing, enter } = this.step;
-    const drawing = loopDrawing(scene, { vertical: this.vertical });
-    // Only animated mode (one live row) animates; stacked rows just appear.
-    this.view.updateContent(() => this.patcher.show(drawing), scene.live ? duration : 0, easing, enter);
+    const sql = "kind" in scene;
+    const drawing = sql ? sqlPipelineDrawing(scene) : loopDrawing(scene, { vertical: this.vertical });
+    // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
+    this.view.updateContent(() => this.patcher.show(drawing), !sql && scene.live ? duration : 0, easing, enter);
     // As you step, keep the iteration that's running in view.
     const current = this.el.querySelector(".loop-row.is-current");
     if (current)

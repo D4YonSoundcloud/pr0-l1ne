@@ -2,6 +2,15 @@
 
 # Roadmap ideas
 
+SQL, the next steps (see [SQL](sql.md) for what's there now):
+
+- Joins: both tables side by side, a line between each pair of rows that match, the rows that match nothing dimmed (inner join) or kept with NULLs filled in (left join).
+- GROUP BY and aggregates: rows gathering into their groups, then each group folding into one row, its aggregates written out (`SUM(3, 5, 2) = 10`). HAVING dropping whole groups.
+- Subqueries and WITH as nested steps; recursive WITH drawn like loop passes.
+- Window functions, with each row's frame highlighted.
+
+Everything else:
+
 - Dragging single nodes of a graph to rearrange it, remembered like dragged boxes.
 - Grids drawn as graphs (a maze search over a 2D grid), with the path through the cells highlighted.
 - ELK.js layouts for large graphs, routing edges around nodes.

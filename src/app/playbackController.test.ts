@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ProgramStore } from "../programs";
 import { createSettings, type KeyValueStorage } from "../settings";
+import type { Trace } from "../trace/types";
 import { PlaybackController, type StepAnimation } from "./playbackController";
 import { AppStore } from "./state";
 
@@ -95,6 +96,16 @@ describe("PlaybackController", () => {
     expect(app.get().stepIndex).toBe(2);
     playback.goTo(Number.POSITIVE_INFINITY);
     expect(app.get().stepIndex).toBe(9);
+  });
+
+  it("starts a SQL trace at its first step: every stage is worth seeing", () => {
+    const { playback, app } = setup(4);
+    const step = { event: "line", line: 1, stack: [], heap: {}, stdoutLength: 0, loops: [] };
+    const trace = { steps: [step, step, step, step], stdout: "", error: null, sql: { statements: [], stages: [] } };
+    app.showTrace(trace as unknown as Trace, "", 3);
+    expect(playback.firstStep()).toBe(0);
+    playback.goTo(0);
+    expect(app.get().stepIndex).toBe(0);
   });
 
   it("animates single steps, not jumps, and never when motion is reduced", () => {

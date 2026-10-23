@@ -10,17 +10,21 @@
  *
  * Traces use the app's step budget (20,000) and a generous time budget, so
  * they stop on steps, never on the clock, and come out the same on any
- * machine. Python runs in Pyodide, the same Python the browser runs.
+ * machine. Python runs in Pyodide, the same Python the browser runs, and
+ * SQL in PGlite, the same Postgres.
  */
 import { beforeAll, describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
+import { PgliteEngine } from "../sql/engine";
+import { loadParser } from "../sql/parser";
+import { traceSql } from "../sql/trace";
 import { pythonTracer, type TracePython } from "../testing/pythonTracer";
 import { traceProblem } from "../trace/checkTrace";
 import { goldenText, slug } from "../trace/golden";
 import { POLICY } from "../trace/policy";
 import { traceProblems } from "../trace/validate";
-import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./index";
+import { type Example, JAVASCRIPT_EXAMPLES, PYTHON_EXAMPLES, SQL_EXAMPLES, TYPESCRIPT_EXAMPLES } from "./index";
 
 const MAX_STEPS = POLICY.maxSteps; // as the app
 const MAX_SECONDS = 600; // never the reason a trace stops
@@ -66,9 +70,29 @@ describe("golden traces: Python (in Pyodide)", () => {
   }
 });
 
+describe("golden traces: SQL (in PGlite)", () => {
+  let engine: PgliteEngine;
+
+  beforeAll(async () => {
+    engine = await PgliteEngine.create();
+  }, 120_000);
+
+  for (const example of SQL_EXAMPLES) {
+    it(example.name, async () => {
+      const trace = await traceSql(example.code, engine, await loadParser());
+      expect(traceProblems(trace), "matches the trace schema").toEqual([]);
+      expect(traceProblem(trace), "the app accepts it").toBeNull();
+      expect(trace.error, "runs without an error").toBeNull();
+      // Every query of an example is stepped through, not just shown as its result.
+      expect(trace.sql?.statements.filter((s) => s.unsupported)).toEqual([]);
+      await expect(goldenText(trace)).toMatchFileSnapshot(fixture("sql", example));
+    });
+  }
+});
+
 describe("golden traces: the examples", () => {
   it("have distinct file names in each language", () => {
-    for (const list of [PYTHON_EXAMPLES, JAVASCRIPT_EXAMPLES, TYPESCRIPT_EXAMPLES]) {
+    for (const list of [PYTHON_EXAMPLES, JAVASCRIPT_EXAMPLES, TYPESCRIPT_EXAMPLES, SQL_EXAMPLES]) {
       const names = list.map((e) => slug(e.name));
       expect(new Set(names).size).toBe(names.length);
     }

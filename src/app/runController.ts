@@ -22,6 +22,12 @@ import type { AppStore } from "./state";
 // The step budget, how long tracing may take (Live or Run) and how long
 // loops are sampled are the tracing policy, trace/policy.ts.
 
+/** Languages whose runtime is a download worth mentioning while it loads (gzipped, roughly). */
+const DOWNLOADS: Partial<Record<LanguageId, { name: string; size: string }>> = {
+  python: { name: "Python", size: "6 MB" },
+  sql: { name: "PostgreSQL", size: "8 MB" },
+};
+
 /** How long typing must pause before a Live run. */
 export const LIVE_DELAY_MS = 600;
 
@@ -134,17 +140,19 @@ export class RunController {
 
   showStatus(status: RunnerStatus): void {
     const el = this.options.status;
-    const python = this.language === "python";
+    const download = DOWNLOADS[this.language];
     el.classList.toggle("is-error", status.kind === "failed");
     el.title =
-      status.kind === "loading" && python
-        ? "Python runs right here in your browser. It downloads once (about 6 MB); after that your browser keeps a copy."
+      status.kind === "loading" && download
+        ? `${download.name} runs right here in your browser. It downloads once (about ${download.size}); after that your browser keeps a copy.`
         : status.kind === "failed"
           ? status.message // a long error may be cut short on screen
           : "";
     switch (status.kind) {
       case "loading":
-        el.textContent = python ? "Downloading Python (6 MB)…" : `Loading ${LANGUAGES[this.language].label}…`;
+        el.textContent = download
+          ? `Downloading ${download.name} (${download.size})…`
+          : `Loading ${LANGUAGES[this.language].label}…`;
         break;
       case "running":
         el.textContent = "Running…";
@@ -242,7 +250,8 @@ export class RunController {
     const warnings = trace.viz?.warnings ?? [];
     editor.setHintWarnings(warnings);
     const last = trace.steps.length - 1;
-    app.showTrace(trace, code, wasAtEnd ? last : Math.max(firstStepFor(trace.steps.length), Math.min(stepIndex, last)));
+    const first = trace.sql ? 0 : firstStepFor(trace.steps.length);
+    app.showTrace(trace, code, wasAtEnd ? last : Math.max(first, Math.min(stepIndex, last)));
 
     if (trace.truncated) {
       setBanner(this.truncationBanner(trace), "budget");

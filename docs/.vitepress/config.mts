@@ -70,6 +70,7 @@ export default defineConfig({
         text: "Using PR0L1NE",
         items: [
           { text: "User guide", link: "/user-guide" },
+          { text: "SQL", link: "/sql" },
           { text: "Hints: viz: comments", link: "/hints" },
           { text: "Limitations and troubleshooting", link: "/limitations" },
         ],
