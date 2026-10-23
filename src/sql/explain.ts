@@ -92,7 +92,7 @@ function advice(error: SqlError, ctx: ErrorContext): string | null {
     case "23503":
       return "A row here must point at a row that exists in the other table.";
     case "42803":
-      return "Every column in SELECT must be inside an aggregate (like COUNT) or listed in GROUP BY.";
+      return "A group becomes one row, so every column in SELECT must be listed in GROUP BY or be inside an aggregate (like COUNT or max). The GROUP BY step shows a group where this column has more than one value.";
     case "57014":
       return "It ran for too long and was stopped.";
     default:

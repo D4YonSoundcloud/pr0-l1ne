@@ -184,16 +184,28 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
         const no = refused(stmt);
         if (no) throw new SqlError(no, "PR0L1");
         if (stmt.SelectStmt && !stmt.SelectStmt.intoClause) {
-          const result = await engine.query(statementText);
           const why = unsupported(stmt.SelectStmt);
+          const context = { engine, parser, statement: index, line, lineOf: (b: number) => text.lineOf(b) };
+          let result: QueryResult;
+          try {
+            result = await engine.query(statementText);
+          } catch (e) {
+            // A column that isn't grouped: step through to the groups, to show why.
+            const column = e instanceof SqlError && e.code === "42803" ? /column "([^"]+)"/.exec(e.message)?.[1] : null;
+            if (column && !why) {
+              const expr = column
+                .split(".")
+                .map((part) => `"${part.replace(/"/g, '""')}"`)
+                .join(".");
+              const steps = await selectStages(context, stmt.SelectStmt, null, expr).catch(() => null);
+              for (const stage of steps ?? []) add(stage);
+            }
+            throw e;
+          }
           let selected: SqlStage[] | null = null;
           if (!why) {
             try {
-              selected = await selectStages(
-                { engine, parser, statement: index, line, lineOf: (b) => text.lineOf(b) },
-                stmt.SelectStmt,
-                result,
-              );
+              selected = await selectStages(context, stmt.SelectStmt, result);
             } catch {
               selected = null;
             }

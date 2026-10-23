@@ -1431,6 +1431,9 @@
         "from",
         "join",
         "where",
+        "group",
+        "aggregate",
+        "having",
         "select",
         "distinct",
         "order",
@@ -1485,6 +1488,30 @@
             "additionalProperties": false
           },
           "description": "Lines across the table (LIMIT, OFFSET) before the row at `before`."
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "count": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "count",
+              "label"
+            ],
+            "additionalProperties": false
+          },
+          "description": "GROUP BY: the groups, in order, each `count` rows from row `start`, and what its rows share (\"category = Tea\")."
         }
       },
       "required": [
@@ -1515,9 +1542,12 @@
             "computed",
             "check",
             "result",
-            "sort"
+            "sort",
+            "key",
+            "inputs",
+            "problem"
           ],
-          "description": "What the column is at this step (absent: a column of the table):   computed  made by an expression in SELECT (`expr`)   check     part of the WHERE condition, worked out for each row (`expr`)   result    the whole WHERE condition for each row: is it kept?   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)"
+          "description": "What the column is at this step (absent: a column of the table):   computed  made by an expression in SELECT (`expr`)   check     part of the WHERE condition, worked out for each row (`expr`)   result    the whole WHERE condition for each row: is it kept?   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)   key       what GROUP BY groups on, worked out for each row (`expr`)   inputs    the values an aggregate was given, for each group (`expr`:             the aggregate; for COUNT(*), the group's rows)   problem   a column that has different values within one group, in a             query Postgres refused for it (see SqlStage.notes)"
         },
         "expr": {
           "type": "string",
@@ -1586,6 +1616,10 @@
         "tie": {
           "type": "boolean",
           "description": "ORDER BY: its sort keys equal the row before's, so the two could come either way."
+        },
+        "group": {
+          "type": "number",
+          "description": "GROUP BY: which group it's in (an index into SqlTable.groups)."
         }
       },
       "required": [

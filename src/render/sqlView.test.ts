@@ -107,6 +107,31 @@ describe("the join drawing", () => {
   });
 });
 
+describe("the group drawing", () => {
+  it("colors each group, labels it, and draws a line between groups", async () => {
+    const trace = await traceOf(
+      "-- viz: database shop\nSELECT category, count(*) FROM products GROUP BY category HAVING count(*) > 2;",
+    );
+    const at = (kind: string) => trace.sql!.stages.findIndex((s) => s.kind === kind);
+    const group = sqlTableDrawing(sqlTableScene(trace, at("group"))!);
+    expect(all(group, ".sql-group-label").map((t) => t.textContent)).toEqual([
+      "G1 · category = Tea · 4 rows",
+      "G2 · category = Coffee · 3 rows",
+      "G3 · category = Kitchen · 3 rows",
+      "G4 · category = NULL · 2 rows",
+    ]);
+    expect(all(group, ".sql-group-line")).toHaveLength(3);
+    expect(all(group, ".sql-row.in-group-0")).toHaveLength(4);
+    expect(all(group, ".sql-group-mark")).toHaveLength(12);
+    const having = sqlTableDrawing(sqlTableScene(trace, at("having"))!);
+    expect(all(having, ".sql-row.is-removed")).toHaveLength(1);
+    const chips = all(sqlPipelineDrawing(sqlPipelineScene(trace, at("having"))!), ".sql-stage-keyword").map(
+      (t) => t.textContent,
+    );
+    expect(chips).toEqual(["FROM", "GROUP BY", "AGGREGATE", "HAVING", "SELECT"]);
+  });
+});
+
 describe("the pipeline drawing", () => {
   it("numbers the statements, leaving out the sample database", async () => {
     const trace = await traceOf("-- viz: database shop\nSELECT 1;\nSELECT name FROM products;");

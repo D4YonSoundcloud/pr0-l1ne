@@ -39,6 +39,7 @@ function cellText(value: string | null, column: SqlColumn): { text: string; cls:
     if (value === "false") return { text: "false", cls: "value v-bool sql-false" };
     return { text: "NULL", cls: "value v-none sql-unknown" };
   }
+  if (column.role === "inputs") return { text: value ?? "", cls: "value sql-inputs" };
   if (value === null) return { text: "NULL", cls: "value v-none" };
   if (column.type === "boolean")
     return { text: value === "t" ? "true" : value === "f" ? "false" : value, cls: "value v-bool" };
@@ -85,13 +86,23 @@ function measure(table: SqlTable): Measured {
   const w = Math.max(LABEL_W + widths.reduce((a, b) => a + b, 0), titleW);
   const notes = table.rows.map((r) => (r.note && !table.cuts?.length ? uiTextWidth(r.note, NOTE_SIZE) : 0));
   // (A join's two tables draw no notes: see joinTables.)
-  const cutNotes = (table.cuts ?? []).map((c) => uiTextWidth(c.label, NOTE_SIZE));
+  const cutNotes = [
+    ...(table.cuts ?? []).map((c) => uiTextWidth(c.label, NOTE_SIZE)),
+    ...(table.groups ?? []).map((g) => uiTextWidth(groupText(g), NOTE_SIZE)),
+  ];
   const notesW = Math.max(0, ...notes, ...cutNotes);
   const h = TITLE_H + HEAD_H + table.rows.length * ROW_H + (table.more ? ROW_H : 0) + 6;
   return { table, widths, w, notesW: notesW ? notesW + NOTE_GAP : 0, h };
 }
 
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
+
+/** A group's label beside its first row: "G2 · category = Coffee · 3 rows". */
+const groupText = (g: NonNullable<SqlTable["groups"]>[number], i = -1) =>
+  `${i >= 0 ? `G${i + 1} · ` : "G00 · "}${g.label} · ${rowsText(g.count)}`;
+
+/** Group colors cycle through this many (styles.css, .in-group-N). */
+const GROUP_COLORS = 6;
 
 /**
  * A table at (x, y), and the middle of each row drawn (for a join's lines).
@@ -135,7 +146,7 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
     lefts.push(cx);
     const role = column.role ? ` is-${column.role}` : "";
     const sorted = column.sort ? " is-sorted" : "";
-    if (column.role === "computed" || column.role === "sort") {
+    if (column.role === "computed" || column.role === "sort" || column.role === "key" || column.role === "problem") {
       g.append(
         s("rect", { class: `sql-col-bg${role}`, x: cx, y: headY, width: widths[i], height: bodyH - TITLE_H - 6 }),
       );
@@ -183,6 +194,24 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
       ),
     );
   }
+  // GROUP BY's groups: a line between them, and what each one's rows share.
+  for (const [i, group] of (table.groups ?? []).entries()) {
+    const gy = rowsY + group.start * ROW_H;
+    if (i > 0) g.append(s("line", { class: "sql-group-line", x1: x, y1: gy, x2: x + w, y2: gy }));
+    if (!group.count) continue;
+    g.append(
+      s(
+        "text",
+        {
+          class: `sql-group-label in-group-${i % GROUP_COLORS}`,
+          x: x + w + NOTE_GAP,
+          y: gy + ROW_H / 2,
+          "dominant-baseline": "central",
+        },
+        groupText(group, i),
+      ),
+    );
+  }
   // LIMIT and OFFSET's cuts.
   for (const cut of table.cuts ?? []) {
     const cy = rowsY + cut.before * ROW_H;
@@ -209,11 +238,20 @@ function drawRow(
   index: number,
   withNote: boolean,
 ): Mark {
-  const cls = ["sql-row", index % 2 ? "is-odd" : "", row.status ? `is-${row.status}` : "", row.tie ? "is-tie" : ""]
+  const cls = [
+    "sql-row",
+    index % 2 ? "is-odd" : "",
+    row.status ? `is-${row.status}` : "",
+    row.tie ? "is-tie" : "",
+    row.group !== undefined ? `in-group-${row.group % GROUP_COLORS}` : "",
+  ]
     .filter(Boolean)
     .join(" ");
   const g = s("g", { class: cls, "data-flip": `sqlrow:${row.id}`, "data-x": x, "data-y": y });
   g.append(s("rect", { class: "sql-row-bg", x: x + 1, y, width: w - 2, height: ROW_H }));
+  // A group's color, down the left edge of its rows.
+  if (row.group !== undefined)
+    g.append(s("rect", { class: "sql-group-mark", x: x + 1, y: y + 2, width: 4, height: ROW_H - 4 }));
   const mid = y + ROW_H / 2;
   g.append(
     s(
@@ -383,6 +421,12 @@ function chip(scene: SqlPipelineScene, kind: string, clause: string): string {
       return "LIMIT";
     case "result":
       return "RESULT";
+    case "group":
+      return "GROUP BY";
+    case "aggregate":
+      return "AGGREGATE";
+    case "having":
+      return "HAVING";
     case "join":
       return /^(?:NATURAL )?((?:LEFT |RIGHT |FULL |CROSS )?JOIN)/.exec(clause)?.[1] ?? "JOIN";
     default:

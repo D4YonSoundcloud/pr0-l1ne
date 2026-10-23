@@ -333,13 +333,103 @@ SELECT * FROM a NATURAL FULL JOIN b ORDER BY id;`);
   });
 });
 
+describe("GROUP BY, aggregates and HAVING", () => {
+  const GROUPED = `-- viz: database school
+SELECT year, count(*) AS students, count(gpa) AS with_gpa
+FROM students
+GROUP BY year
+HAVING count(gpa) >= 3
+ORDER BY year;`;
+
+  it("step after WHERE: the groups, each group's row, then HAVING", async () => {
+    const t = await trace(GROUPED);
+    expect(kinds(t)).toEqual(["tables", "from", "group", "aggregate", "having", "select", "order"]);
+    expect(stages(t).map((s) => s.line)).toEqual([1, 3, 4, 2, 5, 2, 6]);
+  });
+
+  it("gather each group's rows together, marked with its group, saying what they share", async () => {
+    const group = stages(await trace(GROUPED))[2];
+    expect(group.summary).toBe("4 groups of 12 rows");
+    const table = group.tables[0];
+    expect(table.groups?.map((g) => [g.label, g.count])).toEqual([
+      ["year = 2", 3],
+      ["year = 1", 4],
+      ["year = 3", 3],
+      ["year = 4", 2],
+    ]);
+    // In order of the groups, each row marked with its group, and the key worked out.
+    expect(table.rows.map((r) => r.group)).toEqual([0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 3]);
+    expect(table.columns.at(-1)).toMatchObject({ name: "year", role: "key" });
+  });
+
+  it("make each group one row, with the values each aggregate was given", async () => {
+    const aggregate = stages(await trace(GROUPED))[3];
+    const table = aggregate.tables[0];
+    expect(table.columns.map((c) => [c.name, c.role])).toEqual([
+      ["year", "key"],
+      ["count(*)", "computed"],
+      ["rows", "inputs"],
+      ["count(gpa)", "computed"],
+      ["gpa values", "inputs"],
+    ]);
+    // Year 1: four rows, one with no GPA, which COUNT(gpa) leaves out.
+    expect(table.rows[1].values).toEqual(["1", "4", "#2, #4, #9, #12", "3", "3.20, NULL, 2.40, 3.65"]);
+    expect(table.rows.map((r) => r.label)).toEqual(["G1", "G2", "G3", "G4"]);
+  });
+
+  it("drop whole groups with HAVING, and follow the groups through to the result", async () => {
+    const t = await trace(GROUPED);
+    const having = stages(t)[4];
+    expect(having.summary).toBe("kept 2 of 4 groups");
+    expect(having.tables[0].rows.filter((r) => r.status === "removed").map((r) => r.values[0])).toEqual(["3", "4"]);
+    const order = stages(t)[6];
+    expect(order.tables[0].rows.map((r) => [r.label, ...r.values])).toEqual([
+      ["G2", "1", "4", "3"],
+      ["G1", "2", "3", "3"],
+    ]);
+    // A group's row is its first row's id: the row it slides from.
+    expect(order.tables[0].rows[1].id).toBe(stages(t)[2].tables[0].rows[0].id);
+  });
+
+  it("make every row one group for an aggregate without GROUP BY, even with no rows", async () => {
+    const t = await trace("-- viz: database shop\nSELECT count(*), sum(stock) FROM products WHERE price > 100;");
+    expect(kinds(t)).toEqual(["tables", "from", "where", "group", "aggregate", "select"]);
+    expect(stages(t)[3].notes?.[0]).toMatch(/every row is one group/);
+    expect(stages(t).at(-1)?.tables[0].rows[0].values).toEqual(["0", null]);
+  });
+
+  it("group by a SELECT name or position as the query does", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT upper(category) AS shelf, count(*) FROM products GROUP BY shelf ORDER BY 1;",
+    );
+    expect(stages(t).find((s) => s.kind === "group")?.tables[0].groups?.[0].label).toBe("upper(category) = TEA");
+    const u = await trace(
+      "-- viz: database shop\nSELECT category, count(*) FROM products GROUP BY 1 ORDER BY 2 DESC, 1;",
+    );
+    expect(u.sql?.statements[1].unsupported).toBeUndefined();
+  });
+
+  it("show the refused column's values in each group, for SELECT's GROUP BY error", async () => {
+    const t = await trace("-- viz: database shop\nSELECT category, name\nFROM products\nGROUP BY category;");
+    expect(t.error?.message).toMatch(/must appear in the GROUP BY clause/);
+    expect(t.error?.message).toMatch(/The GROUP BY step shows a group/);
+    expect(kinds(t)).toEqual(["tables", "from", "group"]);
+    const group = stages(t)[2];
+    expect(group.tables[0].columns.at(-1)).toMatchObject({ name: "products.name", role: "problem" });
+    expect(group.notes?.[0]).toMatch(
+      /^In G1 \(category = Tea\), products.name has 4 different values: Green tea, Earl Grey, Oolong, Chai\./,
+    );
+  });
+});
+
 describe("what isn't stepped through yet", () => {
   for (const [query, why] of [
-    ["SELECT count(*) FROM products", "aggregate"],
-    ["SELECT category, max(price) FROM products GROUP BY category", "GROUP BY"],
+    ["SELECT category, count(*) FROM products GROUP BY ROLLUP (category)", "ROLLUP"],
+    ["SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY price) FROM products", "WITHIN GROUP"],
+    ["SELECT name, count(*) OVER () FROM products", "window functions"],
     ["SELECT * FROM orders JOIN (customers JOIN products ON true) ON true", "joins in parentheses"],
     ["SELECT * FROM orders, customers JOIN products ON true", "a mix of commas and JOIN"],
-    ["SELECT name FROM products WHERE price > (SELECT avg(price) FROM products)", "aggregate"],
+    ["SELECT name FROM products WHERE price > (SELECT avg(price) FROM products)", "subqueries"],
     ["SELECT name FROM products UNION SELECT name FROM customers", "UNION"],
     ["SELECT * FROM generate_series(1, 3)", "functions in FROM"],
     ["SELECT name, random() FROM products", "random"],

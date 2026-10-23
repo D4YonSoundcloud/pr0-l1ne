@@ -450,8 +450,13 @@ export interface SqlColumn {
    *   check     part of the WHERE condition, worked out for each row (`expr`)
    *   result    the whole WHERE condition for each row: is it kept?
    *   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)
+   *   key       what GROUP BY groups on, worked out for each row (`expr`)
+   *   inputs    the values an aggregate was given, for each group (`expr`:
+   *             the aggregate; for COUNT(*), the group's rows)
+   *   problem   a column that has different values within one group, in a
+   *             query Postgres refused for it (see SqlStage.notes)
    */
-  role?: "computed" | "check" | "result" | "sort";
+  role?: "computed" | "check" | "result" | "sort" | "key" | "inputs" | "problem";
   /** The expression, as written (one line). */
   expr?: string;
   /** ORDER BY sorts on this column: its place among the sort keys (1 first), and which way. */
@@ -484,6 +489,8 @@ export interface SqlRow {
   note?: string;
   /** ORDER BY: its sort keys equal the row before's, so the two could come either way. */
   tie?: boolean;
+  /** GROUP BY: which group it's in (an index into SqlTable.groups). */
+  group?: number;
 }
 
 /** A table drawn at a SQL step. */
@@ -498,6 +505,8 @@ export interface SqlTable {
   more?: number;
   /** Lines across the table (LIMIT, OFFSET) before the row at `before`. */
   cuts?: { before: number; label: string }[];
+  /** GROUP BY: the groups, in order, each `count` rows from row `start`, and what its rows share ("category = Tea"). */
+  groups?: { start: number; count: number; label: string }[];
 }
 
 export type SqlStageKind =
@@ -510,6 +519,12 @@ export type SqlStageKind =
    */
   | "join"
   | "where"
+  /** The rows gathered into groups (GROUP BY, or one group of every row for an aggregate without it). */
+  | "group"
+  /** Each group made into one row, its aggregates worked out from its rows. */
+  | "aggregate"
+  /** HAVING's condition for each group: whole groups dropped. */
+  | "having"
   | "select"
   | "distinct"
   | "order"

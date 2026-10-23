@@ -2807,3 +2807,65 @@ select {
   stroke-width: 1.25;
   opacity: 0.7;
 }
+
+/* GROUP BY: each group's color, down its rows' left edge and on its label (render/sqlView.ts). */
+.sql-svg {
+  --group-0: var(--ballpoint);
+  --group-1: var(--v-const);
+  --group-2: var(--frontier);
+  --group-3: var(--path);
+  --group-4: var(--mem);
+  --group-5: var(--v-str);
+}
+.sql-group-mark {
+  fill: var(--group-color, var(--ink-faint));
+}
+.in-group-0 {
+  --group-color: var(--group-0);
+}
+.in-group-1 {
+  --group-color: var(--group-1);
+}
+.in-group-2 {
+  --group-color: var(--group-2);
+}
+.in-group-3 {
+  --group-color: var(--group-3);
+}
+.in-group-4 {
+  --group-color: var(--group-4);
+}
+.in-group-5 {
+  --group-color: var(--group-5);
+}
+.sql-group-label {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 700;
+  fill: var(--group-color, var(--paper-ink-soft));
+}
+.sql-group-line {
+  stroke: var(--ink-soft);
+  stroke-width: 1.5;
+}
+.sql-head.is-key {
+  fill: var(--path);
+}
+.sql-col-bg.is-key {
+  fill: color-mix(in srgb, var(--path) 8%, transparent);
+}
+.sql-head.is-inputs {
+  font-weight: 400;
+  font-style: italic;
+  fill: var(--ink-soft);
+}
+.sql-head.is-problem {
+  fill: var(--redpen);
+}
+.sql-col-bg.is-problem {
+  fill: color-mix(in srgb, var(--redpen) 9%, transparent);
+}
+.value.sql-inputs {
+  fill: var(--ink-soft);
+  font-size: 12px;
+}

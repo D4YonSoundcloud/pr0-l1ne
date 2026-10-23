@@ -1,0 +1,3036 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": "  name  | orders | spent\n--------+--------+-------\n Grace  |      3 | 65.00\n Edsger |      2 | 46.00\n Ada    |      4 | 38.25\n(3 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "shop",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database shop"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "SELECT c.name, count(*) AS orders, sum(o.quantity * p.price) AS spent…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database shop",
+          "summary": "3 tables: customers, products, orders",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "customers",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "city",
+                  "type": "text"
+                },
+                {
+                  "name": "joined",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "customers:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "customers:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "customers:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "customers:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "customers:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30"
+                  ]
+                },
+                {
+                  "id": "customers:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17"
+                  ]
+                },
+                {
+                  "id": "customers:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05"
+                  ]
+                },
+                {
+                  "id": "customers:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Linus",
+                    "Helsinki",
+                    "2023-07-21"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "products",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "products:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Earl Grey",
+                    "Tea",
+                    "7.25",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "products:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "products:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "products:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                },
+                {
+                  "id": "products:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "products:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22"
+                  ]
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "orders",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "ordered_on",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "orders:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05"
+                  ]
+                },
+                {
+                  "id": "orders:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06"
+                  ]
+                },
+                {
+                  "id": "orders:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12"
+                  ]
+                },
+                {
+                  "id": "orders:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "orders:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02"
+                  ]
+                },
+                {
+                  "id": "orders:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03"
+                  ]
+                },
+                {
+                  "id": "orders:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14"
+                  ]
+                },
+                {
+                  "id": "orders:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20"
+                  ]
+                },
+                {
+                  "id": "orders:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01"
+                  ]
+                },
+                {
+                  "id": "orders:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08"
+                  ]
+                },
+                {
+                  "id": "orders:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09"
+                  ]
+                },
+                {
+                  "id": "orders:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15"
+                  ]
+                },
+                {
+                  "id": "orders:0,13",
+                  "label": "#13",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22"
+                  ]
+                },
+                {
+                  "id": "orders:0,14",
+                  "label": "#14",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM orders AS o",
+          "summary": "orders: 14 rows",
+          "line": 5,
+          "tables": [
+            {
+              "name": "orders",
+              "alias": "o",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "ordered_on",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05"
+                  ]
+                },
+                {
+                  "id": "o:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06"
+                  ]
+                },
+                {
+                  "id": "o:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12"
+                  ]
+                },
+                {
+                  "id": "o:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "o:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02"
+                  ]
+                },
+                {
+                  "id": "o:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03"
+                  ]
+                },
+                {
+                  "id": "o:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14"
+                  ]
+                },
+                {
+                  "id": "o:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20"
+                  ]
+                },
+                {
+                  "id": "o:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01"
+                  ]
+                },
+                {
+                  "id": "o:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08"
+                  ]
+                },
+                {
+                  "id": "o:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09"
+                  ]
+                },
+                {
+                  "id": "o:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15"
+                  ]
+                },
+                {
+                  "id": "o:0,13",
+                  "label": "#13",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22"
+                  ]
+                },
+                {
+                  "id": "o:0,14",
+                  "label": "#14",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14
+        },
+        {
+          "statement": 1,
+          "kind": "join",
+          "clause": "JOIN customers AS c ON c.id = o.customer_id",
+          "summary": "14 matching pairs, 14 rows; 1 of customers AS c matches nothing: left out",
+          "line": 6,
+          "tables": [
+            {
+              "name": "orders",
+              "alias": "o",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "ordered_on",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05"
+                  ]
+                },
+                {
+                  "id": "o:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06"
+                  ]
+                },
+                {
+                  "id": "o:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12"
+                  ]
+                },
+                {
+                  "id": "o:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "o:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02"
+                  ]
+                },
+                {
+                  "id": "o:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03"
+                  ]
+                },
+                {
+                  "id": "o:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14"
+                  ]
+                },
+                {
+                  "id": "o:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20"
+                  ]
+                },
+                {
+                  "id": "o:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01"
+                  ]
+                },
+                {
+                  "id": "o:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08"
+                  ]
+                },
+                {
+                  "id": "o:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09"
+                  ]
+                },
+                {
+                  "id": "o:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15"
+                  ]
+                },
+                {
+                  "id": "o:0,13",
+                  "label": "#13",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22"
+                  ]
+                },
+                {
+                  "id": "o:0,14",
+                  "label": "#14",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "customers",
+              "alias": "c",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "city",
+                  "type": "text"
+                },
+                {
+                  "name": "joined",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "c:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "c:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "c:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "c:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "c:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30"
+                  ]
+                },
+                {
+                  "id": "c:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17"
+                  ]
+                },
+                {
+                  "id": "c:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05"
+                  ]
+                },
+                {
+                  "id": "c:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Linus",
+                    "Helsinki",
+                    "2023-07-21"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                }
+              ]
+            },
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "o.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.ordered_on",
+                  "type": "date"
+                },
+                {
+                  "name": "c.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "c.name",
+                  "type": "text"
+                },
+                {
+                  "name": "c.city",
+                  "type": "text"
+                },
+                {
+                  "name": "c.joined",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1|c:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,2|c:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,3|c:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,4|c:0,3",
+                  "label": "#4·#3",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "o:0,5|c:0,2",
+                  "label": "#5·#2",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,6|c:0,4",
+                  "label": "#6·#4",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5",
+                  "label": "#7·#5",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14",
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30"
+                  ]
+                },
+                {
+                  "id": "o:0,8|c:0,1",
+                  "label": "#8·#1",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6",
+                  "label": "#9·#6",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01",
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3",
+                  "label": "#10·#3",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "o:0,11|c:0,2",
+                  "label": "#11·#2",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7",
+                  "label": "#12·#7",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15",
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4",
+                  "label": "#13·#4",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "o:0,14|c:0,1",
+                  "label": "#14·#1",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14,
+          "links": [
+            {
+              "from": "o:0,1",
+              "to": "c:0,1"
+            },
+            {
+              "from": "o:0,2",
+              "to": "c:0,2"
+            },
+            {
+              "from": "o:0,3",
+              "to": "c:0,1"
+            },
+            {
+              "from": "o:0,4",
+              "to": "c:0,3"
+            },
+            {
+              "from": "o:0,5",
+              "to": "c:0,2"
+            },
+            {
+              "from": "o:0,6",
+              "to": "c:0,4"
+            },
+            {
+              "from": "o:0,7",
+              "to": "c:0,5"
+            },
+            {
+              "from": "o:0,8",
+              "to": "c:0,1"
+            },
+            {
+              "from": "o:0,9",
+              "to": "c:0,6"
+            },
+            {
+              "from": "o:0,10",
+              "to": "c:0,3"
+            },
+            {
+              "from": "o:0,11",
+              "to": "c:0,2"
+            },
+            {
+              "from": "o:0,12",
+              "to": "c:0,7"
+            },
+            {
+              "from": "o:0,13",
+              "to": "c:0,4"
+            },
+            {
+              "from": "o:0,14",
+              "to": "c:0,1"
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "join",
+          "clause": "JOIN products AS p ON p.id = o.product_id",
+          "summary": "14 matching pairs, 14 rows; 2 of products AS p match nothing: left out",
+          "line": 7,
+          "tables": [
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "o.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.ordered_on",
+                  "type": "date"
+                },
+                {
+                  "name": "c.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "c.name",
+                  "type": "text"
+                },
+                {
+                  "name": "c.city",
+                  "type": "text"
+                },
+                {
+                  "name": "c.joined",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1|c:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,2|c:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,3|c:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,4|c:0,3",
+                  "label": "#4·#3",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "o:0,5|c:0,2",
+                  "label": "#5·#2",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,6|c:0,4",
+                  "label": "#6·#4",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5",
+                  "label": "#7·#5",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14",
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30"
+                  ]
+                },
+                {
+                  "id": "o:0,8|c:0,1",
+                  "label": "#8·#1",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6",
+                  "label": "#9·#6",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01",
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3",
+                  "label": "#10·#3",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "o:0,11|c:0,2",
+                  "label": "#11·#2",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7",
+                  "label": "#12·#7",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15",
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4",
+                  "label": "#13·#4",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "o:0,14|c:0,1",
+                  "label": "#14·#1",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "products",
+              "alias": "p",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "p:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "p:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Earl Grey",
+                    "Tea",
+                    "7.25",
+                    "0"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "p:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "p:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "p:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "p:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "p:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                },
+                {
+                  "id": "p:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "p:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30"
+                  ]
+                },
+                {
+                  "id": "p:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "p:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22"
+                  ]
+                },
+                {
+                  "id": "p:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "o.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.ordered_on",
+                  "type": "date"
+                },
+                {
+                  "name": "c.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "c.name",
+                  "type": "text"
+                },
+                {
+                  "name": "c.city",
+                  "type": "text"
+                },
+                {
+                  "name": "c.joined",
+                  "type": "date"
+                },
+                {
+                  "name": "p.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "p.name",
+                  "type": "text"
+                },
+                {
+                  "name": "p.category",
+                  "type": "text"
+                },
+                {
+                  "name": "p.price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "p.stock",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1|c:0,1|p:0,1",
+                  "label": "#1·#1·#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "o:0,2|c:0,2|p:0,3",
+                  "label": "#2·#2·#3",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "o:0,3|c:0,1|p:0,5",
+                  "label": "#3·#1·#5",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "o:0,4|c:0,3|p:0,7",
+                  "label": "#4·#3·#7",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23",
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                },
+                {
+                  "id": "o:0,5|c:0,2|p:0,6",
+                  "label": "#5·#2·#6",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "o:0,6|c:0,4|p:0,3",
+                  "label": "#6·#4·#3",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09",
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "#7·#5·#11",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14",
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30",
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22"
+                  ]
+                },
+                {
+                  "id": "o:0,8|c:0,1|p:0,9",
+                  "label": "#8·#1·#9",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "#9·#6·#10",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01",
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17",
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "#10·#3·#1",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23",
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "#11·#2·#4",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "#12·#7·#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15",
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05",
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "#13·#4·#5",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09",
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "#14·#1·#7",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14,
+          "links": [
+            {
+              "from": "o:0,1|c:0,1",
+              "to": "p:0,1"
+            },
+            {
+              "from": "o:0,2|c:0,2",
+              "to": "p:0,3"
+            },
+            {
+              "from": "o:0,3|c:0,1",
+              "to": "p:0,5"
+            },
+            {
+              "from": "o:0,4|c:0,3",
+              "to": "p:0,7"
+            },
+            {
+              "from": "o:0,5|c:0,2",
+              "to": "p:0,6"
+            },
+            {
+              "from": "o:0,6|c:0,4",
+              "to": "p:0,3"
+            },
+            {
+              "from": "o:0,7|c:0,5",
+              "to": "p:0,11"
+            },
+            {
+              "from": "o:0,8|c:0,1",
+              "to": "p:0,9"
+            },
+            {
+              "from": "o:0,9|c:0,6",
+              "to": "p:0,10"
+            },
+            {
+              "from": "o:0,10|c:0,3",
+              "to": "p:0,1"
+            },
+            {
+              "from": "o:0,11|c:0,2",
+              "to": "p:0,4"
+            },
+            {
+              "from": "o:0,12|c:0,7",
+              "to": "p:0,12"
+            },
+            {
+              "from": "o:0,13|c:0,4",
+              "to": "p:0,5"
+            },
+            {
+              "from": "o:0,14|c:0,1",
+              "to": "p:0,7"
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "group",
+          "clause": "GROUP BY c.name",
+          "summary": "7 groups of 14 rows",
+          "line": 8,
+          "tables": [
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "o.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "o.ordered_on",
+                  "type": "date"
+                },
+                {
+                  "name": "c.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "c.name",
+                  "type": "text"
+                },
+                {
+                  "name": "c.city",
+                  "type": "text"
+                },
+                {
+                  "name": "c.joined",
+                  "type": "date"
+                },
+                {
+                  "name": "p.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "p.name",
+                  "type": "text"
+                },
+                {
+                  "name": "p.category",
+                  "type": "text"
+                },
+                {
+                  "name": "p.price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "p.stock",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "c.name",
+                  "type": "text",
+                  "expr": "c.name",
+                  "role": "key"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,1|c:0,1|p:0,1",
+                  "label": "#1·#1·#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40",
+                    "Ada"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "o:0,3|c:0,1|p:0,5",
+                  "label": "#3·#1·#5",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25",
+                    "Ada"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "o:0,8|c:0,1|p:0,9",
+                  "label": "#8·#1·#9",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30",
+                    "Ada"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "#14·#1·#7",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30",
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14",
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18",
+                    "Ada"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "o:0,2|c:0,2|p:0,3",
+                  "label": "#2·#2·#3",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12",
+                    "Grace"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "o:0,5|c:0,2|p:0,6",
+                  "label": "#5·#2·#6",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3",
+                    "Grace"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "#11·#2·#4",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09",
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02",
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5",
+                    "Grace"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "o:0,4|c:0,3|p:0,7",
+                  "label": "#4·#3·#7",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23",
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18",
+                    "Alan"
+                  ],
+                  "group": 2
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "#10·#3·#1",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08",
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23",
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40",
+                    "Alan"
+                  ],
+                  "group": 2
+                },
+                {
+                  "id": "o:0,6|c:0,4|p:0,3",
+                  "label": "#6·#4·#3",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09",
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12",
+                    "Edsger"
+                  ],
+                  "group": 3
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "#13·#4·#5",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22",
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09",
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25",
+                    "Edsger"
+                  ],
+                  "group": 3
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "#7·#5·#11",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14",
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30",
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22",
+                    "Barbara"
+                  ],
+                  "group": 4
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "#9·#6·#10",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01",
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17",
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7",
+                    "Donald"
+                  ],
+                  "group": 5
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "#12·#7·#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15",
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05",
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100",
+                    "Margaret"
+                  ],
+                  "group": 6
+                }
+              ],
+              "groups": [
+                {
+                  "start": 0,
+                  "count": 4,
+                  "label": "c.name = Ada"
+                },
+                {
+                  "start": 4,
+                  "count": 3,
+                  "label": "c.name = Grace"
+                },
+                {
+                  "start": 7,
+                  "count": 2,
+                  "label": "c.name = Alan"
+                },
+                {
+                  "start": 9,
+                  "count": 2,
+                  "label": "c.name = Edsger"
+                },
+                {
+                  "start": 11,
+                  "count": 1,
+                  "label": "c.name = Barbara"
+                },
+                {
+                  "start": 12,
+                  "count": 1,
+                  "label": "c.name = Donald"
+                },
+                {
+                  "start": 13,
+                  "count": 1,
+                  "label": "c.name = Margaret"
+                }
+              ]
+            }
+          ],
+          "rows": 7
+        },
+        {
+          "statement": 1,
+          "kind": "aggregate",
+          "clause": "count(*), sum(o.quantity * p.price)",
+          "summary": "7 groups, one row each: 2 aggregates worked out from each group's rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "groups",
+              "columns": [
+                {
+                  "name": "c.name",
+                  "type": "text",
+                  "expr": "c.name",
+                  "role": "key"
+                },
+                {
+                  "name": "count(*)",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "rows",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "sum(o.quantity * p.price)",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "sum(o.quantity * p.price)"
+                },
+                {
+                  "name": "o.quantity * p.price values",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "sum(o.quantity * p.price)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "G1",
+                  "group": 0,
+                  "values": [
+                    "Ada",
+                    "4",
+                    "#1·#1·#1, #3·#1·#5, #8·#1·#9, #14·#1·#7",
+                    "38.25",
+                    "13.00, 9.00, 7.25, 9.00"
+                  ]
+                },
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "G2",
+                  "group": 1,
+                  "values": [
+                    "Grace",
+                    "3",
+                    "#2·#2·#3, #5·#2·#6, #11·#2·#4",
+                    "65.00",
+                    "14.00, 24.00, 27.00"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "G3",
+                  "group": 2,
+                  "values": [
+                    "Alan",
+                    "2",
+                    "#4·#3·#7, #10·#3·#1",
+                    "33.50",
+                    "27.00, 6.50"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "G4",
+                  "group": 3,
+                  "values": [
+                    "Edsger",
+                    "2",
+                    "#6·#4·#3, #13·#4·#5",
+                    "46.00",
+                    "28.00, 18.00"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "G5",
+                  "group": 4,
+                  "values": [
+                    "Barbara",
+                    "1",
+                    "#7·#5·#11",
+                    "26.00",
+                    "26.00"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "G6",
+                  "group": 5,
+                  "values": [
+                    "Donald",
+                    "1",
+                    "#9·#6·#10",
+                    "19.99",
+                    "19.99"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "G7",
+                  "group": 6,
+                  "values": [
+                    "Margaret",
+                    "1",
+                    "#12·#7·#12",
+                    "25.00",
+                    "25.00"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 7
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT c.name, count(*) AS orders, sum(o.quantity * p.price) AS sp…",
+          "summary": "3 columns (2 worked out), 7 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "orders",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "spent",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "sum(o.quantity * p.price)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "G1",
+                  "values": [
+                    "Ada",
+                    "4",
+                    "38.25"
+                  ]
+                },
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "G2",
+                  "values": [
+                    "Grace",
+                    "3",
+                    "65.00"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "G3",
+                  "values": [
+                    "Alan",
+                    "2",
+                    "33.50"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "G4",
+                  "values": [
+                    "Edsger",
+                    "2",
+                    "46.00"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "G5",
+                  "values": [
+                    "Barbara",
+                    "1",
+                    "26.00"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "G6",
+                  "values": [
+                    "Donald",
+                    "1",
+                    "19.99"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "G7",
+                  "values": [
+                    "Margaret",
+                    "1",
+                    "25.00"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 7
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY spent DESC",
+          "summary": "sorted by spent (descending)",
+          "line": 9,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "orders",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "spent",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "sum(o.quantity * p.price)",
+                  "sort": {
+                    "rank": 1,
+                    "desc": true
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "G2",
+                  "values": [
+                    "Grace",
+                    "3",
+                    "65.00"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "G4",
+                  "values": [
+                    "Edsger",
+                    "2",
+                    "46.00"
+                  ]
+                },
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "G1",
+                  "values": [
+                    "Ada",
+                    "4",
+                    "38.25"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "G3",
+                  "values": [
+                    "Alan",
+                    "2",
+                    "33.50"
+                  ]
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "G5",
+                  "values": [
+                    "Barbara",
+                    "1",
+                    "26.00"
+                  ]
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "G7",
+                  "values": [
+                    "Margaret",
+                    "1",
+                    "25.00"
+                  ]
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "G6",
+                  "values": [
+                    "Donald",
+                    "1",
+                    "19.99"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 7
+        },
+        {
+          "statement": 1,
+          "kind": "limit",
+          "clause": "LIMIT 3",
+          "summary": "kept 3 of 7 rows",
+          "line": 10,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "orders",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "spent",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "sum(o.quantity * p.price)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "o:0,11|c:0,2|p:0,4",
+                  "label": "G2",
+                  "values": [
+                    "Grace",
+                    "3",
+                    "65.00"
+                  ]
+                },
+                {
+                  "id": "o:0,13|c:0,4|p:0,5",
+                  "label": "G4",
+                  "values": [
+                    "Edsger",
+                    "2",
+                    "46.00"
+                  ]
+                },
+                {
+                  "id": "o:0,14|c:0,1|p:0,7",
+                  "label": "G1",
+                  "values": [
+                    "Ada",
+                    "4",
+                    "38.25"
+                  ]
+                },
+                {
+                  "id": "o:0,10|c:0,3|p:0,1",
+                  "label": "G3",
+                  "values": [
+                    "Alan",
+                    "2",
+                    "33.50"
+                  ],
+                  "status": "removed",
+                  "note": "past LIMIT 3"
+                },
+                {
+                  "id": "o:0,7|c:0,5|p:0,11",
+                  "label": "G5",
+                  "values": [
+                    "Barbara",
+                    "1",
+                    "26.00"
+                  ],
+                  "status": "removed",
+                  "note": "past LIMIT 3"
+                },
+                {
+                  "id": "o:0,12|c:0,7|p:0,12",
+                  "label": "G7",
+                  "values": [
+                    "Margaret",
+                    "1",
+                    "25.00"
+                  ],
+                  "status": "removed",
+                  "note": "past LIMIT 3"
+                },
+                {
+                  "id": "o:0,9|c:0,6|p:0,10",
+                  "label": "G6",
+                  "values": [
+                    "Donald",
+                    "1",
+                    "19.99"
+                  ],
+                  "status": "removed",
+                  "note": "past LIMIT 3"
+                }
+              ],
+              "cuts": [
+                {
+                  "before": 3,
+                  "label": "LIMIT 3"
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f0","func":"Global","line":8,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":10,"stack":[{"id":"f0","func":"Global","line":10,"locals":[]}],"stdoutLength":136,"loops":[]}
+  ]
+}

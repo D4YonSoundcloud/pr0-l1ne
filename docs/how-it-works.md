@@ -664,6 +664,9 @@ SQL is a different kind of language from the other three: a query doesn't run li
 | FROM | `SELECT t.*, t.ctid FROM <from> ORDER BY t.ctid`: every row, and where Postgres keeps it, which is its id from here on |
 | JOIN | For each table joined, the FROM up to that table (the join's own subtree, deparsed), with every joined table's columns and ids: a row's id is its rows' ids together (`c:0,8\|o:-`, `-` for the NULLs of an unmatched row), so the ids say which rows each pair came from, and which rows matched nothing |
 | WHERE | The condition (and each part AND, OR and NOT join) as columns, for every row |
+| GROUP BY | Which rows are in which group (`string_agg` of their ids, after the query's own SELECT list, so `GROUP BY 1` still means its first column), and what each is grouped by, worked out for each row. A group's id is its smallest row id (`min(id COLLATE "C")`), the id its row has from here on |
+| Aggregates | The query's grouping again, with each aggregate, and the values each was given (`string_agg` of its argument, in row order) |
+| HAVING | Its condition for each group |
 | SELECT | The query's own select list, with the id, for the rows WHERE kept |
 | DISTINCT | Worked out from SELECT's rows: the first of each set of identical rows stays |
 | ORDER BY | The select list and the id, in the query's own ORDER BY, so `ORDER BY 2` and a name from SELECT mean what they mean in the query |
@@ -673,7 +676,9 @@ The id is what ties the steps together: it's how a row in the ORDER BY step is t
 
 **The check.** The last step's rows must be the query's own result: in the same order when there's an ORDER BY without ties, and in any order otherwise. If they aren't (some corner of SQL the steps get wrong), the steps are dropped and the result is shown instead, saying it couldn't be stepped through. A wrong picture would be worse than none. Every SQL example's trace is a golden trace ([`src/examples/golden.test.ts`](../src/examples/golden.test.ts)), checked to be stepped through in full.
 
-**What isn't stepped through yet** (GROUP BY, subqueries...) is found from the parse tree by `unsupported()`, and the query is shown as its result, saying what it uses.
+**A GROUP BY error** (a SELECT column that isn't grouped) runs the steps up to GROUP BY anyway, grouping by GROUP BY's own expressions, with the refused column worked out beside them, so the step can show a group where it has more than one value.
+
+**What isn't stepped through yet** (subqueries, WITH...) is found from the parse tree by `unsupported()`, and the query is shown as its result, saying what it uses.
 
 **Errors** keep Postgres's message, and [`explain.ts`](../src/sql/explain.ts) adds what usually causes it, by its SQLSTATE code, using what the run knows: the tables there are, their columns, and the names the query gives columns with AS.
 

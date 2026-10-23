@@ -1,0 +1,1353 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": " category | products | cheapest\n----------+----------+----------\n Kitchen  |        3 |     9.00\n Coffee   |        3 |    13.50\n(2 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "shop",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database shop"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "SELECT category, count(*) AS products, min(price) AS cheapest FROM pr…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database shop",
+          "summary": "3 tables: customers, products, orders",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "customers",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "city",
+                  "type": "text"
+                },
+                {
+                  "name": "joined",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "customers:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Ada",
+                    "London",
+                    "2021-03-14"
+                  ]
+                },
+                {
+                  "id": "customers:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Grace",
+                    "New York",
+                    "2020-11-02"
+                  ]
+                },
+                {
+                  "id": "customers:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Alan",
+                    "London",
+                    "2022-06-23"
+                  ]
+                },
+                {
+                  "id": "customers:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Edsger",
+                    "Austin",
+                    "2023-01-09"
+                  ]
+                },
+                {
+                  "id": "customers:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Barbara",
+                    null,
+                    "2021-08-30"
+                  ]
+                },
+                {
+                  "id": "customers:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Donald",
+                    "Austin",
+                    "2024-02-17"
+                  ]
+                },
+                {
+                  "id": "customers:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Margaret",
+                    "Boston",
+                    "2022-10-05"
+                  ]
+                },
+                {
+                  "id": "customers:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Linus",
+                    "Helsinki",
+                    "2023-07-21"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "products",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "products:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Earl Grey",
+                    "Tea",
+                    "7.25",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "products:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "products:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "products:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                },
+                {
+                  "id": "products:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "products:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22"
+                  ]
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "orders",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "customer_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "product_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "quantity",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "ordered_on",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "orders:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "1",
+                    "1",
+                    "2",
+                    "2024-01-05"
+                  ]
+                },
+                {
+                  "id": "orders:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "2",
+                    "3",
+                    "1",
+                    "2024-01-06"
+                  ]
+                },
+                {
+                  "id": "orders:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "5",
+                    "1",
+                    "2024-01-12"
+                  ]
+                },
+                {
+                  "id": "orders:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "3",
+                    "7",
+                    "3",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "orders:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "6",
+                    "1",
+                    "2024-02-02"
+                  ]
+                },
+                {
+                  "id": "orders:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "3",
+                    "2",
+                    "2024-02-03"
+                  ]
+                },
+                {
+                  "id": "orders:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "5",
+                    "11",
+                    "4",
+                    "2024-02-14"
+                  ]
+                },
+                {
+                  "id": "orders:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "1",
+                    "9",
+                    "1",
+                    "2024-02-20"
+                  ]
+                },
+                {
+                  "id": "orders:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "6",
+                    "10",
+                    "1",
+                    "2024-03-01"
+                  ]
+                },
+                {
+                  "id": "orders:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "3",
+                    "1",
+                    "1",
+                    "2024-03-08"
+                  ]
+                },
+                {
+                  "id": "orders:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "2",
+                    "4",
+                    "2",
+                    "2024-03-09"
+                  ]
+                },
+                {
+                  "id": "orders:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "7",
+                    "12",
+                    "1",
+                    "2024-03-15"
+                  ]
+                },
+                {
+                  "id": "orders:0,13",
+                  "label": "#13",
+                  "values": [
+                    "13",
+                    "4",
+                    "5",
+                    "2",
+                    "2024-03-22"
+                  ]
+                },
+                {
+                  "id": "orders:0,14",
+                  "label": "#14",
+                  "values": [
+                    "14",
+                    "1",
+                    "7",
+                    "1",
+                    "2024-03-30"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM products",
+          "summary": "products: 12 rows",
+          "line": 5,
+          "tables": [
+            {
+              "name": "products",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40"
+                  ]
+                },
+                {
+                  "id": "products:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Earl Grey",
+                    "Tea",
+                    "7.25",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "products:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "products:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25"
+                  ]
+                },
+                {
+                  "id": "products:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18"
+                  ]
+                },
+                {
+                  "id": "products:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "products:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "products:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22"
+                  ]
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 12
+        },
+        {
+          "statement": 1,
+          "kind": "where",
+          "clause": "WHERE price > 8",
+          "summary": "kept 8 of 12 rows",
+          "line": 6,
+          "tables": [
+            {
+              "name": "products",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "kept?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "price > 8"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Green tea",
+                    "Tea",
+                    "6.50",
+                    "40",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "products:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Earl Grey",
+                    "Tea",
+                    "7.25",
+                    "0",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "products:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Honey",
+                    null,
+                    "7.25",
+                    "30",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Chai",
+                    "Tea",
+                    "6.50",
+                    "22",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100",
+                    "true"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 8
+        },
+        {
+          "statement": 1,
+          "kind": "group",
+          "clause": "GROUP BY category",
+          "summary": "4 groups of 8 rows",
+          "line": 7,
+          "tables": [
+            {
+              "name": "products",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "price",
+                  "type": "numeric",
+                  "numeric": true
+                },
+                {
+                  "name": "stock",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "category",
+                  "type": "text",
+                  "expr": "category",
+                  "role": "key"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Espresso beans",
+                    "Coffee",
+                    "14.00",
+                    "12",
+                    "Coffee"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "products:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Decaf beans",
+                    "Coffee",
+                    "13.50",
+                    "5",
+                    "Coffee"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "products:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Cold brew kit",
+                    "Coffee",
+                    "32.00",
+                    "0",
+                    "Coffee"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "products:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Mug",
+                    "Kitchen",
+                    "9.00",
+                    "25",
+                    "Kitchen"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "products:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Teapot",
+                    "Kitchen",
+                    "24.00",
+                    "3",
+                    "Kitchen"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Milk frother",
+                    "Kitchen",
+                    "19.99",
+                    "7",
+                    "Kitchen"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Oolong",
+                    "Tea",
+                    "9.00",
+                    "18",
+                    "Tea"
+                  ],
+                  "group": 2
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "#12",
+                  "values": [
+                    "12",
+                    "Gift card",
+                    null,
+                    "25.00",
+                    "100",
+                    null
+                  ],
+                  "group": 3
+                }
+              ],
+              "groups": [
+                {
+                  "start": 0,
+                  "count": 3,
+                  "label": "category = Coffee"
+                },
+                {
+                  "start": 3,
+                  "count": 3,
+                  "label": "category = Kitchen"
+                },
+                {
+                  "start": 6,
+                  "count": 1,
+                  "label": "category = Tea"
+                },
+                {
+                  "start": 7,
+                  "count": 1,
+                  "label": "category = NULL"
+                }
+              ]
+            }
+          ],
+          "rows": 4
+        },
+        {
+          "statement": 1,
+          "kind": "aggregate",
+          "clause": "count(*), min(price)",
+          "summary": "4 groups, one row each: 2 aggregates worked out from each group's rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "groups",
+              "columns": [
+                {
+                  "name": "category",
+                  "type": "text",
+                  "expr": "category",
+                  "role": "key"
+                },
+                {
+                  "name": "count(*)",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "rows",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "min(price)",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(price)"
+                },
+                {
+                  "name": "price values",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "min(price)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,3",
+                  "label": "G1",
+                  "group": 0,
+                  "values": [
+                    "Coffee",
+                    "3",
+                    "#3, #4, #8",
+                    "13.50",
+                    "14.00, 13.50, 32.00"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "G2",
+                  "group": 1,
+                  "values": [
+                    "Kitchen",
+                    "3",
+                    "#5, #6, #10",
+                    "9.00",
+                    "9.00, 24.00, 19.99"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "G3",
+                  "group": 2,
+                  "values": [
+                    "Tea",
+                    "1",
+                    "#7",
+                    "9.00",
+                    "9.00"
+                  ]
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "G4",
+                  "group": 3,
+                  "values": [
+                    null,
+                    "1",
+                    "#12",
+                    "25.00",
+                    "25.00"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 4
+        },
+        {
+          "statement": 1,
+          "kind": "having",
+          "clause": "HAVING count(*) >= 2",
+          "summary": "kept 2 of 4 groups",
+          "line": 8,
+          "tables": [
+            {
+              "name": "groups",
+              "columns": [
+                {
+                  "name": "category",
+                  "type": "text",
+                  "expr": "category",
+                  "role": "key"
+                },
+                {
+                  "name": "count(*)",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "rows",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "min(price)",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(price)"
+                },
+                {
+                  "name": "price values",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "min(price)"
+                },
+                {
+                  "name": "kept?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "count(*) >= 2"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,3",
+                  "label": "G1",
+                  "group": 0,
+                  "values": [
+                    "Coffee",
+                    "3",
+                    "#3, #4, #8",
+                    "13.50",
+                    "14.00, 13.50, 32.00",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "G2",
+                  "group": 1,
+                  "values": [
+                    "Kitchen",
+                    "3",
+                    "#5, #6, #10",
+                    "9.00",
+                    "9.00, 24.00, 19.99",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "products:0,7",
+                  "label": "G3",
+                  "group": 2,
+                  "values": [
+                    "Tea",
+                    "1",
+                    "#7",
+                    "9.00",
+                    "9.00",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "products:0,12",
+                  "label": "G4",
+                  "group": 3,
+                  "values": [
+                    null,
+                    "1",
+                    "#12",
+                    "25.00",
+                    "25.00",
+                    "false"
+                  ],
+                  "status": "removed"
+                }
+              ]
+            }
+          ],
+          "rows": 2
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT category, count(*) AS products, min(price) AS cheapest",
+          "summary": "3 columns (2 worked out), 2 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "products",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "cheapest",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(price)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,3",
+                  "label": "G1",
+                  "values": [
+                    "Coffee",
+                    "3",
+                    "13.50"
+                  ]
+                },
+                {
+                  "id": "products:0,10",
+                  "label": "G2",
+                  "values": [
+                    "Kitchen",
+                    "3",
+                    "9.00"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 2
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY cheapest",
+          "summary": "sorted by cheapest",
+          "line": 9,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "category",
+                  "type": "text"
+                },
+                {
+                  "name": "products",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "count(*)"
+                },
+                {
+                  "name": "cheapest",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(price)",
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "products:0,10",
+                  "label": "G2",
+                  "values": [
+                    "Kitchen",
+                    "3",
+                    "9.00"
+                  ]
+                },
+                {
+                  "id": "products:0,3",
+                  "label": "G1",
+                  "values": [
+                    "Coffee",
+                    "3",
+                    "13.50"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 2
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f0","func":"Global","line":8,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":139,"loops":[]}
+  ]
+}

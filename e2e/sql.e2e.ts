@@ -73,3 +73,28 @@ test("a join draws a line between each pair of rows it matches", async ({ page }
   await expect(page.locator("#memory .sql-link")).toHaveCount(14);
   await expect(page.locator("#memory")).toContainText("1 of customers AS c matches nothing: kept, with NULLs");
 });
+
+test("GROUP BY gathers rows into groups, and each group becomes one row", async ({ page }) => {
+  await open(
+    page,
+    "-- viz: database shop\nSELECT category, count(*) AS products\nFROM products\nGROUP BY category\nHAVING count(*) > 2;\n",
+  );
+  const label = page.locator("#step-label");
+  await expect(label).toContainText("of 6", { timeout: 90_000 });
+  await page.locator("#first").click();
+  await page.locator("#next").click();
+  await page.locator("#next").click();
+  await expect(label).toContainText("GROUP BY category");
+  await expect(page.locator("#memory .sql-group-label")).toHaveCount(4);
+  await page.locator("#next").click();
+  await expect(page.locator("#memory")).toContainText("#1, #2, #7, #11");
+  await page.locator("#next").click();
+  await expect(page.locator("#memory")).toContainText("kept 3 of 4 groups");
+});
+
+test("the GROUP BY error is stepped through to the group that breaks the rule", async ({ page }) => {
+  await open(page, "-- viz: database shop\nSELECT category, name\nFROM products\nGROUP BY category;\n");
+  await expect(page.locator("#banner")).toContainText("must appear in the GROUP BY clause", { timeout: 90_000 });
+  await expect(page.locator("#step-label")).toContainText("GROUP BY category");
+  await expect(page.locator("#memory")).toContainText("products.name has 4 different values");
+});

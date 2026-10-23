@@ -55,7 +55,8 @@ Every run starts from a fresh copy of the database. Nothing a program does is ke
 | **FROM** | The table, every row, numbered in the order Postgres keeps them (`#1`, `#2`...). The numbers stay with the rows through every step after this one. |
 | **JOIN** | One step for each table joined: see [Joins](#joins), below. |
 | **WHERE** | Every row, with the condition worked out for it in a **kept?** column. Rows where it isn't true are struck through. A condition joined with AND, OR or NOT also gets a column for each of its parts (up to four), so you can see which part decided each row. |
-| **SELECT** | The columns the query asks for, for the rows WHERE kept. Columns it works out (`price * stock AS stock_value`) are tinted, and hovering over the heading shows the expression. |
+| **GROUP BY** | The rows gathered into groups, then each group made into one row, then **HAVING** for each group: see [Groups and aggregates](#groups-and-aggregates), below. |
+| **SELECT** | The columns the query asks for, for the rows WHERE kept (or for each group). Columns it works out (`price * stock AS stock_value`) are tinted, and hovering over the heading shows the expression. |
 | **DISTINCT** | Repeated rows struck through, each marked with the row it repeats: "same as #1". |
 | **ORDER BY** | The rows in their new order. The sort keys are marked in the headings (▲ ascending, ▼ descending, numbered when there are several). A key that isn't one of the result's columns gets a column of its own. Rows that sort the same as the row above are marked `=`, because Postgres may give tied rows in either order. |
 | **LIMIT / OFFSET** | Red lines across the table where OFFSET starts and LIMIT stops, with the rows outside them struck through. |
@@ -82,6 +83,18 @@ A comma between tables in FROM (`FROM customers c, orders o`) is a CROSS JOIN, u
 
 In a self join (a table joined to itself, like employees and their managers), the two copies have different names (`e` and `m`), and their rows are kept apart by those names.
 
+### Groups and aggregates
+
+A query with GROUP BY, or with an aggregate like `count(*)` or `sum(price)`, takes three steps after WHERE:
+
+1. **GROUP BY.** The rows slide together into their groups. Each group has its own color down the left edge, a line above it, and a label beside it saying what its rows share: "G2 · category = Coffee · 3 rows". What GROUP BY groups on is worked out for each row in a column of its own. Rows with NULL there make one group together.
+2. **The aggregates.** Each group becomes one row (`G1`, `G2`...). Each aggregate gets a column, and beside it a column with the values it was given, so `sum(stock)` shows `40, 0, 18, 22` next to its 80. `count(*)` lists the group's rows (`#1, #2, #7`). `count(gpa)` and `avg(gpa)` show the NULLs they leave out.
+3. **HAVING**, if there is one. It's WHERE for groups: the condition is worked out for each group, and the groups where it isn't true are struck through. It runs after the aggregates, so it can use them, which WHERE can't.
+
+An aggregate with no GROUP BY (`SELECT count(*) FROM products`) makes every row one group, and the group one row. SELECT, ORDER BY and LIMIT then work on the groups' rows. Each group's row starts from the group's first row, so it slides there from the GROUP BY step.
+
+GROUP BY can name a column, an expression, or a name or number from SELECT (`GROUP BY 1`, `GROUP BY shelf`), as in Postgres.
+
 ### NULL
 
 NULL is SQL's "no value", and any comparison with it is neither true nor false but **unknown**: `NULL > 3.5` and `NULL = NULL` are both unknown. WHERE keeps only the rows where the condition is true, so an unknown leaves the row out, just as false does. PR0L1NE shows unknown as **NULL** (in orange), and the row says "NULL: unknown, so not kept". To ask for missing values, use `IS NULL`. The "NULL is unknown" example shows both.
@@ -106,30 +119,33 @@ The first error stops the run. It's shown on its line with Postgres's own messag
 
 > **Error** on line 4: column "prise" does not exist. products has "id", "name", "category", "price", "stock". Perhaps you meant to reference the column "products.price".
 
-Using a name from SELECT in WHERE is explained the same way: WHERE runs first, so the name doesn't exist there yet. Asking for a table that isn't there lists the tables there are. If there aren't any, the message suggests a sample database.
+Using a name from SELECT in WHERE is explained the same way: WHERE runs first, so the name doesn't exist there yet.
+
+The most common GROUP BY error, "column must appear in the GROUP BY clause or be used in an aggregate function", is stepped through as far as GROUP BY. The step shows the groups with the refused column beside them (in red), and points at a group where it has more than one value: "In G1 (category = Tea), products.name has 4 different values: Green tea, Earl Grey, Oolong, Chai." A group becomes one row, which can't show four names. The fix is to put the column in GROUP BY, or inside an aggregate like `max(name)`. Asking for a table that isn't there lists the tables there are. If there aren't any, the message suggests a sample database.
 
 ## Not stepped through yet
 
 A query that uses any of these is still run, and its result is shown as a single step, saying what isn't stepped through yet:
 
 - joins in parentheses (`a JOIN (b JOIN c ON ...) ON ...`), a join with a name of its own (`AS` after it), and a mix of commas and JOIN in one FROM
-- GROUP BY, HAVING, and aggregate functions like COUNT and SUM
+- GROUPING SETS, ROLLUP and CUBE, and ordered-set aggregates (`WITHIN GROUP`)
 - subqueries, WITH (common table expressions), UNION, INTERSECT and EXCEPT
 - window functions, DISTINCT ON, and `FETCH … WITH TIES`
 - functions in FROM, like `generate_series`
 - functions like `random()`, which give a new answer each time they're called
 
-GROUP BY and aggregates are next: see the [roadmap](roadmap.md).
+Subqueries and WITH are next: see the [roadmap](roadmap.md).
 
 ## Examples
 
-The **Open…** menu has SQL examples in four groups. Each one adds one thing to the one before:
+The **Open…** menu has SQL examples in five groups. Each one adds one thing to the one before:
 
 | Group | Examples |
 | --- | --- |
 | Querying one table | Every row, choosing columns, filtering with WHERE, AND, OR and NOT, NULL is unknown, computed columns |
 | Sorting, DISTINCT and LIMIT | ORDER BY, breaking ties, DISTINCT, top three with LIMIT, pages with OFFSET, every clause together |
 | Joining tables | JOIN … ON, LEFT JOIN keeps every row, rows with no match, three tables, a self join (who reports to whom), FULL JOIN, a comma in FROM |
+| Grouping and aggregates | COUNT and SUM over every row, GROUP BY, COUNT(*) or COUNT(column), HAVING, WHERE then GROUP BY then HAVING, grouping a join |
 | Your own tables | Create, insert, update, delete |
 
 ## The download

@@ -8,6 +8,7 @@ import type { Example } from "./index";
 const FIRST = "Querying one table";
 const SORTING = "Sorting, DISTINCT and LIMIT";
 const JOINS = "Joining tables";
+const GROUPS = "Grouping and aggregates";
 const OWN = "Your own tables";
 
 export const SQL_EXAMPLES: Example[] = [
@@ -243,6 +244,90 @@ SELECT d.name AS department, e.name
 FROM departments AS d, employees AS e
 WHERE e.department_id = d.id
 ORDER BY d.name, e.name;
+`,
+  },
+  // ------------------------------------------------------------- grouping
+  {
+    group: GROUPS,
+    name: "COUNT and SUM over every row",
+    code: `-- viz: database shop
+-- An aggregate with no GROUP BY makes every row one group, and
+-- the group one row. Each aggregate shows the values it was given.
+SELECT count(*) AS products,
+       sum(stock) AS in_stock,
+       max(price) AS dearest
+FROM products;
+`,
+  },
+  {
+    group: GROUPS,
+    name: "GROUP BY",
+    code: `-- viz: database shop
+-- GROUP BY gathers the rows into groups, one per category (the
+-- two with no category group together), and each group becomes
+-- one row.
+SELECT category, count(*) AS products, sum(stock) AS in_stock
+FROM products
+GROUP BY category
+ORDER BY category;
+`,
+  },
+  {
+    group: GROUPS,
+    name: "COUNT(*) or COUNT(column)",
+    code: `-- viz: database school
+-- COUNT(*) counts rows. COUNT(gpa) counts the rows whose gpa isn't
+-- NULL, and AVG(gpa) leaves the NULLs out too.
+SELECT year,
+       count(*) AS students,
+       count(gpa) AS with_gpa,
+       round(avg(gpa), 2) AS average
+FROM students
+GROUP BY year
+ORDER BY year;
+`,
+  },
+  {
+    group: GROUPS,
+    name: "HAVING",
+    code: `-- viz: database company
+-- HAVING is WHERE for groups: it runs after the aggregates, so it
+-- can use them, and drops whole groups.
+SELECT department_id,
+       count(*) AS people,
+       max(salary) AS top_salary
+FROM employees
+GROUP BY department_id
+HAVING count(*) >= 3;
+`,
+  },
+  {
+    group: GROUPS,
+    name: "WHERE, then GROUP BY, then HAVING",
+    code: `-- viz: database shop
+-- WHERE drops rows before they're grouped; HAVING drops groups
+-- after. Products over 8, then categories with two or more.
+SELECT category, count(*) AS products, min(price) AS cheapest
+FROM products
+WHERE price > 8
+GROUP BY category
+HAVING count(*) >= 2
+ORDER BY cheapest;
+`,
+  },
+  {
+    group: GROUPS,
+    name: "Grouping a join",
+    code: `-- viz: database shop
+-- Join the orders to their customers and products, then group
+-- the joined rows by customer: what each one has spent.
+SELECT c.name, count(*) AS orders, sum(o.quantity * p.price) AS spent
+FROM orders AS o
+JOIN customers AS c ON c.id = o.customer_id
+JOIN products AS p ON p.id = o.product_id
+GROUP BY c.name
+ORDER BY spent DESC
+LIMIT 3;
 `,
   },
   // ------------------------------------------------------------- your own tables
