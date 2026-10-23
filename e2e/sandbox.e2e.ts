@@ -3,13 +3,17 @@
  * and nothing they try gets out (see "Security" in docs/how-it-works.md).
  * Each test is something a hostile program, or a hostile page, could try.
  */
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test, type Worker } from "@playwright/test";
 
 const RUNNER = "http://127.0.0.1:4174";
 const APP = "http://localhost:4173";
 
 /** Open the app with a program in the editor, as if it had been saved there. */
+/** Workers that have closed: the page may still list one for a moment after it's gone. */
+const closedWorkers = new WeakSet<Worker>();
+
 async function open(page: Page, language: string, code: string) {
+  page.on("worker", (worker) => worker.once("close", () => closedWorkers.add(worker)));
   await page.addInitScript(
     ([language, code]) => {
       localStorage.clear();
@@ -32,7 +36,12 @@ const banner = (page: Page) => page.locator("#banner");
  * each test still runs, and Chromium runs them all).
  */
 async function runnerWorker(page: Page, browserName: string) {
-  const find = () => page.workers().find((w) => w.url().startsWith(RUNNER));
+  // The newest one that's still running (the app replaces a worker that stopped).
+  const find = () =>
+    page
+      .workers()
+      .filter((w) => w.url().startsWith(RUNNER) && !closedWorkers.has(w))
+      .at(-1);
   await expect
     .poll(() => !!find(), { timeout: 15_000 })
     .toBe(true)
@@ -138,31 +147,41 @@ test("inside the worker, every way out is blocked", async ({ page, browserName }
         return "blocked (the browser stopped the worker)";
       });
   }
-  const worker = await runnerWorker(page, browserName);
-  results["the app's window"] = await worker.evaluate(() =>
-    "parent" in self || "top" in self ? "reachable" : "blocked",
-  );
   // Shown in the test output, so it's visible which attempts a browser stops the worker for.
   console.log(`[${browserName}] ways out:`, JSON.stringify(results));
+  // Whether the app's window is in reach, in a worker that's running (once more if it stops meanwhile).
+  for (let tries = 0; tries < 2 && !results["the app's window"]; tries++) {
+    const worker = await runnerWorker(page, browserName);
+    results["the app's window"] = await worker
+      .evaluate(() => ("parent" in self || "top" in self ? "reachable" : "blocked"))
+      .catch((error: Error) => {
+        if (!/context was destroyed|Target closed|has been closed/i.test(error.message)) throw error;
+        return "";
+      });
+  }
   expect(Object.entries(results).filter(([, v]) => !v.startsWith("blocked"))).toEqual([]);
 });
 
 test("a program's own attempts to get out are blocked", async ({ page }) => {
+  // Synchronous attempts only: the tracer doesn't wait for real network
+  // replies (a fetch's rejection can come after the program has finished,
+  // in Firefox it does), but a synchronous request or importScripts fails
+  // on the spot, so what each got is always in the last step.
   await open(
     page,
     "javascript",
     `const out = [];
-const tryIt = async (name, f) => { try { await f(); out.push(name + ": GOT OUT"); } catch (e) { out.push(name + ": blocked"); } };
-(async () => {
-  await tryIt("fetch", () => fetch("https://example.com/"));
-  await tryIt("fetch the app", () => fetch("${APP}/"));
-  await tryIt("importScripts", () => importScripts("https://example.com/x.js"));
-})();
+const tryIt = (name, f) => { try { f(); out.push(name + ": GOT OUT"); } catch (e) { out.push(name + ": blocked"); } };
+const get = (url) => { const xhr = new XMLHttpRequest(); xhr.open("GET", url, false); xhr.send(); };
+tryIt("another site", () => get("https://example.com/"));
+tryIt("the app", () => get("${APP}/"));
+tryIt("importScripts", () => importScripts("https://example.com/x.js"));
 `,
   );
   await finished(page);
   // The app opens on the last step: its memory view shows what each attempt got.
-  await expect(page.locator("#memory")).toContainText("fetch: blocked");
+  await expect(page.locator("#memory")).toContainText("another site: blocked");
+  await expect(page.locator("#memory")).toContainText("the app: blocked");
   await expect(page.locator("#memory")).toContainText("importScripts: blocked");
   await expect(page.locator("#memory")).not.toContainText("GOT OUT");
 });

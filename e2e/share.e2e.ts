@@ -72,20 +72,36 @@ test("a broken link says so, and the person's own code is still there", async ({
   expect(new URL(page.url()).hash).toBe("");
 });
 
-test("Share makes a link that opens the same program", async ({ page, context, browserName }) => {
+test("Share makes a link that opens the same program", async ({ page, context }) => {
+  // What Share copies, caught on its way to the clipboard: reading the
+  // clipboard back needs a permission (or a click) some browsers won't give a test.
+  await page.addInitScript(() => {
+    const copied: string[] = [];
+    (window as unknown as { copied: string[] }).copied = copied;
+    if (navigator.clipboard) {
+      Object.defineProperty(navigator.clipboard, "writeText", {
+        configurable: true,
+        value: async (text: string) => {
+          copied.push(text);
+        },
+      });
+    }
+  });
   await page.goto("/");
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 90_000 });
-  if (browserName === "chromium") await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.locator("#share").click();
-  // Copied (where the test can read the clipboard), or shown to copy by hand.
-  let url: string;
-  if (browserName === "chromium") {
-    await expect(page.locator("#share")).toHaveText("Link copied");
-    url = await page.evaluate(() => navigator.clipboard.readText());
-  } else {
-    const shown = banner(page).locator("input.banner-input");
-    url = (await shown.count()) ? await shown.inputValue() : await page.evaluate(() => navigator.clipboard.readText());
-  }
+  // Copied, or (with no clipboard at all) shown to copy by hand.
+  const shown = banner(page).locator("input.banner-input");
+  await expect
+    .poll(
+      async () =>
+        (await shown.count()) > 0 ||
+        (await page.evaluate(() => (window as unknown as { copied: string[] }).copied.length)) > 0,
+    )
+    .toBe(true);
+  const url = (await shown.count())
+    ? await shown.inputValue()
+    : await page.evaluate(() => (window as unknown as { copied: string[] }).copied[0]);
   expect(url).toMatch(/^http:\/\/localhost:4173\/#v1\./);
   const other = await context.newPage();
   await other.goto(url);
