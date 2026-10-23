@@ -1,0 +1,2343 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": " department  |  name\n-------------+--------\n Engineering | Hana\n Engineering | Luis\n Engineering | Mei\n Engineering | Victor\n Sales       | Aisha\n Sales       | Ines\n Sales       | Sam\n Support     | Chloe\n Support     | Jonas\n Support     | Olga\n(10 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "company",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database company"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "SELECT d.name AS department, e.name FROM departments AS d, employees …"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database company",
+          "summary": "2 tables: departments, employees",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "departments",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "departments:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "departments:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM departments AS d",
+          "summary": "departments: 4 rows",
+          "line": 5,
+          "tables": [
+            {
+              "name": "departments",
+              "alias": "d",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "d:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "d:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "d:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 4
+        },
+        {
+          "statement": 1,
+          "kind": "join",
+          "clause": "CROSS JOIN employees AS e",
+          "summary": "4 × 11 = 44 rows: every row with every row",
+          "line": 5,
+          "tables": [
+            {
+              "name": "departments",
+              "alias": "d",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "d:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "d:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "d:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "alias": "e",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "e:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "e:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "e:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "e:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "e:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "e:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "e:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "e:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "e:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "d.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "d.name",
+                  "type": "text"
+                },
+                {
+                  "name": "d.floor",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.name",
+                  "type": "text"
+                },
+                {
+                  "name": "e.department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1|e:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,2",
+                  "label": "#1·#2",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,3",
+                  "label": "#1·#3",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,4",
+                  "label": "#1·#4",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,5",
+                  "label": "#1·#5",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,6",
+                  "label": "#1·#6",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,7",
+                  "label": "#1·#7",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,8",
+                  "label": "#1·#8",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,9",
+                  "label": "#1·#9",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,10",
+                  "label": "#1·#10",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,11",
+                  "label": "#1·#11",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,1",
+                  "label": "#2·#1",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,3",
+                  "label": "#2·#3",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,4",
+                  "label": "#2·#4",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,5",
+                  "label": "#2·#5",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,6",
+                  "label": "#2·#6",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,7",
+                  "label": "#2·#7",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,8",
+                  "label": "#2·#8",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,9",
+                  "label": "#2·#9",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,10",
+                  "label": "#2·#10",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,11",
+                  "label": "#2·#11",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,2",
+                  "label": "#3·#2",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,3",
+                  "label": "#3·#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,4",
+                  "label": "#3·#4",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,5",
+                  "label": "#3·#5",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,6",
+                  "label": "#3·#6",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,7",
+                  "label": "#3·#7",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,8",
+                  "label": "#3·#8",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,9",
+                  "label": "#3·#9",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,10",
+                  "label": "#3·#10",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,11",
+                  "label": "#3·#11",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,1",
+                  "label": "#4·#1",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,2",
+                  "label": "#4·#2",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,3",
+                  "label": "#4·#3",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,4",
+                  "label": "#4·#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,5",
+                  "label": "#4·#5",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,6",
+                  "label": "#4·#6",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,7",
+                  "label": "#4·#7",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,8",
+                  "label": "#4·#8",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,9",
+                  "label": "#4·#9",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,10",
+                  "label": "#4·#10",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,11",
+                  "label": "#4·#11",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 44,
+          "notes": [
+            "A comma between tables in FROM pairs every row with every row, like CROSS JOIN: WHERE then keeps the pairs that belong together."
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "where",
+          "clause": "WHERE e.department_id = d.id",
+          "summary": "kept 10 of 44 rows",
+          "line": 6,
+          "tables": [
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "d.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "d.name",
+                  "type": "text"
+                },
+                {
+                  "name": "d.floor",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.name",
+                  "type": "text"
+                },
+                {
+                  "name": "e.department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.hired",
+                  "type": "date"
+                },
+                {
+                  "name": "kept?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "e.department_id = d.id"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1|e:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,2",
+                  "label": "#1·#2",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,3",
+                  "label": "#1·#3",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,4",
+                  "label": "#1·#4",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,1|e:0,5",
+                  "label": "#1·#5",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,1|e:0,6",
+                  "label": "#1·#6",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,1|e:0,7",
+                  "label": "#1·#7",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,1|e:0,8",
+                  "label": "#1·#8",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,9",
+                  "label": "#1·#9",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,1|e:0,10",
+                  "label": "#1·#10",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    null
+                  ],
+                  "status": "removed",
+                  "note": "NULL: unknown, so not kept"
+                },
+                {
+                  "id": "d:0,1|e:0,11",
+                  "label": "#1·#11",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,1",
+                  "label": "#2·#1",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,3",
+                  "label": "#2·#3",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,4",
+                  "label": "#2·#4",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,5",
+                  "label": "#2·#5",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,6",
+                  "label": "#2·#6",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,7",
+                  "label": "#2·#7",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,8",
+                  "label": "#2·#8",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,2|e:0,9",
+                  "label": "#2·#9",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,10",
+                  "label": "#2·#10",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    null
+                  ],
+                  "status": "removed",
+                  "note": "NULL: unknown, so not kept"
+                },
+                {
+                  "id": "d:0,2|e:0,11",
+                  "label": "#2·#11",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,2",
+                  "label": "#3·#2",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,3",
+                  "label": "#3·#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,4",
+                  "label": "#3·#4",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,5",
+                  "label": "#3·#5",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,6",
+                  "label": "#3·#6",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,7",
+                  "label": "#3·#7",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,8",
+                  "label": "#3·#8",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,9",
+                  "label": "#3·#9",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,3|e:0,10",
+                  "label": "#3·#10",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    null
+                  ],
+                  "status": "removed",
+                  "note": "NULL: unknown, so not kept"
+                },
+                {
+                  "id": "d:0,3|e:0,11",
+                  "label": "#3·#11",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1",
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "d:0,4|e:0,1",
+                  "label": "#4·#1",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,2",
+                  "label": "#4·#2",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,3",
+                  "label": "#4·#3",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,4",
+                  "label": "#4·#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,5",
+                  "label": "#4·#5",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,6",
+                  "label": "#4·#6",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,7",
+                  "label": "#4·#7",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,8",
+                  "label": "#4·#8",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,9",
+                  "label": "#4·#9",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "d:0,4|e:0,10",
+                  "label": "#4·#10",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    null
+                  ],
+                  "status": "removed",
+                  "note": "NULL: unknown, so not kept"
+                },
+                {
+                  "id": "d:0,4|e:0,11",
+                  "label": "#4·#11",
+                  "values": [
+                    "4",
+                    "Research",
+                    null,
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "false"
+                  ],
+                  "status": "removed"
+                }
+              ]
+            }
+          ],
+          "rows": 10
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT d.name AS department, e.name",
+          "summary": "2 columns, 10 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "department",
+                  "type": "text"
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1|e:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "Engineering",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,2",
+                  "label": "#1·#2",
+                  "values": [
+                    "Engineering",
+                    "Luis"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,3",
+                  "label": "#1·#3",
+                  "values": [
+                    "Engineering",
+                    "Mei"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,8",
+                  "label": "#1·#8",
+                  "values": [
+                    "Engineering",
+                    "Victor"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,4",
+                  "label": "#2·#4",
+                  "values": [
+                    "Sales",
+                    "Sam"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,5",
+                  "label": "#2·#5",
+                  "values": [
+                    "Sales",
+                    "Aisha"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,9",
+                  "label": "#2·#9",
+                  "values": [
+                    "Sales",
+                    "Ines"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,6",
+                  "label": "#3·#6",
+                  "values": [
+                    "Support",
+                    "Jonas"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,7",
+                  "label": "#3·#7",
+                  "values": [
+                    "Support",
+                    "Chloe"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,11",
+                  "label": "#3·#11",
+                  "values": [
+                    "Support",
+                    "Olga"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 10
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY d.name, e.name",
+          "summary": "sorted by d.name, then e.name",
+          "line": 7,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "department",
+                  "type": "text"
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "d.name",
+                  "type": "text",
+                  "role": "sort",
+                  "expr": "d.name",
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                },
+                {
+                  "name": "e.name",
+                  "type": "text",
+                  "role": "sort",
+                  "expr": "e.name",
+                  "sort": {
+                    "rank": 2,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "d:0,1|e:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "Engineering",
+                    "Hana",
+                    "Engineering",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,2",
+                  "label": "#1·#2",
+                  "values": [
+                    "Engineering",
+                    "Luis",
+                    "Engineering",
+                    "Luis"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,3",
+                  "label": "#1·#3",
+                  "values": [
+                    "Engineering",
+                    "Mei",
+                    "Engineering",
+                    "Mei"
+                  ]
+                },
+                {
+                  "id": "d:0,1|e:0,8",
+                  "label": "#1·#8",
+                  "values": [
+                    "Engineering",
+                    "Victor",
+                    "Engineering",
+                    "Victor"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,5",
+                  "label": "#2·#5",
+                  "values": [
+                    "Sales",
+                    "Aisha",
+                    "Sales",
+                    "Aisha"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,9",
+                  "label": "#2·#9",
+                  "values": [
+                    "Sales",
+                    "Ines",
+                    "Sales",
+                    "Ines"
+                  ]
+                },
+                {
+                  "id": "d:0,2|e:0,4",
+                  "label": "#2·#4",
+                  "values": [
+                    "Sales",
+                    "Sam",
+                    "Sales",
+                    "Sam"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,7",
+                  "label": "#3·#7",
+                  "values": [
+                    "Support",
+                    "Chloe",
+                    "Support",
+                    "Chloe"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,6",
+                  "label": "#3·#6",
+                  "values": [
+                    "Support",
+                    "Jonas",
+                    "Support",
+                    "Jonas"
+                  ]
+                },
+                {
+                  "id": "d:0,3|e:0,11",
+                  "label": "#3·#11",
+                  "values": [
+                    "Support",
+                    "Olga",
+                    "Support",
+                    "Olga"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 10
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":258,"loops":[]}
+  ]
+}

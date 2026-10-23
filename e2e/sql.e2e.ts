@@ -58,3 +58,18 @@ test("an error is explained, on its line", async ({ page }) => {
   await expect(page.locator("#banner")).toContainText("on line 4");
   await expect(page.locator("#banner")).toContainText('"price"');
 });
+
+test("a join draws a line between each pair of rows it matches", async ({ page }) => {
+  await open(
+    page,
+    "-- viz: database shop\nSELECT c.name, o.id\nFROM customers AS c\nLEFT JOIN orders AS o ON o.customer_id = c.id;\n",
+  );
+  const label = page.locator("#step-label");
+  await expect(label).toContainText("of 4", { timeout: 90_000 });
+  await page.locator("#first").click();
+  await page.locator("#next").click();
+  await page.locator("#next").click();
+  await expect(label).toContainText("LEFT JOIN orders AS o");
+  await expect(page.locator("#memory .sql-link")).toHaveCount(14);
+  await expect(page.locator("#memory")).toContainText("1 of customers AS c matches nothing: kept, with NULLs");
+});

@@ -4,7 +4,6 @@
 
 SQL, the next steps (see [SQL](sql.md) for what's there now):
 
-- Joins: both tables side by side, a line between each pair of rows that match, the rows that match nothing dimmed (inner join) or kept with NULLs filled in (left join).
 - GROUP BY and aggregates: rows gathering into their groups, then each group folding into one row, its aggregates written out (`SUM(3, 5, 2) = 10`). HAVING dropping whole groups.
 - Subqueries and WITH as nested steps; recursive WITH drawn like loop passes.
 - Window functions, with each row's frame highlighted.

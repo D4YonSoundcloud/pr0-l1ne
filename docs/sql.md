@@ -53,11 +53,34 @@ Every run starts from a fresh copy of the database. Nothing a program does is ke
 | Step | What it shows |
 | --- | --- |
 | **FROM** | The table, every row, numbered in the order Postgres keeps them (`#1`, `#2`...). The numbers stay with the rows through every step after this one. |
+| **JOIN** | One step for each table joined: see [Joins](#joins), below. |
 | **WHERE** | Every row, with the condition worked out for it in a **kept?** column. Rows where it isn't true are struck through. A condition joined with AND, OR or NOT also gets a column for each of its parts (up to four), so you can see which part decided each row. |
 | **SELECT** | The columns the query asks for, for the rows WHERE kept. Columns it works out (`price * stock AS stock_value`) are tinted, and hovering over the heading shows the expression. |
 | **DISTINCT** | Repeated rows struck through, each marked with the row it repeats: "same as #1". |
 | **ORDER BY** | The rows in their new order. The sort keys are marked in the headings (▲ ascending, ▼ descending, numbered when there are several). A key that isn't one of the result's columns gets a column of its own. Rows that sort the same as the row above are marked `=`, because Postgres may give tied rows in either order. |
 | **LIMIT / OFFSET** | Red lines across the table where OFFSET starts and LIMIT stops, with the rows outside them struck through. |
+
+### Joins
+
+A join is a step of its own, right after FROM, for each table it joins. The step shows three tables, left to right (or the third one below the other two, if that fits the window better):
+
+1. **The rows so far.** For the first join, these are the FROM table's rows. For a second join, they're the rows the first join made.
+2. **The table being joined.**
+3. **The rows the join makes.** Each row is a pair, labeled with the numbers of its two rows (`#1·#3`). Its columns are named by their table (`c.name`, `o.id`).
+
+A line runs from each row of the first table to each row it pairs with in the second. Every pair is a row of the result: a customer with four orders has four lines, and four rows in the result. The rows that match nothing depend on the kind of join:
+
+| Join | Rows that match nothing |
+| --- | --- |
+| `JOIN` (inner) | Struck through: they're left out. |
+| `LEFT JOIN` | The left table's are kept, tinted orange, with NULLs in the other table's columns (labeled `#8·–`). The right table's are left out. |
+| `RIGHT JOIN` | The right table's are kept with NULLs; the left table's are left out. |
+| `FULL JOIN` | Both tables' are kept with NULLs. |
+| `CROSS JOIN` | There are none: every row pairs with every row (8 × 14 = 112 rows), so no lines are drawn. |
+
+A comma between tables in FROM (`FROM customers c, orders o`) is a CROSS JOIN, usually followed by a WHERE that keeps the pairs that belong together. `ON`, `USING (...)` and `NATURAL` are all stepped through. With three or more tables, the joins happen one at a time, left to right, as Postgres reads them.
+
+In a self join (a table joined to itself, like employees and their managers), the two copies have different names (`e` and `m`), and their rows are kept apart by those names.
 
 ### NULL
 
@@ -87,25 +110,26 @@ Using a name from SELECT in WHERE is explained the same way: WHERE runs first, s
 
 ## Not stepped through yet
 
-This version steps through queries on **one table**. A query that uses something more is still run, and its result is shown as a single step, saying what isn't stepped through yet:
+A query that uses any of these is still run, and its result is shown as a single step, saying what isn't stepped through yet:
 
-- joins (more than one table in FROM)
+- joins in parentheses (`a JOIN (b JOIN c ON ...) ON ...`), a join with a name of its own (`AS` after it), and a mix of commas and JOIN in one FROM
 - GROUP BY, HAVING, and aggregate functions like COUNT and SUM
 - subqueries, WITH (common table expressions), UNION, INTERSECT and EXCEPT
 - window functions, DISTINCT ON, and `FETCH … WITH TIES`
 - functions in FROM, like `generate_series`
 - functions like `random()`, which give a new answer each time they're called
 
-Joins and grouping are next: see the [roadmap](roadmap.md).
+GROUP BY and aggregates are next: see the [roadmap](roadmap.md).
 
 ## Examples
 
-The **Open…** menu has SQL examples in three groups. Each one adds one thing to the one before:
+The **Open…** menu has SQL examples in four groups. Each one adds one thing to the one before:
 
 | Group | Examples |
 | --- | --- |
 | Querying one table | Every row, choosing columns, filtering with WHERE, AND, OR and NOT, NULL is unknown, computed columns |
 | Sorting, DISTINCT and LIMIT | ORDER BY, breaking ties, DISTINCT, top three with LIMIT, pages with OFFSET, every clause together |
+| Joining tables | JOIN … ON, LEFT JOIN keeps every row, rows with no match, three tables, a self join (who reports to whom), FULL JOIN, a comma in FROM |
 | Your own tables | Create, insert, update, delete |
 
 ## The download

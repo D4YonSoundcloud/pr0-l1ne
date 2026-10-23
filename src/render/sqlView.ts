@@ -51,6 +51,12 @@ function clip(text: string, width: number, size = VALUE_SIZE): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** Text in the UI font cut to a width, with an ellipsis. */
+function clipUi(text: string, width: number, size: number): string {
+  const max = Math.max(1, Math.floor(width / (size * 0.56)));
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
 /** A column's heading: its name (or, for an expression Postgres didn't name, the expression). */
 function heading(column: SqlColumn, sortKeys: number): string {
   const name = column.role === "computed" && column.name === "?column?" && column.expr ? column.expr : column.name;
@@ -78,6 +84,7 @@ function measure(table: SqlTable): Measured {
     uiTextWidth(`${table.name}${table.alias ? ` AS ${table.alias}` : ""}`, 13) + uiTextWidth("000 rows", 11.5) + 48;
   const w = Math.max(LABEL_W + widths.reduce((a, b) => a + b, 0), titleW);
   const notes = table.rows.map((r) => (r.note && !table.cuts?.length ? uiTextWidth(r.note, NOTE_SIZE) : 0));
+  // (A join's two tables draw no notes: see joinTables.)
   const cutNotes = (table.cuts ?? []).map((c) => uiTextWidth(c.label, NOTE_SIZE));
   const notesW = Math.max(0, ...notes, ...cutNotes);
   const h = TITLE_H + HEAD_H + table.rows.length * ROW_H + (table.more ? ROW_H : 0) + 6;
@@ -86,10 +93,16 @@ function measure(table: SqlTable): Measured {
 
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
-function drawTable(m: Measured, x: number, y: number): Mark {
+/**
+ * A table at (x, y), and the middle of each row drawn (for a join's lines).
+ * The table itself isn't animated, its rows are: moving both, a row would
+ * move twice.
+ */
+function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Mark; rowMid: Map<string, number> } {
   const { table, widths, w } = m;
   const sortKeys = table.columns.filter((c) => c.sort).length;
-  const g = s("g", { class: "sql-table", "data-flip": `sqltable:${table.name}`, "data-x": x, "data-y": y });
+  const g = s("g", { class: "sql-table" });
+  const rowMid = new Map<string, number>();
   const bodyH = m.h;
   g.append(
     s("rect", { class: "box-body sql-table-body", x, y, width: w, height: bodyH, rx: 5 }),
@@ -151,9 +164,10 @@ function drawTable(m: Measured, x: number, y: number): Mark {
   // The rows.
   const rowsY = headY + HEAD_H;
   // With cut lines, they say why rows go (and notes beside the rows would crowd their labels).
-  const notes = !table.cuts?.length;
+  const notes = withNotes && !table.cuts?.length;
   table.rows.forEach((row, r) => {
     g.append(drawRow(row, table.columns, widths, lefts, x, rowsY + r * ROW_H, w, r, notes));
+    rowMid.set(row.id, rowsY + r * ROW_H + ROW_H / 2);
   });
   if (table.more) {
     g.append(
@@ -181,7 +195,7 @@ function drawTable(m: Measured, x: number, y: number): Mark {
       ),
     );
   }
-  return g;
+  return { g, rowMid };
 }
 
 function drawRow(
@@ -256,11 +270,17 @@ export function sqlTableDrawing(scene: SqlTableScene): Mark {
   let x = MARGIN;
   let bottom = top;
   const tables = s("g", { class: "sql-tables" });
-  for (const table of stage.tables) {
-    const m = measure(table);
-    tables.append(drawTable(m, x, top));
-    x += m.w + m.notesW + TABLE_GAP;
-    bottom = Math.max(bottom, top + m.h);
+  if (stage.kind === "join" && stage.tables.length === 3) {
+    const placed = joinTables(stage, top, tables);
+    x = placed.right + TABLE_GAP;
+    bottom = placed.bottom;
+  } else {
+    for (const table of stage.tables) {
+      const m = measure(table);
+      tables.append(drawTable(m, x, top).g);
+      x += m.w + m.notesW + TABLE_GAP;
+      bottom = Math.max(bottom, top + m.h);
+    }
   }
   if (!stage.tables.length) {
     tables.append(
@@ -281,6 +301,63 @@ export function sqlTableDrawing(scene: SqlTableScene): Mark {
   return svg;
 }
 
+/** Room between a join's two tables, for the lines between their rows; and before the rows it makes. */
+const JOIN_GAP = 96;
+const JOIN_RESULT_GAP = 64;
+
+/**
+ * A join: the rows so far and the table joined side by side, a line from
+ * each row to each row it pairs with, then the rows the join makes.
+ */
+function joinTables(stage: SqlTableScene["stage"], top: number, layer: Mark): { right: number; bottom: number } {
+  const [soFar, joined, made] = stage.tables.map(measure);
+  const left = drawTable(soFar, MARGIN, top, false);
+  const rightX = MARGIN + soFar.w + JOIN_GAP;
+  const right = drawTable(joined, rightX, top, false);
+  const lines = s("g", { class: "sql-links" });
+  for (const link of stage.links ?? []) {
+    const y1 = left.rowMid.get(link.from);
+    const y2 = right.rowMid.get(link.to);
+    if (y1 === undefined || y2 === undefined) continue;
+    const x1 = MARGIN + soFar.w;
+    const x2 = rightX;
+    const bend = JOIN_GAP * 0.45;
+    lines.append(
+      s("path", { class: "sql-link", d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}` }),
+    );
+  }
+  layer.append(left.g, right.g, lines);
+  // The rows it makes: to the right, or below, whichever fits a window
+  // about twice as wide as it's tall at the larger size.
+  const pairW = rightX + joined.w - MARGIN;
+  const pairH = Math.max(soFar.h, joined.h);
+  const across = { w: pairW + JOIN_RESULT_GAP + made.w + made.notesW, h: Math.max(pairH, made.h) };
+  const down = { w: Math.max(pairW, made.w + made.notesW), h: pairH + 44 + made.h };
+  const scale = (size: { w: number; h: number }) => Math.min(2 / size.w, 1 / size.h);
+  if (scale(across) >= scale(down)) {
+    const resultX = rightX + joined.w + JOIN_RESULT_GAP;
+    const mid = top + Math.min(pairH, made.h) / 2;
+    layer.append(
+      s("path", {
+        class: "sql-stage-arrow",
+        d: `M${rightX + joined.w + 12},${mid} H${resultX - 12} m-6,-5 l6,5 l-6,5`,
+      }),
+    );
+    layer.append(drawTable(made, resultX, top).g);
+    return { right: MARGIN + across.w, bottom: top + across.h };
+  }
+  const resultTop = top + pairH + 44;
+  layer.append(
+    s(
+      "text",
+      { class: "sql-stage-note", x: MARGIN, y: resultTop - 14, "dominant-baseline": "central" },
+      "The rows it makes:",
+    ),
+  );
+  layer.append(drawTable(made, MARGIN, resultTop).g);
+  return { right: MARGIN + down.w, bottom: top + down.h };
+}
+
 // ---------------------------------------------------------------- the pipeline window
 
 const CARD_H = 50;
@@ -288,7 +365,7 @@ const CARD_GAP = 22;
 const CHIP_W = 92;
 
 /** The keyword a stage's chip shows. */
-function chip(scene: SqlPipelineScene, kind: string): string {
+function chip(scene: SqlPipelineScene, kind: string, clause: string): string {
   switch (kind) {
     case "tables":
       return "DATABASE";
@@ -306,6 +383,8 @@ function chip(scene: SqlPipelineScene, kind: string): string {
       return "LIMIT";
     case "result":
       return "RESULT";
+    case "join":
+      return /^(?:NATURAL )?((?:LEFT |RIGHT |FULL |CROSS )?JOIN)/.exec(clause)?.[1] ?? "JOIN";
     default:
       return scene.statement.kind.split(" ")[0];
   }
@@ -332,7 +411,7 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
   }));
   const textW = Math.max(200, ...texts.map((t) => Math.max(textWidth(t.clause, 12.5), uiTextWidth(t.summary, 12))));
   const rowsW = Math.max(0, ...texts.map((t) => uiTextWidth(t.rows, 12)));
-  const cardW = CHIP_W + 14 + Math.min(textW, 520) + 16 + rowsW + 14;
+  const cardW = CHIP_W + 14 + Math.min(textW, 600) + 16 + rowsW + 14;
   width = Math.max(width, cardW);
 
   scene.stages.forEach(({ stage, state }, i) => {
@@ -355,11 +434,11 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
           "text-anchor": "middle",
           "dominant-baseline": "central",
         },
-        chip(scene, stage.kind),
+        chip(scene, stage.kind, stage.clause),
       ),
     );
     const tx = MARGIN + CHIP_W + 14;
-    const room = Math.min(textW, 520);
+    const room = Math.min(textW, 600);
     g.append(
       s(
         "text",
@@ -367,7 +446,13 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
         clip(t.clause, room, 12.5),
       ),
     );
-    g.append(s("text", { class: "sql-stage-summary", x: tx, y: top + 35, "dominant-baseline": "central" }, t.summary));
+    g.append(
+      s(
+        "text",
+        { class: "sql-stage-summary", x: tx, y: top + 35, "dominant-baseline": "central" },
+        clipUi(t.summary, room, 12),
+      ),
+    );
     if (t.rows) {
       g.append(
         s(

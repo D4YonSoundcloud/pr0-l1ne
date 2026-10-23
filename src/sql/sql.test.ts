@@ -200,11 +200,145 @@ describe("DISTINCT, ties and order", () => {
   });
 });
 
+describe("joins", () => {
+  const LEFT = `-- viz: database shop
+SELECT c.name, o.id AS order_id
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.id
+ORDER BY c.name;`;
+
+  it("are a step after FROM: the rows so far, the table joined, and the rows the join makes", async () => {
+    const t = await trace(LEFT);
+    expect(kinds(t)).toEqual(["tables", "from", "join", "select", "order"]);
+    const join = stages(t)[2];
+    expect(join.clause).toBe("LEFT JOIN orders AS o ON o.customer_id = c.id");
+    expect(join.line).toBe(4);
+    expect(join.tables.map((x) => [x.name, x.alias])).toEqual([
+      ["customers", "c"],
+      ["orders", "o"],
+      ["joined", undefined],
+    ]);
+    // Every joined column, named by its table.
+    expect(join.tables[2].columns.map((c) => c.name).slice(0, 5)).toEqual([
+      "c.id",
+      "c.name",
+      "c.city",
+      "c.joined",
+      "o.id",
+    ]);
+  });
+
+  it("pair rows up with lines, and keep a LEFT JOIN's unmatched rows with NULLs", async () => {
+    const join = stages(await trace(LEFT))[2];
+    expect(join.links).toHaveLength(14);
+    expect(join.summary).toBe("14 matching pairs, 15 rows; 1 of customers AS c matches nothing: kept, with NULLs");
+    // Linus (customer 8) has no orders.
+    const linus = join.tables[0].rows.find((r) => r.values[1] === "Linus")!;
+    expect([linus.status, linus.note]).toEqual(["unmatched", "no match: kept, with NULLs"]);
+    const padded = join.tables[2].rows.find((r) => r.values[1] === "Linus")!;
+    expect(padded.status).toBe("unmatched");
+    expect(padded.values.slice(4)).toEqual([null, null, null, null, null]);
+    expect(padded.label).toBe("#8·–");
+    // Ada (customer 1) has four orders: four rows, four lines.
+    expect(join.links?.filter((l) => l.from === join.tables[0].rows[0].id)).toHaveLength(4);
+  });
+
+  it("drop an inner join's unmatched rows from both sides", async () => {
+    const t = await trace("-- viz: database shop\nSELECT p.name FROM orders o JOIN products p ON p.id = o.product_id;");
+    const join = stages(t)[2];
+    const dropped = join.tables[1].rows.filter((r) => r.status === "removed").map((r) => r.values[1]);
+    expect(dropped).toEqual(["Earl Grey", "Cold brew kit"]);
+    expect(join.summary).toBe("14 matching pairs, 14 rows; 2 of products AS p match nothing: left out");
+  });
+
+  it("follow three tables, one join at a time", async () => {
+    const t = await trace(`-- viz: database shop
+SELECT c.name, p.name AS product
+FROM orders AS o
+JOIN customers AS c ON c.id = o.customer_id
+JOIN products AS p ON p.id = o.product_id
+ORDER BY o.id
+LIMIT 2;`);
+    expect(kinds(t)).toEqual(["tables", "from", "join", "join", "select", "order", "limit"]);
+    const [first, second] = stages(t).filter((s) => s.kind === "join");
+    // The rows the first join makes are the rows the second starts from.
+    expect(second.tables[0].rows.map((r) => r.id)).toEqual(first.tables[2].rows.map((r) => r.id));
+    expect(second.tables[2].rows[0].label).toBe("#1·#1·#1");
+    expect(values(stages(t)[6], "product")).toEqual(["Green tea", "Espresso beans"]);
+  });
+
+  it("tell the two copies of a table in a self join apart", async () => {
+    const t = await trace(`-- viz: database company
+SELECT e.name, m.name AS manager FROM employees AS e LEFT JOIN employees AS m ON m.id = e.manager_id ORDER BY e.id;`);
+    const join = stages(t)[2];
+    expect(join.tables[0].rows[0].id).toMatch(/^e:/);
+    expect(join.tables[1].rows[0].id).toMatch(/^m:/);
+    expect(
+      stages(t)
+        .at(-1)
+        ?.tables[0].rows.slice(0, 2)
+        .map((r) => r.values.slice(0, 2)),
+    ).toEqual([
+      ["Hana", null],
+      ["Luis", "Hana"],
+    ]);
+  });
+
+  it("keep both sides' unmatched rows in a FULL JOIN", async () => {
+    const t = await trace(
+      "-- viz: database company\nSELECT e.name, d.name FROM employees e FULL JOIN departments d ON d.id = e.department_id;",
+    );
+    const join = stages(t)[2];
+    expect(join.tables[0].rows.filter((r) => r.status === "unmatched").map((r) => r.values[1])).toEqual(["Tariq"]);
+    expect(join.tables[1].rows.filter((r) => r.status === "unmatched").map((r) => r.values[1])).toEqual(["Research"]);
+  });
+
+  it("pair every row with every row for CROSS JOIN and a comma, without lines", async () => {
+    const t = await trace(
+      "-- viz: database company\nSELECT d.name, e.name FROM departments d, employees e WHERE e.department_id = d.id;",
+    );
+    const join = stages(t)[2];
+    expect(join.clause).toBe("CROSS JOIN employees AS e");
+    expect(join.summary).toBe("4 × 11 = 44 rows: every row with every row");
+    expect(join.links).toBeUndefined();
+    expect(join.notes?.[0]).toMatch(/A comma between tables/);
+    expect(stages(t)[3].summary).toBe("kept 10 of 44 rows");
+  });
+
+  it("join with USING and NATURAL, which merge the shared columns", async () => {
+    const t = await trace(`CREATE TABLE a (id int, x text);
+CREATE TABLE b (id int, y text);
+INSERT INTO a VALUES (1, 'a1'), (2, 'a2');
+INSERT INTO b VALUES (2, 'b2'), (3, 'b3');
+SELECT * FROM a JOIN b USING (id);
+SELECT * FROM a NATURAL FULL JOIN b ORDER BY id;`);
+    const joins = stages(t).filter((s) => s.kind === "join");
+    expect(joins.map((j) => j.clause)).toEqual(["JOIN b USING (id)", "NATURAL FULL JOIN b"]);
+    expect(
+      stages(t)
+        .at(-1)
+        ?.tables[0].rows.map((r) => r.values),
+    ).toEqual([
+      ["1", "a1", null],
+      ["2", "a2", "b2"],
+      ["3", null, "b3"],
+    ]);
+  });
+
+  it("explain a column more than one table has", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT id FROM orders JOIN customers ON customers.id = orders.customer_id;",
+    );
+    expect(t.error?.message).toMatch(/orders and customers each have a column named "id": put the table's name/);
+  });
+});
+
 describe("what isn't stepped through yet", () => {
   for (const [query, why] of [
     ["SELECT count(*) FROM products", "aggregate"],
     ["SELECT category, max(price) FROM products GROUP BY category", "GROUP BY"],
-    ["SELECT * FROM orders JOIN customers ON customers.id = orders.customer_id", "joins"],
+    ["SELECT * FROM orders JOIN (customers JOIN products ON true) ON true", "joins in parentheses"],
+    ["SELECT * FROM orders, customers JOIN products ON true", "a mix of commas and JOIN"],
     ["SELECT name FROM products WHERE price > (SELECT avg(price) FROM products)", "aggregate"],
     ["SELECT name FROM products UNION SELECT name FROM customers", "UNION"],
     ["SELECT * FROM generate_series(1, 3)", "functions in FROM"],

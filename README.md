@@ -15,7 +15,7 @@
 - **Graphs.** Adjacency lists, matrices and tries drawn as nodes and edges, with your algorithm's own state on them: the visited set, the queue, distances, the path.
 - **Big inputs.** Long loops are sampled and long lists drawn as color strips, so large programs still trace.
 - **Measure and complexity.** An estimate of time and space complexity from the code, checked against real runs at several input sizes.
-- **SQL, clause by clause.** Queries run on a real PostgreSQL in your browser, drawn in the order Postgres runs them (FROM, WHERE, SELECT, ORDER BY, LIMIT): the table at each clause, every row kept or dropped and why. Sample databases to start from, or make your own tables. See [SQL](docs/sql.md).
+- **SQL, clause by clause.** Queries run on a real PostgreSQL in your browser, drawn in the order Postgres runs them (FROM, JOIN, WHERE, SELECT, ORDER BY, LIMIT): the table at each clause, every row kept or dropped and why, and a line between each pair of rows a join matches. Sample databases to start from, or make your own tables. See [SQL](docs/sql.md).
 - **Hints.** `# viz:` and `// viz:` comments tell the canvas how to draw things when its automatic choices aren't what you want.
 - **Share links.** **Share** copies a link with your program inside it: whoever opens it sees the code, ready to run in their browser's sandbox. Nothing is stored on a server.
 - **Works on a phone.** Pick which one or two of the code, memory view and loop history to see.

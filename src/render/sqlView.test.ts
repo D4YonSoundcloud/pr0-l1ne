@@ -92,6 +92,21 @@ describe("the table drawing", () => {
   });
 });
 
+describe("the join drawing", () => {
+  it("draws a line for each pair, and names the join in its chip", async () => {
+    const trace = await traceOf(
+      "-- viz: database shop\nSELECT c.name, o.id FROM customers AS c LEFT JOIN orders AS o ON o.customer_id = c.id;",
+    );
+    const at = trace.sql!.stages.findIndex((s) => s.kind === "join");
+    const drawing = sqlTableDrawing(sqlTableScene(trace, at)!);
+    expect(all(drawing, ".sql-link")).toHaveLength(14);
+    expect(all(drawing, ".sql-table")).toHaveLength(3);
+    expect(all(drawing, ".sql-row.is-unmatched").length).toBe(2); // Linus, and his row of NULLs
+    const chips = all(sqlPipelineDrawing(sqlPipelineScene(trace, at)!), ".sql-stage-keyword").map((t) => t.textContent);
+    expect(chips).toEqual(["FROM", "LEFT JOIN", "SELECT"]);
+  });
+});
+
 describe("the pipeline drawing", () => {
   it("numbers the statements, leaving out the sample database", async () => {
     const trace = await traceOf("-- viz: database shop\nSELECT 1;\nSELECT name FROM products;");

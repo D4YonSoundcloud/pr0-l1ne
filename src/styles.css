@@ -2792,3 +2792,18 @@ select {
   stroke: var(--paper-ink-faint);
   stroke-width: 1.5;
 }
+
+/* Joins: rows a join keeps without a match, and the lines between the rows it pairs. */
+.sql-row.is-unmatched .sql-row-bg {
+  fill: color-mix(in srgb, var(--frontier) 14%, transparent);
+}
+.sql-row.is-unmatched .sql-label,
+.sql-row.is-unmatched .sql-row-note {
+  fill: var(--frontier);
+}
+.sql-link {
+  fill: none;
+  stroke: var(--ballpoint);
+  stroke-width: 1.25;
+  opacity: 0.7;
+}

@@ -476,8 +476,10 @@ export interface SqlRow {
    *          deleted
    * added    a new row (INSERT)
    * changed  a row changed by UPDATE
+   * unmatched  a join found no row to pair it with, and keeps it anyway
+   *          (LEFT, RIGHT or FULL JOIN), with NULLs for the other table
    */
-  status?: "removed" | "added" | "changed";
+  status?: "removed" | "added" | "changed" | "unmatched";
   /** Why, in words: "age > 3 is NULL: unknown, so not kept". */
   note?: string;
   /** ORDER BY: its sort keys equal the row before's, so the two could come either way. */
@@ -502,6 +504,11 @@ export type SqlStageKind =
   /** The sample database's tables, before the first statement. */
   | "tables"
   | "from"
+  /**
+   * One table joined to the rows so far: `tables` is those rows, the table
+   * joined, and the rows the join makes; `links` pairs them up.
+   */
+  | "join"
   | "where"
   | "select"
   | "distinct"
@@ -528,6 +535,8 @@ export interface SqlStage {
   rows?: number;
   /** Anything worth knowing about it ("No ORDER BY: ..."). */
   notes?: string[];
+  /** A join: which row of the rows so far (tables[0]) pairs with which row of the table joined (tables[1]), by id. */
+  links?: { from: string; to: string }[];
 }
 
 /** A statement of the script, in order. */

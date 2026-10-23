@@ -60,8 +60,16 @@ function advice(error: SqlError, ctx: ErrorContext): string | null {
     }
     case "42601":
       return "Look just before this point: a missing or extra comma, a quote that isn't closed, or a keyword in the wrong place.";
-    case "42702":
-      return "More than one table has a column with this name: write table.column to say which.";
+    case "42702": {
+      // ambiguous_column
+      const name = quoted(error.message);
+      const having = [...ctx.columns.entries()].filter(([, cols]) => cols.includes(name)).map(([table]) => table);
+      const which =
+        having.length >= 2
+          ? `${having.slice(0, -1).join(", ")} and ${having[having.length - 1]} each have a column named "${name}"`
+          : `More than one table has a column named "${name}"`;
+      return `${which}: put the table's name (or its alias) first to say which, like ${having[0] ?? "table"}.${name}.`;
+    }
     case "42P07":
       return ctx.database
         ? `The ${ctx.database} database already has a table with this name: pick another name, or use the one there is.`

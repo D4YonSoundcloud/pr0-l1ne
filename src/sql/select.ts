@@ -3,6 +3,7 @@
  * gives the clauses meaning, not the order they're written:
  *
  *   FROM      the table, every row
+ *   JOIN      each other table, joined to the rows so far
  *   WHERE     each row's condition worked out: kept if it's true
  *   SELECT    the columns asked for, computed ones worked out
  *   DISTINCT  repeated rows dropped
@@ -19,9 +20,14 @@
  * differ, the steps are dropped and the result is shown instead: a picture
  * of the wrong rows would be worse than none.
  *
- * This version steps through queries on one table. Anything else (joins,
- * GROUP BY, subqueries...) is shown as its result, saying what isn't
- * stepped through yet: see unsupported().
+ * With several tables, FROM is the first table, then a JOIN step for each
+ * table joined to the rows so far (a comma in FROM is a CROSS JOIN): the
+ * rows so far, the table joined, the pairs that match, and the rows the
+ * join makes, unmatched rows kept with NULLs by LEFT, RIGHT and FULL JOIN.
+ * Joins are followed left to right, as Postgres reads them.
+ *
+ * Anything else (GROUP BY, subqueries...) is shown as its result, saying
+ * what isn't stepped through yet: see unsupported().
  */
 import type { SqlColumn, SqlRow, SqlStage, SqlTable } from "../trace/types";
 import type { Engine, QueryResult, ResultColumn } from "./engine";
@@ -164,11 +170,10 @@ export function unsupported(select: Node): string | null {
   if (some(select, (type) => type === "SubLink")) return "subqueries";
   if (select.distinctClause?.some((item: Node) => Object.keys(item).length > 0)) return "DISTINCT ON";
   if (select.limitOption === "LIMIT_OPTION_WITH_TIES") return "FETCH … WITH TIES";
-  const from: Node[] = select.fromClause ?? [];
-  if (from.length > 1 || from.some((item) => item.JoinExpr)) return "joins (more than one table in FROM)";
-  if (from.some((item) => item.RangeSubselect)) return "subqueries in FROM";
-  if (from.some((item) => item.RangeFunction)) return "functions in FROM, like generate_series";
-  if (from.some((item) => !item.RangeVar)) return "this kind of FROM";
+  if (select.fromClause) {
+    const shape = readFrom(select.fromClause);
+    if (typeof shape === "string") return shape;
+  }
   if (some(select, (type, body) => type === "FuncCall" && VOLATILE.has(funcName(body))))
     return "functions like random() that give a new answer each time";
   return null;
@@ -184,6 +189,58 @@ function conditionParts(where: Node): Node[] {
   };
   visit(where);
   return parts.length >= 2 && parts.length <= 4 ? parts : [];
+}
+
+/** One table joined to the rows before it. */
+interface JoinPart {
+  /** "JOIN", "LEFT JOIN"... "CROSS JOIN" (also for a comma in FROM). */
+  type: string;
+  range: Node;
+  /** The JoinExpr (null for a comma), for the FROM so far and the condition. */
+  join: Node | null;
+}
+
+/** FROM as its first table and the tables joined to it in order, or what isn't stepped through yet. */
+export function readFrom(from: Node[]): { first: Node; joins: JoinPart[] } | string {
+  const other = (item: Node): string => {
+    if (item.RangeSubselect) return "subqueries in FROM";
+    if (item.RangeFunction) return "functions in FROM, like generate_series";
+    return "this kind of FROM";
+  };
+  if (from.length > 1) {
+    // A comma between tables: every row with every row, as CROSS JOIN.
+    if (from.some((item) => item.JoinExpr)) return "a mix of commas and JOIN in FROM";
+    const bad = from.find((item) => !item.RangeVar);
+    if (bad) return other(bad);
+    return {
+      first: from[0].RangeVar,
+      joins: from.slice(1).map((item) => ({ type: "CROSS JOIN", range: item.RangeVar, join: null })),
+    };
+  }
+  const joins: JoinPart[] = [];
+  let node: Node = from[0];
+  while (node.JoinExpr) {
+    const j: Node = node.JoinExpr;
+    if (j.alias || j.join_using_alias) return "a join with a name of its own (AS after the join)";
+    if (!j.rarg?.RangeVar) return j.rarg?.JoinExpr ? "joins in parentheses" : other(j.rarg ?? {});
+    const kind: Record<string, string> = {
+      JOIN_INNER: "JOIN",
+      JOIN_LEFT: "LEFT JOIN",
+      JOIN_RIGHT: "RIGHT JOIN",
+      JOIN_FULL: "FULL JOIN",
+    };
+    const word = kind[j.jointype];
+    if (!word) return "this kind of join";
+    const cross = word === "JOIN" && !j.quals && !j.usingClause && !j.isNatural;
+    joins.unshift({
+      type: `${j.isNatural ? "NATURAL " : ""}${cross ? "CROSS JOIN" : word}`,
+      range: j.rarg.RangeVar,
+      join: j,
+    });
+    node = j.larg ?? {};
+  }
+  if (!node.RangeVar) return other(node);
+  return { first: node.RangeVar, joins };
 }
 
 // ---------------------------------------------------------------- building tables
@@ -225,6 +282,24 @@ interface Flow {
   values: (string | null)[];
 }
 
+/** A table in FROM: its name in the query, its id for a row, and its rows. */
+interface Source {
+  tableName: string;
+  alias?: string;
+  /** How the query names it: the alias, or the table's name. */
+  ref: string;
+  refSql: string;
+  /** SQL for a row's id in this table. */
+  idPart: string;
+  range: Node;
+  sql: string;
+  columns: SqlColumn[];
+  rows: Flow[];
+}
+
+/** Lines between joined rows drawn at most: more is a tangle, not a picture. */
+const MAX_LINKS = 150;
+
 // ---------------------------------------------------------------- the steps
 
 /**
@@ -243,8 +318,8 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
   };
 
   // No FROM (SELECT 1 + 1): one step, the result.
-  const range: Node | undefined = select.fromClause?.[0]?.RangeVar;
-  if (!range) {
+  const shape = select.fromClause ? readFrom(select.fromClause) : null;
+  if (!shape || typeof shape === "string") {
     const rows = result.rows.map((values, i) => ({ id: `result:${i}`, label: `#${i + 1}`, values }));
     return [
       stage({
@@ -253,43 +328,184 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
         summary: `${plural(rows.length, "row")}`,
         line: at(targets),
         tables: [
-          drawnTable({ name: "result", columns: await computedColumns(result.columns, targets, 0, parser), rows }),
+          drawnTable({
+            name: "result",
+            columns: await computedColumns(result.columns, targets, () => 0, parser),
+            rows,
+          }),
         ],
         rows: rows.length,
       }),
     ];
   }
 
-  const tableName = range.schemaname ? `${range.schemaname}.${range.relname}` : String(range.relname);
-  const alias: string | undefined = range.alias?.aliasname;
-  const ref = quote(alias ?? range.relname);
-  const fromSql = await parser.deparse({ RangeVar: range });
-  const idSql = `${ref}.ctid::text`;
+  // The tables, each with its own rows. A row's id is where Postgres keeps
+  // it (ctid), after its table's name, or with several tables its name in
+  // the query (two copies of a table in a self join are told apart); a
+  // joined row's id is its rows' ids together ("e:0,3|d:0,1", "-" for the
+  // NULLs of a row a join didn't match).
+  const ranges = [shape.first, ...shape.joins.map((j) => j.range)];
+  const several = ranges.length > 1;
+  const sources: Source[] = [];
+  for (const range of ranges) {
+    const tableName = range.schemaname ? `${range.schemaname}.${range.relname}` : String(range.relname);
+    const alias: string | undefined = range.alias?.aliasname;
+    const ref = String(alias ?? range.relname);
+    const source: Source = {
+      tableName,
+      alias,
+      ref,
+      refSql: quote(ref),
+      idPart: "",
+      range,
+      sql: await parser.deparse({ RangeVar: range }),
+      columns: [],
+      rows: [],
+    };
+    const prefix = (several ? ref : tableName).replace(/'/g, "''");
+    source.idPart = `'${prefix}:' || coalesce(translate(${source.refSql}.ctid::text, '()', ''), '-')`;
+    const base = await engine.query(
+      `SELECT ${source.refSql}.*, ${source.idPart} FROM ${source.sql} ORDER BY ${source.refSql}.ctid`,
+    );
+    source.columns = base.columns.slice(0, -1).map(toColumn);
+    source.rows = base.rows.map((row, i) => ({
+      id: String(row[row.length - 1]),
+      label: `#${i + 1}`,
+      values: row.slice(0, -1),
+    }));
+    sources.push(source);
+  }
+  if (new Set(sources.map((s) => s.ref)).size !== sources.length) return null;
+  const labels = new Map(sources.flatMap((s) => s.rows.map((r): [string, string] => [r.id, r.label])));
+  const labelOf = (id: string) =>
+    id
+      .split("|")
+      .map((part) => (part.endsWith(":-") ? "–" : (labels.get(part) ?? "?")))
+      .join("·");
+  const idSqlOf = (list: Source[]) => list.map((s) => s.idPart).join(` || '|' || `);
+  const orderOf = (list: Source[]) => list.map((s) => `${s.refSql}.ctid NULLS LAST`).join(", ");
+  const columnsOf = (list: Source[]): SqlColumn[] =>
+    several ? list.flatMap((s) => s.columns.map((c) => ({ ...c, name: `${s.ref}.${c.name}` }))) : list[0].columns;
+  const fromSql = (await Promise.all(select.fromClause.map((item: Node) => parser.deparse(item)))).join(", ");
+  const idSql = idSqlOf(sources);
+  const orderSql = orderOf(sources);
+  const idOf = (row: (string | null)[]) => String(row[row.length - 1]);
   const stages: SqlStage[] = [];
 
-  // FROM: every row of the table, in the order Postgres keeps them.
-  const base = await engine.query(`SELECT ${ref}.*, ${idSql} FROM ${fromSql} ORDER BY ${ref}.ctid`);
-  const baseColumns = base.columns.slice(0, -1).map(toColumn);
-  const labels = new Map<string, string>();
-  const baseRows: Flow[] = base.rows.map((row, i) => {
-    const id = `${tableName}:${String(row[row.length - 1]).replace(/[()]/g, "")}`;
-    labels.set(id, `#${i + 1}`);
-    return { id, label: `#${i + 1}`, values: row.slice(0, -1) };
-  });
-  const idOf = (row: (string | null)[]) => `${tableName}:${String(row[row.length - 1]).replace(/[()]/g, "")}`;
+  // FROM: every row of the first table, in the order Postgres keeps them.
+  const first = sources[0];
+  const tableOf = (s: Source, rows: SqlRow[]) =>
+    drawnTable({ name: s.tableName, ...(s.alias ? { alias: s.alias } : {}), columns: s.columns, rows });
   stages.push(
     stage({
       kind: "from",
-      clause: `FROM ${oneLine(fromSql)}`,
-      summary: `${tableName}: ${plural(baseRows.length, "row")}`,
-      line: at(range),
-      tables: [drawnTable({ name: tableName, ...(alias ? { alias } : {}), columns: baseColumns, rows: baseRows })],
-      rows: baseRows.length,
+      clause: `FROM ${oneLine(first.sql)}`,
+      summary: `${first.tableName}: ${plural(first.rows.length, "row")}`,
+      line: at(first.range),
+      tables: [tableOf(first, first.rows)],
+      rows: first.rows.length,
     }),
   );
 
+  // JOIN: each table joined to the rows so far.
+  let current: Flow[] = first.rows;
+  let currentColumns = columnsOf([first]);
+  let currentName = first.tableName;
+  for (const [i, part] of shape.joins.entries()) {
+    const joined = sources.slice(0, i + 2);
+    const right = sources[i + 1];
+    const soFar = part.join
+      ? await parser.deparse({ JoinExpr: joinAt(select.fromClause[0], shape.joins.length - 1 - i) })
+      : joined.map((s) => s.sql).join(", ");
+    const out = await engine.query(
+      `SELECT ${joined.map((s) => `${s.refSql}.*`).join(", ")}, ${idSqlOf(joined)} FROM ${soFar} ORDER BY ${orderOf(joined)}`,
+    );
+    const rows: Flow[] = out.rows.map((row) => {
+      const id = idOf(row);
+      return { id, label: labelOf(id), values: row.slice(0, -1) };
+    });
+    const isNull = (id: string) => id.split("|").every((p) => p.endsWith(":-"));
+    const links: { from: string; to: string }[] = [];
+    const leftMatched = new Set<string>();
+    const rightMatched = new Set<string>();
+    const resultRows: SqlRow[] = rows.map((r) => {
+      const parts = r.id.split("|");
+      const leftId = parts.slice(0, -1).join("|");
+      const rightId = parts[parts.length - 1];
+      if (isNull(leftId) || isNull(rightId)) return { ...r, status: "unmatched", note: "no match: NULLs" };
+      links.push({ from: leftId, to: rightId });
+      leftMatched.add(leftId);
+      rightMatched.add(rightId);
+      return r;
+    });
+    const type = part.type.replace(/^NATURAL /, "");
+    const keepsLeft = type === "LEFT JOIN" || type === "FULL JOIN";
+    const keepsRight = type === "RIGHT JOIN" || type === "FULL JOIN";
+    const mark = (r: Flow, matched: Set<string>, keeps: boolean): SqlRow =>
+      matched.has(r.id) || type === "CROSS JOIN"
+        ? r
+        : keeps
+          ? { ...r, status: "unmatched", note: "no match: kept, with NULLs" }
+          : { ...r, status: "removed", note: "no match" };
+    const leftRows = current.map((r) => mark(r, leftMatched, keepsLeft));
+    const rightRows = right.rows.map((r) => mark(r, rightMatched, keepsRight));
+    const unmatched = (list: SqlRow[]) => list.filter((r) => r.status).length;
+    const rightName = right.alias ? `${right.tableName} AS ${right.alias}` : right.tableName;
+    let summary: string;
+    if (type === "CROSS JOIN") {
+      summary = `${current.length} × ${right.rows.length} = ${plural(rows.length, "row")}: every row with every row`;
+    } else {
+      const extras: string[] = [];
+      const [l, r] = [unmatched(leftRows), unmatched(rightRows)];
+      const leftName =
+        i === 0 ? (first.alias ? `${first.tableName} AS ${first.alias}` : first.tableName) : "the rows so far";
+      if (l)
+        extras.push(
+          `${l} of ${leftName} ${l === 1 ? "matches" : "match"} nothing: ${keepsLeft ? "kept, with NULLs" : "dropped"}`,
+        );
+      if (r)
+        extras.push(
+          `${r} of ${rightName} ${r === 1 ? "matches" : "match"} nothing: ${keepsRight ? "kept, with NULLs" : "left out"}`,
+        );
+      summary = [`${plural(links.length, "matching pair")}, ${plural(rows.length, "row")}`, ...extras].join("; ");
+    }
+    const condition = part.join?.quals
+      ? ` ON ${await parser.deparse(part.join.quals)}`
+      : part.join?.usingClause
+        ? ` USING (${(part.join.usingClause as Node[]).map((u) => u.String?.sval).join(", ")})`
+        : "";
+    const notes: string[] = [];
+    if (!part.join)
+      notes.push(
+        "A comma between tables in FROM pairs every row with every row, like CROSS JOIN: WHERE then keeps the pairs that belong together.",
+      );
+    if (links.length > MAX_LINKS) notes.push(`${links.length} pairs: too many lines to draw.`);
+    const columns = columnsOf(joined);
+    stages.push(
+      stage({
+        kind: "join",
+        clause: oneLine(`${part.type} ${right.sql}${condition}`),
+        summary,
+        line: at(part.join?.quals ?? part.range),
+        tables: [
+          i === 0
+            ? tableOf(first, leftRows)
+            : drawnTable({ name: currentName, columns: currentColumns, rows: leftRows }),
+          tableOf(right, rightRows),
+          drawnTable({ name: "joined", columns, rows: resultRows }),
+        ],
+        rows: rows.length,
+        ...(type !== "CROSS JOIN" && links.length <= MAX_LINKS ? { links } : {}),
+        ...(notes.length ? { notes } : {}),
+      }),
+    );
+    current = rows;
+    currentColumns = columns;
+    currentName = "joined";
+  }
+
   // WHERE: the condition for every row, and the parts AND / OR / NOT join.
-  let kept = new Set(baseRows.map((r) => r.id));
+  let kept = new Set(current.map((r) => r.id));
   let whereSql = "";
   if (select.whereClause) {
     whereSql = await parser.deparse(select.whereClause);
@@ -297,7 +513,7 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
     const partSql = await Promise.all(parts.map((p) => parser.deparse(p)));
     const run = (exprs: string[]) =>
       engine.query(
-        `SELECT ${[...exprs.map((e) => `(${e})`), `(${whereSql})`, idSql].join(", ")} FROM ${fromSql} ORDER BY ${ref}.ctid`,
+        `SELECT ${[...exprs.map((e) => `(${e})`), `(${whereSql})`, idSql].join(", ")} FROM ${fromSql} ORDER BY ${orderSql}`,
       );
     let checked: QueryResult;
     try {
@@ -310,7 +526,7 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
     const byId = new Map(checked.rows.map((row) => [idOf(row), row]));
     const whereText = oneLine(whereSql, 60);
     kept = new Set();
-    const rows: SqlRow[] = baseRows.map((r) => {
+    const rows: SqlRow[] = current.map((r) => {
       const row = byId.get(r.id) ?? [];
       const verdict = row[row.length - 2] ?? null;
       const checks = row.slice(0, parts.length).map(boolText);
@@ -327,19 +543,22 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
       };
     });
     const columns: SqlColumn[] = [
-      ...baseColumns,
+      ...currentColumns,
       ...partSql
         .slice(0, parts.length)
         .map((expr): SqlColumn => ({ name: oneLine(expr, 40), type: "boolean", role: "check", expr: oneLine(expr) })),
       { name: "kept?", type: "boolean", role: "result", expr: whereText },
     ];
+    const whereTable = several
+      ? { name: currentName }
+      : { name: first.tableName, ...(first.alias ? { alias: first.alias } : {}) };
     stages.push(
       stage({
         kind: "where",
         clause: `WHERE ${whereText}`,
-        summary: `kept ${kept.size} of ${plural(baseRows.length, "row")}`,
+        summary: `kept ${kept.size} of ${plural(current.length, "row")}`,
         line: at(select.whereClause),
-        tables: [drawnTable({ name: tableName, ...(alias ? { alias } : {}), columns, rows })],
+        tables: [drawnTable({ ...whereTable, columns, rows })],
         rows: kept.size,
       }),
     );
@@ -347,12 +566,18 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
   const whereTail = whereSql ? ` WHERE ${whereSql}` : "";
 
   // SELECT: the columns asked for, for the rows WHERE kept.
-  const selected = await engine.query(`SELECT ${targetSql}, ${idSql} FROM ${fromSql}${whereTail} ORDER BY ${ref}.ctid`);
+  const selected = await engine.query(`SELECT ${targetSql}, ${idSql} FROM ${fromSql}${whereTail} ORDER BY ${orderSql}`);
   const resultColumns = selected.columns.slice(0, -1);
-  let columns = await computedColumns(resultColumns, targets, baseColumns.length, parser);
+  // How many columns a `*` stands for: every table's, or `t.*` one table's.
+  const starWidth = (fields: Node[]) => {
+    if (fields.length === 1) return sources.reduce((n, s) => n + s.columns.length, 0);
+    const name = fields[0]?.String?.sval;
+    return sources.find((s) => s.ref === name || s.tableName === name)?.columns.length ?? 0;
+  };
+  let columns = await computedColumns(resultColumns, targets, starWidth, parser);
   let rows: Flow[] = selected.rows.map((row) => {
     const id = idOf(row);
-    return { id, label: labels.get(id) ?? "", values: row.slice(0, -1) };
+    return { id, label: labelOf(id), values: row.slice(0, -1) };
   });
   const computed = columns.filter((c) => c.role === "computed").length;
   stages.push(
@@ -553,23 +778,34 @@ export async function selectStages(ctx: SelectContext, select: Node, result: Que
 async function computedColumns(
   columns: ResultColumn[],
   targets: Node[],
-  starWidth: number,
+  starWidth: (fields: Node[]) => number,
   parser: SqlParser,
 ): Promise<SqlColumn[]> {
   const out = columns.map(toColumn);
+  const computed: [number, Node][] = [];
   let i = 0;
   for (const target of targets) {
     const val: Node = target.ResTarget?.val ?? {};
     const fields: Node[] | undefined = val.ColumnRef?.fields;
     if (fields?.some((f) => f.A_Star)) {
-      i += starWidth;
+      i += starWidth(fields);
       continue;
     }
-    if (!fields && out[i]) {
-      out[i].role = "computed";
-      out[i].expr = oneLine(await parser.deparse(val));
-    }
+    if (!fields) computed.push([i, val]);
     i++;
   }
+  // A `*` that doesn't add up (USING and NATURAL joins merge columns): no way to tell which are which.
+  if (i !== out.length) return out;
+  for (const [index, val] of computed) {
+    out[index].role = "computed";
+    out[index].expr = oneLine(await parser.deparse(val));
+  }
   return out;
+}
+
+/** The JoinExpr `depth` levels down a left-deep join's left side (0: the whole join). */
+function joinAt(item: Node, depth: number): Node {
+  let node: Node = item.JoinExpr;
+  for (let d = 0; d < depth; d++) node = node.larg.JoinExpr;
+  return node;
 }

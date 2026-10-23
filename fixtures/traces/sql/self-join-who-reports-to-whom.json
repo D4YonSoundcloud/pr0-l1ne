@@ -1,0 +1,1361 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": "  name  | manager\n--------+---------\n Hana   |\n Luis   | Hana\n Mei    | Hana\n Sam    | Hana\n Aisha  | Sam\n Jonas  | Hana\n Chloe  | Jonas\n Victor | Luis\n Ines   | Sam\n Tariq  | Hana\n Olga   | Jonas\n(11 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "company",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database company"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "SELECT e.name, m.name AS manager FROM employees AS e LEFT JOIN employ…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database company",
+          "summary": "2 tables: departments, employees",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "departments",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "departments:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "departments:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM employees AS e",
+          "summary": "employees: 11 rows",
+          "line": 5,
+          "tables": [
+            {
+              "name": "employees",
+              "alias": "e",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "e:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "e:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "e:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "e:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "e:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "e:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "e:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "e:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "e:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11
+        },
+        {
+          "statement": 1,
+          "kind": "join",
+          "clause": "LEFT JOIN employees AS m ON m.id = e.manager_id",
+          "summary": "10 matching pairs, 11 rows; 1 of employees AS e matches nothing: kept, with NULLs; 7 of employees AS m match nothing: left out",
+          "line": 6,
+          "tables": [
+            {
+              "name": "employees",
+              "alias": "e",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ],
+                  "status": "unmatched",
+                  "note": "no match: kept, with NULLs"
+                },
+                {
+                  "id": "e:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "e:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "e:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "e:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "e:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "e:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "e:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "e:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "e:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "e:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "alias": "m",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "m:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "m:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "m:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "m:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "m:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                },
+                {
+                  "id": "m:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                }
+              ]
+            },
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "e.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.name",
+                  "type": "text"
+                },
+                {
+                  "name": "e.department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "e.hired",
+                  "type": "date"
+                },
+                {
+                  "name": "m.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "m.name",
+                  "type": "text"
+                },
+                {
+                  "name": "m.department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "m.manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "m.salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "m.hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1|m:-",
+                  "label": "#1·–",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                  ],
+                  "status": "unmatched",
+                  "note": "no match: NULLs"
+                },
+                {
+                  "id": "e:0,2|m:0,1",
+                  "label": "#2·#1",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,3|m:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,4|m:0,1",
+                  "label": "#4·#1",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,5|m:0,4",
+                  "label": "#5·#4",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "e:0,6|m:0,1",
+                  "label": "#6·#1",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,7|m:0,6",
+                  "label": "#7·#6",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "e:0,8|m:0,2",
+                  "label": "#8·#2",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "e:0,9|m:0,4",
+                  "label": "#9·#4",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "e:0,10|m:0,1",
+                  "label": "#10·#1",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "e:0,11|m:0,6",
+                  "label": "#11·#6",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11,
+          "links": [
+            {
+              "from": "e:0,2",
+              "to": "m:0,1"
+            },
+            {
+              "from": "e:0,3",
+              "to": "m:0,1"
+            },
+            {
+              "from": "e:0,4",
+              "to": "m:0,1"
+            },
+            {
+              "from": "e:0,5",
+              "to": "m:0,4"
+            },
+            {
+              "from": "e:0,6",
+              "to": "m:0,1"
+            },
+            {
+              "from": "e:0,7",
+              "to": "m:0,6"
+            },
+            {
+              "from": "e:0,8",
+              "to": "m:0,2"
+            },
+            {
+              "from": "e:0,9",
+              "to": "m:0,4"
+            },
+            {
+              "from": "e:0,10",
+              "to": "m:0,1"
+            },
+            {
+              "from": "e:0,11",
+              "to": "m:0,6"
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT e.name, m.name AS manager",
+          "summary": "2 columns, 11 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1|m:-",
+                  "label": "#1·–",
+                  "values": [
+                    "Hana",
+                    null
+                  ]
+                },
+                {
+                  "id": "e:0,2|m:0,1",
+                  "label": "#2·#1",
+                  "values": [
+                    "Luis",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "e:0,3|m:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "Mei",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "e:0,4|m:0,1",
+                  "label": "#4·#1",
+                  "values": [
+                    "Sam",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "e:0,5|m:0,4",
+                  "label": "#5·#4",
+                  "values": [
+                    "Aisha",
+                    "Sam"
+                  ]
+                },
+                {
+                  "id": "e:0,6|m:0,1",
+                  "label": "#6·#1",
+                  "values": [
+                    "Jonas",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "e:0,7|m:0,6",
+                  "label": "#7·#6",
+                  "values": [
+                    "Chloe",
+                    "Jonas"
+                  ]
+                },
+                {
+                  "id": "e:0,8|m:0,2",
+                  "label": "#8·#2",
+                  "values": [
+                    "Victor",
+                    "Luis"
+                  ]
+                },
+                {
+                  "id": "e:0,9|m:0,4",
+                  "label": "#9·#4",
+                  "values": [
+                    "Ines",
+                    "Sam"
+                  ]
+                },
+                {
+                  "id": "e:0,10|m:0,1",
+                  "label": "#10·#1",
+                  "values": [
+                    "Tariq",
+                    "Hana"
+                  ]
+                },
+                {
+                  "id": "e:0,11|m:0,6",
+                  "label": "#11·#6",
+                  "values": [
+                    "Olga",
+                    "Jonas"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY e.id",
+          "summary": "sorted by e.id",
+          "line": 7,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager",
+                  "type": "text"
+                },
+                {
+                  "name": "e.id",
+                  "type": "integer",
+                  "role": "sort",
+                  "expr": "e.id",
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "e:0,1|m:-",
+                  "label": "#1·–",
+                  "values": [
+                    "Hana",
+                    null,
+                    "1"
+                  ]
+                },
+                {
+                  "id": "e:0,2|m:0,1",
+                  "label": "#2·#1",
+                  "values": [
+                    "Luis",
+                    "Hana",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "e:0,3|m:0,1",
+                  "label": "#3·#1",
+                  "values": [
+                    "Mei",
+                    "Hana",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "e:0,4|m:0,1",
+                  "label": "#4·#1",
+                  "values": [
+                    "Sam",
+                    "Hana",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "e:0,5|m:0,4",
+                  "label": "#5·#4",
+                  "values": [
+                    "Aisha",
+                    "Sam",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "e:0,6|m:0,1",
+                  "label": "#6·#1",
+                  "values": [
+                    "Jonas",
+                    "Hana",
+                    "6"
+                  ]
+                },
+                {
+                  "id": "e:0,7|m:0,6",
+                  "label": "#7·#6",
+                  "values": [
+                    "Chloe",
+                    "Jonas",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "e:0,8|m:0,2",
+                  "label": "#8·#2",
+                  "values": [
+                    "Victor",
+                    "Luis",
+                    "8"
+                  ]
+                },
+                {
+                  "id": "e:0,9|m:0,4",
+                  "label": "#9·#4",
+                  "values": [
+                    "Ines",
+                    "Sam",
+                    "9"
+                  ]
+                },
+                {
+                  "id": "e:0,10|m:0,1",
+                  "label": "#10·#1",
+                  "values": [
+                    "Tariq",
+                    "Hana",
+                    "10"
+                  ]
+                },
+                {
+                  "id": "e:0,11|m:0,6",
+                  "label": "#11·#6",
+                  "values": [
+                    "Olga",
+                    "Jonas",
+                    "11"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":208,"loops":[]}
+  ]
+}

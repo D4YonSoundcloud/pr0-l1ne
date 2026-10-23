@@ -90,7 +90,8 @@ Everything listed for JavaScript applies, plus:
 
 **SQL**
 
-- **One table at a time.** Queries on one table are stepped through clause by clause. Joins, GROUP BY and aggregates, subqueries, WITH, UNION and window functions run, but are shown as their result in one step (see [SQL](sql.md#not-stepped-through-yet)).
+- **Not every query is stepped through yet.** Queries on one table and joins are stepped through clause by clause. GROUP BY and aggregates, subqueries, WITH, UNION and window functions run, but are shown as their result in one step (see [SQL](sql.md#not-stepped-through-yet)).
+- **A join's result can be wide.** Its rows have every column of every table joined, so a join of wide tables is drawn small: zoom in, or SELECT fewer columns to see them later on.
 - **Up to a hundred rows a step.** A table with more is drawn to its hundredth row, with the rest counted. The output pane prints up to 200 rows of a result.
 - **UPDATE moves rows.** Postgres keeps an updated row in a new place, so after an UPDATE the row has a new number (`#4`) and isn't followed from its old one.
 - **A query that never finishes** (a huge `generate_series`, say) is stopped by the same time limit as a program, and Postgres starts again.

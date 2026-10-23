@@ -1391,6 +1391,26 @@
             "type": "string"
           },
           "description": "Anything worth knowing about it (\"No ORDER BY: ...\")."
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          "description": "A join: which row of the rows so far (tables[0]) pairs with which row of the table joined (tables[1]), by id."
         }
       },
       "required": [
@@ -1409,6 +1429,7 @@
       "enum": [
         "tables",
         "from",
+        "join",
         "where",
         "select",
         "distinct",
@@ -1553,9 +1574,10 @@
           "enum": [
             "removed",
             "added",
-            "changed"
+            "changed",
+            "unmatched"
           ],
-          "description": "removed  this step takes it out: WHERE's condition isn't true, a          duplicate DISTINCT drops, past LIMIT, skipped by OFFSET, or          deleted added    a new row (INSERT) changed  a row changed by UPDATE"
+          "description": "removed  this step takes it out: WHERE's condition isn't true, a          duplicate DISTINCT drops, past LIMIT, skipped by OFFSET, or          deleted added    a new row (INSERT) changed  a row changed by UPDATE unmatched  a join found no row to pair it with, and keeps it anyway          (LEFT, RIGHT or FULL JOIN), with NULLs for the other table"
         },
         "note": {
           "type": "string",

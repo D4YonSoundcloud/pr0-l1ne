@@ -2,11 +2,12 @@ import type { Example } from "./index";
 
 /**
  * SQL examples: each adds one thing to the one before, from every row of a
- * table to all of one table's clauses together. They use the sample
+ * table to all of one table's clauses together, then joining tables. They use the sample
  * databases (sql/databases.ts), except the last, which makes its own table.
  */
 const FIRST = "Querying one table";
 const SORTING = "Sorting, DISTINCT and LIMIT";
+const JOINS = "Joining tables";
 const OWN = "Your own tables";
 
 export const SQL_EXAMPLES: Example[] = [
@@ -153,6 +154,95 @@ WHERE hired >= '2019-01-01'
   AND department_id IS NOT NULL
 ORDER BY yearly DESC
 LIMIT 4;
+`,
+  },
+  // ------------------------------------------------------------- joins
+  {
+    group: JOINS,
+    name: "JOIN … ON",
+    code: `-- viz: database shop
+-- Each order names its customer by id. JOIN pairs every order
+-- with the customer whose id matches: one line per pair.
+SELECT o.id, c.name, o.quantity
+FROM orders AS o
+JOIN customers AS c ON c.id = o.customer_id
+ORDER BY o.id;
+`,
+  },
+  {
+    group: JOINS,
+    name: "LEFT JOIN keeps every row",
+    code: `-- viz: database shop
+-- A plain JOIN drops customers with no orders. LEFT JOIN keeps
+-- every row on its left, with NULLs where there's no match.
+SELECT c.name, o.id AS order_id, o.ordered_on
+FROM customers AS c
+LEFT JOIN orders AS o ON o.customer_id = c.id
+ORDER BY c.name;
+`,
+  },
+  {
+    group: JOINS,
+    name: "Rows with no match",
+    code: `-- viz: database shop
+-- LEFT JOIN, then keep only the rows it filled with NULLs:
+-- the products nobody has ordered.
+SELECT p.name, p.stock
+FROM products AS p
+LEFT JOIN orders AS o ON o.product_id = p.id
+WHERE o.id IS NULL;
+`,
+  },
+  {
+    group: JOINS,
+    name: "Three tables",
+    code: `-- viz: database shop
+-- Joins run one at a time, left to right: orders with their
+-- customers, then those rows with their products.
+SELECT c.name,
+       p.name AS product,
+       o.quantity * p.price AS total
+FROM orders AS o
+JOIN customers AS c ON c.id = o.customer_id
+JOIN products AS p ON p.id = o.product_id
+ORDER BY total DESC
+LIMIT 5;
+`,
+  },
+  {
+    group: JOINS,
+    name: "Self join: who reports to whom",
+    code: `-- viz: database company
+-- A table joined to itself, under two names: e for each
+-- employee, m for their manager. Hana has no manager.
+SELECT e.name, m.name AS manager
+FROM employees AS e
+LEFT JOIN employees AS m ON m.id = e.manager_id
+ORDER BY e.id;
+`,
+  },
+  {
+    group: JOINS,
+    name: "FULL JOIN",
+    code: `-- viz: database company
+-- FULL JOIN keeps the rows with no match on both sides: Tariq,
+-- in no department, and Research, with nobody in it.
+SELECT e.name, d.name AS department
+FROM employees AS e
+FULL JOIN departments AS d ON d.id = e.department_id
+ORDER BY d.name, e.name;
+`,
+  },
+  {
+    group: JOINS,
+    name: "A comma in FROM",
+    code: `-- viz: database company
+-- An older way to join: a comma pairs every row with every
+-- row (4 × 11), then WHERE keeps the pairs that belong together.
+SELECT d.name AS department, e.name
+FROM departments AS d, employees AS e
+WHERE e.department_id = d.id
+ORDER BY d.name, e.name;
 `,
   },
   // ------------------------------------------------------------- your own tables
