@@ -101,6 +101,12 @@ test("inside the worker, every way out is blocked", async ({ page, browserName }
   // worker: the app then replaces it as a crashed one). That attempt didn't
   // get out either: note it, and try the next one in the fresh worker.
   const results: Record<string, string> = {};
+  // First, while the worker is untouched: can it see the app's window at all?
+  results["the app's window"] = await (await runnerWorker(page, browserName)).evaluate(() =>
+    "parent" in self || "top" in self ? "reachable" : "blocked",
+  );
+  // Then the ways out. The last ones (import(), EventSource) are the ones
+  // Firefox answers by stopping the worker, so nothing comes after them.
   for (const name of WAYS_OUT) {
     const worker = await runnerWorker(page, browserName);
     results[name] = await worker
@@ -144,21 +150,13 @@ test("inside the worker, every way out is blocked", async ({ page, browserName }
       )
       .catch((error: Error) => {
         if (!/context was destroyed|Target closed|has been closed/i.test(error.message)) throw error;
+        // Gone, even if the browser hasn't said so yet: the next attempt waits for the app's fresh one.
+        closedWorkers.add(worker);
         return "blocked (the browser stopped the worker)";
       });
   }
   // Shown in the test output, so it's visible which attempts a browser stops the worker for.
   console.log(`[${browserName}] ways out:`, JSON.stringify(results));
-  // Whether the app's window is in reach, in a worker that's running (once more if it stops meanwhile).
-  for (let tries = 0; tries < 2 && !results["the app's window"]; tries++) {
-    const worker = await runnerWorker(page, browserName);
-    results["the app's window"] = await worker
-      .evaluate(() => ("parent" in self || "top" in self ? "reachable" : "blocked"))
-      .catch((error: Error) => {
-        if (!/context was destroyed|Target closed|has been closed/i.test(error.message)) throw error;
-        return "";
-      });
-  }
   expect(Object.entries(results).filter(([, v]) => !v.startsWith("blocked"))).toEqual([]);
 });
 
