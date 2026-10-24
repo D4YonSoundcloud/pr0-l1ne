@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crosses, findFreeY, overlaps, type Point, type Rect, roundedPath, routeEdges } from "./route";
+import { crosses, fewestCrossings, findFreeY, overlaps, type Point, type Rect, roundedPath, routeEdges } from "./route";
 
 const box = (x: number, y: number, w = 100, h = 60): Rect => ({ x, y, w, h });
 const segments = (points: Point[]) => points.slice(1).map((p, i) => [points[i], p] as const);
@@ -130,5 +130,31 @@ describe("roundedPath", () => {
       { x: 50, y: 50 },
     ]);
     expect(d).toBe("M0,0 L44,0 Q50,0 50,6 L50,50");
+  });
+});
+
+describe("fewestCrossings", () => {
+  // Items cross when the one on the left is bigger: the best order is sorted.
+  const cost = (a: number, b: number) => Number(a > b);
+
+  it("finds the order with the fewest crossings", () => {
+    expect(fewestCrossings([3, 1, 4, 2], cost)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("keeps the order it's given when nothing would improve", () => {
+    const none = () => 0;
+    expect(fewestCrossings(["b", "a", "c"], none)).toEqual(["b", "a", "c"]);
+    expect(fewestCrossings([], cost)).toEqual([]);
+  });
+
+  it("never makes the total worse, even with a cost no sort could follow", () => {
+    // A cycle of preferences: a before b, b before c, c before a.
+    const prefer: Record<string, string> = { a: "b", b: "c", c: "a" };
+    const cyc = (x: string, y: string) => Number(prefer[y] === x);
+    const total = (list: string[]) =>
+      list.reduce((sum, x, i) => sum + list.slice(i + 1).reduce((s, y) => s + cyc(x, y), 0), 0);
+    const start = ["c", "b", "a"];
+    expect(total(fewestCrossings(start, cyc))).toBeLessThanOrEqual(total(start));
+    expect(total(fewestCrossings(start, cyc))).toBe(1);
   });
 });

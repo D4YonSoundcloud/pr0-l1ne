@@ -200,6 +200,57 @@ function spreadEntries(plans: Plan[]): void {
   }
 }
 
+/**
+ * Lanes left to right with as few crossings as can be found: `cost(a, b)`
+ * is how many times a and b cross with a left of b. Sifting: each lane in
+ * turn moves to the place where the total is lowest, until nothing
+ * improves. The total never goes up, ties keep the order given, and the
+ * result is the same every time.
+ */
+export function fewestCrossings<T>(items: readonly T[], cost: (a: T, b: T) => number): T[] {
+  const order = items.slice();
+  const n = order.length;
+  if (n < 2) return order;
+  const total = (list: T[]) => {
+    let sum = 0;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) sum += cost(list[i], list[j]);
+    return sum;
+  };
+  let best = total(order);
+  for (let round = 0; round < 8 && best > 0; round++) {
+    let improved = false;
+    for (const item of order.slice()) {
+      const rest = order.filter((x) => x !== item);
+      for (let at = 0; at <= rest.length; at++) {
+        const trial = [...rest.slice(0, at), item, ...rest.slice(at)];
+        const t = total(trial);
+        if (t < best) {
+          best = t;
+          improved = true;
+          order.splice(0, n, ...trial);
+        }
+      }
+    }
+    if (!improved) break;
+  }
+  return order;
+}
+
+/** How many boxes a group of forward arrows would run through, with their lanes placed. */
+function laneHits(group: Plan[], boxes: Rect[]): number {
+  let hits = 0;
+  for (const p of group) {
+    const points = buildPoints(p);
+    for (let k = 1; k < points.length; k++) {
+      for (const box of boxes) {
+        if (box === p.edge.source || box === p.edge.target) continue;
+        if (crosses(points[k - 1], points[k], box)) hits++;
+      }
+    }
+  }
+  return hits;
+}
+
 /** Vertical extent of the segment an edge runs along a lane. */
 function laneSpan(p: Plan): [number, number] {
   const a = p.edge.from.y;
@@ -225,15 +276,24 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
     // to make that rare.
     const cost = (a: Plan, b: Plan) =>
       Number(inside(a.entryY, laneSpan(b))) + Number(inside(b.edge.from.y, laneSpan(a)));
+    // A first order by pairs, then improved as a whole (fewestCrossings only takes strict improvements).
     group.sort((a, b) => cost(a, b) - cost(b, a) || a.edge.from.y - b.edge.from.y);
     const targetX = group[0].kind === "top" ? group[0].edge.enterTopFrom! : group[0].edge.target.x;
     const leftLimit = Math.max(...group.map((p) => right(p.edge.source))) + 8;
     const first = targetX - GAP_PAD;
     const spacing = group.length > 1 ? Math.max(2, Math.min(LANE, (first - leftLimit) / (group.length - 1))) : 0;
-    // group[0] is leftmost.
-    group.forEach((p, i) => {
-      p.inLane!.x = Math.max(leftLimit, first - (group.length - 1 - i) * spacing);
-    });
+    // order[0] is leftmost.
+    const place = (order: Plan[]) =>
+      order.forEach((p, i) => {
+        p.inLane!.x = Math.max(leftLimit, first - (group.length - 1 - i) * spacing);
+      });
+    // Improve the order as a whole, but never at the cost of running an arrow through a box.
+    place(group);
+    const hitsBefore = laneHits(group, boxes);
+    const ordered = fewestCrossings(group, cost);
+    place(ordered);
+    if (laneHits(ordered, boxes) > hitsBefore) place(group);
+    else group.splice(0, group.length, ...ordered);
   }
 
   // Lanes in the gap right of a column: u-turns leaving it, and corridor

@@ -40,6 +40,17 @@ describe("the site's pages", () => {
       url: "https://pr0l1ne.com/sql",
     });
     expect(data.offers.price).toBe("0");
+    // Who made it: D4Y, tied to the name and the LinkedIn profile.
+    expect(data.author).toMatchObject({
+      "@type": "Person",
+      name: "Matthew Day",
+      alternateName: "D4Y",
+      url: "https://www.linkedin.com/in/matthew-day-developer/",
+    });
+    expect(html).toContain(
+      'Created by <a href="https://www.linkedin.com/in/matthew-day-developer/" rel="author">D4Y</a>',
+    );
+    expect(html).toContain('<meta name="author" content="D4Y (Matthew Day)" />');
     // Everything else is index.html's.
     expect(html.split("\n").length).toBe(index.split("\n").length);
     expect(pageHtml(index, HOME_PAGE)).toContain('<link rel="canonical" href="https://pr0l1ne.com/" />');
@@ -52,5 +63,15 @@ describe("the site's pages", () => {
 
   it("links to every language's page from index.html", () => {
     for (const page of Object.values(LANGUAGE_PAGES)) expect(index).toContain(`href="${page.path}"`);
+  });
+});
+
+describe("llms.txt", () => {
+  const text = readFileSync(new URL("../../public/llms.txt", import.meta.url), "utf8");
+  it("says who made PR0L1NE, when it was written, and links every language's page", () => {
+    expect(text).toMatch(/^# PR0L1NE\n/);
+    expect(text).toContain("Created by D4Y (Matthew Day): https://www.linkedin.com/in/matthew-day-developer/");
+    expect(text).toContain("As of October 2026");
+    for (const page of Object.values(LANGUAGE_PAGES)) expect(text).toContain(`(https://pr0l1ne.com${page.path})`);
   });
 });

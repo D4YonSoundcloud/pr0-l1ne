@@ -24,6 +24,18 @@ const TOP = 40;
 const EXIT_DROP = 9;
 const EXIT_LANE = 7;
 
+/**
+ * A column's boxes in the order their arrows arrive, top to bottom. Boxes
+ * with no arrival yet (`arrival` null) keep their places; the others fill
+ * the remaining places in arrival order, ties in their first order.
+ */
+export function inArrowOrder(ids: readonly string[], arrival: (id: string) => number | null): string[] {
+  const at = ids.map((id, i) => ({ id, i, y: arrival(id) }));
+  const sorted = at.filter((a) => a.y !== null).sort((a, b) => a.y! - b.y! || a.i - b.i);
+  let next = 0;
+  return at.map((a) => (a.y === null ? a.id : sorted[next++].id));
+}
+
 /** Lay out a memory scene as a drawing (drawing.ts). */
 export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { positions: new Map() }): Mark {
   const { step, graphAlias } = scene;
@@ -169,14 +181,31 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
   });
 
   const columnCursor: number[] = columnW.map(() => TOP);
-  for (const id of order) {
+  // Objects come in breadth-first order, so one column at a time. Within a
+  // column, boxes go in the order their arrows arrive (top to bottom), so
+  // arrows into a column don't cross on the way. Boxes placed by hand, tree
+  // nodes and boxes nothing in an earlier column points to keep their
+  // places. The order depends only on the arrows, so a box only moves when
+  // an arrow does.
+  // Each column is placed before the next is ordered: the next one's arrows come from it.
+  for (let start = 0; start < order.length; ) {
+    let end = start;
+    while (end < order.length && depth.get(order[end]) === depth.get(order[start])) end++;
+    const column = inArrowOrder(order.slice(start, end), (id) =>
+      layout.positions.has(nodeKey.object(id)) || blockOf.has(id) ? null : (preferredY.get(id) ?? null),
+    );
+    for (const id of column) placeObject(id);
+    start = end;
+  }
+
+  function placeObject(id: string): void {
     const d = depth.get(id)!;
     const shape = shapes.get(id)!;
     const key = nodeKey.object(id);
     const moved = layout.positions.get(key);
     if (moved) {
       drawNode(key, shape, moved.x, moved.y);
-      continue;
+      return;
     }
     const block = blockOf.get(id);
     if (block) {
@@ -195,7 +224,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
         block.origin.x + slot.index * (block.slotW + TREE_GAP) + Math.round((block.slotW - shape.w) / 2),
         block.origin.y + slot.depth * block.levelH,
       );
-      continue;
+      return;
     }
     const want = preferredY.has(id) ? preferredY.get(id)! - shape.inY : TOP;
     const y = findFreeY(columnX[d], shape.w, shape.h, Math.max(columnCursor[d], want), obstacles, STACK_GAP);

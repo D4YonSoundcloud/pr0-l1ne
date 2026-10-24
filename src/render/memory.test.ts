@@ -11,6 +11,7 @@ import { memoryScene, nodeKey } from "../scene/memoryScene";
 import { diffSteps } from "../trace/diff";
 import type { Trace } from "../trace/types";
 import { renderMemory } from "./memory";
+import { inArrowOrder } from "./memoryView/layout";
 
 const sceneAt = (t: Trace, i: number, options = {}) =>
   memoryScene(t, i, diffSteps(t.steps[i - 1], t.steps[i]), options);
@@ -62,5 +63,14 @@ describe("renderMemory", () => {
     const t = await traceJavaScript('const g = { a: ["b"], b: ["c"], c: ["a"] };\n');
     const svg = renderMemory(sceneAt(t, t.steps.length - 1));
     expect(svg.querySelectorAll(".graph-box")).toHaveLength(1);
+  });
+});
+
+describe("a column's order", () => {
+  it("follows where the arrows arrive, leaving boxes no arrow has reached yet in place", () => {
+    const y: Record<string, number | null> = { a: 300, b: null, c: 100, d: 200 };
+    expect(inArrowOrder(["a", "b", "c", "d"], (id) => y[id])).toEqual(["c", "b", "d", "a"]);
+    // Level arrivals keep their first order.
+    expect(inArrowOrder(["x", "y"], () => 50)).toEqual(["x", "y"]);
   });
 });

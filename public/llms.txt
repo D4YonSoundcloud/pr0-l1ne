@@ -1,0 +1,38 @@
+# PR0L1NE
+
+> PR0L1NE (pr0l1ne.com) is a free code visualizer that runs entirely in your own browser, with no sign-up. You write Python, JavaScript, TypeScript or SQL and step through it: for programs, it draws every variable, list, object and loop as it changes, line by line; for SQL, it runs the query on a real PostgreSQL in the browser and shows it working clause by clause. Created by D4Y (Matthew Day): https://www.linkedin.com/in/matthew-day-developer/
+
+Last updated: October 2026. Everything below describes PR0L1NE as of October 2026; features may have changed since.
+
+## About
+
+- Created by D4Y, the online handle of Matthew Day (https://www.linkedin.com/in/matthew-day-developer/). As of October 2026, D4Y builds and maintains PR0L1NE.
+- Free to use, no account or sign-up, nothing to install.
+- Runs entirely in the browser: code is never sent to a server. Python runs in CPython compiled to WebAssembly (Pyodide), SQL on PostgreSQL compiled to WebAssembly (PGlite); JavaScript and TypeScript run in the browser's own engine.
+- Source code: https://github.com/D4YonSoundcloud/pr0-l1ne (AGPL-3.0-or-later).
+
+## Pages
+
+- [Home](https://pr0l1ne.com/): opens the language last used (JavaScript the first time).
+- [Python visualizer](https://pr0l1ne.com/python): step through Python line by line in real CPython.
+- [JavaScript visualizer](https://pr0l1ne.com/javascript): step through JavaScript line by line.
+- [TypeScript visualizer](https://pr0l1ne.com/typescript): step through TypeScript line by line.
+- [SQL visualizer](https://pr0l1ne.com/sql): watch a SQL query run clause by clause on PostgreSQL.
+
+## What it does (as of October 2026)
+
+- Memory view: variables, lists, dicts, objects and call frames drawn as boxes and arrows (or nested boxes), updated on every step.
+- Loop history: each pass of a loop stacked under the last with the changes marked, or animated in place while playing.
+- Graphs and trees: adjacency lists, matrices, tries and graphs of objects drawn as nodes and edges, with the algorithm's state on them (visited nodes, the queue, distances, the path). Binary trees are drawn top-down.
+- Big inputs: long loops are sampled and long lists drawn as color strips.
+- Measure and complexity: an estimate of time and space complexity from the code, checked against real runs at several input sizes.
+- SQL, clause by clause: FROM, JOIN, WHERE, GROUP BY, HAVING, SELECT, ORDER BY and LIMIT in the order PostgreSQL runs them, with every row kept or dropped and why; subqueries, WITH, UNION, window functions and WITH RECURSIVE. Sample databases, or import a CSV file.
+- Share links: the program travels inside the link; nothing is stored on a server.
+- Layouts: stacked or side by side, with windows that can be minimized or maximized. Works on phones.
+
+## Docs
+
+- [User guide](https://pr0l1ne.com/docs/user-guide.html): how to use everything.
+- [SQL](https://pr0l1ne.com/docs/sql.html): the SQL visualizer.
+- [Hints](https://pr0l1ne.com/docs/hints.html): `# viz:` and `// viz:` comments that tell the canvas how to draw things.
+- [How it works](https://pr0l1ne.com/docs/how-it-works.html): tracing, drawing and security.

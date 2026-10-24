@@ -40,6 +40,9 @@ export default defineConfig({
       },
     ],
     ["meta", { property: "og:image", content: "https://pr0l1ne.com/og-image.png" }],
+    // Who made it (src/site/pages.ts, CREATOR).
+    ["meta", { name: "author", content: "D4Y (Matthew Day)" }],
+    ["link", { rel: "author", href: "https://www.linkedin.com/in/matthew-day-developer/" }],
   ],
   markdown: {
     config(md) {

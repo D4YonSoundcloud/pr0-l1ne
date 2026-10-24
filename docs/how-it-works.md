@@ -412,12 +412,14 @@ The column walk then runs over separate boxes only. A reference from inside a ne
 
 Each frame and object is drawn in its own `<g class="node">` carrying a key (`frame:2:factorial`, `obj:o4`) and its position. `renderMemory()` takes a `MemoryLayout`, a map from key to position for boxes the person has dragged. A dragged box is drawn at its saved position and leaves the automatic flow, so it doesn't push later boxes down. Arrows are routed using wherever boxes actually ended up, so they follow automatically. Each node group starts with an invisible rectangle covering the whole box, so a press anywhere on it, even in the gap between a list's index numbers and its cells, grabs the box rather than panning the canvas.
 
+**Columns in arrow order.** Within a column, boxes go in the order their arrows arrive, top to bottom (`inArrowOrder()`), so arrows into a column don't cross on the way. Dragged boxes, tree nodes and boxes nothing earlier points to keep their places. The order depends only on the arrows, so a box only moves when an arrow does.
+
 **Placement never overlaps.** Boxes the person dragged are placed first, at their saved positions. Every automatically placed box then asks `findFreeY()` (in [`route.ts`](../src/render/route.ts)) for the first spot at or below where it wants to go that doesn't touch anything already placed, so it moves down past dragged boxes instead of hiding underneath them. A list whose arrows leave downward reserves room under itself for their turns, so the next box down doesn't sit on them.
 
 **Arrow routing** happens after every box is placed, in `routeEdges()`, which is pure geometry with its own tests. Each arrow is classified by where its target is: to the right (*forward*), in the same column (*u-turn*), or in an earlier column (*corridor*). Then:
 
 1. Arrows arriving at the same side of the same box are spread a few pixels apart, ordered by where they come from. An arrow already level with its target stays level and becomes a single straight line.
-2. Each vertical segment gets a **lane** in its gap. Forward arrows use lanes just left of the target's column, counted leftward. U-turns and corridors use lanes just right of a column, with shorter loops nearer the column so loops nest instead of crossing. Forward lanes are ordered with a pairwise crossing count: lane A left of lane B costs a crossing when A's exit passes B's vertical span, or B's entry passes A's.
+2. Each vertical segment gets a **lane** in its gap. Forward arrows use lanes just left of the target's column, counted leftward. U-turns and corridors use lanes just right of a column, with shorter loops nearer the column so loops nest instead of crossing. Forward lanes are ordered with a pairwise crossing count: lane A left of lane B costs a crossing when A's exit passes B's vertical span, or B's entry passes A's. A first order by pairs is then improved as a whole by sifting (`fewestCrossings()`): each lane moves to the place where the total is lowest, until nothing improves.
 3. Corridors run above the boxes in their horizontal range when there's room (the diagram keeps 40 px free at the top for this), otherwise below.
 4. `roundedPath()` turns each list of points into an SVG path with rounded corners.
 
@@ -530,16 +532,28 @@ Saved settings are read by `parseAppearance()`, which checks every field and fal
 
 **Reading the state.** `graphOverlay()` goes through every variable in view and asks two questions: does it hold nodes (directly, or in `(priority, node)` pairs), and what kind of container is it? The rules in [the table above](user-guide.md#your-algorithms-state-drawn-on-the-graph) come from that. Names only break ties, using the short regular-expression lists at the top of the overlay section (`VISITED_NAMES`, `PARENT_NAMES` and so on). For graphs whose nodes are exactly `0..n-1`, a list of length `n` is read as one value per node. Pointers are primitives that name a node, held by a conventional name, a name used as a subscript of the graph (`graph[node]`), or a name in a hint.
 
-**Layout.** `layoutFor(trace, graph)` lays out a graph once per run, using every node and edge it has at any step. That takes one pass over the trace, cached per trace in a `WeakMap`, so nodes never move while the graph is built, and the memory view and loop history agree. `computeLayout()` works like this:
+**Layout.** `layoutFor(trace, graph)` lays out a graph once per run, using every node and edge it has at any step. That takes one pass over the trace, cached per trace in a `WeakMap`, so nodes never move while the graph is built, and the memory view and loop history agree. The same pass finds where the algorithm starts: the first node it queues or visits. `computeLayout()` (in [`trace/graphLayout.ts`](../src/trace/graphLayout.ts), our own; no layout library) picks one of four layouts:
 
-- **Layered** for directed graphs without cycles (longest-path layers) and for forests (breadth-first depth). A few sweeps order each layer by the average position of each node's neighbors. Each node then sits as close to that average as a gap of 1 allows.
+- **Layered** for trees, directed graphs without cycles, and directed graphs with a few cycles. It's the classic layered pipeline:
+  1. *Tidy the edges.* Self-loops take no part; an undirected edge listed from both ends, a repeated edge and a two-way pair are one connection.
+  2. *Break cycles.* A depth-first walk from the start (then from nodes nothing points to, in program order) turns each edge that leads back to a node still on the walk. Those are the back edges, drawn pointing up. Undirected graphs are layered by breadth-first distance from the start instead.
+  3. *Layers.* Longest path from the top, then each node nothing points to moves down to just above its highest child, so its edges are short. The start stays on top.
+  4. *Placeholders.* An edge spanning several layers gets an invisible point in each layer it crosses, so it bends around the nodes in between.
+  5. *Order.* From a depth-first order (subtrees together, children in program order), sweeps down and up order each layer by the median position of its neighbors, and neighbors swap whenever that removes crossings. The order with the fewest crossings wins. A tree keeps its depth-first order, which has no crossings, so children stay left to right as the program has them.
+  6. *Positions.* Each node as close as it can be to the average of its neighbors above and below, keeping the order and a minimum gap, solved exactly per sweep (isotonic regression by pool adjacent violators). Placeholders weigh more, so long edges run straight.
+
+  Separate pieces are laid out apart and put side by side, the start's first; nodes with no edges go in a block on the right. Layers are used when cycle breaking turns only a few edges, the graph isn't dense, and its edges don't mostly go both ways (that's really an undirected graph).
+- **Circle** for a ring (every node linked to exactly two others, all in one loop), in ring order from the start, at the top.
+- **Grid** (rows) for nodes with no edges at all.
 - **Force-directed** for everything else (Fruchterman–Reingold). It starts from a circle, so it gives the same picture every run. It's then rotated so its long side is horizontal and scaled so an edge is about one unit long, and a last pass pushes apart any nodes closer than 0.9.
+
+Nothing is random and every tie goes to program order, so the same graph gets the same picture every time, in every browser. `graphLayout.test.ts` checks each of these cases, that nothing overlaps, that a 200-node graph lays out quickly, and that no example graph has more crossings than the previous layout (kept in `src/testing/legacyGraphLayout.ts` for that comparison).
 
 The same pass records every kind of state the graph is ever drawn with, so its legend, and therefore its size, stays the same from the first step to the last.
 
 **Drawing.** [`render/graphView.ts`](../src/render/graphView.ts) turns layout units into pixels: one unit is the widest node plus a gap.
 
-- **Edges** are clipped to node outlines. An undirected pair is drawn once, a directed pair as two bowed curves, and weights as labels with a halo.
+- **Edges** are clipped to node outlines. An undirected edge (listed from both ends) is drawn once. A long edge in a layered layout runs through its placeholders as a smooth curve (Catmull-Rom, as cubic Béziers). Repeated edges get lanes side by side, a directed two-way pair two bowed curves, a back edge between neighboring layers a bow, and a self-loop a loop off the node's right side. Weights are labels with a halo, halfway along.
 - **Nodes** carry classes for their state, plus badges for queue order and labels.
 - **▲ markers** carry `data-flip` keys, so they slide when animated.
 

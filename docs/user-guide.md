@@ -495,7 +495,15 @@ When your data is a graph, the memory view draws it as one: nodes and edges in a
 | An adjacency matrix: `m = [[0, 1], [1, 0]]` | With a hint, `viz: graph m`. A square list of lists is read as a matrix |
 | An edge list: `edges = [(0, 1), (1, 2, 5)]` | With a hint, `viz: graph edges`. JavaScript arrays need `viz: graph edges edgelist` |
 
-A graph is **undirected** when every edge goes both ways, and **directed** (with arrowheads) otherwise. It's drawn in **layers** when it can be, meaning a directed graph without cycles or a tree, so a dependency graph or a trie reads from top to bottom. Anything else gets a force-directed layout.
+A graph is **undirected** when every edge goes both ways, and **directed** (with arrowheads) otherwise. It's drawn in **layers** when it reads well that way, so a dependency graph or a trie reads from top to bottom:
+
+- **Where the search starts is on top.** The first node your algorithm queues or visits is the top of the picture.
+- **Cycles are fine.** In a directed graph with a few cycles, the edges that close a cycle (back to a node above) point up, curving around the nodes in between.
+- **Long edges bend around nodes** instead of running through them, and the layers are ordered to cross as few edges as possible.
+- **A tree's children stay in your order**, left to right.
+- **Separate pieces** sit side by side, and nodes with no edges in a block to the right.
+
+A single loop of nodes (a ring) is drawn as a circle, starting at the top. Undirected graphs with cycles, and dense graphs, get a force-directed layout. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. The same graph is always laid out the same way.
 
 ![Topological sort: items already placed in the order are filled in, the ready queue is numbered, and each item shows how many things it still waits on](graph-topo.png)
 

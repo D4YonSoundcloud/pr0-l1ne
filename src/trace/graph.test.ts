@@ -185,18 +185,19 @@ describe("layout", () => {
       { from: "r", to: "b" },
       { from: "a", to: "c" },
     ];
-    const { pos, mode } = computeLayout(["r", "a", "b", "c"], edges, true);
+    const { pos, mode } = computeLayout(["r", "a", "b", "c"], edges, { directed: true });
     expect(mode).toBe("layered");
     expect(pos.get("r")!.y).toBe(0);
     expect(pos.get("c")!.y).toBe(2);
     expect(pos.get("a")!.x).toBeLessThan(pos.get("b")!.x);
   });
 
-  it("spreads a cyclic graph out without overlaps, the same way every time", () => {
+  it("spreads a tangled graph out without overlaps, the same way every time", () => {
     const nodes = ["a", "b", "c", "d", "e"];
-    const edges = nodes.map((n, i) => ({ from: n, to: nodes[(i + 1) % 5] }));
-    const one = computeLayout(nodes, edges, true);
-    const two = computeLayout(nodes, edges, true);
+    // Every node linked to every other, both ways: no layers suit it.
+    const edges = nodes.flatMap((n) => nodes.filter((m) => m !== n).map((m) => ({ from: n, to: m })));
+    const one = computeLayout(nodes, edges, { directed: false });
+    const two = computeLayout(nodes, edges, { directed: false });
     expect(one.mode).toBe("force");
     expect([...one.pos]).toEqual([...two.pos]);
     const points = [...one.pos.values()];

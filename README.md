@@ -4,6 +4,8 @@
 
 **See your code run.** Write Python, JavaScript or TypeScript, and PR0L1NE draws every variable, list, object and scope as it changes, step by step, right in your browser. Or write SQL, and watch a query work through its table one clause at a time.
 
+Created by [D4Y](https://www.linkedin.com/in/matthew-day-developer/).
+
 **[Try it: pr0l1ne.com](https://pr0l1ne.com)**. Free, no sign-up, nothing to install: it runs in your own browser, and your code never leaves it. Each language has its own page: [Python](https://pr0l1ne.com/python), [JavaScript](https://pr0l1ne.com/javascript), [TypeScript](https://pr0l1ne.com/typescript) and [SQL](https://pr0l1ne.com/sql).
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)

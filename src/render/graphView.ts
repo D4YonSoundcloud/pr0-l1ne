@@ -81,6 +81,160 @@ function legendItems(overlays: GraphOverlay[]): Legend[] {
   return items;
 }
 
+/** To the nearest half pixel: layouts give fractions, and the picture moves as a whole (canvas/keep.ts). */
+const half = (v: number) => Math.round(v * 2) / 2;
+
+/** How far a back edge with no bends bows to its side, in pixels. */
+const BACK_BOW = 18;
+/** Between neighboring lanes of repeated edges, in pixels. */
+const LANE_GAP = 14;
+
+interface LaneEdge {
+  from: string;
+  to: string;
+  label?: string;
+  tree: boolean;
+  /** Which of the edges between the same two nodes this is, and how many there are. */
+  lane: number;
+  lanes: number;
+}
+
+/**
+ * The edges to draw, each with its lane. A directed edge listed twice is
+ * two edges, side by side. An undirected graph lists each edge from both
+ * ends: its edges between two nodes are as many as the end that lists
+ * more, drawn from that end.
+ */
+export function edgeLanes(
+  edges: readonly { from: string; to: string; label?: string }[],
+  directed: boolean,
+): Omit<LaneEdge, "tree">[] {
+  const groups = new Map<string, { from: string; to: string; label?: string }[]>();
+  for (const e of edges) {
+    const key =
+      directed || e.from === e.to ? `${e.from}>${e.to}` : e.from < e.to ? `${e.from}|${e.to}` : `${e.to}|${e.from}`;
+    const group = groups.get(key) ?? [];
+    group.push(e);
+    groups.set(key, group);
+  }
+  const out: Omit<LaneEdge, "tree">[] = [];
+  for (const group of groups.values()) {
+    let chosen = group;
+    if (!directed && group[0].from !== group[0].to) {
+      const first = group.filter((e) => e.from === group[0].from);
+      const other = group.filter((e) => e.from !== group[0].from);
+      chosen = other.length > first.length ? other : first;
+    }
+    chosen.forEach((e, lane) => {
+      out.push({ ...e, lane, lanes: chosen.length });
+    });
+  }
+  return out;
+}
+
+/** Sideways offset for a lane: lanes spread around the straight line; a two-way pair keeps to its own side. */
+function laneOffset(lane: number, lanes: number, twoWay: boolean): number {
+  if (twoWay) return 14 + lane * LANE_GAP;
+  return (lane - (lanes - 1) / 2) * LANE_GAP;
+}
+
+/**
+ * An edge from a to b: straight, bowed sideways by `offset`, or through
+ * `bends` (a long edge in a layered layout) as a smooth curve. Cut where it
+ * leaves each node's outline. `mid` is where its label goes.
+ */
+export function edgePath(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  bends: { x: number; y: number }[],
+  fromSize: { w: number; h: number },
+  toSize: { w: number; h: number },
+  offset: number,
+  arrow: boolean,
+): { d: string; mid: { x: number; y: number } } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const r = (v: number) => Math.round(v * 100) / 100;
+  if (!bends.length) {
+    const startCut = exitDistance(fromSize, dx, dy);
+    const endCut = exitDistance(toSize, -dx, -dy) + (arrow ? 1 : 0);
+    const sx = a.x + (dx / len) * startCut + nx * offset * 0.5;
+    const sy = a.y + (dy / len) * startCut + ny * offset * 0.5;
+    const ex = b.x - (dx / len) * endCut + nx * offset * 0.5;
+    const ey = b.y - (dy / len) * endCut + ny * offset * 0.5;
+    if (!offset) return { d: `M${r(sx)},${r(sy)} L${r(ex)},${r(ey)}`, mid: { x: (sx + ex) / 2, y: (sy + ey) / 2 } };
+    const cx = (a.x + b.x) / 2 + nx * offset * 1.6;
+    const cy = (a.y + b.y) / 2 + ny * offset * 1.6;
+    return {
+      d: `M${r(sx)},${r(sy)} Q${r(cx)},${r(cy)} ${r(ex)},${r(ey)}`,
+      mid: { x: (a.x + b.x) / 2 + nx * offset * 1.1, y: (a.y + b.y) / 2 + ny * offset * 1.1 },
+    };
+  }
+  // Through the bends, shifted sideways for a lane.
+  const inner = bends.map((p) => ({ x: p.x + nx * offset, y: p.y + ny * offset }));
+  const first = inner[0];
+  const last = inner[inner.length - 1];
+  const out = { x: first.x - a.x, y: first.y - a.y };
+  const into = { x: b.x - last.x, y: b.y - last.y };
+  const outLen = Math.hypot(out.x, out.y) || 1;
+  const intoLen = Math.hypot(into.x, into.y) || 1;
+  const startCut = exitDistance(fromSize, out.x, out.y);
+  const endCut = exitDistance(toSize, -into.x, -into.y) + (arrow ? 1 : 0);
+  const points = [
+    { x: a.x + (out.x / outLen) * startCut, y: a.y + (out.y / outLen) * startCut },
+    ...inner,
+    { x: b.x - (into.x / intoLen) * endCut, y: b.y - (into.y / intoLen) * endCut },
+  ];
+  // Catmull-Rom through the points, as cubic Béziers.
+  let d = `M${r(points[0].x)},${r(points[0].y)}`;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+    d += ` C${r(c1.x)},${r(c1.y)} ${r(c2.x)},${r(c2.y)} ${r(p2.x)},${r(p2.y)}`;
+  }
+  // The label halfway along.
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+  let half = lengths.reduce((sum, l) => sum + l, 0) / 2;
+  let mid = points[0];
+  for (let i = 0; i < lengths.length; i++) {
+    if (half <= lengths[i]) {
+      const t = lengths[i] ? half / lengths[i] : 0;
+      mid = {
+        x: points[i].x + (points[i + 1].x - points[i].x) * t,
+        y: points[i].y + (points[i + 1].y - points[i].y) * t,
+      };
+      break;
+    }
+    half -= lengths[i];
+  }
+  return { d, mid };
+}
+
+/** A self-loop: out of the node's right side and back in, further out for each extra one. */
+function selfLoop(
+  c: { x: number; y: number },
+  size: { w: number; h: number },
+  lane: number,
+): {
+  d: string;
+  mid: { x: number; y: number };
+} {
+  const right = c.x + size.w / 2;
+  const reach = 26 + lane * 12;
+  const spread = 16 + lane * 6;
+  return {
+    d: `M${right},${c.y - 6} C${right + reach},${c.y - spread} ${right + reach},${c.y + spread} ${right + 1},${c.y + 6}`,
+    mid: { x: right + reach * 0.75 + 8, y: c.y },
+  };
+}
+
 export function graphPicture(
   graph: GraphData,
   layout: GraphLayout,
@@ -111,7 +265,7 @@ export function graphPicture(
 
   const centers = new Map<string, { x: number; y: number }>();
   for (const [key, p] of layout.pos) {
-    centers.set(key, { x: offsetX + padX + (p.x - minX) * unitX, y: padTop + (p.y - minY) * unitY });
+    centers.set(key, { x: half(offsetX + padX + (p.x - minX) * unitX), y: half(padTop + (p.y - minY) * unitY) });
   }
 
   return {
@@ -124,6 +278,11 @@ export function graphPicture(
         const c = centers.get(key)!;
         return { x: x + c.x, y: y + c.y };
       };
+      // A bend of a long edge (layout units) on the page.
+      const place = (p: { x: number; y: number }) => ({
+        x: x + half(offsetX + padX + (p.x - minX) * unitX),
+        y: y + half(padTop + (p.y - minY) * unitY),
+      });
       const prevGraph = options.prev?.graph;
       const prevOverlay = options.prev?.overlay;
       const prevEdges = prevGraph ? new Set(prevGraph.edges.map((e) => `${e.from}>${e.to}`)) : null;
@@ -147,17 +306,17 @@ export function graphPicture(
         g.append(lg);
       }
 
-      // Edges. An undirected edge stored both ways is drawn once.
+      // Edges. An undirected edge stored both ways is drawn once; repeated
+      // edges and two-way pairs get lanes side by side (edgeLanes).
       const edgesG = s("g", { class: "graph-edges" });
       const labelsG = s("g", { class: "graph-edge-labels" });
-      const drawn = new Set<string>();
       const all = new Set(graph.edges.map((e) => `${e.from}>${e.to}`));
-      const edgeList = graph.edges.map((e) => ({ ...e, tree: false }));
+      const edgeList: LaneEdge[] = edgeLanes(graph.edges, graph.directed).map((e) => ({ ...e, tree: false }));
       // Parent-map edges that aren't in the graph are still drawn.
       for (const key of [...overlay.treeEdges, ...overlay.pathEdges, ...overlay.chosenEdges]) {
         const [from, to] = key.split(">");
         if (!all.has(key) && !all.has(`${to}>${from}`) && centers.has(from) && centers.has(to)) {
-          edgeList.push({ from, to, tree: true });
+          edgeList.push({ from, to, tree: true, lane: 0, lanes: 1 });
         }
       }
       for (const edge of edgeList) {
@@ -168,10 +327,6 @@ export function graphPicture(
           !graph.nodes.has(edge.to)
         )
           continue;
-        const pair = edge.from < edge.to ? `${edge.from}|${edge.to}` : `${edge.to}|${edge.from}`;
-        const id = graph.directed ? `${edge.from}>${edge.to}` : pair;
-        if (drawn.has(id)) continue;
-        drawn.add(id);
         const forward = `${edge.from}>${edge.to}`;
         const backward = `${edge.to}>${edge.from}`;
         const inTree = overlay.treeEdges.has(forward) || (!graph.directed && overlay.treeEdges.has(backward));
@@ -185,8 +340,6 @@ export function graphPicture(
           !overlay.pathEdges.has(forward);
         const from = flip ? edge.to : edge.from;
         const to = flip ? edge.from : edge.to;
-        const a = at(from);
-        const b = at(to);
         const isNew =
           !!prevEdges && !prevEdges.has(forward) && !(!graph.directed && prevEdges.has(backward)) && !edge.tree;
         const arrow = graph.directed || inTree || onPath;
@@ -207,45 +360,27 @@ export function graphPicture(
             : graph.directed
               ? "url(#arrow-graph)"
               : null;
-        let d: string;
-        let mid: { x: number; y: number };
+        let shape: { d: string; mid: { x: number; y: number } };
         if (from === to) {
-          const top = a.y - sizes.get(from)!.h / 2;
-          d = `M${a.x - 7},${top} C${a.x - 26},${top - 30} ${a.x + 26},${top - 30} ${a.x + 7},${top - 1}`;
-          mid = { x: a.x, y: top - 24 };
+          shape = selfLoop(at(from), sizes.get(from)!, edge.lane);
         } else {
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const len = Math.hypot(dx, dy) || 1;
-          // A directed edge that also goes the other way bows to one side.
-          const bow = graph.directed && all.has(backward) ? 14 : 0;
-          const nx = -dy / len;
-          const ny = dx / len;
-          const startCut = exitDistance(sizes.get(from)!, dx, dy);
-          const endCut = exitDistance(sizes.get(to)!, -dx, -dy) + (arrow ? 1 : 0);
-          const sx = a.x + (dx / len) * startCut + nx * bow * 0.5;
-          const sy = a.y + (dy / len) * startCut + ny * bow * 0.5;
-          const ex = b.x - (dx / len) * endCut + nx * bow * 0.5;
-          const ey = b.y - (dy / len) * endCut + ny * bow * 0.5;
-          if (bow) {
-            const cx = (a.x + b.x) / 2 + nx * bow * 1.6;
-            const cy = (a.y + b.y) / 2 + ny * bow * 1.6;
-            d = `M${sx},${sy} Q${cx},${cy} ${ex},${ey}`;
-            mid = { x: (a.x + b.x) / 2 + nx * bow * 1.1, y: (a.y + b.y) / 2 + ny * bow * 1.1 };
-          } else {
-            d = `M${sx},${sy} L${ex},${ey}`;
-            mid = { x: (sx + ex) / 2, y: (sy + ey) / 2 };
-          }
+          // Sideways from the straight line, in pixels: lanes, two-way pairs, and back edges.
+          const twoWay = graph.directed && all.has(backward);
+          const back = graph.directed && !edge.tree && layout.back.has(`${edge.from}>${edge.to}`);
+          const bends = (layout.routes.get(`${from}>${to}`) ?? []).map(place);
+          let offset = laneOffset(edge.lane, edge.lanes, twoWay);
+          if (!offset && back && !bends.length) offset = BACK_BOW;
+          shape = edgePath(at(from), at(to), bends, sizes.get(from)!, sizes.get(to)!, offset, arrow);
         }
-        edgesG.append(s("path", { d, class: cls, "marker-end": arrow ? marker : null }));
+        edgesG.append(s("path", { d: shape.d, class: cls, "marker-end": arrow ? marker : null }));
         if (edge.label !== undefined && edge.label !== "") {
           labelsG.append(
             s(
               "text",
               {
                 class: ["edge-label", isNew && "is-new"].filter(Boolean).join(" "),
-                x: mid.x,
-                y: mid.y,
+                x: shape.mid.x,
+                y: shape.mid.y,
                 "text-anchor": "middle",
                 "dominant-baseline": "central",
               },

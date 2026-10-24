@@ -288,7 +288,8 @@ pr0-l1ne/
     │   ├── hints.test.ts       Hint tests (all three languages)
     │   ├── linked.ts           Linked lists and trees (loop history and memory)
     │   ├── linked.test.ts      Linked structure tests
-    │   ├── graph.ts            Graphs: detection, the algorithm's state, layout
+    │   ├── graph.ts            Graphs: detection, the algorithm's state, one layout per run
+    │   ├── graphLayout.ts      Graph layouts: layered (cycles, long edges, crossings), circle, force
     │   ├── graph.test.ts       Graph tests
     │   ├── output.ts           What a step printed (text, line, printed objects)
     │   ├── measurement.ts      What a Measure run reports, and formatting it
@@ -495,7 +496,7 @@ Say you want sets drawn as bubbles or tuples drawn differently:
 
 ### Add a structure-specific layout
 
-Binary trees (`measureBlock()` in `memoryView/trees.ts`) and graphs (`graphBoxes()` in `memoryView/graphs.ts`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. For bigger graphs, a layout library such as [ELK.js](https://github.com/kieler/elkjs) or [dagre](https://github.com/dagrejs/dagre) could replace `computeLayout()` in `graph.ts`. Everything downstream only needs a position per node.
+Binary trees (`measureBlock()` in `memoryView/trees.ts`) and graphs (`graphBoxes()` in `memoryView/graphs.ts`) already have their own layouts in the memory view, using two patterns. A tree is measured as one block that the column walk places like a single wide box, with each node then put at its slot inside it. A graph is a single box drawn in place of a host object, with the other members aliased to it. Either pattern works for a new shape. Graph layouts are our own, in `src/trace/graphLayout.ts` (see "Graphs" in how-it-works.md): pure, synchronous and deterministic, with no layout library. Everything downstream needs a position per node, and optionally the bends of long edges (`routes`) and which edges point up (`back`).
 
 ### Teach graphs a new kind of state
 

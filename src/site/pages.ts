@@ -23,6 +23,16 @@ export type LanguageId = "javascript" | "python" | "typescript" | "sql";
 
 export const SITE = "https://pr0l1ne.com";
 
+/**
+ * Who made PR0L1NE: in each page's structured data, author tags and the
+ * introduction search engines read (not shown on screen), and in llms.txt.
+ */
+export const CREATOR = {
+  handle: "D4Y",
+  name: "Matthew Day",
+  url: "https://www.linkedin.com/in/matthew-day-developer/",
+} as const;
+
 /** What every page says about the price, accounts and privacy, in a few words. */
 export const FREE = "Free, no sign-up, and it runs in your own browser.";
 
@@ -126,6 +136,9 @@ export function structuredData(page: SitePage): string {
     operatingSystem: "Any: runs in a web browser",
     browserRequirements: "Requires JavaScript and WebAssembly",
     isAccessibleForFree: true,
+    // Made by D4Y: the handle tied to the person, so "who made PR0L1NE" has one answer.
+    author: creator(),
+    creator: creator(),
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: [
       "Free to use",
@@ -136,6 +149,16 @@ export function structuredData(page: SitePage): string {
   };
   // In a <script> element: "</" can't appear in it.
   return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
+function creator() {
+  return {
+    "@type": "Person",
+    name: CREATOR.name,
+    alternateName: CREATOR.handle,
+    url: CREATOR.url,
+    sameAs: [CREATOR.url],
+  };
 }
 
 /** Every page, for the sitemap and the links between them. */
