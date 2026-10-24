@@ -4,7 +4,7 @@
 
 **See your code run.** Write Python, JavaScript or TypeScript, and PR0L1NE draws every variable, list, object and scope as it changes, step by step, right in your browser. Or write SQL, and watch a query work through its table one clause at a time.
 
-**[Try it: pr0l1ne.com](https://pr0l1ne.com)**. Nothing to install and no account; your code never leaves your browser.
+**[Try it: pr0l1ne.com](https://pr0l1ne.com)**. Free, no sign-up, nothing to install: it runs in your own browser, and your code never leaves it. Each language has its own page: [Python](https://pr0l1ne.com/python), [JavaScript](https://pr0l1ne.com/javascript), [TypeScript](https://pr0l1ne.com/typescript) and [SQL](https://pr0l1ne.com/sql).
 
 ![Bubble sort: each pass of the outer loop stacked, swaps drawn as crossing arrows](docs/bubble-loop.png)
 
@@ -18,6 +18,7 @@
 - **SQL, clause by clause.** Queries run on a real PostgreSQL in your browser, drawn in the order Postgres runs them (FROM, JOIN, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT): the table at each clause, every row kept or dropped and why, a line between each pair of rows a join matches, groups folding into rows with each aggregate's inputs written out, subqueries, WITH and UNION stepped through first, as parts of the statement, window functions with each row's frame, and WITH RECURSIVE pass by pass. Import a CSV file as a table of your own. Sample databases to start from, or make your own tables. See [SQL](docs/sql.md).
 - **Hints.** `# viz:` and `// viz:` comments tell the canvas how to draw things when its automatic choices aren't what you want.
 - **Share links.** **Share** copies a link with your program inside it: whoever opens it sees the code, ready to run in their browser's sandbox. Nothing is stored on a server.
+- **Your layout.** The code, memory and loop history stacked or side by side, with draggable dividers; minimize or maximize any window.
 - **Works on a phone.** Pick which one or two of the code, memory view and loop history to see.
 - **SVG or Canvas 2D.** The diagrams are SVG by default, or drawn with [PixiJS](https://pixijs.com) on a canvas, which pans and zooms smoothly around big drawings (Style → Rendering). **Save SVG** saves either as a vector file.
 

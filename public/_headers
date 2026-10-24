@@ -11,6 +11,15 @@
   Cache-Control: no-cache
 /index.html
   Cache-Control: no-cache
+# Each language's page (src/site/pages.ts).
+/javascript
+  Cache-Control: no-cache
+/python
+  Cache-Control: no-cache
+/typescript
+  Cache-Control: no-cache
+/sql
+  Cache-Control: no-cache
 
 # Safe defaults for every response.
 #

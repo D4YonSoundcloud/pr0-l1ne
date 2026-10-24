@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Alias, Plugin } from "vite";
+import { HOME_PAGE, LANGUAGE_PAGES, languageFromPath, pageHtml, sitemap } from "./src/site/pages";
 
 /**
  * Babel's core (used by the TypeScript worker) calls path.resolve() while
@@ -88,4 +89,39 @@ export function appHeaders(frameSrc: string): Record<string, string> {
   const policy = headers["Content-Security-Policy"];
   if (policy) headers["Content-Security-Policy"] = policy.replace("frame-src ", `frame-src ${frameSrc} `);
   return headers;
+}
+
+/**
+ * A page for each language (src/site/pages.ts): the built index.html again
+ * as python.html, javascript.html and so on, each with its own title,
+ * description, canonical address, link previews, structured data and
+ * introduction, so a search engine can list pr0l1ne.com/python on its own.
+ * Cloudflare Pages serves python.html at /python. The home page
+ * (index.html) gets its structured data, and the sitemap is written too.
+ *
+ * In `npm run dev`, /python and the others are served index.html (the app
+ * reads the language from the address either way).
+ */
+export function sitePages(): Plugin {
+  return {
+    name: "pr0l1ne:site-pages",
+    enforce: "post",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const [path, query] = (req.url ?? "").split("?");
+        if (languageFromPath(path)) req.url = `/index.html${query === undefined ? "" : `?${query}`}`;
+        next();
+      });
+    },
+    generateBundle(_options, bundle) {
+      const index = bundle["index.html"];
+      if (index?.type !== "asset") return;
+      const html = String(index.source);
+      index.source = pageHtml(html, HOME_PAGE);
+      for (const page of Object.values(LANGUAGE_PAGES)) {
+        this.emitFile({ type: "asset", fileName: `${page.path.slice(1)}.html`, source: pageHtml(html, page) });
+      }
+      this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemap() });
+    },
+  };
 }

@@ -7,11 +7,12 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { DEV_RUNNER, PREVIEW_RUNNER, runnerUrlFor } from "./src/sandbox/origins";
-import { appHeaders, nodePathAlias, traceValidators } from "./vite.shared";
+import { appHeaders, nodePathAlias, sitePages, traceValidators } from "./vite.shared";
 
 export default defineConfig(({ command }) => ({
-  // The trace schema as plain functions, for checking what the runner sends (trace/checkTrace.ts).
-  plugins: [traceValidators()],
+  // The trace schema as plain functions, for checking what the runner sends
+  // (trace/checkTrace.ts); and a page for each language (src/site/pages.ts).
+  plugins: [traceValidators(), sitePages()],
   define: {
     // The dev server talks to the runner `npm run dev` starts; a build, to
     // the one for where it's built (runnerUrlFor: live, a branch preview, or

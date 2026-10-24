@@ -108,7 +108,10 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically; builds the loop's scene and hands it to the window's renderer |
 | `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
 | `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
-| `src/app/layout.ts` | The two dividers (drag, arrow keys, double-click to reset) and swapping the editor and canvas sides |
+| `src/app/layout.ts` | The window layout on a wide screen: stacked or side by side, the two dividers (drag, arrow keys, double-click to reset), swapping the editor and canvas sides, and windows minimized or maximized to bars. It works out the grid tracks (`layoutTracks`) as CSS variables; styles.css applies them under "window layout" |
+| `src/app/routing.ts` | Each language's address (/python, /sql...): the address follows the language, Back and Forward switch it, and pr0l1ne.com shows the address of the language it opened |
+| `src/app/loadingCard.ts` | The card over the canvas, with a spinner, while Python or PostgreSQL downloads |
+| `src/site/pages.ts` | The site's pages for search engines: each language's title, description, canonical address, structured data and introduction, and the sitemap. The build (`sitePages` in vite.shared.ts) writes python.html and the others from index.html with them |
 | `src/app/mobileViews.ts` | On a phone: which one or two of the editor, memory view and loop history show (the Code / Memory / Loops bar); styles.css lays them out under "Phones and narrow windows" |
 | `src/app/shortcuts.ts` | The keys that work anywhere outside the editor: Run, Measure, Save, Save as, and the stepping keys |
 | `src/app/banner.ts` | The banner above the canvas, and its Run / Measure buttons |

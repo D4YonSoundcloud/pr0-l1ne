@@ -33,6 +33,7 @@
     "src/testing/**/*.ts",
     "src/trace/conformance.test.ts",
     "src/app/elements.test.ts",
-    "src/share/link.test.ts"
+    "src/share/link.test.ts",
+    "src/site/pages.test.ts"
   ]
 }

@@ -22,11 +22,19 @@ import type { AppStore } from "./state";
 // The step budget, how long tracing may take (Live or Run) and how long
 // loops are sampled are the tracing policy, trace/policy.ts.
 
+export interface Download {
+  name: string;
+  size: string;
+}
+
 /** Languages whose runtime is a download worth mentioning while it loads (gzipped, roughly). */
-const DOWNLOADS: Partial<Record<LanguageId, { name: string; size: string }>> = {
+const DOWNLOADS: Partial<Record<LanguageId, Download>> = {
   python: { name: "Python", size: "6 MB" },
   sql: { name: "PostgreSQL", size: "8 MB" },
 };
+
+/** What a language downloads the first time it runs, or null when it's ready at once. */
+export const downloadFor = (language: LanguageId): Download | null => DOWNLOADS[language] ?? null;
 
 /** How long typing must pause before a Live run. */
 export const LIVE_DELAY_MS = 600;
@@ -60,6 +68,12 @@ export interface RunOptions {
   reportCrash?(crash: TracerCrash): void;
   /** A run produced something to show: draw it. `updateMarks` is false when the editor's marks are already set. */
   onResult(updateMarks: boolean): void;
+  /**
+   * The current language's runner status changed (or the language did):
+   * `download` is what it's downloading, if it's a download worth showing
+   * (the loading card, app/loadingCard.ts).
+   */
+  onStatus?(status: RunnerStatus, download: Download | null): void;
   /** Make a language's runner. */
   createRunner?(language: LanguageId, onStatus: (status: RunnerStatus) => void): RunnerLike;
   setTimeout?(callback: () => void, ms: number): number;
@@ -142,6 +156,9 @@ export class RunController {
     const el = this.options.status;
     const download = DOWNLOADS[this.language];
     el.classList.toggle("is-error", status.kind === "failed");
+    // A spinner beside the text while the language loads (styles.css).
+    el.classList.toggle("is-loading", status.kind === "loading");
+    this.options.onStatus?.(status, download ?? null);
     el.title =
       status.kind === "loading" && download
         ? `${download.name} runs right here in your browser. It downloads once (about ${download.size}); after that your browser keeps a copy.`

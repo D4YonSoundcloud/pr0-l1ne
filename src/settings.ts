@@ -204,6 +204,12 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     split: number("split"),
     /** The memory window's share of the canvas height, in percent; null for the default. */
     canvasSplit: number("canvas-split"),
+    /** Side by side: the memory window's share of the canvas width, in percent; null for the default. */
+    columnSplit: number("column-split"),
+    /** On a wide screen: memory over loop history beside the code, or all three side by side (see app/layout.ts). */
+    layoutMode: choice("layout-mode", ["stacked", "columns"] as const, "stacked"),
+    /** The windows folded to bars, as "memory,loop" (see app/layout.ts); null or "" for none. */
+    collapsed: text("collapsed"),
     /** On a phone, the one or two windows shown, as "editor,memory" (see app/mobileViews.ts); null for the default. */
     mobileViews: text("mobile-views"),
 

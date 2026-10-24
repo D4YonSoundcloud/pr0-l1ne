@@ -3,14 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PR0L1NE</title>
+    <!-- The home page's. Each language's page (python.html, served at /python...) gets its own title,
+         description, address and structured data at build time: src/site/pages.ts and vite.shared.ts (sitePages). -->
+    <title>PR0L1NE: See Your Code Run | Python, JavaScript, TypeScript and SQL Visualizer</title>
     <link rel="canonical" href="https://pr0l1ne.com/" />
-    <meta name="description" content="See your code run. Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <meta name="description" content="Step through Python, JavaScript, TypeScript and SQL and watch memory, loops and queries change, step by step. Free, no sign-up, runs in your own browser." />
     <!-- Link previews (Open Graph, X/Twitter). The image is public/og-image.png, 1200 × 630. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="PR0L1NE" />
     <meta property="og:title" content="PR0L1NE: see your code run" />
-    <meta property="og:description" content="Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <meta property="og:description" content="Step through Python, JavaScript, TypeScript and SQL and watch memory, loops and queries change, step by step. Free, no sign-up, runs in your own browser." />
     <meta property="og:url" content="https://pr0l1ne.com/" />
     <meta property="og:image" content="https://pr0l1ne.com/og-image.png" />
     <meta property="og:image:type" content="image/png" />
@@ -19,9 +21,10 @@
     <meta property="og:image:alt" content="PR0L1NE over a memory diagram of a route planner: variables, a graph of places and arrows between them." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="PR0L1NE: see your code run" />
-    <meta name="twitter:description" content="Step through Python, JavaScript and TypeScript programs and watch memory, loops and complexity change, right in your browser." />
+    <meta name="twitter:description" content="Step through Python, JavaScript, TypeScript and SQL and watch memory, loops and queries change, step by step. Free, no sign-up, runs in your own browser." />
     <meta name="twitter:image" content="https://pr0l1ne.com/og-image.png" />
     <meta name="twitter:image:alt" content="PR0L1NE over a memory diagram of a route planner: variables, a graph of places and arrows between them." />
+    <script type="application/ld+json" id="structured-data">{}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -33,6 +36,7 @@
     <div class="app">
       <header class="toolbar">
         <h1 class="brand">PR0L1NE</h1>
+        <p class="tagline" title="PR0L1NE runs your code here, in this browser tab: nothing is sent to a server">Free · No sign-up · Runs in your browser</p>
         <!-- Laid out as part of the toolbar on a wide screen (display: contents); one row that scrolls sideways on a phone. -->
         <div class="toolbar-actions">
         <label class="field">
@@ -63,6 +67,10 @@
         </label>
         <button id="complexity" class="button cx-chip" type="button" aria-expanded="false" aria-controls="complexity-panel">Complexity</button>
         <button id="style" class="button style-button" type="button" aria-expanded="false" aria-controls="style-panel" title="Colors, backgrounds, grid and animation for the canvas">Style</button>
+        <button id="layout-mode" class="button icon layout-mode" type="button" aria-pressed="false" aria-label="Side by side" title="Put the code, memory and loop history side by side">
+          <svg class="icon-columns" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M6 2.5v11M10 2.5v11" /></svg>
+          <svg class="icon-stacked" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M7 2.5v11M7 8h7.5" /></svg>
+        </button>
         <button id="swap" class="button icon swap" type="button" aria-pressed="false" aria-label="Swap editor and canvas" title="Swap editor and canvas">⇄</button>
         <a id="docs" class="button quiet docs-link" href="/docs/user-guide.html" target="_blank" rel="noopener" title="The user guide and how PR0L1NE works (opens in a new tab)">Docs</a>
         </div>
@@ -78,6 +86,14 @@
 
       <main class="workspace" id="workspace">
         <section class="editor-pane" id="editor-pane" aria-label="Code editor">
+          <button type="button" class="window-bar" data-window="editor" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Code</span></button>
+          <div class="pane-head editor-head">
+            <span class="pane-name">Code</span>
+            <div class="window-controls" role="group" aria-label="Window size">
+              <button type="button" class="window-button" data-window="editor" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
+              <button type="button" class="window-button" data-window="editor" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
+            </div>
+          </div>
           <div id="editor" class="editor"></div>
           <!-- Shown until the app's script has loaded (main.ts removes .is-booting). -->
           <div class="boot-editor" aria-hidden="true">
@@ -101,8 +117,17 @@
 
         <section class="canvas-pane" id="canvas-pane" aria-label="Visualization">
           <div id="banner" class="banner" hidden></div>
+          <!-- While Python or PostgreSQL downloads (app/loadingCard.ts). -->
+          <div id="loading-card" class="loading-card" hidden>
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <p class="loading-title">Downloading <span class="loading-what">Python</span></p>
+            <div class="loading-bar" aria-hidden="true"><span></span></div>
+            <p class="loading-detail">About <span class="loading-size">6 MB</span>, and only the first time: your browser keeps a copy.</p>
+            <p class="loading-free">Free, no sign-up, and it runs in your own browser: your code never leaves it.</p>
+          </div>
           <div class="canvas" id="canvas">
             <section class="canvas-section" id="memory-section" aria-labelledby="memory-title">
+              <button type="button" class="window-bar" data-window="memory" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Memory</span></button>
               <div class="section-head">
                 <h2 class="section-title" id="memory-title">Memory</h2>
                 <div class="segmented" role="group" aria-label="How references are drawn">
@@ -119,11 +144,16 @@
                 <select id="size-model" class="size-model" aria-label="How memory sizes are counted" hidden></select>
                 <span id="memory-total" class="memory-total" hidden></span>
                 <span class="section-hint">Drag boxes to rearrange them</span>
+                <div class="window-controls" role="group" aria-label="Window size">
+                  <button type="button" class="window-button" data-window="memory" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
+                  <button type="button" class="window-button" data-window="memory" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
+                </div>
               </div>
               <div id="memory"></div>
             </section>
             <div id="canvas-divider" class="divider horizontal" role="separator" aria-orientation="horizontal" aria-label="Resize memory and loop history" aria-valuemin="15" aria-valuemax="85" aria-valuenow="55" tabindex="0" title="Drag to resize. Double-click to reset."></div>
             <section class="canvas-section" id="loop-section" aria-labelledby="loop-title">
+              <button type="button" class="window-bar" data-window="loop" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Loop history</span></button>
               <div class="section-head">
                 <h2 class="section-title" id="loop-title">Loop history</h2>
                 <div class="segmented" role="group" aria-label="How iterations are shown">
@@ -137,6 +167,10 @@
                 <label class="toggle small" title="Draw each list, dict, linked list or graph on its own line, one above another, with the iteration and its variables at the middle">
                   <input id="loop-vertical" type="checkbox" /> One above another
                 </label>
+                <div class="window-controls" role="group" aria-label="Window size">
+                  <button type="button" class="window-button" data-window="loop" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
+                  <button type="button" class="window-button" data-window="loop" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
+                </div>
               </div>
               <div id="loop"></div>
             </section>
@@ -171,6 +205,20 @@
       </form>
     </dialog>
     <div id="announce" class="visually-hidden" role="status" aria-live="polite"></div>
+    <!-- What the page is, for search engines and screen readers. Each language's page has its own (src/site/pages.ts). -->
+    <section class="site-intro visually-hidden" aria-labelledby="intro-heading">
+      <h2 id="intro-heading">See your code run</h2>
+      <p id="intro-text">PR0L1NE steps through Python, JavaScript and TypeScript programs and draws every variable, list, object and loop as it changes, and steps through SQL queries one clause at a time on a real PostgreSQL. Free, no sign-up, and it runs in your own browser.</p>
+      <nav aria-label="Visualizers">
+        <ul>
+          <li><a href="/python">Python visualizer</a></li>
+          <li><a href="/javascript">JavaScript visualizer</a></li>
+          <li><a href="/typescript">TypeScript visualizer</a></li>
+          <li><a href="/sql">SQL visualizer</a></li>
+          <li><a href="/docs/user-guide.html">User guide</a></li>
+        </ul>
+      </nav>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -23,7 +23,8 @@
     "playwright.config.ts",
     "src/trace/virtual-trace-validators.d.ts",
     "src/sql/wasm-url.d.ts",
-    "src/share/link.test.ts"
+    "src/share/link.test.ts",
+    "src/site/pages.test.ts"
   ],
   "exclude": []
 }

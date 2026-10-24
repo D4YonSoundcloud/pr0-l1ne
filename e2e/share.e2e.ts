@@ -102,7 +102,8 @@ test("Share makes a link that opens the same program", async ({ page, context })
   const url = (await shown.count())
     ? await shown.inputValue()
     : await page.evaluate(() => (window as unknown as { copied: string[] }).copied[0]);
-  expect(url).toMatch(/^http:\/\/localhost:4173\/#v1\./);
+  // At the language's own page (app/routing.ts).
+  expect(url).toMatch(/^http:\/\/localhost:4173\/javascript#v1\./);
   const other = await context.newPage();
   await other.goto(url);
   await expect(other.locator("#banner")).toContainText("came from a share link");

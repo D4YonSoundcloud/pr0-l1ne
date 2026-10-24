@@ -127,14 +127,14 @@ A Measure result or its progress gets the limits pass. The tests' own check (`tr
 **Share** copies a link with the program inside it ([`share/link.ts`](../src/share/link.ts)):
 
 ```
-https://pr0l1ne.com/#v1.bVJLbsIwEN1zitkAkvA...
-                    └┬┘└───────── the program, packed ─────────┘
-                  version
+https://pr0l1ne.com/python#v1.bVJLbsIwEN1zitkAkvA...
+                          └┬┘└───────── the program, packed ─────────┘
+                        version
 ```
 
 Packing: `{"language": "python", "code": "..."}` as JSON, compressed with the browser's own deflate (`CompressionStream("deflate-raw")`), then written in base64url, whose letters, digits, `-` and `_` go in a link as they are. Base64 adds back a third of what compression saves, so short programs barely shrink, but every example's link is under 1,500 characters, and code repeats enough that long programs pack to under half. Links are capped at 32,000 characters (`MAX_FRAGMENT`), which chat apps and forms keep whole.
 
-**Why after the `#`.** The fragment is the one part of a link the browser never sends: opening `pr0l1ne.com/#v1....` asks Cloudflare for `pr0l1ne.com/` only. So the program goes from the person who shared it straight to whoever opens it, and nothing is stored, logged or moderated anywhere. The cost: a link can't be edited or deleted (the program *is* the link), and link previews in chat apps are the standard PR0L1NE card, since they can't see the program either. Short links stored on a server, later, would add both.
+**Why after the `#`.** The fragment is the one part of a link the browser never sends: opening `pr0l1ne.com/python#v1....` asks Cloudflare for `pr0l1ne.com/python` only (a link made before each language had its own page, `pr0l1ne.com/#v1....`, still opens). So the program goes from the person who shared it straight to whoever opens it, and nothing is stored, logged or moderated anywhere. The cost: a link can't be edited or deleted (the program *is* the link), and link previews in chat apps are the standard PR0L1NE card, since they can't see the program either. Short links stored on a server, later, would add both.
 
 **Opening one is careful** (`decodeShare`), because the link came from someone else: the version (only `v1.`; a later format would be `v2.`, and `v1.` keeps working), the characters, the length, the size after decompressing (read as it streams, stopping at 1 MB, so a tiny link can't unpack into gigabytes), valid UTF-8, a JSON object, a language the app has, and code that's text. Fields a later `v1` might add are ignored. Any failure is a `ShareLinkError` saying what's wrong in the person's words.
 

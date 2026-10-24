@@ -15,6 +15,7 @@ import { findElements } from "./app/elements";
 import { escapeHtml } from "./app/html";
 import { showLanguageKind } from "./app/languageKind";
 import { LayoutController } from "./app/layout";
+import { LoadingCard } from "./app/loadingCard";
 import { LoopController } from "./app/loopController";
 import { MeasureController } from "./app/measureController";
 import { MemoryController } from "./app/memoryController";
@@ -22,6 +23,7 @@ import { MobileViewsController } from "./app/mobileViews";
 import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
 import { RendererSwitch } from "./app/rendererSwitch";
+import { LanguageRoutes, languageFromPath } from "./app/routing";
 import { RunController } from "./app/runController";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
 import { ShareController } from "./app/shareController";
@@ -36,6 +38,10 @@ import { createSettings, type RendererKind } from "./settings";
 
 /** Everything remembered between visits (see settings.ts). */
 const settings = createSettings();
+// A language's own page (/python...): that language, which is then the one
+// used last (so pr0l1ne.com opens it next time; see app/routing.ts).
+const routed = languageFromPath(window.location.pathname);
+if (routed) settings.language.set(routed);
 const savedCode = (id: LanguageId) => settings.code(id).get() ?? LANGUAGES[id].examples[0].code;
 
 // Saved programs, and the app's state (the language, the open program, the trace...).
@@ -68,6 +74,7 @@ function useRenderer(kind: RendererKind): Promise<void> {
   });
 }
 
+const loadingCard = new LoadingCard(els.loadingCard);
 const banner = new Banner(els.banner, {
   run: () => runNow(),
   measure: () => {
@@ -137,6 +144,7 @@ const runs = new RunController({
   editor,
   setBanner,
   onResult: (updateMarks) => view.render(updateMarks),
+  onStatus: (status, download) => loadingCard.show(status, download),
 });
 
 function runNow(): void {
@@ -226,14 +234,27 @@ for (const lang of Object.values(LANGUAGES)) els.language.append(new Option(lang
 els.language.value = currentLanguage();
 els.language.addEventListener("change", () => {
   if (!isLanguageId(els.language.value) || els.language.value === currentLanguage()) return;
+  switchLanguage(els.language.value);
+  routes.show(currentLanguage());
+});
+
+/** Switch the editor to another language (the language menu, or Back to another language's page). */
+function switchLanguage(language: LanguageId): void {
   // The controllers catch up themselves (app.watch): the trace, Measure, the canvas, the Open menu...
-  app.setLanguage(els.language.value);
+  app.setLanguage(language);
+  els.language.value = language;
   showLanguageKind(LANGUAGES[currentLanguage()].kind);
   editor.setLanguage(LANGUAGES[currentLanguage()].monacoId, savedCode(currentLanguage()));
   programsController.updateUI(); // the unsaved-changes dot, for this language's code
   setBanner(null);
   view.render();
   runNow();
+}
+
+// Each language has its own page, /python and so on: the address follows the language, and Back and Forward switch it.
+const routes = new LanguageRoutes({
+  current: currentLanguage,
+  switchTo: (language) => switchLanguage(language),
 });
 
 // ---------------------------------------------------------------- the rest of the page
@@ -265,6 +286,7 @@ const shares = new ShareController({
       editor.setCode(program.code);
     }
     programsController.updateUI();
+    routes.show(program.language, { replace: true });
     view.render();
   },
 });
@@ -313,11 +335,14 @@ installShortcuts({
   dialogOpen: () => els.saveDialog.open,
   step: (event) => playback.handleKey(event),
 });
+// Stacked or side by side, the dividers, and windows folded to bars.
 const layout = new LayoutController(els, settings);
 // On a phone: which one or two windows show (styles.css lays them out).
 new MobileViewsController(els, settings.mobileViews);
 
 view.render();
+// pr0l1ne.com shows the address of the language it opened (pr0l1ne.com/python).
+routes.start();
 // Opened with a share link: show its program, and run nothing until asked. Otherwise run what's in the editor.
 void shares.openFromLocation().then((opened) => {
   if (!opened) runNow();

@@ -56,6 +56,8 @@ export function findElements(doc: Document = document) {
     editorPane: byId<HTMLElement>("editor-pane"),
     canvasPane: byId<HTMLElement>("canvas-pane"),
     swap: byId<HTMLButtonElement>("swap"),
+    layoutMode: byId<HTMLButtonElement>("layout-mode"),
+    loadingCard: byId<HTMLDivElement>("loading-card"),
     style: byId<HTMLButtonElement>("style"),
     complexity: byId<HTMLButtonElement>("complexity"),
     measure: byId<HTMLButtonElement>("measure"),

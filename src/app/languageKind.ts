@@ -25,6 +25,9 @@ export function showLanguageKind(kind: LanguageKind, doc: Document = document): 
   };
   set("#memory-title", titles.memory);
   set("#loop-title", titles.loop);
+  // A folded window's bar (app/layout.ts) shows its name too.
+  set("#memory-section .window-bar-label", titles.memory);
+  set("#loop-section .window-bar-label", titles.loop);
   set('.view-choice[data-view="memory"]', titles.memoryView);
   set('.view-choice[data-view="loop"]', titles.loopView);
 }

@@ -12,11 +12,13 @@ Big inputs still trace: long loops are **sampled** (their first passes, passes a
 
 It also estimates your code's **time and space complexity** (O(n²), O(n log n), O(V + E)) from the shape of the code, checks the estimate against the run, and labels every loop and function in the editor with what it costs.
 
-It runs entirely in your browser, so there's no server to set up. Python executes in a real CPython interpreter compiled to WebAssembly ([Pyodide](https://pyodide.org)). JavaScript runs in the browser's own engine, after PR0L1NE rewrites it to report on itself as it runs. TypeScript has its types removed and then runs the same way.
+It's free, there's no sign-up, and it runs entirely in your own browser, so there's no server to set up and your code never leaves your computer. Python executes in a real CPython interpreter compiled to WebAssembly ([Pyodide](https://pyodide.org)). JavaScript runs in the browser's own engine, after PR0L1NE rewrites it to report on itself as it runs. TypeScript has its types removed and then runs the same way.
 
 ## Choosing a language
 
-The menu at the left of the toolbar switches between **Python**, **JavaScript**, **TypeScript** and **SQL**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python; the status in the toolbar reads "Downloading Python (6 MB)…" until it's ready, and your browser keeps a copy after that. SQL's database (PostgreSQL, about 8 MB) is downloaded the same way, the first time you pick SQL.
+The menu at the left of the toolbar switches between **Python**, **JavaScript**, **TypeScript** and **SQL**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python: while it loads, a card over the canvas shows a spinner and a moving bar with what's downloading and how big it is, and the status in the toolbar reads "Downloading Python (6 MB)…" beside a small spinner. Your browser keeps a copy after that. SQL's database (PostgreSQL, about 8 MB) is downloaded the same way, the first time you pick SQL.
+
+Each language has its own address: [pr0l1ne.com/javascript](https://pr0l1ne.com/javascript), [/python](https://pr0l1ne.com/python), [/typescript](https://pr0l1ne.com/typescript) and [/sql](https://pr0l1ne.com/sql). The address changes as you switch language, so you can bookmark or link to a language, and the browser's Back button goes back to the language before. [pr0l1ne.com](https://pr0l1ne.com) itself opens the language you used last (JavaScript the first time) and shows its address. Share links keep working at any of them.
 
 SQL is drawn differently from the other three: a query is stepped through one clause at a time, with the table at each step, instead of variables and loops. [SQL](sql.md) has the details. Everything below is about Python, JavaScript and TypeScript, except where it says otherwise.
 
@@ -106,11 +108,22 @@ If you're mid-edit and the code has a syntax error, the canvas keeps showing the
 
 ## Layout
 
+There are two layouts on a wide screen. **Stacked** (the default) puts the code on one side and the memory view over the loop history on the other. **Side by side** puts all three in columns: the code, then memory, then loop history (for SQL: the code, Tables, Query steps), which suits a wide monitor. The layout button next to **⇄** in the toolbar switches between them, and your choice is remembered.
+
 The **⇄** button at the right end of the toolbar swaps the editor and canvas, so the canvas can be on the left if you prefer. It's also in the command palette as "AlgoViz: Swap Editor and Canvas". Your choice is remembered.
 
 Drag the divider between the panels to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the default size. The editor keeps its width when you swap sides, and the width is remembered too.
 
-Inside the canvas, **Memory** and **Loop history** are separate sections with a divider of their own. It works the same way: drag it, use `↑`/`↓` when it's focused, or double-click to reset. Its position is remembered.
+Inside the canvas, **Memory** and **Loop history** are separate sections with a divider of their own. It works the same way: drag it, use `↑`/`↓` when it's focused (`←`/`→` side by side), or double-click to reset. Its position is remembered, separately for each layout.
+
+### Maximizing and minimizing windows
+
+Each window (the code, memory and loop history) has two buttons at the right end of its header:
+
+- **Minimize** (–) folds the window to a thin bar with its name, and the other two windows take its room.
+- **Maximize** (□) folds the other two windows to bars, so this one gets the whole workspace. Press it again (it shows two overlapping squares while the window is maximized) to bring all three back.
+
+Click a bar to open its window again. One window always stays open: minimizing the only one still open brings the other two back instead. The Style, Complexity and Measure panels still open while the code window is folded. Which windows are folded is remembered.
 
 ### On a phone
 
@@ -121,7 +134,7 @@ A phone screen can't fit the editor, the memory view and the loop history at onc
 
 It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
 
-This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
+The layout button and the window buttons aren't shown on a phone, which has this layout instead. This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
 
 ## Styling the canvas
 

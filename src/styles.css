@@ -107,6 +107,8 @@ body {
 .app {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* Nothing in the toolbar can make the page wider than the window. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100dvh;
 }
 
@@ -174,7 +176,8 @@ body {
 .editor-pane {
   position: relative;
   display: grid;
-  grid-template-rows: 1fr auto;
+  /* A header (its name and window buttons), the editor, the printed output. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   background: var(--editor-bg);
@@ -183,6 +186,7 @@ body {
 /* Monaco sizes itself to this element (automaticLayout), so it must have a
    definite size: the grid row gives it one. */
 .editor {
+  grid-row: 2;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -803,6 +807,7 @@ select {
 }
 
 .console {
+  grid-row: 3;
   border-top: 1px solid #2c344b;
   max-height: 28vh;
   display: grid;
@@ -1808,14 +1813,339 @@ select {
   border-top: 1px solid #2c344b;
 }
 
+/* ---------------------------------------------------------------- window layout (app/layout.ts)
+
+   Stacked (memory over loop history, beside the code) or side by side (all
+   three in columns), and windows folded to bars. layout.ts sets the grid
+   tracks as CSS variables and classes; they only apply on a wide screen
+   (phones: "small screens", below). */
+
+/* The editor's header: its name, and its window buttons. */
+.editor-head {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 6px 2px 14px;
+  border-bottom: 1px solid #2c344b;
+}
+.pane-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--chrome-muted);
+}
+
+/* Minimize and maximize, at the end of each window's header. */
+.window-controls {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.window-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--paper-ink-faint);
+  cursor: pointer;
+}
+.window-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.window-button:hover,
+.window-button:focus-visible {
+  color: var(--paper-ink);
+  border-color: var(--paper-edge);
+  background: color-mix(in srgb, var(--paper) 80%, var(--ink));
+}
+.editor-head .window-button {
+  color: var(--chrome-muted);
+}
+.editor-head .window-button:hover,
+.editor-head .window-button:focus-visible {
+  color: #fff;
+  border-color: #343c55;
+  background: #232a3d;
+}
+.window-button .icon-restore,
+.window-button.is-restore .icon-max {
+  display: none;
+}
+.window-button.is-restore .icon-restore {
+  display: block;
+}
+
+/* A folded window: a bar with its name. Clicking it opens the window again. */
+.window-bar {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 12px;
+  border: 0;
+  background: var(--paper-band, #1c2233);
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.window-bar::before {
+  /* An open-the-window chevron. */
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+.window-bar:hover,
+.window-bar:focus-visible {
+  background: color-mix(in srgb, var(--paper) 78%, var(--ink));
+}
+.window-bar:focus-visible {
+  outline-offset: -3px;
+}
+.is-upright > .window-bar {
+  padding: 12px 0;
+  writing-mode: vertical-rl;
+}
+.is-upright > .window-bar::before {
+  transform: rotate(-45deg);
+}
+.editor-pane > .window-bar {
+  background: #1a2030;
+  color: var(--chrome-text);
+}
+.editor-pane > .window-bar:hover,
+.editor-pane > .window-bar:focus-visible {
+  background: #232a3d;
+}
+
+/* The toolbar's layout button: three columns, or stacked. */
+.layout-mode svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  vertical-align: -3px;
+}
+.layout-mode .icon-stacked,
+.layout-mode[aria-pressed="true"] .icon-columns {
+  display: none;
+}
+.layout-mode[aria-pressed="true"] .icon-stacked {
+  display: inline;
+}
+#layout-mode {
+  order: 2;
+}
+
+/* A divider whose neighbor is folded has nothing to resize. */
+.divider.is-inactive {
+  visibility: hidden;
+}
+
+@media (min-width: 821px) and (min-height: 501px) {
+  .workspace,
+  .workspace.is-swapped {
+    grid-template-columns: var(--workspace-columns, var(--split) 6px 1fr);
+  }
+  .canvas {
+    grid-template-rows: var(--canvas-rows, minmax(0, var(--canvas-split)) 6px minmax(0, 1fr));
+    grid-template-columns: var(--canvas-columns, minmax(0, 1fr));
+  }
+  /* Side by side: the divider between memory and loop history stands upright. */
+  .canvas.is-columns > .divider.horizontal {
+    cursor: col-resize;
+    border-block: 0;
+    border-inline: 1px solid color-mix(in srgb, var(--paper) 70%, var(--ink));
+  }
+
+  /* Folded: only the bar shows. The editor's panels (Style, Complexity,
+     Measure) stay where they open, at their own width. */
+  .is-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .is-collapsed > .window-bar {
+    display: flex;
+    grid-row: 1 / -1;
+  }
+  .canvas-section.is-collapsed > :not(.window-bar),
+  .editor-pane.is-collapsed > :is(.editor-head, .editor, .console, .boot-editor, noscript) {
+    display: none;
+  }
+  .editor-pane.is-collapsed > .style-panel {
+    width: 370px;
+  }
+  .workspace.is-swapped .editor-pane.is-collapsed > .style-panel {
+    left: auto;
+    right: 10px;
+  }
+  /* Both canvas windows folded (a strip of two bars): a line between them. */
+  .canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed > .window-bar {
+    box-shadow: inset 0 1px 0 var(--paper-edge);
+  }
+  .canvas.is-columns > .canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed > .window-bar {
+    box-shadow: inset 1px 0 0 var(--paper-edge);
+  }
+}
+
+/* "Free · No sign-up · Runs in your browser", beside the name when there's room. */
+.tagline {
+  display: none;
+  margin: 0 4px 0 -2px;
+  font-size: 12px;
+  color: var(--chrome-muted);
+  white-space: nowrap;
+}
+@media (min-width: 1560px) {
+  .tagline {
+    display: block;
+  }
+}
+
+/* ---------------------------------------------------------------- loading (app/loadingCard.ts)
+
+   While Python or PostgreSQL downloads: a card over the canvas with a
+   spinner and a moving bar, and a small spinner beside the toolbar status. */
+.loading-card {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter: blur(2px);
+  text-align: center;
+}
+.loading-card[hidden] {
+  display: none;
+}
+/* Both canvas windows folded to bars: a small card in the corner instead. */
+.canvas-pane:has(.canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed) .loading-card {
+  position: fixed;
+  inset: auto 16px 72px auto;
+  width: min(340px, calc(100vw - 32px));
+  border: 1px solid var(--paper-edge);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  background: var(--paper);
+}
+.loading-card > * {
+  max-width: 34rem;
+}
+.loading-spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid color-mix(in srgb, var(--highlight) 22%, transparent);
+  border-top-color: var(--highlight);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.loading-title {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--paper-ink);
+}
+.loading-bar {
+  position: relative;
+  width: min(280px, 80%);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--highlight) 18%, transparent);
+}
+.loading-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--highlight);
+  animation: loading-slide 1.3s ease-in-out infinite;
+}
+.loading-detail {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--paper-ink);
+}
+.loading-free {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--paper-ink-faint);
+}
+.status.is-loading::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loading-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+/* Reduced motion: the spinners pulse slowly instead of turning, and the bar stays still. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner,
+  .status.is-loading::before {
+    animation: loading-pulse 2s ease-in-out infinite;
+  }
+  .loading-bar > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+@keyframes loading-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* ------------------------------------------------------------ small screens */
 
-/* Below laptop width the toolbar doesn't fit on one row: let it wrap. */
-@media (max-width: 1240px) {
-  .toolbar {
-    flex-wrap: wrap;
-    row-gap: 8px;
-  }
+/* When the toolbar doesn't fit on one row (below a wide desktop), it wraps. */
+.toolbar {
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 /* Phones (upright or on their side) and narrow windows. The editor, memory view and loop history can't
@@ -1868,7 +2198,10 @@ select {
   #style {
     order: 0;
   }
-  #swap {
+  #swap,
+  #layout-mode,
+  .window-controls,
+  .editor-head {
     display: none;
   }
   #programs {
@@ -2564,7 +2897,7 @@ select {
 }
 .is-booting .boot-editor {
   position: absolute;
-  inset: 0 0 auto 0;
+  inset: 30px 0 auto 0;
   display: grid;
   gap: 12px;
   padding: 18px 20px 0 64px;
@@ -2625,8 +2958,8 @@ select {
 :is(
   .measure-group,
   #complexity,
-  #memory-section .section-head > :not(.section-title),
-  #loop-section .section-head > :not(.section-title)
+  #memory-section .section-head > :not(.section-title, .window-controls),
+  #loop-section .section-head > :not(.section-title, .window-controls)
 ) {
   display: none !important;
 }

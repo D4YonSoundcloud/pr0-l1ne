@@ -1,0 +1,6 @@
+# Every page may be crawled. The app's pages, and the docs' own sitemap.
+User-agent: *
+Allow: /
+
+Sitemap: https://pr0l1ne.com/sitemap.xml
+Sitemap: https://pr0l1ne.com/docs/sitemap.xml
