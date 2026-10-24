@@ -132,6 +132,29 @@ describe("the group drawing", () => {
   });
 });
 
+describe("parts of a statement", () => {
+  it("are indented under their names in the pipeline, and named above their clause", async () => {
+    const trace = await traceOf(
+      "-- viz: database shop\nSELECT city FROM customers UNION SELECT category FROM products;",
+    );
+    const at = trace.sql!.stages.findIndex((s) => s.kind === "combine");
+    const steps = sqlPipelineDrawing(sqlPipelineScene(trace, at)!);
+    expect(all(steps, ".sql-part-label").map((t) => t.textContent)).toEqual([
+      "UNION: the first query",
+      "UNION: the second query",
+    ]);
+    const xs = all(steps, ".sql-stage-card").map((r) => Number(r.getAttribute("x")));
+    expect(xs).toEqual([52, 52, 52, 52, 24]);
+    const chips = all(steps, ".sql-stage-keyword").map((t) => t.textContent);
+    expect(chips.at(-1)).toBe("UNION");
+    // The combine step: both queries' rows, then the rows they make.
+    const combine = sqlTableDrawing(sqlTableScene(trace, at)!);
+    expect(all(combine, ".sql-table")).toHaveLength(3);
+    const first = sqlTableDrawing(sqlTableScene(trace, 1)!);
+    expect(all(first, ".sql-part-label")[0].textContent).toBe("UNION: the first query");
+  });
+});
+
 describe("the pipeline drawing", () => {
   it("numbers the statements, leaving out the sample database", async () => {
     const trace = await traceOf("-- viz: database shop\nSELECT 1;\nSELECT name FROM products;");

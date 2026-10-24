@@ -293,6 +293,13 @@ export function sqlTableDrawing(scene: SqlTableScene): Mark {
   const svg = s("svg", { class: "memory-svg sql-svg", xmlns: "http://www.w3.org/2000/svg" });
   const caption = s("g", { class: "sql-caption" });
   let y = MARGIN + 8;
+  // A part of the statement (a WITH query, a subquery...): which, above its clause.
+  if (stage.part) {
+    caption.append(
+      s("text", { class: "sql-part-label", x: MARGIN, y, "dominant-baseline": "central" }, stage.part.label),
+    );
+    y += 20;
+  }
   caption.append(s("text", { class: "sql-clause", x: MARGIN, y, "dominant-baseline": "central" }, stage.clause));
   y += 22;
   caption.append(s("text", { class: "sql-summary", x: MARGIN, y, "dominant-baseline": "central" }, stage.summary));
@@ -308,7 +315,7 @@ export function sqlTableDrawing(scene: SqlTableScene): Mark {
   let x = MARGIN;
   let bottom = top;
   const tables = s("g", { class: "sql-tables" });
-  if (stage.kind === "join" && stage.tables.length === 3) {
+  if ((stage.kind === "join" || stage.kind === "combine") && stage.tables.length === 3) {
     const placed = joinTables(stage, top, tables);
     x = placed.right + TABLE_GAP;
     bottom = placed.bottom;
@@ -401,6 +408,8 @@ function joinTables(stage: SqlTableScene["stage"], top: number, layer: Mark): { 
 const CARD_H = 50;
 const CARD_GAP = 22;
 const CHIP_W = 92;
+/** How far a nested part's stages are indented, per level. */
+const PART_INDENT = 28;
 
 /** The keyword a stage's chip shows. */
 function chip(scene: SqlPipelineScene, kind: string, clause: string): string {
@@ -427,6 +436,10 @@ function chip(scene: SqlPipelineScene, kind: string, clause: string): string {
       return "AGGREGATE";
     case "having":
       return "HAVING";
+    case "subquery":
+      return "SUBQUERY";
+    case "combine":
+      return clause.split(" ")[0];
     case "join":
       return /^(?:NATURAL )?((?:LEFT |RIGHT |FULL |CROSS )?JOIN)/.exec(clause)?.[1] ?? "JOIN";
     default:
@@ -456,24 +469,33 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
   const textW = Math.max(200, ...texts.map((t) => Math.max(textWidth(t.clause, 12.5), uiTextWidth(t.summary, 12))));
   const rowsW = Math.max(0, ...texts.map((t) => uiTextWidth(t.rows, 12)));
   const cardW = CHIP_W + 14 + Math.min(textW, 600) + 16 + rowsW + 14;
-  width = Math.max(width, cardW);
+  const deepest = Math.max(0, ...scene.stages.map(({ stage }) => stage.part?.depth ?? 0));
+  width = Math.max(width, cardW + deepest * PART_INDENT);
 
   scene.stages.forEach(({ stage, state }, i) => {
     const t = texts[i];
+    // A part of the statement (a WITH query, a subquery, a UNION's side):
+    // indented by how deeply it's nested, under its name where it starts.
+    const left = MARGIN + (stage.part?.depth ?? 0) * PART_INDENT;
+    const partLabel = stage.part?.label ?? "";
+    if (partLabel && partLabel !== (scene.stages[i - 1]?.stage.part?.label ?? "")) {
+      svg.append(s("text", { class: "sql-part-label", x: left, y: y + 4, "dominant-baseline": "central" }, partLabel));
+      y += 20;
+    }
     const top = y;
     const g = s("g", {
       class: `sql-stage loop-row is-${state}`,
       "data-top": top,
       "data-bottom": top + CARD_H,
     });
-    g.append(s("rect", { class: "sql-stage-card", x: MARGIN, y: top, width: cardW, height: CARD_H, rx: 6 }));
-    g.append(s("rect", { class: "sql-stage-chip", x: MARGIN + 8, y: top + 13, width: CHIP_W - 8, height: 24, rx: 4 }));
+    g.append(s("rect", { class: "sql-stage-card", x: left, y: top, width: cardW, height: CARD_H, rx: 6 }));
+    g.append(s("rect", { class: "sql-stage-chip", x: left + 8, y: top + 13, width: CHIP_W - 8, height: 24, rx: 4 }));
     g.append(
       s(
         "text",
         {
           class: "sql-stage-keyword",
-          x: MARGIN + 8 + (CHIP_W - 8) / 2,
+          x: left + 8 + (CHIP_W - 8) / 2,
           y: top + 25,
           "text-anchor": "middle",
           "dominant-baseline": "central",
@@ -481,7 +503,7 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
         chip(scene, stage.kind, stage.clause),
       ),
     );
-    const tx = MARGIN + CHIP_W + 14;
+    const tx = left + CHIP_W + 14;
     const room = Math.min(textW, 600);
     g.append(
       s(
@@ -503,7 +525,7 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
           "text",
           {
             class: "sql-stage-rows",
-            x: MARGIN + cardW - 14,
+            x: left + cardW - 14,
             y: top + CARD_H / 2,
             "text-anchor": "end",
             "dominant-baseline": "central",
@@ -515,7 +537,7 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
     svg.append(g);
     y += CARD_H;
     if (i < scene.stages.length - 1) {
-      const ax = MARGIN + 8 + (CHIP_W - 8) / 2;
+      const ax = left + 8 + (CHIP_W - 8) / 2;
       svg.append(s("path", { class: "sql-stage-arrow", d: `M${ax},${y + 3} V${y + CARD_GAP - 5} m-4,-5 l4,5 l4,-5` }));
       y += CARD_GAP;
     }

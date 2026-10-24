@@ -2869,3 +2869,17 @@ select {
   fill: var(--ink-soft);
   font-size: 12px;
 }
+
+/* A part of a statement (a WITH query, a subquery, a UNION's side): its name. */
+.sql-part-label {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  fill: var(--path);
+}
+.sql-head.is-case,
+.sql-head.is-outer {
+  font-weight: 400;
+  font-style: italic;
+  fill: var(--path);
+}

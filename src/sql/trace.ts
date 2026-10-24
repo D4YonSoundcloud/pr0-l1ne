@@ -14,12 +14,13 @@
  * it. The first error stops the run, explained (explain.ts).
  */
 import type { SqlStage, SqlStatement, Step, Trace, TraceError } from "../trace/types";
+import { type ComposeContext, queryStages } from "./compose";
 import { SAMPLE_DATABASES, sampleDatabase } from "./databases";
 import { type Engine, type QueryResult, SqlError } from "./engine";
 import { explainError } from "./explain";
 import { type Node, ParseError, type SqlParser } from "./parser";
 import { oneLine, readHints, SourceText, skipToCode } from "./script";
-import { drawnTable, selectStages, unsupported } from "./select";
+import { drawnTable, unsupported } from "./select";
 import { refused, runStatement, snapshot, statementKind } from "./statements";
 
 /** Rows of a result printed to the output at most. */
@@ -180,12 +181,21 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
       statements.push({ kind, line, text: oneLine(source.slice(codeStart, text.char(end)), 70) });
       const lineAt = (position: number | undefined) =>
         position ? text.lineOfChar(text.char(start) + position - 1) : line;
+      /** Temporary tables the steps make (compose.ts), dropped after the statement. */
+      const temps: string[] = [];
       try {
         const no = refused(stmt);
         if (no) throw new SqlError(no, "PR0L1");
         if (stmt.SelectStmt && !stmt.SelectStmt.intoClause) {
           const why = unsupported(stmt.SelectStmt);
-          const context = { engine, parser, statement: index, line, lineOf: (b: number) => text.lineOf(b) };
+          const context: ComposeContext = {
+            engine,
+            parser,
+            statement: index,
+            line,
+            lineOf: (b: number) => text.lineOf(b),
+            temps,
+          };
           let result: QueryResult;
           try {
             result = await engine.query(statementText);
@@ -197,7 +207,7 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
                 .split(".")
                 .map((part) => `"${part.replace(/"/g, '""')}"`)
                 .join(".");
-              const steps = await selectStages(context, stmt.SelectStmt, null, expr).catch(() => null);
+              const steps = await queryStages(context, stmt.SelectStmt, null, expr).catch(() => null);
               for (const stage of steps ?? []) add(stage);
             }
             throw e;
@@ -205,7 +215,7 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
           let selected: SqlStage[] | null = null;
           if (!why) {
             try {
-              selected = await selectStages(context, stmt.SelectStmt, result);
+              selected = await queryStages(context, stmt.SelectStmt, result);
             } catch {
               selected = null;
             }
@@ -261,6 +271,8 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
           line: lineAt(e.position),
         };
         break;
+      } finally {
+        for (const name of temps) await engine.query(`DROP TABLE IF EXISTS pg_temp.${quote(name)}`).catch(() => {});
       }
     }
   } finally {

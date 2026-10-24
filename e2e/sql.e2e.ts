@@ -98,3 +98,18 @@ test("the GROUP BY error is stepped through to the group that breaks the rule", 
   await expect(page.locator("#step-label")).toContainText("GROUP BY category");
   await expect(page.locator("#memory")).toContainText("products.name has 4 different values");
 });
+
+test("subqueries and UNION are stepped through as parts of the statement", async ({ page }) => {
+  await open(
+    page,
+    "-- viz: database shop\nSELECT name FROM products\nWHERE price > (SELECT avg(price) FROM products)\nUNION\nSELECT name FROM customers;\n",
+  );
+  await expect(page.locator("#step-label")).toContainText("of ", { timeout: 90_000 });
+  await expect(page.locator("#loop .sql-part-label")).toHaveText([
+    "UNION: the first query › Subquery 1",
+    "UNION: the first query",
+    "UNION: the second query",
+  ]);
+  await expect(page.locator("#step-label")).toContainText("UNION");
+  await expect(page.locator("#memory .sql-table")).toHaveCount(3);
+});

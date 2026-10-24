@@ -455,8 +455,10 @@ export interface SqlColumn {
    *             the aggregate; for COUNT(*), the group's rows)
    *   problem   a column that has different values within one group, in a
    *             query Postgres refused for it (see SqlStage.notes)
+   *   case      which branch of a CASE expression in SELECT each row took
+   *   outer     a value from the outer row a subquery uses
    */
-  role?: "computed" | "check" | "result" | "sort" | "key" | "inputs" | "problem";
+  role?: "computed" | "check" | "result" | "sort" | "key" | "inputs" | "problem" | "case" | "outer";
   /** The expression, as written (one line). */
   expr?: string;
   /** ORDER BY sorts on this column: its place among the sort keys (1 first), and which way. */
@@ -532,7 +534,11 @@ export type SqlStageKind =
   /** A statement that isn't a query (CREATE TABLE, INSERT...): the table it changed. */
   | "statement"
   /** A query that isn't stepped through (yet): its result. */
-  | "result";
+  | "result"
+  /** A subquery that uses the outer row: what it gives for each row (it runs once per row). */
+  | "subquery"
+  /** UNION, INTERSECT or EXCEPT: the two queries' rows, and the rows they make together. */
+  | "combine";
 
 /** One step: a stage of a statement. */
 export interface SqlStage {
@@ -550,6 +556,12 @@ export interface SqlStage {
   rows?: number;
   /** Anything worth knowing about it ("No ORDER BY: ..."). */
   notes?: string[];
+  /**
+   * A stage of a part of the statement that runs before the rest: a WITH
+   * query, a subquery, one side of a UNION. `depth` is how deeply it's
+   * nested (1: inside the statement).
+   */
+  part?: { label: string; depth: number };
   /** A join: which row of the rows so far (tables[0]) pairs with which row of the table joined (tables[1]), by id. */
   links?: { from: string; to: string }[];
 }

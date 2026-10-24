@@ -39,7 +39,7 @@
  * isn't stepped through yet: see unsupported().
  */
 import type { SqlColumn, SqlRow, SqlStage, SqlTable } from "../trace/types";
-import type { Engine, QueryResult, ResultColumn } from "./engine";
+import { type Engine, type QueryResult, type ResultColumn, SqlError } from "./engine";
 import type { Node, SqlParser } from "./parser";
 import { oneLine } from "./script";
 
@@ -55,6 +55,10 @@ export interface SelectContext {
   line: number;
   /** The line of a byte offset in the script (the parse tree's locations). */
   lineOf(byteOffset: number): number;
+  /** The part of the statement this query is (a WITH query, a subquery...), stamped on its stages. */
+  part?: { label: string; depth: number };
+  /** Step through a query inside this one (a subquery that stands alone), a level deeper: its steps and its result. */
+  inner?(select: Node, label: string): Promise<{ stages: SqlStage[]; result: QueryResult } | null>;
 }
 
 // ---------------------------------------------------------------- reading the parse tree
@@ -159,24 +163,52 @@ const funcName = (call: Node): string => {
  * or null if it can be.
  */
 export function unsupported(select: Node): string | null {
-  if (select.withClause) return "WITH (common table expressions)";
-  if (select.op && select.op !== "SETOP_NONE") return "UNION, INTERSECT and EXCEPT";
+  // Every query in it: the statement's, its WITH queries', its subqueries',
+  // each side of a UNION.
+  const queries: Node[] = [];
+  const add = (q: Node) => {
+    queries.push(q);
+    // A UNION's two sides are queries too (written without a SelectStmt of their own).
+    if (q.larg) add(q.larg);
+    if (q.rarg) add(q.rarg);
+  };
+  add(select);
+  walk(select, (type, body) => {
+    if (type === "SelectStmt") add(body);
+  });
+  for (const q of queries) {
+    const why = unsupportedHere(q);
+    if (why) return why;
+  }
+  if (some(select, (type, body) => type === "FuncCall" && !!body.over)) return "window functions";
+  if (some(select, (type, body) => type === "FuncCall" && !!body.agg_within_group))
+    return "ordered-set aggregates (WITHIN GROUP)";
+  if (some(select, (type, body) => type === "SubLink" && !SUBLINKS.has(body.subLinkType)))
+    return "this kind of subquery (ARRAY, or comparing whole rows)";
+  if (some(select, (type, body) => type === "RangeSubselect" && !!body.lateral)) return "LATERAL subqueries";
+  if (some(select, (type, body) => type === "FuncCall" && VOLATILE.has(funcName(body))))
+    return "functions like random() that give a new answer each time";
+  return null;
+}
+
+/** The kinds of subquery stepped through: (SELECT ...), EXISTS, IN / = ANY, ALL. */
+const SUBLINKS = new Set(["EXPR_SUBLINK", "EXISTS_SUBLINK", "ANY_SUBLINK", "ALL_SUBLINK"]);
+
+/** What one query (not the ones inside it) uses that isn't stepped through yet. */
+function unsupportedHere(select: Node): string | null {
+  if (select.withClause?.recursive) return "WITH RECURSIVE";
+  if (select.withClause?.ctes?.some((c: Node) => !c.CommonTableExpr?.ctequery?.SelectStmt))
+    return "WITH queries that change tables (INSERT, UPDATE or DELETE in WITH)";
   if (select.valuesLists) return "VALUES lists";
   if (select.lockingClause) return "FOR UPDATE and other locking clauses";
   if (select.groupClause?.some((item: Node) => item.GroupingSet)) return "GROUPING SETS, ROLLUP and CUBE";
   if (select.windowClause) return "window functions";
-  if (some(select, (type, body) => type === "FuncCall" && !!body.over)) return "window functions";
-  if (some(select, (type, body) => type === "FuncCall" && !!body.agg_within_group))
-    return "ordered-set aggregates (WITHIN GROUP)";
-  if (some(select, (type) => type === "SubLink")) return "subqueries";
   if (select.distinctClause?.some((item: Node) => Object.keys(item).length > 0)) return "DISTINCT ON";
   if (select.limitOption === "LIMIT_OPTION_WITH_TIES") return "FETCH … WITH TIES";
   if (select.fromClause) {
     const shape = readFrom(select.fromClause);
     if (typeof shape === "string") return shape;
   }
-  if (some(select, (type, body) => type === "FuncCall" && VOLATILE.has(funcName(body))))
-    return "functions like random() that give a new answer each time";
   return null;
 }
 
@@ -203,6 +235,7 @@ function aggregateNodes(select: Node): Node[] {
     }
     if (!value || typeof value !== "object") return;
     const node = value as Node;
+    if (node.SubLink) return; // a subquery's aggregates are its own
     if (node.FuncCall && isAggregate(node.FuncCall) && !node.FuncCall.over) {
       found.push(node);
       return; // an aggregate inside an aggregate is Postgres's error to give
@@ -210,6 +243,26 @@ function aggregateNodes(select: Node): Node[] {
     for (const v of Object.values(node)) visit(v);
   };
   visit([select.targetList, select.havingClause, select.sortClause]);
+  return found;
+}
+
+/** The subqueries in a clause, outermost only (each one's own are its business). */
+function subLinks(tree: unknown): Node[] {
+  const found: Node[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const node = value as Node;
+    if (node.SubLink) {
+      found.push(node);
+      return;
+    }
+    for (const v of Object.values(node)) visit(v);
+  };
+  visit(tree);
   return found;
 }
 
@@ -234,21 +287,33 @@ interface JoinPart {
   join: Node | null;
 }
 
+/**
+ * A table in FROM, as a RangeVar. A named subquery stands for the table
+ * it's made into before the query is stepped through (compose.ts).
+ */
+function rangeOf(item: Node): Node | null {
+  if (item.RangeVar) return item.RangeVar;
+  const sub: Node | undefined = item.RangeSubselect;
+  if (sub?.alias?.aliasname && !sub.lateral) return { relname: sub.alias.aliasname, inh: true, relpersistence: "p" };
+  return null;
+}
+
 /** FROM as its first table and the tables joined to it in order, or what isn't stepped through yet. */
 export function readFrom(from: Node[]): { first: Node; joins: JoinPart[] } | string {
   const other = (item: Node): string => {
-    if (item.RangeSubselect) return "subqueries in FROM";
+    if (item.RangeSubselect)
+      return item.RangeSubselect.lateral ? "LATERAL subqueries" : "a subquery in FROM without a name (AS)";
     if (item.RangeFunction) return "functions in FROM, like generate_series";
     return "this kind of FROM";
   };
   if (from.length > 1) {
     // A comma between tables: every row with every row, as CROSS JOIN.
     if (from.some((item) => item.JoinExpr)) return "a mix of commas and JOIN in FROM";
-    const bad = from.find((item) => !item.RangeVar);
+    const bad = from.find((item) => !rangeOf(item));
     if (bad) return other(bad);
     return {
-      first: from[0].RangeVar,
-      joins: from.slice(1).map((item) => ({ type: "CROSS JOIN", range: item.RangeVar, join: null })),
+      first: rangeOf(from[0])!,
+      joins: from.slice(1).map((item) => ({ type: "CROSS JOIN", range: rangeOf(item)!, join: null })),
     };
   }
   const joins: JoinPart[] = [];
@@ -256,7 +321,8 @@ export function readFrom(from: Node[]): { first: Node; joins: JoinPart[] } | str
   while (node.JoinExpr) {
     const j: Node = node.JoinExpr;
     if (j.alias || j.join_using_alias) return "a join with a name of its own (AS after the join)";
-    if (!j.rarg?.RangeVar) return j.rarg?.JoinExpr ? "joins in parentheses" : other(j.rarg ?? {});
+    const rarg = rangeOf(j.rarg ?? {});
+    if (!rarg) return j.rarg?.JoinExpr ? "joins in parentheses" : other(j.rarg ?? {});
     const kind: Record<string, string> = {
       JOIN_INNER: "JOIN",
       JOIN_LEFT: "LEFT JOIN",
@@ -268,13 +334,14 @@ export function readFrom(from: Node[]): { first: Node; joins: JoinPart[] } | str
     const cross = word === "JOIN" && !j.quals && !j.usingClause && !j.isNatural;
     joins.unshift({
       type: `${j.isNatural ? "NATURAL " : ""}${cross ? "CROSS JOIN" : word}`,
-      range: j.rarg.RangeVar,
+      range: rarg,
       join: j,
     });
     node = j.larg ?? {};
   }
-  if (!node.RangeVar) return other(node);
-  return { first: node.RangeVar, joins };
+  const first = rangeOf(node);
+  if (!first) return other(node);
+  return { first, joins };
 }
 
 // ---------------------------------------------------------------- building tables
@@ -298,7 +365,7 @@ export function drawnTable(table: Omit<SqlTable, "more">): SqlTable {
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Two lists of rows hold the same values: in the same order, or in any order. */
-function sameRows(a: (string | null)[][], b: (string | null)[][], ordered: boolean): boolean {
+export function sameRows(a: (string | null)[][], b: (string | null)[][], ordered: boolean): boolean {
   if (a.length !== b.length) return false;
   const keys = (rows: (string | null)[][]) => rows.map((r) => JSON.stringify(r));
   const [x, y] = [keys(a), keys(b)];
@@ -353,7 +420,11 @@ export async function selectStages(
   problem?: string,
 ): Promise<SqlStage[] | null> {
   const { engine, parser, statement } = ctx;
-  const stage = (s: Omit<SqlStage, "statement">): SqlStage => ({ statement, ...s });
+  const stage = (s: Omit<SqlStage, "statement">): SqlStage => ({
+    statement,
+    ...(ctx.part ? { part: ctx.part } : {}),
+    ...s,
+  });
   const targets: Node[] = select.targetList ?? [];
   const targetSql = (await Promise.all(targets.map((t) => parser.deparse(t)))).join(", ");
   const at = (tree: unknown) => {
@@ -361,15 +432,57 @@ export async function selectStages(
     return loc === null ? ctx.line : ctx.lineOf(loc);
   };
 
+  // Subqueries in SELECT, WHERE and HAVING. One that stands alone runs
+  // first, stepped through as a part of its own. One that uses the outer
+  // row (correlated) can't run alone: Postgres runs it once per row, shown
+  // in a step of its own just before the clause it's in. Either way, the
+  // clauses show it as "(subquery 1)".
+  const prelude: SqlStage[] = [];
+  const replacements: [string, string][] = [];
+  const correlated: { node: Node; n: number; clause: string; outer: string[] }[] = [];
+  const subResults = new Map<Node, QueryResult>();
+  const subNumber = new Map<Node, number>();
+  let subqueries = 0;
+  for (const [clause, tree] of [
+    ["select", select.targetList],
+    ["where", select.whereClause],
+    ["having", select.havingClause],
+  ] as const) {
+    for (const link of subLinks(tree)) {
+      const n = ++subqueries;
+      subNumber.set(link, n);
+      const inner: Node = link.SubLink.subselect.SelectStmt;
+      const innerSql = await parser.deparse({ SelectStmt: inner });
+      replacements.push([`(${innerSql})`, `(subquery ${n})`]);
+      let alone: QueryResult | null = null;
+      try {
+        alone = await engine.query(innerSql);
+      } catch (e) {
+        // A column or table it can't find alone is the outer row's.
+        if (!(e instanceof SqlError) || !["42703", "42P01"].includes(e.code)) return null;
+      }
+      if (alone) {
+        subResults.set(link, alone);
+        const steps = await ctx.inner?.(inner, `Subquery ${n}`);
+        if (steps) prelude.push(...steps.stages);
+      } else {
+        correlated.push({ node: link, n, clause, outer: [] });
+      }
+    }
+  }
+  const display = (text: string) =>
+    replacements.reduce((t, [from, to]) => t.split(from).join(to), text).replace(/\(\((subquery \d+)\)\)/g, "($1)");
+
   // No FROM (SELECT 1 + 1): one step, the result.
   const shape = select.fromClause ? readFrom(select.fromClause) : null;
   if (!shape || typeof shape === "string") {
     if (!result) return null;
     const rows = result.rows.map((values, i) => ({ id: `result:${i}`, label: `#${i + 1}`, values }));
     return [
+      ...prelude,
       stage({
         kind: "select",
-        clause: `SELECT ${oneLine(targetSql)}`,
+        clause: `SELECT ${oneLine(display(targetSql))}`,
         summary: `${plural(rows.length, "row")}`,
         line: at(targets),
         tables: [
@@ -435,7 +548,69 @@ export async function selectStages(
   const idSql = idSqlOf(sources);
   const orderSql = orderOf(sources);
   const idOf = (row: (string | null)[]) => String(row[row.length - 1]);
-  const stages: SqlStage[] = [];
+  const stages: SqlStage[] = [...prelude];
+
+  // What a correlated subquery uses from the outer row: table.column, for the outer tables.
+  const outerRefs = new Set(sources.flatMap((s) => [s.ref, s.tableName]));
+  for (const c of correlated) {
+    const inner: Node = c.node.SubLink.subselect.SelectStmt;
+    const innerRefs = new Set<string>();
+    walk(inner.fromClause, (type, body) => {
+      if (type === "RangeVar") innerRefs.add(String(body.alias?.aliasname ?? body.relname));
+    });
+    const used = new Set<string>();
+    walk(inner, (type, body) => {
+      const f: Node[] = type === "ColumnRef" ? body.fields : [];
+      const [t, col] = f.map((x) => x.String?.sval);
+      if (f.length === 2 && t && col && outerRefs.has(t) && !innerRefs.has(t)) used.add(`${t}.${col}`);
+    });
+    c.outer = [...used];
+  }
+  /** A correlated subquery's step: what it gives for each row (of `rowsIn`, the rows it runs for). */
+  const perRow = async (c: (typeof correlated)[number], rowsIn: Flow[], tailSql: string): Promise<SqlStage | null> => {
+    try {
+      const linkSql = await parser.deparse(c.node);
+      const outerSql = c.outer.map((r) => r.split(".").map(quote).join("."));
+      const res = await engine.query(
+        `SELECT ${[...outerSql, `(${linkSql})`, idSql].join(", ")} FROM ${fromSql}${tailSql} ORDER BY ${orderSql}`,
+      );
+      const byId = new Map(res.rows.map((row) => [idOf(row), row]));
+      const gives = res.columns[outerSql.length];
+      const isBool = gives.type === "boolean";
+      const rows: SqlRow[] = rowsIn.map((r) => {
+        const row = byId.get(r.id) ?? [];
+        const value = row[outerSql.length] ?? null;
+        return {
+          id: r.id,
+          label: r.label,
+          values: [...row.slice(0, outerSql.length), isBool ? boolText(value) : value],
+        };
+      });
+      const columns: SqlColumn[] = [
+        ...c.outer.map((name, i): SqlColumn => ({ ...toColumn(res.columns[i]), name, role: "outer" })),
+        {
+          ...toColumn(gives),
+          name: oneLine(display(linkSql), 40),
+          role: isBool ? "check" : "computed",
+          expr: oneLine(display(linkSql)),
+        },
+      ];
+      const uses = c.outer.length ? c.outer.join(", ") : "the outer row";
+      return stage({
+        kind: "subquery",
+        clause: `Subquery ${c.n}, for each row`,
+        summary: `run ${rows.length} times: once for each row, with its ${uses}`,
+        line: at(c.node),
+        tables: [drawnTable({ name: `subquery ${c.n}`, columns, rows })],
+        rows: rows.length,
+        notes: [
+          `Subquery ${c.n} uses ${uses} from the row it's working on, so it can't run once for the whole query: Postgres runs it again for each row.`,
+        ],
+      });
+    } catch {
+      return null;
+    }
+  };
 
   // FROM: every row of the first table, in the order Postgres keeps them.
   const first = sources[0];
@@ -549,6 +724,11 @@ export async function selectStages(
     currentName = "joined";
   }
 
+  for (const c of correlated.filter((c) => c.clause === "where")) {
+    const step = await perRow(c, current, "");
+    if (step) stages.push(step);
+  }
+
   // WHERE: the condition for every row, and the parts AND / OR / NOT join.
   let kept = new Set(current.map((r) => r.id));
   let whereSql = "";
@@ -569,7 +749,7 @@ export async function selectStages(
       checked = await run([]);
     }
     const byId = new Map(checked.rows.map((row) => [idOf(row), row]));
-    const whereText = oneLine(whereSql, 60);
+    const whereText = oneLine(display(whereSql), 60);
     kept = new Set();
     const rows: SqlRow[] = current.map((r) => {
       const row = byId.get(r.id) ?? [];
@@ -589,11 +769,29 @@ export async function selectStages(
     });
     const columns: SqlColumn[] = [
       ...currentColumns,
-      ...partSql
-        .slice(0, parts.length)
-        .map((expr): SqlColumn => ({ name: oneLine(expr, 40), type: "boolean", role: "check", expr: oneLine(expr) })),
+      ...partSql.slice(0, parts.length).map(
+        (expr): SqlColumn => ({
+          name: oneLine(display(expr), 40),
+          type: "boolean",
+          role: "check",
+          expr: oneLine(display(expr)),
+        }),
+      ),
       { name: "kept?", type: "boolean", role: "result", expr: whereText },
     ];
+    // NOT IN a list with a NULL in it is never true: the classic trap.
+    const whereNotes: string[] = [];
+    walk(select.whereClause, (type, body) => {
+      if (type !== "BoolExpr" || body.boolop !== "NOT_EXPR") return;
+      const link = body.args?.[0];
+      const res = link?.SubLink?.subLinkType === "ANY_SUBLINK" ? subResults.get(link) : undefined;
+      if (res?.rows.some((r) => r[0] === null)) {
+        const n = subNumber.get(link);
+        whereNotes.push(
+          `Subquery ${n} gives a NULL, so NOT IN is never true: x NOT IN (…, NULL) asks whether x isn't NULL, which is unknown. Use NOT EXISTS, or leave the NULLs out of the subquery.`,
+        );
+      }
+    });
     const whereTable = several
       ? { name: currentName }
       : { name: first.tableName, ...(first.alias ? { alias: first.alias } : {}) };
@@ -605,6 +803,7 @@ export async function selectStages(
         line: at(select.whereClause),
         tables: [drawnTable({ ...whereTable, columns, rows })],
         rows: kept.size,
+        ...(whereNotes.length ? { notes: whereNotes } : {}),
       }),
     );
   }
@@ -833,7 +1032,7 @@ export async function selectStages(
           ...(verdict === null ? { note: "NULL: unknown, so not kept" } : {}),
         };
       });
-      const havingText = oneLine(havingSql, 60);
+      const havingText = oneLine(display(havingSql), 60);
       stages.push(
         stage({
           kind: "having",
@@ -861,6 +1060,14 @@ export async function selectStages(
     return g === undefined ? labelOf(id) : `G${g + 1}`;
   };
 
+  if (!grouped) {
+    const keptRows = current.filter((r) => kept.has(r.id));
+    for (const c of correlated.filter((c) => c.clause === "select")) {
+      const step = await perRow(c, keptRows, whereTail);
+      if (step) stages.push(step);
+    }
+  }
+
   // SELECT: the columns asked for, for the rows WHERE kept (or each group).
   const selected = await engine.query(
     `SELECT ${targetSql}, ${rowIdSql} FROM ${fromSql}${tail}${grouped ? "" : ` ORDER BY ${orderSql}`}`,
@@ -872,23 +1079,49 @@ export async function selectStages(
     const name = fields[0]?.String?.sval;
     return sources.find((s) => s.ref === name || s.tableName === name)?.columns.length ?? 0;
   };
-  let columns = await computedColumns(resultColumns, targets, starWidth, parser);
+  let columns = (await computedColumns(resultColumns, targets, starWidth, parser)).map((c) =>
+    c.expr ? { ...c, expr: display(c.expr) } : c,
+  );
   let rows: Flow[] = selected.rows.map((row) => {
     const id = idOf(row);
     return { id, label: labelFor(id), values: row.slice(0, -1) };
   });
   if (grouped) rows.sort((a, b) => (groupOrder.get(a.id) ?? 0) - (groupOrder.get(b.id) ?? 0));
   const computed = columns.filter((c) => c.role === "computed").length;
+  // CASE in SELECT: which branch each row took, beside the columns.
+  const cases = await caseBranches(targets, columns, parser, display);
+  let caseColumns: SqlColumn[] = [];
+  let caseValues = new Map<string, (string | null)[]>();
+  if (cases.length) {
+    try {
+      const taken = await engine.query(
+        `SELECT ${[...cases.map((c) => c.sql), rowIdSql].join(", ")} FROM ${fromSql}${tail}`,
+      );
+      caseValues = new Map(taken.rows.map((row) => [idOf(row), row.slice(0, -1)]));
+      caseColumns = cases.map((c) => ({ name: `${c.name}: which`, type: "text", role: "case", expr: c.expr }));
+    } catch {
+      // The branches are worked out by the same query as the column: shouldn't fail, but the step is fine without them.
+    }
+  }
   stages.push(
     stage({
       kind: "select",
-      clause: `SELECT ${oneLine(targetSql, 60)}`,
+      clause: `SELECT ${oneLine(display(targetSql), 60)}`,
       summary:
         `${plural(columns.length, "column")}` +
         (computed ? ` (${computed} worked out)` : "") +
         `, ${plural(rows.length, "row")}`,
       line: at(targets),
-      tables: [drawnTable({ name: "result", columns, rows })],
+      tables: [
+        drawnTable({
+          name: "result",
+          columns: [...columns, ...caseColumns],
+          rows: rows.map((r) => ({
+            ...r,
+            values: [...r.values, ...(caseColumns.length ? (caseValues.get(r.id) ?? caseColumns.map(() => null)) : [])],
+          })),
+        }),
+      ],
       rows: rows.length,
     }),
   );
@@ -998,7 +1231,7 @@ export async function selectStages(
     stages.push(
       stage({
         kind: "order",
-        clause: `ORDER BY ${oneLine(sortSql, 60)}`,
+        clause: `ORDER BY ${oneLine(display(sortSql), 60)}`,
         summary: `sorted by ${named.join(", then ")}`,
         line: at(select.sortClause),
         tables: [drawnTable({ name: "result", columns: [...columns, ...extra.map((e) => e.column)], rows: shown })],
@@ -1056,7 +1289,8 @@ export async function selectStages(
     )
   )
     return null;
-  if (!sorts.length && rows.length > 1) {
+  // (A part's order is the outer query's business.)
+  if (!sorts.length && rows.length > 1 && !ctx.part) {
     const last = stages[stages.length - 1];
     last.notes = [
       ...(last.notes ?? []),
@@ -1095,6 +1329,36 @@ async function computedColumns(
   for (const [index, val] of computed) {
     out[index].role = "computed";
     out[index].expr = oneLine(await parser.deparse(val));
+  }
+  return out;
+}
+
+/** A CASE in SELECT: SQL giving the branch each row takes ("WHEN price < 10", "ELSE"), and its column's name. */
+async function caseBranches(
+  targets: Node[],
+  columns: SqlColumn[],
+  parser: SqlParser,
+  display: (text: string) => string,
+): Promise<{ sql: string; name: string; expr: string }[]> {
+  // Only where each target is one column (no `*`), so they line up.
+  if (targets.some((t) => t.ResTarget?.val?.ColumnRef?.fields?.some((f: Node) => f.A_Star))) return [];
+  const literal = (text: string) => `'${text.replace(/'/g, "''")}'`;
+  const out: { sql: string; name: string; expr: string }[] = [];
+  for (const [i, target] of targets.entries()) {
+    const ce: Node | undefined = target.ResTarget?.val?.CaseExpr;
+    if (!ce || !columns[i]) continue;
+    const arg = ce.arg ? await parser.deparse(ce.arg) : "";
+    const whens: string[] = [];
+    for (const w of ce.args ?? []) {
+      const when = await parser.deparse(w.CaseWhen.expr);
+      whens.push(`WHEN ${when} THEN ${literal(`WHEN ${oneLine(display(when), 40)}`)}`);
+    }
+    const otherwise = ce.defresult ? "ELSE" : "ELSE (NULL)";
+    out.push({
+      sql: `CASE ${arg} ${whens.join(" ")} ELSE ${literal(otherwise)} END`,
+      name: columns[i].name,
+      expr: columns[i].expr ?? columns[i].name,
+    });
   }
   return out;
 }

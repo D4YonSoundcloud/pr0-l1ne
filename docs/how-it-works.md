@@ -678,7 +678,9 @@ The id is what ties the steps together: it's how a row in the ORDER BY step is t
 
 **A GROUP BY error** (a SELECT column that isn't grouped) runs the steps up to GROUP BY anyway, grouping by GROUP BY's own expressions, with the refused column worked out beside them, so the step can show a group where it has more than one value.
 
-**What isn't stepped through yet** (subqueries, WITH...) is found from the parse tree by `unsupported()`, and the query is shown as its result, saying what it uses.
+**Queries inside queries** ([`compose.ts`](../src/sql/compose.ts)) are stepped through first, as parts of the statement (`SqlStage.part`). A WITH query or a subquery in FROM is then made into a temporary table of its rows, under its name, and the outer query is stepped through reading that table, like any other, its rows followed by their place in it. The temporary tables are dropped after the statement. For UNION, INTERSECT and EXCEPT, the two sides are stepped through, then put together by their values, as the set operations do; an ORDER BY or LIMIT after them runs on a temporary table of the rows they made. A subquery in WHERE, SELECT or HAVING is first run on its own: if that works, it stands alone, and is stepped through first. If it fails for a column or table it can't find, it uses the outer row, and is shown as a step of what it gives for each row (the outer query's rows, with the subquery's expression as a column).
+
+**What isn't stepped through yet** (window functions, WITH RECURSIVE...) is found from the parse tree by `unsupported()`, and the query is shown as its result, saying what it uses.
 
 **Errors** keep Postgres's message, and [`explain.ts`](../src/sql/explain.ts) adds what usually causes it, by its SQLSTATE code, using what the run knows: the tables there are, their columns, and the names the query gives columns with AS.
 

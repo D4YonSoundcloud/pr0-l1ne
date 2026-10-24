@@ -1392,6 +1392,23 @@
           },
           "description": "Anything worth knowing about it (\"No ORDER BY: ...\")."
         },
+        "part": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "label",
+            "depth"
+          ],
+          "additionalProperties": false,
+          "description": "A stage of a part of the statement that runs before the rest: a WITH query, a subquery, one side of a UNION. `depth` is how deeply it's nested (1: inside the statement)."
+        },
         "links": {
           "type": "array",
           "items": {
@@ -1439,7 +1456,9 @@
         "order",
         "limit",
         "statement",
-        "result"
+        "result",
+        "subquery",
+        "combine"
       ]
     },
     "SqlTable": {
@@ -1545,9 +1564,11 @@
             "sort",
             "key",
             "inputs",
-            "problem"
+            "problem",
+            "case",
+            "outer"
           ],
-          "description": "What the column is at this step (absent: a column of the table):   computed  made by an expression in SELECT (`expr`)   check     part of the WHERE condition, worked out for each row (`expr`)   result    the whole WHERE condition for each row: is it kept?   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)   key       what GROUP BY groups on, worked out for each row (`expr`)   inputs    the values an aggregate was given, for each group (`expr`:             the aggregate; for COUNT(*), the group's rows)   problem   a column that has different values within one group, in a             query Postgres refused for it (see SqlStage.notes)"
+          "description": "What the column is at this step (absent: a column of the table):   computed  made by an expression in SELECT (`expr`)   check     part of the WHERE condition, worked out for each row (`expr`)   result    the whole WHERE condition for each row: is it kept?   sort      a value ORDER BY sorts on that the result doesn't show (`expr`)   key       what GROUP BY groups on, worked out for each row (`expr`)   inputs    the values an aggregate was given, for each group (`expr`:             the aggregate; for COUNT(*), the group's rows)   problem   a column that has different values within one group, in a             query Postgres refused for it (see SqlStage.notes)   case      which branch of a CASE expression in SELECT each row took   outer     a value from the outer row a subquery uses"
         },
         "expr": {
           "type": "string",

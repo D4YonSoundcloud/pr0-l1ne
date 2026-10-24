@@ -365,6 +365,7 @@ pr0-l1ne/
     │   ├── script.ts           Byte offsets to characters and lines; the database hint
     │   ├── trace.ts            traceSql(): the run, statement by statement, as a Trace
     │   ├── select.ts           A SELECT's steps: a smaller query per clause; what isn't stepped yet
+    │   ├── compose.ts          WITH, subqueries in FROM, UNION: parts stepped through first
     │   ├── statements.ts       CREATE, INSERT, UPDATE, DELETE: the table each changed
     │   ├── explain.ts          Postgres's errors, explained
     │   ├── databases.ts        The sample databases (shop, school, company)

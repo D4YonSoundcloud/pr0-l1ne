@@ -422,6 +422,162 @@ ORDER BY year;`;
   });
 });
 
+describe("subqueries, WITH and set operations", () => {
+  const partsOf = (t: Trace) => stages(t).map((s) => `${s.part ? `${s.part.label}/` : ""}${s.kind}`);
+
+  it("step through a subquery that stands alone first, and call it by its number", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT name FROM products WHERE price > (SELECT avg(price) FROM products) ORDER BY price;",
+    );
+    expect(partsOf(t)).toEqual([
+      "tables",
+      "Subquery 1/from",
+      "Subquery 1/group",
+      "Subquery 1/aggregate",
+      "Subquery 1/select",
+      "from",
+      "where",
+      "select",
+      "order",
+    ]);
+    expect(stages(t)[1].part?.depth).toBe(1);
+    expect(stages(t)[6].clause).toBe("WHERE price > (subquery 1)");
+    // A part's steps don't fuss about its order: the outer query decides.
+    expect(stages(t)[4].notes).toBeUndefined();
+  });
+
+  it("run a subquery that uses the outer row once per row, shown before its clause", async () => {
+    const t = await trace(`-- viz: database shop
+SELECT c.name FROM customers AS c
+WHERE EXISTS (SELECT 1 FROM orders AS o WHERE o.customer_id = c.id AND o.quantity > 1);`);
+    expect(partsOf(t)).toEqual(["tables", "from", "subquery", "where", "select"]);
+    const each = stages(t)[2];
+    expect(each.clause).toBe("Subquery 1, for each row");
+    expect(each.summary).toBe("run 8 times: once for each row, with its c.id");
+    expect(each.tables[0].columns.map((c) => [c.name, c.role])).toEqual([
+      ["c.id", "outer"],
+      ["EXISTS (subquery 1)", "check"],
+    ]);
+    expect(each.tables[0].rows.map((r) => r.values[1])).toEqual([
+      "true",
+      "true",
+      "true",
+      "true",
+      "true",
+      "false",
+      "false",
+      "false",
+    ]);
+  });
+
+  it("warn about NOT IN with a NULL", async () => {
+    const t = await trace(
+      "-- viz: database company\nSELECT name FROM departments WHERE id NOT IN (SELECT department_id FROM employees);",
+    );
+    const where = stages(t).find((s) => s.kind === "where")!;
+    expect(where.summary).toBe("kept 0 of 4 rows");
+    expect(where.notes?.[0]).toMatch(/^Subquery 1 gives a NULL, so NOT IN is never true/);
+  });
+
+  it("step through WITH queries first, then read them as tables", async () => {
+    const t = await trace(`-- viz: database shop
+WITH cheap AS (SELECT id, name FROM products WHERE price < 8),
+     ordered AS (SELECT DISTINCT product_id FROM orders)
+SELECT cheap.name FROM cheap JOIN ordered ON ordered.product_id = cheap.id ORDER BY cheap.name;`);
+    expect(partsOf(t)).toEqual([
+      "tables",
+      "WITH cheap/from",
+      "WITH cheap/where",
+      "WITH cheap/select",
+      "WITH ordered/from",
+      "WITH ordered/select",
+      "WITH ordered/distinct",
+      "from",
+      "join",
+      "select",
+      "order",
+    ]);
+    expect(stages(t)[7].tables[0].name).toBe("cheap");
+    expect(
+      stages(t)
+        .at(-1)
+        ?.tables[0].rows.map((r) => r.values[0]),
+    ).toEqual(["Chai", "Green tea", "Honey"]);
+  });
+
+  it("drop WITH's tables after the statement", async () => {
+    const t = await trace(
+      "-- viz: database shop\nWITH cheap AS (SELECT 1 AS x) SELECT * FROM cheap;\nSELECT * FROM cheap;",
+    );
+    expect(t.error?.message).toMatch(/relation "cheap" does not exist/);
+  });
+
+  it("step through a subquery in FROM, then read it as a table", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT s.category, s.n FROM (SELECT category, count(*) AS n FROM products GROUP BY category) AS s WHERE s.n > 2;",
+    );
+    expect(partsOf(t).slice(0, 5)).toEqual([
+      "tables",
+      "Subquery AS s/from",
+      "Subquery AS s/group",
+      "Subquery AS s/aggregate",
+      "Subquery AS s/select",
+    ]);
+    expect(stages(t).at(-1)?.rows).toBe(3);
+  });
+
+  it("step through both sides of a UNION, then put them together", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT city FROM customers UNION SELECT category FROM products ORDER BY 1 LIMIT 5;",
+    );
+    expect(partsOf(t)).toEqual([
+      "tables",
+      "UNION: the first query/from",
+      "UNION: the first query/select",
+      "UNION: the second query/from",
+      "UNION: the second query/select",
+      "combine",
+      "order",
+      "limit",
+    ]);
+    const combine = stages(t)[5];
+    expect(combine.summary).toBe("8 rows and 12 rows: 9 rows, every row of both, each different row once");
+    expect(combine.tables.map((x) => x.name)).toEqual(["first query", "second query", "UNION"]);
+    expect(combine.tables[2].rows.find((r) => r.values[0] === "London" && r.status)?.note).toBe("same as #1");
+    expect(
+      stages(t)
+        .at(-1)
+        ?.tables[0].rows.filter((r) => !r.status)
+        .map((r) => r.values[0]),
+    ).toEqual(["Austin", "Boston", "Coffee", "Helsinki", "Kitchen"]);
+  });
+
+  it("keep and drop rows as INTERSECT, EXCEPT and their ALL kinds do", async () => {
+    const q = (op: string) => `SELECT x FROM a ${op} SELECT x FROM b`;
+    const t = await trace(`CREATE TABLE a (x int); CREATE TABLE b (x int);
+INSERT INTO a VALUES (1), (1), (2), (3); INSERT INTO b VALUES (1), (3), (3);
+${q("INTERSECT")}; ${q("INTERSECT ALL")}; ${q("EXCEPT")}; ${q("EXCEPT ALL")}; ${q("UNION ALL")};`);
+    const made = stages(t)
+      .filter((s) => s.kind === "combine")
+      .map((s) => s.tables[2].rows.filter((r) => r.status !== "removed").map((r) => r.values[0]));
+    expect(made).toEqual([["1", "3"], ["1", "3"], ["2"], ["1", "2"], ["1", "1", "2", "3", "1", "3", "3"]]);
+  });
+
+  it("show which branch of a CASE each row took", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT name, CASE WHEN price < 8 THEN 'cheap' WHEN price < 20 THEN 'middle' END AS band FROM products;",
+    );
+    const select = stages(t).find((s) => s.kind === "select")!;
+    expect(select.tables[0].columns.at(-1)).toMatchObject({ name: "band: which", role: "case" });
+    expect(select.tables[0].rows.slice(0, 3).map((r) => r.values.slice(1))).toEqual([
+      ["cheap", "WHEN price < 8"],
+      ["cheap", "WHEN price < 8"],
+      ["middle", "WHEN price < 20"],
+    ]);
+    expect(select.tables[0].rows[5].values.slice(1)).toEqual([null, "ELSE (NULL)"]);
+  });
+});
+
 describe("what isn't stepped through yet", () => {
   for (const [query, why] of [
     ["SELECT category, count(*) FROM products GROUP BY ROLLUP (category)", "ROLLUP"],
@@ -429,8 +585,9 @@ describe("what isn't stepped through yet", () => {
     ["SELECT name, count(*) OVER () FROM products", "window functions"],
     ["SELECT * FROM orders JOIN (customers JOIN products ON true) ON true", "joins in parentheses"],
     ["SELECT * FROM orders, customers JOIN products ON true", "a mix of commas and JOIN"],
-    ["SELECT name FROM products WHERE price > (SELECT avg(price) FROM products)", "subqueries"],
-    ["SELECT name FROM products UNION SELECT name FROM customers", "UNION"],
+    ["WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT * FROM n", "WITH RECURSIVE"],
+    ["SELECT ARRAY(SELECT name FROM products)", "this kind of subquery"],
+    ["SELECT * FROM customers c, LATERAL (SELECT * FROM orders o WHERE o.customer_id = c.id) x", "LATERAL"],
     ["SELECT * FROM generate_series(1, 3)", "functions in FROM"],
     ["SELECT name, random() FROM products", "random"],
   ]) {

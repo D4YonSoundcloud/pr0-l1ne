@@ -95,6 +95,20 @@ An aggregate with no GROUP BY (`SELECT count(*) FROM products`) makes every row 
 
 GROUP BY can name a column, an expression, or a name or number from SELECT (`GROUP BY 1`, `GROUP BY shelf`), as in Postgres.
 
+### Subqueries, WITH and UNION
+
+A query can hold other queries. Each inner query is stepped through as a **part** of the statement, before the steps that use it. In the Query steps window, a part's steps are indented under its name (for example "WITH spent", "Subquery 1" or "UNION: the first query"). The same name is shown above the clause in the Tables window. A part inside another part is named with both, like "UNION: the first query › Subquery 1".
+
+- **WITH name AS (...)**: the WITH query's steps come first. In the main query's steps, `name` is a table of its rows, like any other.
+- **A subquery in FROM** (`FROM (SELECT ...) AS sizes`) works the same way: its steps come first, then the outer query reads it as a table called `sizes`.
+- **A subquery that stands alone**, in WHERE, SELECT or HAVING (`WHERE price > (SELECT avg(price) FROM products)`), doesn't depend on the outer query. It runs once, first, and its steps come before the outer query's. In the outer query's clauses it's called `(subquery 1)`, so its text doesn't crowd them.
+- **A subquery that uses the outer row** (a *correlated* subquery, like `EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)`) can't run on its own: Postgres runs it again for every row. It gets a step of its own, just before the clause it's in, showing each row, the outer values the subquery uses (`c.id`), and what it gave for that row.
+- **UNION, INTERSECT and EXCEPT**: each query's steps, then a step showing both queries' rows and the rows they make together. Rows that are left out are struck through, with the reason: "same as #1" (a repeat UNION drops), "not in the second query" (INTERSECT), "in the second query" (EXCEPT). The `ALL` kinds keep repeats, counting copies. An ORDER BY or LIMIT after them sorts and cuts the combined rows, in steps of their own.
+
+**The NOT IN trap.** If a `NOT IN (subquery)` subquery gives a NULL, `x NOT IN (...)` is never true, so the query returns no rows. That's because comparing x with NULL is unknown. The WHERE step says so when it happens, and suggests NOT EXISTS. The "The NOT IN trap" example shows both.
+
+**CASE** in SELECT gets a column beside it showing which branch each row took: `WHEN price < 8`, `WHEN price < 20` or `ELSE`.
+
 ### NULL
 
 NULL is SQL's "no value", and any comparison with it is neither true nor false but **unknown**: `NULL > 3.5` and `NULL = NULL` are both unknown. WHERE keeps only the rows where the condition is true, so an unknown leaves the row out, just as false does. PR0L1NE shows unknown as **NULL** (in orange), and the row says "NULL: unknown, so not kept". To ask for missing values, use `IS NULL`. The "NULL is unknown" example shows both.
@@ -129,16 +143,16 @@ A query that uses any of these is still run, and its result is shown as a single
 
 - joins in parentheses (`a JOIN (b JOIN c ON ...) ON ...`), a join with a name of its own (`AS` after it), and a mix of commas and JOIN in one FROM
 - GROUPING SETS, ROLLUP and CUBE, and ordered-set aggregates (`WITHIN GROUP`)
-- subqueries, WITH (common table expressions), UNION, INTERSECT and EXCEPT
+- WITH RECURSIVE, WITH queries that change tables, LATERAL, and ARRAY(...) subqueries
 - window functions, DISTINCT ON, and `FETCH … WITH TIES`
 - functions in FROM, like `generate_series`
 - functions like `random()`, which give a new answer each time they're called
 
-Subqueries and WITH are next: see the [roadmap](roadmap.md).
+Window functions and WITH RECURSIVE are next: see the [roadmap](roadmap.md).
 
 ## Examples
 
-The **Open…** menu has SQL examples in five groups. Each one adds one thing to the one before:
+The **Open…** menu has SQL examples in six groups. Each one adds one thing to the one before:
 
 | Group | Examples |
 | --- | --- |
@@ -146,6 +160,7 @@ The **Open…** menu has SQL examples in five groups. Each one adds one thing to
 | Sorting, DISTINCT and LIMIT | ORDER BY, breaking ties, DISTINCT, top three with LIMIT, pages with OFFSET, every clause together |
 | Joining tables | JOIN … ON, LEFT JOIN keeps every row, rows with no match, three tables, a self join (who reports to whom), FULL JOIN, a comma in FROM |
 | Grouping and aggregates | COUNT and SUM over every row, GROUP BY, COUNT(*) or COUNT(column), HAVING, WHERE then GROUP BY then HAVING, grouping a join |
+| Subqueries, WITH and UNION | CASE, a subquery that stands alone, IN (subquery), EXISTS once for each row, a count for each row, the NOT IN trap, WITH, a subquery in FROM, UNION, INTERSECT and EXCEPT |
 | Your own tables | Create, insert, update, delete |
 
 ## The download

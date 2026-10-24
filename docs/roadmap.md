@@ -4,7 +4,7 @@
 
 SQL, the next steps (see [SQL](sql.md) for what's there now):
 
-- Subqueries and WITH as nested steps; recursive WITH drawn like loop passes.
+- Recursive WITH, each pass drawn like a loop's passes.
 - Window functions, with each row's frame highlighted.
 
 Everything else:
