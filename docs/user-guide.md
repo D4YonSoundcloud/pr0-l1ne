@@ -200,8 +200,8 @@ Zooming centers on the pointer, so you can zoom into the part you're looking at.
 
 The **▾** next to it picks how it zooms:
 
-- **Zoom out only** (the default) keeps the widest view the run has needed. Stepping back to a small early step, or a diagram that shrinks, doesn't zoom back in, so the picture stays steady while you step back and forth.
-- **Zoom in and out** always fits snugly. It zooms back in when the diagram gets smaller.
+- **Zoom in and out** (the default) always fits snugly. It zooms back in when the diagram gets smaller.
+- **Zoom out only** keeps the widest view the run has needed. Stepping back to a small early step, or a diagram that shrinks, doesn't zoom back in, so the picture stays steady while you step back and forth.
 
 Like **Fit**, it never zooms in past 100%. Zooming or panning by hand turns Auto-fit off, so it never fights you, and pressing **Auto-fit** turns it back on with a fresh, snug fit. Opening another program also starts fresh.
 

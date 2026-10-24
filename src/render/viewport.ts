@@ -134,8 +134,8 @@ export class Viewport {
     this.autoFitMenu.setAttribute("role", "menu");
     this.autoFitMenu.hidden = true;
     const choices: [AutoFitMode, string, string][] = [
-      ["out", "Zoom out only", "Keeps the widest view the run has needed, so the picture stays steady"],
       ["both", "Zoom in and out", "Always fits snugly: zooms back in when the diagram gets smaller"],
+      ["out", "Zoom out only", "Keeps the widest view the run has needed, so the picture stays steady"],
     ];
     for (const [mode, label, detail] of choices) {
       const item = document.createElement("button");

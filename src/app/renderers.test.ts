@@ -155,7 +155,7 @@ const CODE = "const nums = [3, 1, 2];\nfor (let i = 0; i < nums.length; i++) {\n
 describe("the memory window, through its renderer", () => {
   it("starts with Auto-fit on (nothing saved yet) and a Reset layout control", () => {
     const { fakes } = setup();
-    expect(fakes.memory.called("setViewport")[0].args[0]).toEqual({ autoFit: { on: true, mode: "out" } });
+    expect(fakes.memory.called("setViewport")[0].args[0]).toEqual({ autoFit: { on: true, mode: "both" } });
     expect(fakes.memory.called("addControl").map((c) => c.args[0])).toEqual(["Reset layout"]);
   });
 

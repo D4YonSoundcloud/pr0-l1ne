@@ -27,6 +27,9 @@ export default defineConfig({
   ignoreDeadLinks: "localhostLinks",
   sitemap: { hostname: "https://pr0l1ne.com/docs/" },
   head: [
+    // The site's icon (public/ of the app, served at the site's root).
+    ["link", { rel: "icon", href: "/favicon.ico", sizes: "16x16 32x32 48x48" }],
+    ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
     [
