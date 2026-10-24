@@ -98,6 +98,8 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/elements.ts` | Finds the page's elements (`index.html`) once, by id |
 | `src/app/programsController.ts` | Saved programs: the Open menu, Save, Save as, Delete, the save dialog and the unsaved-changes dot |
 | `src/app/shareController.ts` | Share links: the Share button, and opening a link as a shared program that runs nothing until asked |
+| `src/app/languageKind.ts` | The page for a program's languages or for SQL: the windows' names, and the controls that only one kind has |
+| `src/app/csvImport.ts` | SQL's Import CSV button: a CSV file's table added to the program (`src/sql/csv.ts` writes it) |
 | `src/app/playbackController.ts` | Moving through the steps: first / previous / next / last, the scrubber, Play and the speed menu, and the stepping keys (arrows, Home / End, Space, F10, Ctrl/Cmd + Enter) |
 | `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
 | `src/app/measureController.ts` | Measure and growth runs: the Measure and results buttons, the Measure panel and its growth section, the time limit, the editor's count labels, and the last measurement (shown only in its language, and only while the code still matches) |
@@ -368,7 +370,8 @@ pr0-l1ne/
     │   ├── compose.ts          WITH, subqueries in FROM, UNION: parts stepped through first
     │   ├── statements.ts       CREATE, INSERT, UPDATE, DELETE: the table each changed
     │   ├── explain.ts          Postgres's errors, explained
-    │   ├── databases.ts        The sample databases (shop, school, company)
+    │   ├── databases.ts        The sample databases (shop, school, company, transit)
+    │   ├── csv.ts              Import CSV: a CSV file as CREATE TABLE and INSERT
     │   └── sql.test.ts         The SQL tracer on PGlite in Node
     ├── js/
     │   ├── instrument.ts       Rewrites JavaScript to report on itself (Babel): parse, then

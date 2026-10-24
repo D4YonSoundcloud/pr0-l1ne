@@ -10,6 +10,7 @@ import { SVG_RENDERERS } from "./render/svgRenderers";
 import "./styles.css";
 import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
+import { CsvImportController } from "./app/csvImport";
 import { findElements } from "./app/elements";
 import { escapeHtml } from "./app/html";
 import { showLanguageKind } from "./app/languageKind";
@@ -265,6 +266,39 @@ const shares = new ShareController({
     }
     programsController.updateUI();
     view.render();
+  },
+});
+
+// SQL: Import CSV, a CSV file's table added to the program at the cursor.
+new CsvImportController({
+  button: els.importCsv,
+  input: els.csvFile,
+  setBanner,
+  insert(sql) {
+    const monacoEditor = editor.editor;
+    const at = monacoEditor.getSelection();
+    const model = monacoEditor.getModel();
+    if (!at || !model) {
+      editor.setCode(`${sql}\n${editor.getCode()}`);
+      return;
+    }
+    // On lines of its own: after the cursor's line, or at the very top on line 1 with nothing before it.
+    const line = at.startLineNumber;
+    const lineText = model.getLineContent(line);
+    const start = lineText.trim() ? { lineNumber: line, column: lineText.length + 1 } : { lineNumber: line, column: 1 };
+    const text = lineText.trim() ? `\n\n${sql}` : sql;
+    monacoEditor.executeEdits("import-csv", [
+      {
+        range: {
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: start.lineNumber,
+          endColumn: start.column,
+        },
+        text,
+      },
+    ]);
+    monacoEditor.focus();
   },
 });
 

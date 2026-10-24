@@ -509,6 +509,8 @@ export interface SqlTable {
   cuts?: { before: number; label: string }[];
   /** GROUP BY: the groups, in order, each `count` rows from row `start`, and what its rows share ("category = Tea"). */
   groups?: { start: number; count: number; label: string }[];
+  /** What the groups are: GROUP BY's groups (G1, G2...), or a window's partitions (P1, P2...). */
+  groupKind?: "group" | "partition";
 }
 
 export type SqlStageKind =
@@ -538,7 +540,13 @@ export type SqlStageKind =
   /** A subquery that uses the outer row: what it gives for each row (it runs once per row). */
   | "subquery"
   /** UNION, INTERSECT or EXCEPT: the two queries' rows, and the rows they make together. */
-  | "combine";
+  | "combine"
+  /** A window function worked out for each row, from the rows of its partition (its frame). */
+  | "window"
+  /** WITH RECURSIVE: one pass of the recursive query, on the rows the pass before made. */
+  | "pass"
+  /** A statement Postgres refused for a rule of the table's (a key, NOT NULL, a CHECK): the rows involved. */
+  | "refused";
 
 /** One step: a stage of a statement. */
 export interface SqlStage {

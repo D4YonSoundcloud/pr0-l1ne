@@ -578,14 +578,163 @@ ${q("INTERSECT")}; ${q("INTERSECT ALL")}; ${q("EXCEPT")}; ${q("EXCEPT ALL")}; ${
   });
 });
 
+describe("window functions", () => {
+  it("are a step before SELECT: every row in its partition, worked out from its frame", async () => {
+    const t = await trace(`-- viz: database company
+SELECT name, sum(salary) OVER (PARTITION BY department_id ORDER BY hired) AS running
+FROM employees WHERE department_id IS NOT NULL;`);
+    expect(kinds(t)).toEqual(["tables", "from", "where", "window", "select"]);
+    const w = stages(t)[3];
+    const table = w.tables[0];
+    expect(table.groupKind).toBe("partition");
+    expect(table.groups?.map((g) => [g.label, g.count])).toEqual([
+      ["department_id = 1", 4],
+      ["department_id = 2", 3],
+      ["department_id = 3", 3],
+    ]);
+    expect(table.columns.slice(-4).map((c) => [c.name, c.role])).toEqual([
+      ["department_id", "key"],
+      ["sum(salary)", "computed"],
+      ["frame", "inputs"],
+      ["salary values", "inputs"],
+    ]);
+    // Mei, the third hired in Engineering: her frame is the three up to her.
+    expect(table.rows[2].values.slice(-3)).toEqual(["24200", "#1, #2, #3", "9800, 7200, 7200"]);
+    expect(w.notes?.[0]).toMatch(/running total/);
+  });
+
+  it("show a frame set by hand", async () => {
+    const t = await trace(
+      "-- viz: database shop\nSELECT id, sum(quantity) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM orders;",
+    );
+    const w = stages(t).find((s) => s.kind === "window")!;
+    expect(w.tables[0].rows[4].values.slice(-2)).toEqual(["#3, #4, #5", "1, 3, 1"]);
+    expect(w.notes?.[0]).toBe("Each row's frame is set by the window: ROWS BETWEEN 2 PRECEDING AND CURRENT ROW.");
+  });
+
+  it("number rows for rank, without a frame", async () => {
+    const t = await trace(
+      "-- viz: database company\nSELECT name, rank() OVER (ORDER BY salary DESC) FROM employees ORDER BY 2, 1 LIMIT 4;",
+    );
+    const w = stages(t).find((s) => s.kind === "window")!;
+    expect(w.tables[0].columns.some((c) => c.name === "frame")).toBe(false);
+    expect(w.notes?.[0]).toMatch(/rank skips numbers after a tie/);
+    expect(
+      stages(t)
+        .at(-1)
+        ?.tables[0].rows.filter((r) => !r.status)
+        .map((r) => r.values),
+    ).toEqual([
+      ["Hana", "1"],
+      ["Luis", "2"],
+      ["Mei", "2"],
+      ["Victor", "4"],
+    ]);
+  });
+});
+
+describe("WITH RECURSIVE", () => {
+  it("steps pass by pass, each pass reading the rows the one before made", async () => {
+    const t = await trace(
+      "WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT i FROM n;",
+    );
+    expect(stages(t).map((s) => `${s.kind} ${s.clause}`)).toEqual([
+      "select SELECT 1",
+      "pass Pass 1",
+      "pass Pass 2",
+      "pass Pass 3",
+      "pass All passes together",
+      "from FROM n",
+      "select SELECT i",
+    ]);
+    const [, first, second, last] = stages(t);
+    expect(first.summary).toBe("1 new row, from the starting rows");
+    expect(second.tables[0].rows[0].id).toBe(first.tables[1].rows[0].id);
+    expect(last.summary).toBe("no new rows from the 1 row pass 2 made: done");
+    expect(first.part?.label).toBe("WITH RECURSIVE n");
+  });
+
+  it("with UNION, skips rows found already, so a cycle ends", async () => {
+    const t = await trace(`CREATE TABLE edges (a int, b int);
+INSERT INTO edges VALUES (1, 2), (2, 3), (3, 1);
+WITH RECURSIVE reach (node) AS (SELECT 1 UNION SELECT e.b FROM edges e JOIN reach r ON e.a = r.node)
+SELECT node FROM reach ORDER BY node;`);
+    const passes = stages(t).filter((s) => s.kind === "pass");
+    expect(passes.map((p) => p.rows)).toEqual([1, 1, 0, 3]);
+    expect(passes[2].tables[1].rows[0]).toMatchObject({ values: ["1"], status: "removed", note: "found already" });
+  });
+});
+
+describe("changing tables, before and after", () => {
+  const SETUP =
+    "CREATE TABLE pets (name text, age int);\nINSERT INTO pets VALUES ('Rex', 3), ('Tom', NULL), ('Kit', 1);\n";
+
+  it("UPDATE steps through its WHERE, then shows the table before and after", async () => {
+    const t = await trace(`${SETUP}UPDATE pets SET age = age + 1 WHERE age < 5;`);
+    expect(kinds(t)).toEqual(["statement", "statement", "where", "statement"]);
+    const where = stages(t)[2];
+    expect(where.summary).toBe("picks 2 of 3 rows to change");
+    expect(where.tables[0].rows.map((r) => r.note)).toEqual([
+      "picked: to change",
+      "NULL: unknown, so not picked",
+      "picked: to change",
+    ]);
+    const update = stages(t)[3];
+    expect(update.tables.map((x) => x.name)).toEqual(["pets (before)", "pets (after)"]);
+    expect(update.tables[1].rows.filter((r) => r.status === "changed").map((r) => r.note)).toEqual([
+      "was #1: age 3 → 4",
+      "was #3: age 1 → 2",
+    ]);
+  });
+
+  it("DELETE steps through its WHERE, then shows the rows gone", async () => {
+    const t = await trace(`${SETUP}DELETE FROM pets WHERE age IS NULL;`);
+    const del = stages(t).at(-1)!;
+    expect(del.tables[0].rows.filter((r) => r.status === "removed").map((r) => r.values[0])).toEqual(["Tom"]);
+    expect(del.tables[1].rows.map((r) => r.values[0])).toEqual(["Rex", "Kit"]);
+  });
+});
+
+describe("refused statements", () => {
+  it("show the row already holding a unique key", async () => {
+    const t = await trace("-- viz: database shop\nINSERT INTO customers VALUES (3, 'Ann', 'Leeds', '2024-01-01');");
+    expect(t.error?.message).toMatch(/duplicate key value/);
+    const refused = stages(t).at(-1)!;
+    expect(refused.kind).toBe("refused");
+    expect(refused.summary).toBe("customers already has a row with id = 3");
+    expect(refused.tables[0].rows.filter((r) => r.status).map((r) => [r.values[1], r.note])).toEqual([
+      ["Alan", "already has this key"],
+    ]);
+    expect(refused.notes?.[0]).toBe("Refused: nothing changed. The rule: PRIMARY KEY (id).");
+  });
+
+  it("show the rows that still point at a row being deleted", async () => {
+    const t = await trace("-- viz: database shop\nDELETE FROM customers WHERE id = 2;");
+    const refused = stages(t).at(-1)!;
+    expect(refused.summary).toBe("rows of orders still point at id = 2");
+    expect(refused.tables[0].name).toBe("orders");
+    expect(refused.tables[0].rows.filter((r) => r.status).map((r) => r.values[0])).toEqual(["2", "5", "11"]);
+  });
+
+  it("show the table a key isn't in, and a CHECK rule", async () => {
+    const missing = await trace("-- viz: database transit\nINSERT INTO connections VALUES (1, 99, 3);");
+    expect(stages(missing).at(-1)?.summary).toBe("stations has no row with to_station = 99");
+    const check = await trace("-- viz: database transit\nINSERT INTO connections VALUES (1, 10, 0);");
+    expect(stages(check).at(-1)?.summary).toBe("a row of connections would break its rule CHECK ((minutes > 0))");
+  });
+});
+
 describe("what isn't stepped through yet", () => {
   for (const [query, why] of [
     ["SELECT category, count(*) FROM products GROUP BY ROLLUP (category)", "ROLLUP"],
     ["SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY price) FROM products", "WITHIN GROUP"],
-    ["SELECT name, count(*) OVER () FROM products", "window functions"],
     ["SELECT * FROM orders JOIN (customers JOIN products ON true) ON true", "joins in parentheses"],
     ["SELECT * FROM orders, customers JOIN products ON true", "a mix of commas and JOIN"],
-    ["WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT * FROM n", "WITH RECURSIVE"],
+    ["SELECT name, rank() OVER w FROM products WINDOW w AS (ORDER BY price)", "named windows"],
+    [
+      "SELECT category, count(*), rank() OVER (ORDER BY count(*)) FROM products GROUP BY category",
+      "window functions with GROUP BY",
+    ],
     ["SELECT ARRAY(SELECT name FROM products)", "this kind of subquery"],
     ["SELECT * FROM customers c, LATERAL (SELECT * FROM orders o WHERE o.customer_id = c.id) x", "LATERAL"],
     ["SELECT * FROM generate_series(1, 3)", "functions in FROM"],
@@ -616,12 +765,22 @@ SELECT * FROM pets ORDER BY age;`;
 
   it("are a step each, with the rows they changed marked", async () => {
     const t = await trace(SCRIPT);
-    expect(kinds(t)).toEqual(["statement", "statement", "statement", "statement", "from", "select", "order"]);
-    const [create, insert, update, del] = stages(t);
+    expect(kinds(t)).toEqual([
+      "statement",
+      "statement",
+      "where",
+      "statement",
+      "where",
+      "statement",
+      "from",
+      "select",
+      "order",
+    ]);
+    const [create, insert, , update, , del] = stages(t);
     expect(create.summary).toBe("made the table pets");
     expect(insert.tables[0].rows.map((r) => r.status)).toEqual(["added", "added", "added"]);
     expect(update.summary).toBe("changed 1 row");
-    expect(update.tables[0].rows.filter((r) => r.status === "changed").map((r) => r.values)).toEqual([["Rex", "4"]]);
+    expect(update.tables[1].rows.filter((r) => r.status === "changed").map((r) => r.values)).toEqual([["Rex", "4"]]);
     expect(del.tables[0].rows.filter((r) => r.status === "removed").map((r) => r.values)).toEqual([["Tom", null]]);
     expect(t.stdout).toMatch(/^CREATE TABLE\nINSERT 0 3\nUPDATE 1\nDELETE 1\n/);
   });

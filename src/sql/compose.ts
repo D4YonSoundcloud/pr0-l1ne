@@ -23,7 +23,7 @@ import type { SqlRow, SqlStage, SqlTable } from "../trace/types";
 import type { QueryResult } from "./engine";
 import type { Node } from "./parser";
 import { oneLine } from "./script";
-import { drawnTable, type SelectContext, sameRows, selectStages } from "./select";
+import { drawnTable, firstLocation, type SelectContext, sameRows, selectStages } from "./select";
 
 export interface ComposeContext extends Omit<SelectContext, "inner"> {
   /** Temporary tables made for this statement, to drop after it. */
@@ -141,13 +141,132 @@ async function withStages(
     const cte: Node = item.CommonTableExpr;
     const name = String(cte.ctename);
     const inner: Node = cte.ctequery.SelectStmt;
-    stages.push(...(await partStages(deeper(ctx, `WITH ${name}`), inner)).stages);
     const columns: string[] = (cte.aliascolnames ?? []).map((c: Node) => String(c.String?.sval));
+    if (select.withClause.recursive && readsItself(inner, name)) {
+      const passes = await recursiveStages(ctx, name, columns, inner);
+      if (!passes) return null;
+      stages.push(...passes);
+      continue;
+    }
+    stages.push(...(await partStages(deeper(ctx, `WITH ${name}`), inner)).stages);
     await makeTable(ctx, name, columns, inner);
   }
   const { withClause: _, ...main } = select;
   const rest = await queryStages(ctx, main, result, problem);
   return rest ? [...stages, ...rest] : null;
+}
+
+/** Does a query read the table `name` (a WITH RECURSIVE query reading itself)? */
+function readsItself(query: Node, name: string): boolean {
+  return JSON.stringify(query).includes(`"relname":${JSON.stringify(name)}`);
+}
+
+/** Passes a WITH RECURSIVE query may take: more is almost certainly a query that never stops. */
+const MAX_PASSES = 50;
+
+/**
+ * WITH RECURSIVE name AS (start UNION [ALL] step): the starting query's
+ * steps, then one step for each pass of the recursive query, which reads
+ * the rows the pass before made (the starting query's, the first time),
+ * until a pass makes no new rows. With UNION (not ALL), a row already found
+ * isn't new. Each pass runs the recursive query on a temporary table
+ * `name` holding the last pass's rows; at the end it holds them all, for
+ * the main query.
+ */
+async function recursiveStages(
+  ctx: ComposeContext,
+  name: string,
+  columnNames: string[],
+  query: Node,
+): Promise<SqlStage[] | null> {
+  const label = `WITH RECURSIVE ${name}`;
+  const start = await partStages(deeper(ctx, `${label}: the starting query`), query.larg);
+  const passCtx = deeper(ctx, label);
+  const columns = toColumns(start.result).map((c, i) => (columnNames[i] ? { ...c, name: columnNames[i] } : c));
+  const types = start.result.columns.map((c) => c.type);
+  const distinct = !query.all;
+  const literal = (v: string | null, i: number) =>
+    v === null ? `NULL::${types[i]}` : `'${v.replace(/'/g, "''")}'::${types[i]}`;
+  const fill = async (rows: SqlRow[]) => {
+    await ctx.engine.query(`TRUNCATE ${quote(name)}`);
+    if (rows.length)
+      await ctx.engine.query(
+        `INSERT INTO ${quote(name)} VALUES ${rows.map((r) => `(${r.values.map(literal).join(", ")})`).join(", ")}`,
+      );
+  };
+  await ctx.engine.query(
+    `CREATE TEMP TABLE ${quote(name)} (${columns.map((c, i) => `${quote(c.name)} ${types[i]}`).join(", ")})`,
+  );
+  ctx.temps.push(name);
+
+  // The starting rows (UNION, not ALL, keeps each once).
+  const found = new Set<string>();
+  const key = (r: SqlRow) => JSON.stringify(r.values);
+  let working: SqlRow[] = [];
+  for (const [i, values] of start.result.rows.entries()) {
+    const row: SqlRow = { id: `pass0:${i}`, label: `#${i + 1}`, values };
+    if (distinct && found.has(key(row))) continue;
+    found.add(key(row));
+    working.push(row);
+  }
+  const all: SqlRow[] = [...working];
+  const stages: SqlStage[] = [...start.stages];
+  const stepSql = await ctx.parser.deparse({ SelectStmt: query.rarg });
+  const loc = firstLocation(query.rarg);
+  const line = loc === null ? ctx.line : ctx.lineOf(loc);
+  for (let pass = 1; ; pass++) {
+    if (pass > MAX_PASSES) return null;
+    await fill(working);
+    const made = await ctx.engine.query(stepSql);
+    const from = pass === 1 ? "the starting rows" : `the ${plural(working.length, "row")} pass ${pass - 1} made`;
+    const fresh: SqlRow[] = [];
+    const rows = made.rows.map((values, i): SqlRow => {
+      const row: SqlRow = { id: `pass${pass}:${i}`, label: `${pass}.${i + 1}`, values };
+      if (distinct && found.has(key(row))) return { ...row, status: "removed", note: "found already" };
+      found.add(key(row));
+      fresh.push(row);
+      return row;
+    });
+    stages.push({
+      statement: ctx.statement,
+      ...(passCtx.part ? { part: passCtx.part } : {}),
+      kind: "pass",
+      clause: `Pass ${pass}`,
+      summary: fresh.length ? `${plural(fresh.length, "new row")}, from ${from}` : `no new rows from ${from}: done`,
+      line,
+      tables: [
+        drawnTable({
+          name: pass === 1 ? `${name}: the starting rows` : `${name}: pass ${pass - 1}`,
+          columns,
+          rows: working,
+        }),
+        drawnTable({ name: `pass ${pass}`, columns, rows }),
+      ],
+      rows: fresh.length,
+      ...(pass === 1
+        ? {
+            notes: [
+              `Each pass runs the recursive query with ${name} holding only the rows the pass before made. It stops when a pass makes nothing new.`,
+            ],
+          }
+        : {}),
+    });
+    if (!fresh.length) break;
+    all.push(...fresh);
+    working = fresh;
+  }
+  await fill(all);
+  stages.push({
+    statement: ctx.statement,
+    ...(passCtx.part ? { part: passCtx.part } : {}),
+    kind: "pass",
+    clause: "All passes together",
+    summary: `${plural(all.length, "row")}: the starting rows and every pass's new ones, the rows of ${name}`,
+    line: ctx.line,
+    tables: [drawnTable({ name, columns, rows: all })],
+    rows: all.length,
+  });
+  return stages;
 }
 
 /** The rows a part's steps end with: its last step's rows that weren't dropped, if they're all drawn. */

@@ -1,0 +1,502 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": " i\n---\n 1\n 2\n 3\n 4\n 5\n(5 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "statements": [
+        {
+          "kind": "SELECT",
+          "line": 3,
+          "text": "WITH RECURSIVE n (i) AS ( SELECT 1 UNION ALL SELECT i + 1 FROM n WHER…"
+        }
+      ],
+      "stages": [
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n: the starting query",
+            "depth": 1
+          },
+          "kind": "select",
+          "clause": "SELECT 1",
+          "summary": "1 row",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "?column?",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "1"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "result:0",
+                  "label": "#1",
+                  "values": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 1",
+          "summary": "1 new row, from the starting rows",
+          "line": 6,
+          "tables": [
+            {
+              "name": "n: the starting rows",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 1",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1,
+          "notes": [
+            "Each pass runs the recursive query with n holding only the rows the pass before made. It stops when a pass makes nothing new."
+          ]
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 2",
+          "summary": "1 new row, from the 1 row pass 1 made",
+          "line": 6,
+          "tables": [
+            {
+              "name": "n: pass 1",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 2",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "3"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 3",
+          "summary": "1 new row, from the 1 row pass 2 made",
+          "line": 6,
+          "tables": [
+            {
+              "name": "n: pass 2",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "3"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 3",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 4",
+          "summary": "1 new row, from the 1 row pass 3 made",
+          "line": 6,
+          "tables": [
+            {
+              "name": "n: pass 3",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "4"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 4",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "5"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 5",
+          "summary": "no new rows from the 1 row pass 4 made: done",
+          "line": 6,
+          "tables": [
+            {
+              "name": "n: pass 4",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "5"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 5",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "rows": 0
+        },
+        {
+          "statement": 0,
+          "part": {
+            "label": "WITH RECURSIVE n",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "All passes together",
+          "summary": "5 rows: the starting rows and every pass's new ones, the rows of n",
+          "line": 3,
+          "tables": [
+            {
+              "name": "n",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "5"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 5
+        },
+        {
+          "statement": 0,
+          "kind": "from",
+          "clause": "FROM n",
+          "summary": "n: 5 rows",
+          "line": 8,
+          "tables": [
+            {
+              "name": "n",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "n:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1"
+                  ]
+                },
+                {
+                  "id": "n:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2"
+                  ]
+                },
+                {
+                  "id": "n:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3"
+                  ]
+                },
+                {
+                  "id": "n:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4"
+                  ]
+                },
+                {
+                  "id": "n:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 5
+        },
+        {
+          "statement": 0,
+          "kind": "select",
+          "clause": "SELECT i",
+          "summary": "1 column, 5 rows",
+          "line": 8,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "i",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "n:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1"
+                  ]
+                },
+                {
+                  "id": "n:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2"
+                  ]
+                },
+                {
+                  "id": "n:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3"
+                  ]
+                },
+                {
+                  "id": "n:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4"
+                  ]
+                },
+                {
+                  "id": "n:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 5,
+          "notes": [
+            "No ORDER BY: Postgres may give these rows in any order. Add ORDER BY to choose one."
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":3,"stack":[{"id":"f0","func":"Global","line":3,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f0","func":"Global","line":8,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f0","func":"Global","line":8,"locals":[]}],"stdoutLength":32,"loops":[]}
+  ]
+}

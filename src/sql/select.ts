@@ -180,7 +180,8 @@ export function unsupported(select: Node): string | null {
     const why = unsupportedHere(q);
     if (why) return why;
   }
-  if (some(select, (type, body) => type === "FuncCall" && !!body.over)) return "window functions";
+  if (some(select, (type, body) => type === "FuncCall" && !!(body.over?.refname || body.over?.name)))
+    return "named windows (WINDOW w AS …)";
   if (some(select, (type, body) => type === "FuncCall" && !!body.agg_within_group))
     return "ordered-set aggregates (WITHIN GROUP)";
   if (some(select, (type, body) => type === "SubLink" && !SUBLINKS.has(body.subLinkType)))
@@ -196,13 +197,28 @@ const SUBLINKS = new Set(["EXPR_SUBLINK", "EXISTS_SUBLINK", "ANY_SUBLINK", "ALL_
 
 /** What one query (not the ones inside it) uses that isn't stepped through yet. */
 function unsupportedHere(select: Node): string | null {
-  if (select.withClause?.recursive) return "WITH RECURSIVE";
+  if (select.withClause?.recursive) {
+    for (const item of select.withClause.ctes ?? []) {
+      const cte: Node = item.CommonTableExpr ?? {};
+      const q: Node = cte.ctequery?.SelectStmt ?? {};
+      const refers = (tree: unknown) => some(tree, (type, body) => type === "RangeVar" && body.relname === cte.ctename);
+      if (!refers(q)) continue;
+      // Stepped through: a starting query, UNION [ALL], then a query that reads the rows so far.
+      if (q.op !== "SETOP_UNION" || refers(q.larg) || q.sortClause || q.limitCount)
+        return "this kind of WITH RECURSIVE (a starting query, UNION, then the recursive one, is stepped through)";
+    }
+  }
   if (select.withClause?.ctes?.some((c: Node) => !c.CommonTableExpr?.ctequery?.SelectStmt))
     return "WITH queries that change tables (INSERT, UPDATE or DELETE in WITH)";
   if (select.valuesLists) return "VALUES lists";
   if (select.lockingClause) return "FOR UPDATE and other locking clauses";
   if (select.groupClause?.some((item: Node) => item.GroupingSet)) return "GROUPING SETS, ROLLUP and CUBE";
-  if (select.windowClause) return "window functions";
+  if (select.windowClause) return "named windows (WINDOW w AS …)";
+  const windows = windowNodes(select.targetList);
+  if (windows.length && (select.groupClause || select.havingClause || aggregateNodes(select).length))
+    return "window functions with GROUP BY or aggregates";
+  if (windowNodes([select.sortClause, select.whereClause, select.havingClause]).length)
+    return "window functions outside SELECT's list";
   if (select.distinctClause?.some((item: Node) => Object.keys(item).length > 0)) return "DISTINCT ON";
   if (select.limitOption === "LIMIT_OPTION_WITH_TIES") return "FETCH … WITH TIES";
   if (select.fromClause) {
@@ -245,6 +261,33 @@ function aggregateNodes(select: Node): Node[] {
   visit([select.targetList, select.havingClause, select.sortClause]);
   return found;
 }
+
+/** Window functions (a call with OVER) in a clause, not in its subqueries. */
+function windowNodes(tree: unknown): Node[] {
+  const found: Node[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const node = value as Node;
+    if (node.SubLink) return;
+    if (node.FuncCall?.over) {
+      found.push(node);
+      return;
+    }
+    for (const v of Object.values(node)) visit(v);
+  };
+  visit(tree);
+  return found;
+}
+
+/** frameOptions with no frame written: RANGE UNBOUNDED PRECEDING to CURRENT ROW (with ORDER BY), or the whole partition. */
+const DEFAULT_FRAME = 1058;
+
+/** Window functions that work from their frame: the aggregates, first_value, last_value, nth_value. */
+const FRAMED = new Set(["first_value", "last_value", "nth_value"]);
 
 /** The subqueries in a clause, outermost only (each one's own are its business). */
 function subLinks(tree: unknown): Node[] {
@@ -724,6 +767,137 @@ export async function selectStages(
     currentName = "joined";
   }
 
+  /** A window's step: every row, in its partition, with the window functions worked out, and each one's frame. */
+  const windowStage = async (overText: string, over: Node, calls: Node[], rowsIn: Flow[]): Promise<SqlStage | null> => {
+    try {
+      const partSql = await Promise.all((over.partitionClause ?? []).map((p: Node) => parser.deparse(p)));
+      const sortSql = await Promise.all((over.orderClause ?? []).map((p: Node) => parser.deparse(p)));
+      const callSql = await Promise.all(calls.map((c) => parser.deparse(c)));
+      const framed = await Promise.all(
+        calls.map(async (c) => {
+          const call: Node = c.FuncCall;
+          const arg: Node | undefined = call.args?.[0];
+          return (isAggregate(call) || FRAMED.has(funcName(call))) && !call.agg_star && arg
+            ? parser.deparse(arg)
+            : null;
+        }),
+      );
+      const usesFrame = calls.some((c) => isAggregate(c.FuncCall) || FRAMED.has(funcName(c.FuncCall)));
+      const inputs = framed.filter((f): f is string => f !== null);
+      const exprs = [
+        ...partSql.map((p) => `(${p})`),
+        ...callSql,
+        ...(usesFrame ? [`string_agg(${idSql}, chr(10)) OVER ${overText}`] : []),
+        ...inputs.map((a) => `string_agg(coalesce((${a})::text, 'NULL'), ', ') OVER ${overText}`),
+        idSql,
+      ];
+      const res = await engine.query(
+        `SELECT ${exprs.join(", ")} FROM ${fromSql}${whereTail} ORDER BY ${[...partSql, ...sortSql, orderSql].join(", ")}`,
+      );
+      const byId = new Map(rowsIn.map((r) => [r.id, r]));
+      const col = (kind: "part" | "call" | "frame" | "input", i = 0) =>
+        kind === "part"
+          ? i
+          : kind === "call"
+            ? partSql.length + i
+            : kind === "frame"
+              ? partSql.length + callSql.length
+              : partSql.length + callSql.length + (usesFrame ? 1 : 0) + i;
+      const groups: NonNullable<SqlTable["groups"]> = [];
+      let lastKey = "";
+      const rows: SqlRow[] = res.rows.map((row, i) => {
+        const flow = byId.get(idOf(row));
+        const key = JSON.stringify(row.slice(0, partSql.length));
+        if (i === 0 || key !== lastKey) {
+          const label = partSql.length
+            ? partSql.map((p, k) => `${oneLine(display(p), 30)} = ${row[k] ?? "NULL"}`).join(", ")
+            : "every row";
+          groups.push({ start: i, count: 0, label });
+          lastKey = key;
+        }
+        groups[groups.length - 1].count++;
+        const frame = usesFrame
+          ? String(row[col("frame")] ?? "")
+              .split("\n")
+              .filter(Boolean)
+              .map(labelOf)
+              .join(", ")
+          : null;
+        return {
+          id: idOf(row),
+          label: flow?.label ?? labelOf(idOf(row)),
+          group: groups.length - 1,
+          values: [
+            ...(flow?.values ?? currentColumns.map(() => null)),
+            ...row.slice(0, partSql.length),
+            ...callSql.map((_, k) => row[col("call", k)]),
+            ...(usesFrame ? [frame] : []),
+            ...inputs.map((_, k) => row[col("input", k)]),
+          ],
+        };
+      });
+      if (rows.length !== rowsIn.length) return null;
+      const columns: SqlColumn[] = [
+        ...currentColumns,
+        ...partSql.map(
+          (p, i): SqlColumn => ({
+            ...toColumn(res.columns[i]),
+            name: oneLine(display(p), 40),
+            role: "key",
+            expr: oneLine(display(p)),
+          }),
+        ),
+        ...callSql.map(
+          (c, i): SqlColumn => ({
+            ...toColumn(res.columns[col("call", i)]),
+            name: oneLine(display(c.slice(0, c.lastIndexOf(" OVER "))), 40),
+            role: "computed",
+            expr: oneLine(display(c)),
+          }),
+        ),
+        ...(usesFrame ? [{ name: "frame", type: "text", role: "inputs", expr: oneLine(overText) } as SqlColumn] : []),
+        ...inputs.map(
+          (a): SqlColumn => ({
+            name: `${oneLine(display(a), 30)} values`,
+            type: "text",
+            role: "inputs",
+            expr: oneLine(display(a)),
+          }),
+        ),
+      ];
+      const explicitFrame = over.frameOptions !== undefined && over.frameOptions !== DEFAULT_FRAME;
+      const notes: string[] = [];
+      if (usesFrame) {
+        notes.push(
+          explicitFrame
+            ? `Each row's frame is set by the window: ${oneLine(overText.slice(1, -1).replace(/^.*?((?:ROWS|RANGE|GROUPS) .*)$/, "$1"))}.`
+            : over.orderClause
+              ? "With ORDER BY in the window, a row's frame is its partition's rows up to it, and any that tie with it: a running total."
+              : "Without ORDER BY in the window, a row's frame is its whole partition.",
+        );
+      }
+      if (calls.some((c) => ["rank", "dense_rank", "row_number"].includes(funcName(c.FuncCall))))
+        notes.push(
+          "row_number counts along each partition in the window's ORDER BY; rank skips numbers after a tie, dense_rank doesn't.",
+        );
+      return stage({
+        kind: "window",
+        clause: oneLine(display(callSql.join(", ")), 60),
+        summary: partSql.length
+          ? `${plural(groups.length, "partition")}: each row worked out from the rows of its own`
+          : "one partition, every row: each row worked out from it",
+        line: at(calls[0]),
+        tables: [
+          drawnTable({ name: several ? currentName : first.tableName, columns, rows, groups, groupKind: "partition" }),
+        ],
+        rows: rows.length,
+        ...(notes.length ? { notes } : {}),
+      });
+    } catch {
+      return null;
+    }
+  };
+
   for (const c of correlated.filter((c) => c.clause === "where")) {
     const step = await perRow(c, current, "");
     if (step) stages.push(step);
@@ -1065,6 +1239,23 @@ export async function selectStages(
     for (const c of correlated.filter((c) => c.clause === "select")) {
       const step = await perRow(c, keptRows, whereTail);
       if (step) stages.push(step);
+    }
+
+    // Window functions: each worked out for every row, from the rows of
+    // its partition. One step for each window (OVER ...) the query uses.
+    const windows = new Map<string, { over: Node; calls: Node[] }>();
+    for (const node of windowNodes(targets)) {
+      const sql = await parser.deparse(node);
+      const overText = sql.slice(sql.lastIndexOf(" OVER ") + 6);
+      if (!windows.has(overText)) windows.set(overText, { over: node.FuncCall.over, calls: [] });
+      const calls = windows.get(overText)!.calls;
+      // The same call twice (avg(price) OVER () in two columns) is one column here.
+      if (!(await Promise.all(calls.map((c) => parser.deparse(c)))).includes(sql)) calls.push(node);
+    }
+    for (const [overText, w] of windows) {
+      const step = await windowStage(overText, w.over, w.calls, keptRows);
+      if (!step) return null;
+      stages.push(step);
     }
   }
 

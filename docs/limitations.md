@@ -90,10 +90,12 @@ Everything listed for JavaScript applies, plus:
 
 **SQL**
 
-- **Not every query is stepped through yet.** Queries on one table, joins, GROUP BY and aggregates, subqueries, WITH and UNION are stepped through clause by clause. Window functions, WITH RECURSIVE and LATERAL run, but are shown as their result in one step (see [SQL](sql.md#not-stepped-through-yet)).
+- **Not every query is stepped through yet.** Queries on one table, joins, GROUP BY and aggregates, subqueries, WITH and WITH RECURSIVE, UNION and window functions are stepped through clause by clause. Named windows, LATERAL and a few others run, but are shown as their result in one step (see [SQL](sql.md#not-stepped-through-yet)).
 - **A join's result can be wide.** Its rows have every column of every table joined, so a join of wide tables is drawn small: zoom in, or SELECT fewer columns to see them later on.
 - **Up to a hundred rows a step.** A table with more is drawn to its hundredth row, with the rest counted. The output pane prints up to 200 rows of a result.
-- **UPDATE moves rows.** Postgres keeps an updated row in a new place, so after an UPDATE the row has a new number (`#4`) and isn't followed from its old one.
+- **UPDATE moves rows.** Postgres keeps an updated row in a new place, so after an UPDATE the row has a new number (`#4`). Old and new versions are paired up in the order Postgres found and wrote them, which is right for a plain UPDATE.
+- **A recursive query** may take up to 50 passes; one that takes more is shown as its result.
+- **Import CSV** takes up to 200 rows, from a file of up to 1 MB.
 - **A query that never finishes** (a huge `generate_series`, say) is stopped by the same time limit as a program, and Postgres starts again.
 - **No files, no transactions.** `COPY` can't read or write files, and `BEGIN`, `COMMIT` and `ROLLBACK` aren't allowed: each run starts from a fresh database and is thrown away at the end.
 

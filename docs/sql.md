@@ -43,6 +43,7 @@ Its first step shows every table in the database. The sample databases are small
 | `shop` | `customers` (id, name, city, joined), `products` (id, name, category, price, stock), `orders` (id, customer_id, product_id, quantity, ordered_on) |
 | `school` | `students` (id, name, year, gpa, city), `courses` (id, title, department, credits), `enrollments` (student_id, course_id, grade) |
 | `company` | `departments` (id, name, floor), `employees` (id, name, department_id, manager_id, salary, hired) |
+| `transit` | `stations` (id, name, zone), `connections` (from_station, to_station, minutes): one-way, for following routes with WITH RECURSIVE |
 
 Without the hint, the database starts empty. Make your own tables with `CREATE TABLE` and fill them with `INSERT`.
 
@@ -109,6 +110,21 @@ A query can hold other queries. Each inner query is stepped through as a **part*
 
 **CASE** in SELECT gets a column beside it showing which branch each row took: `WHEN price < 8`, `WHEN price < 20` or `ELSE`.
 
+### Window functions
+
+A window function (`sum(salary) OVER (...)`, `rank() OVER (...)`, `lag(x) OVER (...)`) works out a value for each row from other rows, without folding them into one the way GROUP BY does. Each window (each different `OVER (...)`) gets a step of its own, just before SELECT:
+
+- **Partitions.** The rows are shown in their partitions (`PARTITION BY department_id`), each with a color and a label beside it: "P1 · department_id = 1 · 4 rows". Within a partition, rows are in the window's ORDER BY.
+- **The value.** Each window function gets a column, worked out for each row.
+- **The frame.** An aggregate (`sum`, `avg`, `count`...) and `first_value`, `last_value` and `nth_value` work from a row's *frame*: some of its partition's rows. A **frame** column lists them for every row (`#1, #2, #3`), and a column beside it lists the values the function was given. With ORDER BY in the window, a row's frame is its partition's rows up to it, so `sum` makes a running total. Without ORDER BY, the frame is the whole partition. `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` sets a frame by hand. A note under the clause says which applies.
+- `row_number`, `rank` and `dense_rank` count along the partition, and `lag` and `lead` read the row before or after: they don't use a frame.
+
+### WITH RECURSIVE
+
+A recursive WITH query has a starting query, then `UNION` or `UNION ALL`, then a query that reads the WITH query itself. Postgres runs it in passes, like a loop. The steps follow it: the starting query's steps, then one step per pass. Each pass shows two tables: the rows the pass before made (the starting rows, the first time), and the rows this pass makes from them. That's all the recursive query sees each time: not every row so far, only the last pass's. It stops when a pass makes no new rows. With `UNION` (not ALL), a row found already isn't new, and is struck through ("found already"), which is what lets a search through a graph with a cycle finish. A last step shows every pass's rows together, which is what the main query reads.
+
+The Query steps window lists the passes (`PASS 1`, `PASS 2`...) like loop passes. A recursive query that runs for more than 50 passes is shown as its result instead.
+
 ### NULL
 
 NULL is SQL's "no value", and any comparison with it is neither true nor false but **unknown**: `NULL > 3.5` and `NULL = NULL` are both unknown. WHERE keeps only the rows where the condition is true, so an unknown leaves the row out, just as false does. PR0L1NE shows unknown as **NULL** (in orange), and the row says "NULL: unknown, so not kept". To ask for missing values, use `IS NULL`. The "NULL is unknown" example shows both.
@@ -119,13 +135,32 @@ Without ORDER BY, Postgres may return rows in any order, and the last step says 
 
 ## Statements that change tables
 
-`CREATE TABLE`, `INSERT`, `UPDATE` and `DELETE` are a step each. Each one shows the table it changed:
+`CREATE TABLE`, `INSERT`, `UPDATE` and `DELETE` are a step each, showing the table before and after:
 
-- **INSERT** shows the new rows highlighted.
-- **UPDATE** shows the changed rows highlighted.
-- **DELETE** shows the table before the delete, with the deleted rows struck through.
+- **INSERT:** the new rows are highlighted in the table after.
+- **UPDATE:** first, a step through its WHERE. It shows which rows it picks to change, with a **picked?** column, the same way a query's WHERE works. Then the table before, with those rows marked, beside the table after. Each changed row there says what changed: "was #1: age 3 → 4". Postgres writes an updated row anew, so it has a new number.
+- **DELETE:** first, the same step through its WHERE. Then the table before, with the deleted rows struck through, beside the table after.
+
+### Refused statements
+
+When Postgres refuses a statement for one of a table's rules, the error is shown as usual, and a last step shows the rows involved. Nothing has changed at that point.
+
+- **A unique key** (`PRIMARY KEY`, `UNIQUE`): the row that already has the key is marked. For example, "customers already has a row with id = 3", with Alan's row marked.
+- **A foreign key:** for a key that doesn't exist, the step shows the other table ("stations has no row with to_station = 99"). For a row that other rows still point at, the step marks those rows ("rows of orders still point at id = 2").
+- **NOT NULL and CHECK:** the table, and the rule it breaks, like `CHECK ((minutes > 0))`.
+
+The rule itself, as Postgres keeps it, is in a note under the step.
 
 `BEGIN`, `COMMIT` and `ROLLBACK` aren't needed here and aren't allowed: every run is thrown away at the end. `COPY` can't read files here either.
+
+## Importing a CSV file
+
+With SQL selected, **Import CSV** in the toolbar makes a table from a CSV file. It adds `CREATE TABLE` and `INSERT` statements to your program, at the cursor, so the table is part of the program: it's saved with it and travels in its share link. The file is read in your browser and goes nowhere else.
+
+- **Column names:** the first row names the columns, made into names SQL can use without quotes (`First Name` becomes `first_name`).
+- **Types:** each column gets the narrowest type every value fits: integer, numeric, date (`2024-01-31`), boolean, or text. An empty value is NULL.
+- **Separators:** commas, semicolons or tabs, and quoted values with commas or line breaks in them.
+- **Limits:** up to the first 200 rows are imported, from a file of up to 1 MB. A program is for reading, and its share link has to hold it.
 
 ## Errors
 
@@ -143,16 +178,16 @@ A query that uses any of these is still run, and its result is shown as a single
 
 - joins in parentheses (`a JOIN (b JOIN c ON ...) ON ...`), a join with a name of its own (`AS` after it), and a mix of commas and JOIN in one FROM
 - GROUPING SETS, ROLLUP and CUBE, and ordered-set aggregates (`WITHIN GROUP`)
-- WITH RECURSIVE, WITH queries that change tables, LATERAL, and ARRAY(...) subqueries
-- window functions, DISTINCT ON, and `FETCH … WITH TIES`
+- WITH queries that change tables, a WITH RECURSIVE query that isn't a starting query, UNION, then the recursive one, LATERAL, and ARRAY(...) subqueries
+- named windows (`WINDOW w AS (...)`), window functions with GROUP BY, DISTINCT ON, and `FETCH … WITH TIES`
 - functions in FROM, like `generate_series`
 - functions like `random()`, which give a new answer each time they're called
 
-Window functions and WITH RECURSIVE are next: see the [roadmap](roadmap.md).
+
 
 ## Examples
 
-The **Open…** menu has SQL examples in six groups. Each one adds one thing to the one before:
+The **Open…** menu has SQL examples in eight groups. Each one adds one thing to the one before:
 
 | Group | Examples |
 | --- | --- |
@@ -161,6 +196,8 @@ The **Open…** menu has SQL examples in six groups. Each one adds one thing to 
 | Joining tables | JOIN … ON, LEFT JOIN keeps every row, rows with no match, three tables, a self join (who reports to whom), FULL JOIN, a comma in FROM |
 | Grouping and aggregates | COUNT and SUM over every row, GROUP BY, COUNT(*) or COUNT(column), HAVING, WHERE then GROUP BY then HAVING, grouping a join |
 | Subqueries, WITH and UNION | CASE, a subquery that stands alone, IN (subquery), EXISTS once for each row, a count for each row, the NOT IN trap, WITH, a subquery in FROM, UNION, INTERSECT and EXCEPT |
+| Window functions | A running total, PARTITION BY, a moving window, LAG: the row before |
+| WITH RECURSIVE | Counting to five, chain of command, every station you can reach |
 | Your own tables | Create, insert, update, delete |
 
 ## The download

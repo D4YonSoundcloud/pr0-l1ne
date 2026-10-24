@@ -1458,7 +1458,10 @@
         "statement",
         "result",
         "subquery",
-        "combine"
+        "combine",
+        "window",
+        "pass",
+        "refused"
       ]
     },
     "SqlTable": {
@@ -1531,6 +1534,14 @@
             "additionalProperties": false
           },
           "description": "GROUP BY: the groups, in order, each `count` rows from row `start`, and what its rows share (\"category = Tea\")."
+        },
+        "groupKind": {
+          "type": "string",
+          "enum": [
+            "group",
+            "partition"
+          ],
+          "description": "What the groups are: GROUP BY's groups (G1, G2...), or a window's partitions (P1, P2...)."
         }
       },
       "required": [

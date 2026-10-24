@@ -22,17 +22,17 @@
         },
         {
           "kind": "UPDATE",
-          "line": 15,
+          "line": 17,
           "text": "UPDATE pets SET age = age + 1 WHERE kind = 'dog'"
         },
         {
           "kind": "DELETE",
-          "line": 17,
+          "line": 19,
           "text": "DELETE FROM pets WHERE age IS NULL"
         },
         {
           "kind": "SELECT",
-          "line": 19,
+          "line": 21,
           "text": "SELECT name, age FROM pets ORDER BY age DESC"
         }
       ],
@@ -139,14 +139,154 @@
           ]
         },
         {
+          "clause": "WHERE kind = 'dog'",
+          "statement": 2,
+          "line": 17,
+          "kind": "where",
+          "summary": "picks 2 of 4 rows to change",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "picked?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "kind = 'dog'"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "3",
+                    "true"
+                  ],
+                  "status": "changed",
+                  "note": "picked: to change"
+                },
+                {
+                  "id": "pets:0,2",
+                  "label": "#2",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null,
+                    "false"
+                  ]
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1",
+                    "false"
+                  ]
+                },
+                {
+                  "id": "pets:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "7",
+                    "true"
+                  ],
+                  "status": "changed",
+                  "note": "picked: to change"
+                }
+              ]
+            }
+          ],
+          "rows": 2
+        },
+        {
           "clause": "UPDATE pets SET age = age + 1 WHERE kind = 'dog'",
           "statement": 2,
-          "line": 15,
+          "line": 17,
           "kind": "statement",
           "summary": "changed 2 rows",
           "tables": [
             {
-              "name": "pets",
+              "name": "pets (before)",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "before|pets:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "3"
+                  ],
+                  "status": "changed",
+                  "note": "changed"
+                },
+                {
+                  "id": "before|pets:0,2",
+                  "label": "#2",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null
+                  ]
+                },
+                {
+                  "id": "before|pets:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "before|pets:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "7"
+                  ],
+                  "status": "changed",
+                  "note": "changed"
+                }
+              ]
+            },
+            {
+              "name": "pets (after)",
               "columns": [
                 {
                   "name": "name",
@@ -190,7 +330,7 @@
                     "4"
                   ],
                   "status": "changed",
-                  "note": "updated"
+                  "note": "was #1: age 3 → 4"
                 },
                 {
                   "id": "pets:0,6",
@@ -201,21 +341,99 @@
                     "8"
                   ],
                   "status": "changed",
-                  "note": "updated"
+                  "note": "was #4: age 7 → 8"
                 }
               ]
             }
           ]
         },
         {
+          "clause": "WHERE age IS NULL",
+          "statement": 3,
+          "line": 19,
+          "kind": "where",
+          "summary": "picks 1 of 4 rows to delete",
+          "tables": [
+            {
+              "name": "pets",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "picked?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "age IS NULL"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,2",
+                  "label": "#1",
+                  "values": [
+                    "Tom",
+                    "cat",
+                    null,
+                    "true"
+                  ],
+                  "status": "removed",
+                  "note": "picked: to delete"
+                },
+                {
+                  "id": "pets:0,3",
+                  "label": "#2",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1",
+                    "false"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#3",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "4",
+                    "false"
+                  ]
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "8",
+                    "false"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
           "clause": "DELETE FROM pets WHERE age IS NULL",
           "statement": 3,
-          "line": 17,
+          "line": 19,
           "kind": "statement",
           "summary": "removed 1 row",
           "tables": [
             {
-              "name": "pets",
+              "name": "pets (before)",
               "columns": [
                 {
                   "name": "name",
@@ -233,7 +451,7 @@
               ],
               "rows": [
                 {
-                  "id": "pets:0,2",
+                  "id": "before|pets:0,2",
                   "label": "#1",
                   "values": [
                     "Tom",
@@ -244,7 +462,7 @@
                   "note": "deleted"
                 },
                 {
-                  "id": "pets:0,3",
+                  "id": "before|pets:0,3",
                   "label": "#2",
                   "values": [
                     "Kiwi",
@@ -253,7 +471,7 @@
                   ]
                 },
                 {
-                  "id": "pets:0,5",
+                  "id": "before|pets:0,5",
                   "label": "#3",
                   "values": [
                     "Rex",
@@ -262,8 +480,55 @@
                   ]
                 },
                 {
-                  "id": "pets:0,6",
+                  "id": "before|pets:0,6",
                   "label": "#4",
+                  "values": [
+                    "Bella",
+                    "dog",
+                    "8"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pets (after)",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "kind",
+                  "type": "text"
+                },
+                {
+                  "name": "age",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pets:0,3",
+                  "label": "#1",
+                  "values": [
+                    "Kiwi",
+                    "bird",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pets:0,5",
+                  "label": "#2",
+                  "values": [
+                    "Rex",
+                    "dog",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pets:0,6",
+                  "label": "#3",
                   "values": [
                     "Bella",
                     "dog",
@@ -279,7 +544,7 @@
           "kind": "from",
           "clause": "FROM pets",
           "summary": "pets: 3 rows",
-          "line": 20,
+          "line": 22,
           "tables": [
             {
               "name": "pets",
@@ -336,7 +601,7 @@
           "kind": "select",
           "clause": "SELECT name, age",
           "summary": "2 columns, 3 rows",
-          "line": 19,
+          "line": 21,
           "tables": [
             {
               "name": "result",
@@ -386,7 +651,7 @@
           "kind": "order",
           "clause": "ORDER BY age DESC",
           "summary": "sorted by age (descending)",
-          "line": 21,
+          "line": 23,
           "tables": [
             {
               "name": "result",
@@ -441,10 +706,12 @@
   "steps": [
     {"event":"line","line":3,"stack":[{"id":"f0","func":"Global","line":3,"locals":[]}],"stdoutLength":13,"loops":[]},
     {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":24,"loops":[]},
-    {"event":"line","line":15,"stack":[{"id":"f0","func":"Global","line":15,"locals":[]}],"stdoutLength":33,"loops":[]},
-    {"event":"line","line":17,"stack":[{"id":"f0","func":"Global","line":17,"locals":[]}],"stdoutLength":42,"loops":[]},
-    {"event":"line","line":20,"stack":[{"id":"f0","func":"Global","line":20,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":17,"stack":[{"id":"f0","func":"Global","line":17,"locals":[]}],"stdoutLength":24,"loops":[]},
+    {"event":"line","line":17,"stack":[{"id":"f0","func":"Global","line":17,"locals":[]}],"stdoutLength":33,"loops":[]},
+    {"event":"line","line":19,"stack":[{"id":"f0","func":"Global","line":19,"locals":[]}],"stdoutLength":33,"loops":[]},
     {"event":"line","line":19,"stack":[{"id":"f0","func":"Global","line":19,"locals":[]}],"stdoutLength":42,"loops":[]},
-    {"event":"line","line":21,"stack":[{"id":"f0","func":"Global","line":21,"locals":[]}],"stdoutLength":118,"loops":[]}
+    {"event":"line","line":22,"stack":[{"id":"f0","func":"Global","line":22,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":21,"stack":[{"id":"f0","func":"Global","line":21,"locals":[]}],"stdoutLength":42,"loops":[]},
+    {"event":"line","line":23,"stack":[{"id":"f0","func":"Global","line":23,"locals":[]}],"stdoutLength":118,"loops":[]}
   ]
 }

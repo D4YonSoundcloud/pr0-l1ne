@@ -1,0 +1,1206 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": " level | name\n-------+-------\n     1 | Chloe\n     2 | Jonas\n     3 | Hana\n(3 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "company",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database company"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "WITH RECURSIVE chain AS ( SELECT id, name, manager_id, 1 AS level FRO…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database company",
+          "summary": "2 tables: departments, employees",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "departments",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "departments:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "departments:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain: the starting query",
+            "depth": 1
+          },
+          "kind": "from",
+          "clause": "FROM employees",
+          "summary": "employees: 11 rows",
+          "line": 6,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain: the starting query",
+            "depth": 1
+          },
+          "kind": "where",
+          "clause": "WHERE name = 'Chloe'",
+          "summary": "kept 1 of 11 rows",
+          "line": 7,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                },
+                {
+                  "name": "kept?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "name = 'Chloe'"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "false"
+                  ],
+                  "status": "removed"
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain: the starting query",
+            "depth": 1
+          },
+          "kind": "select",
+          "clause": "SELECT id, name, manager_id, 1 AS level",
+          "summary": "4 columns (1 worked out), 1 row",
+          "line": 5,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "1"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "6",
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 1",
+          "summary": "1 new row, from the starting rows",
+          "line": 9,
+          "tables": [
+            {
+              "name": "chain: the starting rows",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "6",
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 1",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1,
+          "notes": [
+            "Each pass runs the recursive query with chain holding only the rows the pass before made. It stops when a pass makes nothing new."
+          ]
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 2",
+          "summary": "1 new row, from the 1 row pass 1 made",
+          "line": 9,
+          "tables": [
+            {
+              "name": "chain: pass 1",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 2",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    null,
+                    "3"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 3",
+          "summary": "no new rows from the 1 row pass 2 made: done",
+          "line": 9,
+          "tables": [
+            {
+              "name": "chain: pass 2",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    null,
+                    "3"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 3",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "rows": 0
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE chain",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "All passes together",
+          "summary": "3 rows: the starting rows and every pass's new ones, the rows of chain",
+          "line": 4,
+          "tables": [
+            {
+              "name": "chain",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "6",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "1",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    null,
+                    "3"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM chain",
+          "summary": "chain: 3 rows",
+          "line": 13,
+          "tables": [
+            {
+              "name": "chain",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "chain:0,1",
+                  "label": "#1",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "6",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "chain:0,2",
+                  "label": "#2",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "1",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "chain:0,3",
+                  "label": "#3",
+                  "values": [
+                    "1",
+                    "Hana",
+                    null,
+                    "3"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT level, name",
+          "summary": "2 columns, 3 rows",
+          "line": 13,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "chain:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Chloe"
+                  ]
+                },
+                {
+                  "id": "chain:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Jonas"
+                  ]
+                },
+                {
+                  "id": "chain:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Hana"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY level",
+          "summary": "sorted by level",
+          "line": 13,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "level",
+                  "type": "integer",
+                  "numeric": true,
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "chain:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Chloe"
+                  ]
+                },
+                {
+                  "id": "chain:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Jonas"
+                  ]
+                },
+                {
+                  "id": "chain:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Hana"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":13,"stack":[{"id":"f0","func":"Global","line":13,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":13,"stack":[{"id":"f0","func":"Global","line":13,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":13,"stack":[{"id":"f0","func":"Global","line":13,"locals":[]}],"stdoutLength":84,"loops":[]}
+  ]
+}

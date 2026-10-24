@@ -98,8 +98,8 @@ function measure(table: SqlTable): Measured {
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
 /** A group's label beside its first row: "G2 · category = Coffee · 3 rows". */
-const groupText = (g: NonNullable<SqlTable["groups"]>[number], i = -1) =>
-  `${i >= 0 ? `G${i + 1} · ` : "G00 · "}${g.label} · ${rowsText(g.count)}`;
+const groupText = (g: NonNullable<SqlTable["groups"]>[number], i = -1, prefix = "G") =>
+  `${i >= 0 ? `${prefix}${i + 1} · ` : `${prefix}00 · `}${g.label} · ${rowsText(g.count)}`;
 
 /** Group colors cycle through this many (styles.css, .in-group-N). */
 const GROUP_COLORS = 6;
@@ -208,7 +208,7 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
           y: gy + ROW_H / 2,
           "dominant-baseline": "central",
         },
-        groupText(group, i),
+        groupText(group, i, table.groupKind === "partition" ? "P" : "G"),
       ),
     );
   }
@@ -438,6 +438,12 @@ function chip(scene: SqlPipelineScene, kind: string, clause: string): string {
       return "HAVING";
     case "subquery":
       return "SUBQUERY";
+    case "window":
+      return "WINDOW";
+    case "refused":
+      return "REFUSED";
+    case "pass":
+      return clause.startsWith("Pass") ? clause.toUpperCase() : "ALL";
     case "combine":
       return clause.split(" ")[0];
     case "join":
@@ -489,7 +495,16 @@ export function sqlPipelineDrawing(scene: SqlPipelineScene): Mark {
       "data-bottom": top + CARD_H,
     });
     g.append(s("rect", { class: "sql-stage-card", x: left, y: top, width: cardW, height: CARD_H, rx: 6 }));
-    g.append(s("rect", { class: "sql-stage-chip", x: left + 8, y: top + 13, width: CHIP_W - 8, height: 24, rx: 4 }));
+    g.append(
+      s("rect", {
+        class: stage.kind === "refused" ? "sql-stage-chip is-refused" : "sql-stage-chip",
+        x: left + 8,
+        y: top + 13,
+        width: CHIP_W - 8,
+        height: 24,
+        rx: 4,
+      }),
+    );
     g.append(
       s(
         "text",

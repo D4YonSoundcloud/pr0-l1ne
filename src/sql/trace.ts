@@ -21,7 +21,7 @@ import { explainError } from "./explain";
 import { type Node, ParseError, type SqlParser } from "./parser";
 import { oneLine, readHints, SourceText, skipToCode } from "./script";
 import { drawnTable, unsupported } from "./select";
-import { refused, runStatement, snapshot, statementKind } from "./statements";
+import { refused, refusedStage, runStatement, snapshot, statementKind } from "./statements";
 
 /** Rows of a result printed to the output at most. */
 const MAX_PRINTED = 200;
@@ -253,17 +253,25 @@ export async function traceSql(source: string, postgres: Engine, parser: SqlPars
           stdout += `${formatResult(result)}\n`;
           steps[steps.length - 1].stdoutLength = stdout.length;
         } else {
-          const { stage, result } = await runStatement(engine, stmt, statementText, {
-            clause: oneLine(source.slice(codeStart, text.char(end)), 60),
-            statement: index,
-            line,
-          });
-          add(stage);
+          const { stages: done, result } = await runStatement(
+            { engine, parser, lineOf: (b) => text.lineOf(b) },
+            stmt,
+            statementText,
+            { clause: oneLine(source.slice(codeStart, text.char(end)), 60), statement: index, line },
+          );
+          for (const stage of done) add(stage);
           stdout += result.columns.length ? `${formatResult(result)}\n` : `${commandTag(stmt, result)}\n`;
           steps[steps.length - 1].stdoutLength = stdout.length;
         }
       } catch (e) {
         if (!(e instanceof SqlError)) throw e;
+        // A broken rule of a table's: the rows involved, as a step.
+        const refusal = await refusedStage(engine, e, {
+          clause: oneLine(source.slice(codeStart, text.char(end)), 60),
+          statement: index,
+          line: lineAt(e.position),
+        }).catch(() => null);
+        if (refusal) add(refusal);
         error = {
           type: "Error",
           message:

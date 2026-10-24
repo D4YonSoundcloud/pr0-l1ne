@@ -1,0 +1,1459 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": "  name  | department_id | salary |     dept_average      | place\n--------+---------------+--------+-----------------------+-------\n Hana   |             1 |   9800 | 7700.0000000000000000 |     1\n Luis   |             1 |   7200 | 7700.0000000000000000 |     2\n Mei    |             1 |   7200 | 7700.0000000000000000 |     2\n Victor |             1 |   6600 | 7700.0000000000000000 |     4\n Sam    |             2 |   6100 | 5633.3333333333333333 |     1\n Aisha  |             2 |   5400 | 5633.3333333333333333 |     2\n Ines   |             2 |   5400 | 5633.3333333333333333 |     2\n Jonas  |             3 |   4800 | 4466.6666666666666667 |     1\n Chloe  |             3 |   4300 | 4466.6666666666666667 |     2\n Olga   |             3 |   4300 | 4466.6666666666666667 |     2\n(10 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "company",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database company"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "SELECT name, department_id, salary, avg(salary) OVER (PARTITION BY de…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database company",
+          "summary": "2 tables: departments, employees",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "departments",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "floor",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "departments:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Engineering",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "departments:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Sales",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Support",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "departments:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Research",
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM employees",
+          "summary": "employees: 11 rows",
+          "line": 7,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 11
+        },
+        {
+          "statement": 1,
+          "kind": "where",
+          "clause": "WHERE department_id IS NOT NULL",
+          "summary": "kept 10 of 11 rows",
+          "line": 8,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                },
+                {
+                  "name": "kept?",
+                  "type": "boolean",
+                  "role": "result",
+                  "expr": "department_id IS NOT NULL"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "true"
+                  ]
+                },
+                {
+                  "id": "employees:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Tariq",
+                    null,
+                    "1",
+                    "5000",
+                    "2024-06-03",
+                    "false"
+                  ],
+                  "status": "removed"
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "true"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 10
+        },
+        {
+          "statement": 1,
+          "kind": "window",
+          "clause": "avg(salary) OVER (PARTITION BY department_id)",
+          "summary": "3 partitions: each row worked out from the rows of its own",
+          "line": 5,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "key",
+                  "expr": "department_id"
+                },
+                {
+                  "name": "avg(salary)",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "avg(salary) OVER (PARTITION BY department_id)"
+                },
+                {
+                  "name": "frame",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "(PARTITION BY department_id)"
+                },
+                {
+                  "name": "salary values",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "salary"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "group": 0,
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "1",
+                    "7700.0000000000000000",
+                    "#1, #2, #3, #8",
+                    "9800, 7200, 7200, 6600"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "group": 0,
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "1",
+                    "7700.0000000000000000",
+                    "#1, #2, #3, #8",
+                    "9800, 7200, 7200, 6600"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "group": 0,
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "1",
+                    "7700.0000000000000000",
+                    "#1, #2, #3, #8",
+                    "9800, 7200, 7200, 6600"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "group": 0,
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "1",
+                    "7700.0000000000000000",
+                    "#1, #2, #3, #8",
+                    "9800, 7200, 7200, 6600"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "group": 1,
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "2",
+                    "5633.3333333333333333",
+                    "#4, #9, #5",
+                    "6100, 5400, 5400"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "group": 1,
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "2",
+                    "5633.3333333333333333",
+                    "#4, #9, #5",
+                    "6100, 5400, 5400"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "group": 1,
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "2",
+                    "5633.3333333333333333",
+                    "#4, #9, #5",
+                    "6100, 5400, 5400"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "group": 2,
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "3",
+                    "4466.6666666666666667",
+                    "#11, #6, #7",
+                    "4300, 4800, 4300"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "group": 2,
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "3",
+                    "4466.6666666666666667",
+                    "#11, #6, #7",
+                    "4300, 4800, 4300"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "group": 2,
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "3",
+                    "4466.6666666666666667",
+                    "#11, #6, #7",
+                    "4300, 4800, 4300"
+                  ]
+                }
+              ],
+              "groups": [
+                {
+                  "start": 0,
+                  "count": 4,
+                  "label": "department_id = 1"
+                },
+                {
+                  "start": 4,
+                  "count": 3,
+                  "label": "department_id = 2"
+                },
+                {
+                  "start": 7,
+                  "count": 3,
+                  "label": "department_id = 3"
+                }
+              ],
+              "groupKind": "partition"
+            }
+          ],
+          "rows": 10,
+          "notes": [
+            "Without ORDER BY in the window, a row's frame is its whole partition."
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "window",
+          "clause": "rank() OVER (PARTITION BY department_id ORDER BY salary DES…",
+          "summary": "3 partitions: each row worked out from the rows of its own",
+          "line": 6,
+          "tables": [
+            {
+              "name": "employees",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "manager_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "hired",
+                  "type": "date"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "key",
+                  "expr": "department_id"
+                },
+                {
+                  "name": "rank()",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "rank() OVER (PARTITION BY department_id ORDER BY salary DESC)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "group": 0,
+                  "values": [
+                    "1",
+                    "Hana",
+                    "1",
+                    null,
+                    "9800",
+                    "2016-04-01",
+                    "1",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "group": 0,
+                  "values": [
+                    "2",
+                    "Luis",
+                    "1",
+                    "1",
+                    "7200",
+                    "2019-09-16",
+                    "1",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "group": 0,
+                  "values": [
+                    "3",
+                    "Mei",
+                    "1",
+                    "1",
+                    "7200",
+                    "2021-02-08",
+                    "1",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "group": 0,
+                  "values": [
+                    "8",
+                    "Victor",
+                    "1",
+                    "2",
+                    "6600",
+                    "2023-08-21",
+                    "1",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "group": 1,
+                  "values": [
+                    "4",
+                    "Sam",
+                    "2",
+                    "1",
+                    "6100",
+                    "2018-06-25",
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "group": 1,
+                  "values": [
+                    "5",
+                    "Aisha",
+                    "2",
+                    "4",
+                    "5400",
+                    "2022-03-14",
+                    "2",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "group": 1,
+                  "values": [
+                    "9",
+                    "Ines",
+                    "2",
+                    "4",
+                    "5400",
+                    "2024-01-15",
+                    "2",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "group": 2,
+                  "values": [
+                    "6",
+                    "Jonas",
+                    "3",
+                    "1",
+                    "4800",
+                    "2020-11-30",
+                    "3",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "group": 2,
+                  "values": [
+                    "7",
+                    "Chloe",
+                    "3",
+                    "6",
+                    "4300",
+                    "2023-05-02",
+                    "3",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "group": 2,
+                  "values": [
+                    "11",
+                    "Olga",
+                    "3",
+                    "6",
+                    "4300",
+                    "2019-01-07",
+                    "3",
+                    "2"
+                  ]
+                }
+              ],
+              "groups": [
+                {
+                  "start": 0,
+                  "count": 4,
+                  "label": "department_id = 1"
+                },
+                {
+                  "start": 4,
+                  "count": 3,
+                  "label": "department_id = 2"
+                },
+                {
+                  "start": 7,
+                  "count": 3,
+                  "label": "department_id = 3"
+                }
+              ],
+              "groupKind": "partition"
+            }
+          ],
+          "rows": 10,
+          "notes": [
+            "row_number counts along each partition in the window's ORDER BY; rank skips numbers after a tie, dense_rank doesn't."
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT name, department_id, salary, avg(salary) OVER (PARTITION BY…",
+          "summary": "5 columns (2 worked out), 10 rows",
+          "line": 4,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "dept_average",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "avg(salary) OVER (PARTITION BY department_id)"
+                },
+                {
+                  "name": "place",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "rank() OVER (PARTITION BY department_id ORDER BY salary DESC)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Hana",
+                    "1",
+                    "9800",
+                    "7700.0000000000000000",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "Luis",
+                    "1",
+                    "7200",
+                    "7700.0000000000000000",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Mei",
+                    "1",
+                    "7200",
+                    "7700.0000000000000000",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Sam",
+                    "2",
+                    "6100",
+                    "5633.3333333333333333",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "Aisha",
+                    "2",
+                    "5400",
+                    "5633.3333333333333333",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "Jonas",
+                    "3",
+                    "4800",
+                    "4466.6666666666666667",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "Chloe",
+                    "3",
+                    "4300",
+                    "4466.6666666666666667",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "Victor",
+                    "1",
+                    "6600",
+                    "7700.0000000000000000",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "Ines",
+                    "2",
+                    "5400",
+                    "5633.3333333333333333",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "Olga",
+                    "3",
+                    "4300",
+                    "4466.6666666666666667",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 10
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY department_id, place",
+          "summary": "sorted by department_id, then place",
+          "line": 9,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "department_id",
+                  "type": "integer",
+                  "numeric": true,
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                },
+                {
+                  "name": "salary",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "dept_average",
+                  "type": "numeric",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "avg(salary) OVER (PARTITION BY department_id)"
+                },
+                {
+                  "name": "place",
+                  "type": "bigint",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "rank() OVER (PARTITION BY department_id ORDER BY salary DESC)",
+                  "sort": {
+                    "rank": 2,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "employees:0,1",
+                  "label": "#1",
+                  "values": [
+                    "Hana",
+                    "1",
+                    "9800",
+                    "7700.0000000000000000",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,2",
+                  "label": "#2",
+                  "values": [
+                    "Luis",
+                    "1",
+                    "7200",
+                    "7700.0000000000000000",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,3",
+                  "label": "#3",
+                  "values": [
+                    "Mei",
+                    "1",
+                    "7200",
+                    "7700.0000000000000000",
+                    "2"
+                  ],
+                  "tie": true
+                },
+                {
+                  "id": "employees:0,8",
+                  "label": "#8",
+                  "values": [
+                    "Victor",
+                    "1",
+                    "6600",
+                    "7700.0000000000000000",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "employees:0,4",
+                  "label": "#4",
+                  "values": [
+                    "Sam",
+                    "2",
+                    "6100",
+                    "5633.3333333333333333",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,5",
+                  "label": "#5",
+                  "values": [
+                    "Aisha",
+                    "2",
+                    "5400",
+                    "5633.3333333333333333",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,9",
+                  "label": "#9",
+                  "values": [
+                    "Ines",
+                    "2",
+                    "5400",
+                    "5633.3333333333333333",
+                    "2"
+                  ],
+                  "tie": true
+                },
+                {
+                  "id": "employees:0,6",
+                  "label": "#6",
+                  "values": [
+                    "Jonas",
+                    "3",
+                    "4800",
+                    "4466.6666666666666667",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "employees:0,7",
+                  "label": "#7",
+                  "values": [
+                    "Chloe",
+                    "3",
+                    "4300",
+                    "4466.6666666666666667",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "employees:0,11",
+                  "label": "#11",
+                  "values": [
+                    "Olga",
+                    "3",
+                    "4300",
+                    "4466.6666666666666667",
+                    "2"
+                  ],
+                  "tie": true
+                }
+              ]
+            }
+          ],
+          "rows": 10,
+          "notes": [
+            "Rows marked = sort the same as the row above: Postgres may give tied rows in either order."
+          ]
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":8,"stack":[{"id":"f0","func":"Global","line":8,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":6,"stack":[{"id":"f0","func":"Global","line":6,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":9,"stack":[{"id":"f0","func":"Global","line":9,"locals":[]}],"stdoutLength":792,"loops":[]}
+  ]
+}

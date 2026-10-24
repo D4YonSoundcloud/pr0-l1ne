@@ -13,6 +13,8 @@ export function findElements(doc: Document = document) {
     save: byId<HTMLButtonElement>("save"),
     delete: byId<HTMLButtonElement>("delete"),
     share: byId<HTMLButtonElement>("share"),
+    importCsv: byId<HTMLButtonElement>("import-csv"),
+    csvFile: byId<HTMLInputElement>("csv-file"),
     saveDialog: byId<HTMLDialogElement>("save-dialog"),
     saveForm: byId<HTMLFormElement>("save-form"),
     saveName: byId<HTMLInputElement>("save-name"),

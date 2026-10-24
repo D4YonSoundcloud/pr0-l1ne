@@ -51,6 +51,8 @@
         <button id="save" class="button" type="button" title="Save (Ctrl/Cmd + S). Save as a new program: Ctrl/Cmd + Shift + S">Save</button>
         <button id="delete" class="button quiet" type="button" title="Delete this saved program" hidden>Delete</button>
         <button id="share" class="button quiet" type="button" title="Copy a link to this program: whoever opens it sees the code, ready to run">Share</button>
+        <button id="import-csv" class="button quiet sql-only" type="button" title="Make a table from a CSV file: adds CREATE TABLE and INSERT to your program (the file stays in your browser)">Import CSV</button>
+        <input id="csv-file" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" hidden />
         <button id="run" class="button primary" type="button" title="Run (Ctrl + ')">Run</button>
         <div class="measure-group">
           <button id="measure" class="button measure-button" type="button" title="Run the whole program at full size, counting how many times each line runs (Ctrl + Shift + ')">Measure</button>

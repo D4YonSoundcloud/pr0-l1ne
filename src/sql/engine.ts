@@ -34,6 +34,8 @@ export class SqlError extends Error {
     readonly position?: number,
     readonly detail?: string,
     readonly hint?: string,
+    /** For a broken rule (a key, NOT NULL, CHECK): its table, column and name. */
+    readonly where: { table?: string; column?: string; constraint?: string } = {},
   ) {
     super(message);
     this.name = "SqlError";
@@ -111,7 +113,19 @@ function text(value: unknown): string | null {
 /** PGlite's errors carry Postgres's fields; anything else is passed on as it is. */
 export function toSqlError(error: unknown): unknown {
   if (!(error instanceof Error) || typeof (error as { code?: unknown }).code !== "string") return error;
-  const e = error as Error & { code: string; position?: string; detail?: string; hint?: string };
+  const e = error as Error & {
+    code: string;
+    position?: string;
+    detail?: string;
+    hint?: string;
+    table?: string;
+    column?: string;
+    constraint?: string;
+  };
   const position = e.position ? Number(e.position) : undefined;
-  return new SqlError(e.message, e.code, Number.isFinite(position) ? position : undefined, e.detail, e.hint);
+  return new SqlError(e.message, e.code, Number.isFinite(position) ? position : undefined, e.detail, e.hint, {
+    table: e.table,
+    column: e.column,
+    constraint: e.constraint,
+  });
 }

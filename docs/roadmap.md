@@ -2,10 +2,11 @@
 
 # Roadmap ideas
 
-SQL, the next steps (see [SQL](sql.md) for what's there now):
+SQL (see [SQL](sql.md) for what's there now):
 
-- Recursive WITH, each pass drawn like a loop's passes.
-- Window functions, with each row's frame highlighted.
+- Hovering a row to highlight what it came from, across every step: its rows in a join, its group, its frame.
+- Named windows (`WINDOW w AS ...`), and window functions with GROUP BY.
+- Following an updated row from its old version to its new one by more than the order they were found in.
 
 Everything else:
 

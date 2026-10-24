@@ -178,6 +178,46 @@ INSERT INTO employees VALUES
   (11, 'Olga', 3, 6, 4300, '2019-01-07');
 `;
 
+const TRANSIT = `
+CREATE TABLE stations (
+  id integer PRIMARY KEY,
+  name text NOT NULL,
+  zone integer NOT NULL
+);
+INSERT INTO stations VALUES
+  (1, 'Central', 1),
+  (2, 'Harbour', 1),
+  (3, 'Market', 1),
+  (4, 'Museum', 2),
+  (5, 'Park', 2),
+  (6, 'University', 2),
+  (7, 'Stadium', 3),
+  (8, 'Airport', 4),
+  (9, 'Riverside', 3),
+  (10, 'Old Town', 2);
+
+CREATE TABLE connections (
+  from_station integer NOT NULL REFERENCES stations (id),
+  to_station integer NOT NULL REFERENCES stations (id),
+  minutes integer NOT NULL CHECK (minutes > 0),
+  PRIMARY KEY (from_station, to_station)
+);
+INSERT INTO connections VALUES
+  (1, 2, 4),
+  (1, 3, 3),
+  (2, 4, 5),
+  (3, 4, 2),
+  (3, 5, 6),
+  (4, 6, 4),
+  (5, 6, 3),
+  (4, 5, 2),
+  (6, 7, 5),
+  (7, 8, 12),
+  (5, 9, 7),
+  (2, 9, 8),
+  (9, 8, 15);
+`;
+
 export const SAMPLE_DATABASES: readonly SampleDatabase[] = [
   {
     name: "shop",
@@ -193,6 +233,11 @@ export const SAMPLE_DATABASES: readonly SampleDatabase[] = [
     name: "company",
     description: "departments, and employees with their managers",
     setup: COMPANY,
+  },
+  {
+    name: "transit",
+    description: "stations and the one-way connections between them",
+    setup: TRANSIT,
   },
 ];
 

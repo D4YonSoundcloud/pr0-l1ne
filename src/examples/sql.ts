@@ -10,6 +10,8 @@ const SORTING = "Sorting, DISTINCT and LIMIT";
 const JOINS = "Joining tables";
 const GROUPS = "Grouping and aggregates";
 const COMPOSE = "Subqueries, WITH and UNION";
+const WINDOWS = "Window functions";
+const RECURSION = "WITH RECURSIVE";
 const OWN = "Your own tables";
 
 export const SQL_EXAMPLES: Example[] = [
@@ -488,6 +490,111 @@ EXCEPT
 SELECT name FROM products WHERE stock > 20;
 `,
   },
+  // ------------------------------------------------------------- window functions
+  {
+    group: WINDOWS,
+    name: "A running total",
+    code: `-- viz: database company
+-- A window function works out a value for each row from other
+-- rows, without folding them into one. With ORDER BY, each row's
+-- frame is the rows up to it: a running total.
+SELECT name, hired, salary,
+       sum(salary) OVER (ORDER BY hired) AS payroll_so_far
+FROM employees
+ORDER BY hired;
+`,
+  },
+  {
+    group: WINDOWS,
+    name: "PARTITION BY",
+    code: `-- viz: database company
+-- PARTITION BY splits the rows like GROUP BY, but keeps every row:
+-- each is worked out from its own department's rows.
+SELECT name, department_id, salary,
+       avg(salary) OVER (PARTITION BY department_id) AS dept_average,
+       rank() OVER (PARTITION BY department_id ORDER BY salary DESC) AS place
+FROM employees
+WHERE department_id IS NOT NULL
+ORDER BY department_id, place;
+`,
+  },
+  {
+    group: WINDOWS,
+    name: "A moving window",
+    code: `-- viz: database shop
+-- ROWS BETWEEN sets the frame by hand: each order and the two
+-- before it.
+SELECT id, ordered_on, quantity,
+       sum(quantity) OVER (ORDER BY id ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS last_three
+FROM orders
+ORDER BY id;
+`,
+  },
+  {
+    group: WINDOWS,
+    name: "LAG: the row before",
+    code: `-- viz: database shop
+-- lag() reads a value from the row before, in the window's order:
+-- how many days since the order before.
+SELECT id, ordered_on,
+       ordered_on - lag(ordered_on) OVER (ORDER BY ordered_on) AS days_since
+FROM orders
+ORDER BY ordered_on;
+`,
+  },
+  // ------------------------------------------------------------- recursion
+  {
+    group: RECURSION,
+    name: "Counting to five",
+    code: `-- A recursive query runs again and again on the rows it made
+-- last, until it makes none: each pass is a step.
+WITH RECURSIVE n (i) AS (
+  SELECT 1
+  UNION ALL
+  SELECT i + 1 FROM n WHERE i < 5
+)
+SELECT i FROM n;
+`,
+  },
+  {
+    group: RECURSION,
+    name: "Chain of command",
+    code: `-- viz: database company
+-- Start at Chloe, then find each manager's manager, pass by pass,
+-- up to the top.
+WITH RECURSIVE chain AS (
+  SELECT id, name, manager_id, 1 AS level
+  FROM employees
+  WHERE name = 'Chloe'
+  UNION ALL
+  SELECT m.id, m.name, m.manager_id, chain.level + 1
+  FROM employees AS m
+  JOIN chain ON m.id = chain.manager_id
+)
+SELECT level, name FROM chain ORDER BY level;
+`,
+  },
+  {
+    group: RECURSION,
+    name: "Every station you can reach",
+    code: `-- viz: database transit
+-- From Central, follow the connections out, one stop a pass.
+-- UNION (not ALL) skips stations already found, so it ends.
+WITH RECURSIVE reach (station, stops) AS (
+  SELECT 1, 0
+  UNION
+  SELECT c.to_station, reach.stops + 1
+  FROM connections AS c
+  JOIN reach ON c.from_station = reach.station
+  WHERE reach.stops < 4
+)
+SELECT s.name, min(r.stops) AS fewest_stops
+FROM reach AS r
+JOIN stations AS s ON s.id = r.station
+GROUP BY s.name
+ORDER BY fewest_stops, s.name;
+`,
+  },
   // ------------------------------------------------------------- your own tables
   {
     group: OWN,
@@ -506,6 +613,8 @@ INSERT INTO pets VALUES
   ('Kiwi', 'bird', 1),
   ('Bella', 'dog', 7);
 
+-- UPDATE and DELETE step through their WHERE first, then show
+-- the table before and after.
 UPDATE pets SET age = age + 1 WHERE kind = 'dog';
 
 DELETE FROM pets WHERE age IS NULL;

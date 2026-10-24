@@ -1,0 +1,2230 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "sql",
+    "loops": [],
+    "indexNames": {},
+    "stdout": "    name    | fewest_stops\n------------+--------------\n Central    |            0\n Harbour    |            1\n Market     |            1\n Museum     |            2\n Park       |            2\n Riverside  |            2\n Airport    |            3\n University |            3\n Stadium    |            4\n(9 rows)\n\n",
+    "error": null,
+    "truncated": false,
+    "hints": [],
+    "sql": {
+      "database": "transit",
+      "statements": [
+        {
+          "kind": "DATABASE",
+          "line": 1,
+          "text": "-- viz: database transit"
+        },
+        {
+          "kind": "SELECT",
+          "line": 4,
+          "text": "WITH RECURSIVE reach (station, stops) AS ( SELECT 1, 0 UNION SELECT c…"
+        }
+      ],
+      "stages": [
+        {
+          "kind": "tables",
+          "clause": "Database transit",
+          "summary": "2 tables: stations, connections",
+          "statement": 0,
+          "line": 1,
+          "tables": [
+            {
+              "name": "stations",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "zone",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "stations:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Central",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "stations:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Harbour",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "stations:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Market",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "stations:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Museum",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "stations:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Park",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "stations:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "University",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "stations:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Stadium",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "stations:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Airport",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "stations:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Riverside",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "stations:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Old Town",
+                    "2"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "connections",
+              "columns": [
+                {
+                  "name": "from_station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "to_station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "minutes",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "connections:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "2",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "connections:0,2",
+                  "label": "#2",
+                  "values": [
+                    "1",
+                    "3",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "connections:0,3",
+                  "label": "#3",
+                  "values": [
+                    "2",
+                    "4",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "connections:0,4",
+                  "label": "#4",
+                  "values": [
+                    "3",
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "connections:0,5",
+                  "label": "#5",
+                  "values": [
+                    "3",
+                    "5",
+                    "6"
+                  ]
+                },
+                {
+                  "id": "connections:0,6",
+                  "label": "#6",
+                  "values": [
+                    "4",
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "connections:0,7",
+                  "label": "#7",
+                  "values": [
+                    "5",
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "connections:0,8",
+                  "label": "#8",
+                  "values": [
+                    "4",
+                    "5",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "connections:0,9",
+                  "label": "#9",
+                  "values": [
+                    "6",
+                    "7",
+                    "5"
+                  ]
+                },
+                {
+                  "id": "connections:0,10",
+                  "label": "#10",
+                  "values": [
+                    "7",
+                    "8",
+                    "12"
+                  ]
+                },
+                {
+                  "id": "connections:0,11",
+                  "label": "#11",
+                  "values": [
+                    "5",
+                    "9",
+                    "7"
+                  ]
+                },
+                {
+                  "id": "connections:0,12",
+                  "label": "#12",
+                  "values": [
+                    "2",
+                    "9",
+                    "8"
+                  ]
+                },
+                {
+                  "id": "connections:0,13",
+                  "label": "#13",
+                  "values": [
+                    "9",
+                    "8",
+                    "15"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach: the starting query",
+            "depth": 1
+          },
+          "kind": "select",
+          "clause": "SELECT 1, 0",
+          "summary": "1 row",
+          "line": 5,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "?column?",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "1"
+                },
+                {
+                  "name": "?column?",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "0"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "result:0",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 1
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 1",
+          "summary": "2 new rows, from the starting rows",
+          "line": 7,
+          "tables": [
+            {
+              "name": "reach: the starting rows",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 1",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass1:1",
+                  "label": "1.2",
+                  "values": [
+                    "3",
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 2,
+          "notes": [
+            "Each pass runs the recursive query with reach holding only the rows the pass before made. It stops when a pass makes nothing new."
+          ]
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 2",
+          "summary": "3 new rows, from the 2 rows pass 1 made",
+          "line": 7,
+          "tables": [
+            {
+              "name": "reach: pass 1",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass1:1",
+                  "label": "1.2",
+                  "values": [
+                    "3",
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 2",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:1",
+                  "label": "2.2",
+                  "values": [
+                    "9",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:2",
+                  "label": "2.3",
+                  "values": [
+                    "4",
+                    "2"
+                  ],
+                  "status": "removed",
+                  "note": "found already"
+                },
+                {
+                  "id": "pass2:3",
+                  "label": "2.4",
+                  "values": [
+                    "5",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 3
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 3",
+          "summary": "4 new rows, from the 3 rows pass 2 made",
+          "line": 7,
+          "tables": [
+            {
+              "name": "reach: pass 2",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:1",
+                  "label": "2.2",
+                  "values": [
+                    "9",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:3",
+                  "label": "2.4",
+                  "values": [
+                    "5",
+                    "2"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 3",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "5",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:1",
+                  "label": "3.2",
+                  "values": [
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:2",
+                  "label": "3.3",
+                  "values": [
+                    "6",
+                    "3"
+                  ],
+                  "status": "removed",
+                  "note": "found already"
+                },
+                {
+                  "id": "pass3:3",
+                  "label": "3.4",
+                  "values": [
+                    "9",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:4",
+                  "label": "3.5",
+                  "values": [
+                    "8",
+                    "3"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 4
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 4",
+          "summary": "4 new rows, from the 4 rows pass 3 made",
+          "line": 7,
+          "tables": [
+            {
+              "name": "reach: pass 3",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "5",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:1",
+                  "label": "3.2",
+                  "values": [
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:3",
+                  "label": "3.4",
+                  "values": [
+                    "9",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:4",
+                  "label": "3.5",
+                  "values": [
+                    "8",
+                    "3"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 4",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:1",
+                  "label": "4.2",
+                  "values": [
+                    "9",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:2",
+                  "label": "4.3",
+                  "values": [
+                    "7",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:3",
+                  "label": "4.4",
+                  "values": [
+                    "8",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 4
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "Pass 5",
+          "summary": "no new rows from the 4 rows pass 4 made: done",
+          "line": 7,
+          "tables": [
+            {
+              "name": "reach: pass 4",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:1",
+                  "label": "4.2",
+                  "values": [
+                    "9",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:2",
+                  "label": "4.3",
+                  "values": [
+                    "7",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:3",
+                  "label": "4.4",
+                  "values": [
+                    "8",
+                    "4"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pass 5",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "rows": 0
+        },
+        {
+          "statement": 1,
+          "part": {
+            "label": "WITH RECURSIVE reach",
+            "depth": 1
+          },
+          "kind": "pass",
+          "clause": "All passes together",
+          "summary": "14 rows: the starting rows and every pass's new ones, the rows of reach",
+          "line": 4,
+          "tables": [
+            {
+              "name": "reach",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "pass0:0",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "pass1:0",
+                  "label": "1.1",
+                  "values": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass1:1",
+                  "label": "1.2",
+                  "values": [
+                    "3",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "pass2:0",
+                  "label": "2.1",
+                  "values": [
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:1",
+                  "label": "2.2",
+                  "values": [
+                    "9",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass2:3",
+                  "label": "2.4",
+                  "values": [
+                    "5",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "pass3:0",
+                  "label": "3.1",
+                  "values": [
+                    "5",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:1",
+                  "label": "3.2",
+                  "values": [
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:3",
+                  "label": "3.4",
+                  "values": [
+                    "9",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass3:4",
+                  "label": "3.5",
+                  "values": [
+                    "8",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "pass4:0",
+                  "label": "4.1",
+                  "values": [
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:1",
+                  "label": "4.2",
+                  "values": [
+                    "9",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:2",
+                  "label": "4.3",
+                  "values": [
+                    "7",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "pass4:3",
+                  "label": "4.4",
+                  "values": [
+                    "8",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14
+        },
+        {
+          "statement": 1,
+          "kind": "from",
+          "clause": "FROM reach AS r",
+          "summary": "reach: 14 rows",
+          "line": 13,
+          "tables": [
+            {
+              "name": "reach",
+              "alias": "r",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "r:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,5",
+                  "label": "#5",
+                  "values": [
+                    "9",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,6",
+                  "label": "#6",
+                  "values": [
+                    "5",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,7",
+                  "label": "#7",
+                  "values": [
+                    "5",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,8",
+                  "label": "#8",
+                  "values": [
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,10",
+                  "label": "#10",
+                  "values": [
+                    "8",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,11",
+                  "label": "#11",
+                  "values": [
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,12",
+                  "label": "#12",
+                  "values": [
+                    "9",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,13",
+                  "label": "#13",
+                  "values": [
+                    "7",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,14",
+                  "label": "#14",
+                  "values": [
+                    "8",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14
+        },
+        {
+          "statement": 1,
+          "kind": "join",
+          "clause": "JOIN stations AS s ON s.id = r.station",
+          "summary": "14 matching pairs, 14 rows; 1 of stations AS s matches nothing: left out",
+          "line": 14,
+          "tables": [
+            {
+              "name": "reach",
+              "alias": "r",
+              "columns": [
+                {
+                  "name": "station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "stops",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "r:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,5",
+                  "label": "#5",
+                  "values": [
+                    "9",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,6",
+                  "label": "#6",
+                  "values": [
+                    "5",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,7",
+                  "label": "#7",
+                  "values": [
+                    "5",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,8",
+                  "label": "#8",
+                  "values": [
+                    "6",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,10",
+                  "label": "#10",
+                  "values": [
+                    "8",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,11",
+                  "label": "#11",
+                  "values": [
+                    "6",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,12",
+                  "label": "#12",
+                  "values": [
+                    "9",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,13",
+                  "label": "#13",
+                  "values": [
+                    "7",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,14",
+                  "label": "#14",
+                  "values": [
+                    "8",
+                    "4"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "stations",
+              "alias": "s",
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "zone",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "s:0,1",
+                  "label": "#1",
+                  "values": [
+                    "1",
+                    "Central",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "s:0,2",
+                  "label": "#2",
+                  "values": [
+                    "2",
+                    "Harbour",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "s:0,3",
+                  "label": "#3",
+                  "values": [
+                    "3",
+                    "Market",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "s:0,4",
+                  "label": "#4",
+                  "values": [
+                    "4",
+                    "Museum",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "s:0,5",
+                  "label": "#5",
+                  "values": [
+                    "5",
+                    "Park",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "s:0,6",
+                  "label": "#6",
+                  "values": [
+                    "6",
+                    "University",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "s:0,7",
+                  "label": "#7",
+                  "values": [
+                    "7",
+                    "Stadium",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "s:0,8",
+                  "label": "#8",
+                  "values": [
+                    "8",
+                    "Airport",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "s:0,9",
+                  "label": "#9",
+                  "values": [
+                    "9",
+                    "Riverside",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "s:0,10",
+                  "label": "#10",
+                  "values": [
+                    "10",
+                    "Old Town",
+                    "2"
+                  ],
+                  "status": "removed",
+                  "note": "no match"
+                }
+              ]
+            },
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "r.station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "r.stops",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "s.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "s.name",
+                  "type": "text"
+                },
+                {
+                  "name": "s.zone",
+                  "type": "integer",
+                  "numeric": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1|s:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "0",
+                    "1",
+                    "Central",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,2|s:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "1",
+                    "2",
+                    "Harbour",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,3|s:0,3",
+                  "label": "#3·#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "3",
+                    "Market",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,4|s:0,4",
+                  "label": "#4·#4",
+                  "values": [
+                    "4",
+                    "2",
+                    "4",
+                    "Museum",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,5|s:0,9",
+                  "label": "#5·#9",
+                  "values": [
+                    "9",
+                    "2",
+                    "9",
+                    "Riverside",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,6|s:0,5",
+                  "label": "#6·#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "5",
+                    "Park",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,7|s:0,5",
+                  "label": "#7·#5",
+                  "values": [
+                    "5",
+                    "3",
+                    "5",
+                    "Park",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,8|s:0,6",
+                  "label": "#8·#6",
+                  "values": [
+                    "6",
+                    "3",
+                    "6",
+                    "University",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,9|s:0,9",
+                  "label": "#9·#9",
+                  "values": [
+                    "9",
+                    "3",
+                    "9",
+                    "Riverside",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,10|s:0,8",
+                  "label": "#10·#8",
+                  "values": [
+                    "8",
+                    "3",
+                    "8",
+                    "Airport",
+                    "4"
+                  ]
+                },
+                {
+                  "id": "r:0,11|s:0,6",
+                  "label": "#11·#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "6",
+                    "University",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,12|s:0,9",
+                  "label": "#12·#9",
+                  "values": [
+                    "9",
+                    "4",
+                    "9",
+                    "Riverside",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,13|s:0,7",
+                  "label": "#13·#7",
+                  "values": [
+                    "7",
+                    "4",
+                    "7",
+                    "Stadium",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,14|s:0,8",
+                  "label": "#14·#8",
+                  "values": [
+                    "8",
+                    "4",
+                    "8",
+                    "Airport",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 14,
+          "links": [
+            {
+              "from": "r:0,1",
+              "to": "s:0,1"
+            },
+            {
+              "from": "r:0,2",
+              "to": "s:0,2"
+            },
+            {
+              "from": "r:0,3",
+              "to": "s:0,3"
+            },
+            {
+              "from": "r:0,4",
+              "to": "s:0,4"
+            },
+            {
+              "from": "r:0,5",
+              "to": "s:0,9"
+            },
+            {
+              "from": "r:0,6",
+              "to": "s:0,5"
+            },
+            {
+              "from": "r:0,7",
+              "to": "s:0,5"
+            },
+            {
+              "from": "r:0,8",
+              "to": "s:0,6"
+            },
+            {
+              "from": "r:0,9",
+              "to": "s:0,9"
+            },
+            {
+              "from": "r:0,10",
+              "to": "s:0,8"
+            },
+            {
+              "from": "r:0,11",
+              "to": "s:0,6"
+            },
+            {
+              "from": "r:0,12",
+              "to": "s:0,9"
+            },
+            {
+              "from": "r:0,13",
+              "to": "s:0,7"
+            },
+            {
+              "from": "r:0,14",
+              "to": "s:0,8"
+            }
+          ]
+        },
+        {
+          "statement": 1,
+          "kind": "group",
+          "clause": "GROUP BY s.name",
+          "summary": "9 groups of 14 rows",
+          "line": 15,
+          "tables": [
+            {
+              "name": "joined",
+              "columns": [
+                {
+                  "name": "r.station",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "r.stops",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "s.id",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "s.name",
+                  "type": "text"
+                },
+                {
+                  "name": "s.zone",
+                  "type": "integer",
+                  "numeric": true
+                },
+                {
+                  "name": "s.name",
+                  "type": "text",
+                  "expr": "s.name",
+                  "role": "key"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1|s:0,1",
+                  "label": "#1·#1",
+                  "values": [
+                    "1",
+                    "0",
+                    "1",
+                    "Central",
+                    "1",
+                    "Central"
+                  ],
+                  "group": 0
+                },
+                {
+                  "id": "r:0,2|s:0,2",
+                  "label": "#2·#2",
+                  "values": [
+                    "2",
+                    "1",
+                    "2",
+                    "Harbour",
+                    "1",
+                    "Harbour"
+                  ],
+                  "group": 1
+                },
+                {
+                  "id": "r:0,3|s:0,3",
+                  "label": "#3·#3",
+                  "values": [
+                    "3",
+                    "1",
+                    "3",
+                    "Market",
+                    "1",
+                    "Market"
+                  ],
+                  "group": 2
+                },
+                {
+                  "id": "r:0,4|s:0,4",
+                  "label": "#4·#4",
+                  "values": [
+                    "4",
+                    "2",
+                    "4",
+                    "Museum",
+                    "2",
+                    "Museum"
+                  ],
+                  "group": 3
+                },
+                {
+                  "id": "r:0,5|s:0,9",
+                  "label": "#5·#9",
+                  "values": [
+                    "9",
+                    "2",
+                    "9",
+                    "Riverside",
+                    "3",
+                    "Riverside"
+                  ],
+                  "group": 4
+                },
+                {
+                  "id": "r:0,9|s:0,9",
+                  "label": "#9·#9",
+                  "values": [
+                    "9",
+                    "3",
+                    "9",
+                    "Riverside",
+                    "3",
+                    "Riverside"
+                  ],
+                  "group": 4
+                },
+                {
+                  "id": "r:0,12|s:0,9",
+                  "label": "#12·#9",
+                  "values": [
+                    "9",
+                    "4",
+                    "9",
+                    "Riverside",
+                    "3",
+                    "Riverside"
+                  ],
+                  "group": 4
+                },
+                {
+                  "id": "r:0,6|s:0,5",
+                  "label": "#6·#5",
+                  "values": [
+                    "5",
+                    "2",
+                    "5",
+                    "Park",
+                    "2",
+                    "Park"
+                  ],
+                  "group": 5
+                },
+                {
+                  "id": "r:0,7|s:0,5",
+                  "label": "#7·#5",
+                  "values": [
+                    "5",
+                    "3",
+                    "5",
+                    "Park",
+                    "2",
+                    "Park"
+                  ],
+                  "group": 5
+                },
+                {
+                  "id": "r:0,8|s:0,6",
+                  "label": "#8·#6",
+                  "values": [
+                    "6",
+                    "3",
+                    "6",
+                    "University",
+                    "2",
+                    "University"
+                  ],
+                  "group": 6
+                },
+                {
+                  "id": "r:0,11|s:0,6",
+                  "label": "#11·#6",
+                  "values": [
+                    "6",
+                    "4",
+                    "6",
+                    "University",
+                    "2",
+                    "University"
+                  ],
+                  "group": 6
+                },
+                {
+                  "id": "r:0,10|s:0,8",
+                  "label": "#10·#8",
+                  "values": [
+                    "8",
+                    "3",
+                    "8",
+                    "Airport",
+                    "4",
+                    "Airport"
+                  ],
+                  "group": 7
+                },
+                {
+                  "id": "r:0,14|s:0,8",
+                  "label": "#14·#8",
+                  "values": [
+                    "8",
+                    "4",
+                    "8",
+                    "Airport",
+                    "4",
+                    "Airport"
+                  ],
+                  "group": 7
+                },
+                {
+                  "id": "r:0,13|s:0,7",
+                  "label": "#13·#7",
+                  "values": [
+                    "7",
+                    "4",
+                    "7",
+                    "Stadium",
+                    "3",
+                    "Stadium"
+                  ],
+                  "group": 8
+                }
+              ],
+              "groups": [
+                {
+                  "start": 0,
+                  "count": 1,
+                  "label": "s.name = Central"
+                },
+                {
+                  "start": 1,
+                  "count": 1,
+                  "label": "s.name = Harbour"
+                },
+                {
+                  "start": 2,
+                  "count": 1,
+                  "label": "s.name = Market"
+                },
+                {
+                  "start": 3,
+                  "count": 1,
+                  "label": "s.name = Museum"
+                },
+                {
+                  "start": 4,
+                  "count": 3,
+                  "label": "s.name = Riverside"
+                },
+                {
+                  "start": 7,
+                  "count": 2,
+                  "label": "s.name = Park"
+                },
+                {
+                  "start": 9,
+                  "count": 2,
+                  "label": "s.name = University"
+                },
+                {
+                  "start": 11,
+                  "count": 2,
+                  "label": "s.name = Airport"
+                },
+                {
+                  "start": 13,
+                  "count": 1,
+                  "label": "s.name = Stadium"
+                }
+              ]
+            }
+          ],
+          "rows": 9
+        },
+        {
+          "statement": 1,
+          "kind": "aggregate",
+          "clause": "min(r.stops)",
+          "summary": "9 groups, one row each: 1 aggregate worked out from each group's rows",
+          "line": 12,
+          "tables": [
+            {
+              "name": "groups",
+              "columns": [
+                {
+                  "name": "s.name",
+                  "type": "text",
+                  "expr": "s.name",
+                  "role": "key"
+                },
+                {
+                  "name": "min(r.stops)",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(r.stops)"
+                },
+                {
+                  "name": "r.stops values",
+                  "type": "text",
+                  "role": "inputs",
+                  "expr": "min(r.stops)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1|s:0,1",
+                  "label": "G1",
+                  "group": 0,
+                  "values": [
+                    "Central",
+                    "0",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "r:0,2|s:0,2",
+                  "label": "G2",
+                  "group": 1,
+                  "values": [
+                    "Harbour",
+                    "1",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,3|s:0,3",
+                  "label": "G3",
+                  "group": 2,
+                  "values": [
+                    "Market",
+                    "1",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,4|s:0,4",
+                  "label": "G4",
+                  "group": 3,
+                  "values": [
+                    "Museum",
+                    "2",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,12|s:0,9",
+                  "label": "G5",
+                  "group": 4,
+                  "values": [
+                    "Riverside",
+                    "2",
+                    "2, 3, 4"
+                  ]
+                },
+                {
+                  "id": "r:0,6|s:0,5",
+                  "label": "G6",
+                  "group": 5,
+                  "values": [
+                    "Park",
+                    "2",
+                    "2, 3"
+                  ]
+                },
+                {
+                  "id": "r:0,11|s:0,6",
+                  "label": "G7",
+                  "group": 6,
+                  "values": [
+                    "University",
+                    "3",
+                    "3, 4"
+                  ]
+                },
+                {
+                  "id": "r:0,10|s:0,8",
+                  "label": "G8",
+                  "group": 7,
+                  "values": [
+                    "Airport",
+                    "3",
+                    "3, 4"
+                  ]
+                },
+                {
+                  "id": "r:0,13|s:0,7",
+                  "label": "G9",
+                  "group": 8,
+                  "values": [
+                    "Stadium",
+                    "4",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 9
+        },
+        {
+          "statement": 1,
+          "kind": "select",
+          "clause": "SELECT s.name, min(r.stops) AS fewest_stops",
+          "summary": "2 columns (1 worked out), 9 rows",
+          "line": 12,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "fewest_stops",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(r.stops)"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1|s:0,1",
+                  "label": "G1",
+                  "values": [
+                    "Central",
+                    "0"
+                  ]
+                },
+                {
+                  "id": "r:0,2|s:0,2",
+                  "label": "G2",
+                  "values": [
+                    "Harbour",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,3|s:0,3",
+                  "label": "G3",
+                  "values": [
+                    "Market",
+                    "1"
+                  ]
+                },
+                {
+                  "id": "r:0,4|s:0,4",
+                  "label": "G4",
+                  "values": [
+                    "Museum",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,12|s:0,9",
+                  "label": "G5",
+                  "values": [
+                    "Riverside",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,6|s:0,5",
+                  "label": "G6",
+                  "values": [
+                    "Park",
+                    "2"
+                  ]
+                },
+                {
+                  "id": "r:0,11|s:0,6",
+                  "label": "G7",
+                  "values": [
+                    "University",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,10|s:0,8",
+                  "label": "G8",
+                  "values": [
+                    "Airport",
+                    "3"
+                  ]
+                },
+                {
+                  "id": "r:0,13|s:0,7",
+                  "label": "G9",
+                  "values": [
+                    "Stadium",
+                    "4"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 9
+        },
+        {
+          "statement": 1,
+          "kind": "order",
+          "clause": "ORDER BY fewest_stops, s.name",
+          "summary": "sorted by fewest_stops, then s.name",
+          "line": 16,
+          "tables": [
+            {
+              "name": "result",
+              "columns": [
+                {
+                  "name": "name",
+                  "type": "text"
+                },
+                {
+                  "name": "fewest_stops",
+                  "type": "integer",
+                  "numeric": true,
+                  "role": "computed",
+                  "expr": "min(r.stops)",
+                  "sort": {
+                    "rank": 1,
+                    "desc": false
+                  }
+                },
+                {
+                  "name": "s.name",
+                  "type": "text",
+                  "role": "sort",
+                  "expr": "s.name",
+                  "sort": {
+                    "rank": 2,
+                    "desc": false
+                  }
+                }
+              ],
+              "rows": [
+                {
+                  "id": "r:0,1|s:0,1",
+                  "label": "G1",
+                  "values": [
+                    "Central",
+                    "0",
+                    "Central"
+                  ]
+                },
+                {
+                  "id": "r:0,2|s:0,2",
+                  "label": "G2",
+                  "values": [
+                    "Harbour",
+                    "1",
+                    "Harbour"
+                  ]
+                },
+                {
+                  "id": "r:0,3|s:0,3",
+                  "label": "G3",
+                  "values": [
+                    "Market",
+                    "1",
+                    "Market"
+                  ]
+                },
+                {
+                  "id": "r:0,4|s:0,4",
+                  "label": "G4",
+                  "values": [
+                    "Museum",
+                    "2",
+                    "Museum"
+                  ]
+                },
+                {
+                  "id": "r:0,6|s:0,5",
+                  "label": "G6",
+                  "values": [
+                    "Park",
+                    "2",
+                    "Park"
+                  ]
+                },
+                {
+                  "id": "r:0,12|s:0,9",
+                  "label": "G5",
+                  "values": [
+                    "Riverside",
+                    "2",
+                    "Riverside"
+                  ]
+                },
+                {
+                  "id": "r:0,10|s:0,8",
+                  "label": "G8",
+                  "values": [
+                    "Airport",
+                    "3",
+                    "Airport"
+                  ]
+                },
+                {
+                  "id": "r:0,11|s:0,6",
+                  "label": "G7",
+                  "values": [
+                    "University",
+                    "3",
+                    "University"
+                  ]
+                },
+                {
+                  "id": "r:0,13|s:0,7",
+                  "label": "G9",
+                  "values": [
+                    "Stadium",
+                    "4",
+                    "Stadium"
+                  ]
+                }
+              ]
+            }
+          ],
+          "rows": 9
+        }
+      ]
+    }
+  },
+  "steps": [
+    {"event":"line","line":1,"stack":[{"id":"f0","func":"Global","line":1,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":5,"stack":[{"id":"f0","func":"Global","line":5,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":7,"stack":[{"id":"f0","func":"Global","line":7,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":4,"stack":[{"id":"f0","func":"Global","line":4,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":13,"stack":[{"id":"f0","func":"Global","line":13,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":14,"stack":[{"id":"f0","func":"Global","line":14,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":15,"stack":[{"id":"f0","func":"Global","line":15,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":12,"stack":[{"id":"f0","func":"Global","line":12,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":12,"stack":[{"id":"f0","func":"Global","line":12,"locals":[]}],"stdoutLength":0,"loops":[]},
+    {"event":"line","line":16,"stack":[{"id":"f0","func":"Global","line":16,"locals":[]}],"stdoutLength":308,"loops":[]}
+  ]
+}

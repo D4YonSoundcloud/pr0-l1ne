@@ -113,3 +113,39 @@ test("subqueries and UNION are stepped through as parts of the statement", async
   await expect(page.locator("#step-label")).toContainText("UNION");
   await expect(page.locator("#memory .sql-table")).toHaveCount(3);
 });
+
+test("window functions and WITH RECURSIVE have steps of their own", async ({ page }) => {
+  await open(
+    page,
+    "WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3)\nSELECT i, sum(i) OVER (ORDER BY i) AS total FROM n;\n",
+  );
+  await expect(page.locator("#step-label")).toContainText("of ", { timeout: 90_000 });
+  await expect(page.locator("#loop .sql-stage-keyword")).toHaveText([
+    "SELECT",
+    "PASS 1",
+    "PASS 2",
+    "PASS 3",
+    "ALL",
+    "FROM",
+    "WINDOW",
+    "SELECT",
+  ]);
+  await expect(page.locator("#output")).toContainText("(3 rows)");
+});
+
+test("Import CSV adds a table to the program, ready to run", async ({ page }) => {
+  await open(page, "SELECT 1;\n");
+  await expect(page.locator("#step-label")).toContainText("of ", { timeout: 90_000 });
+  await expect(page.locator("#import-csv")).toBeVisible();
+  await page.locator("#csv-file").setInputFiles({
+    name: "pets.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("name,age\nRex,3\nTom,5\n"),
+  });
+  await expect(page.locator("#banner")).toContainText("Added the table pets from pets.csv: 2 rows");
+  await page.locator("#run").click();
+  await expect(page.locator("#output")).toContainText("INSERT 0 2");
+  // Not for a program's languages.
+  await page.locator("#language").selectOption("python");
+  await expect(page.locator("#import-csv")).toBeHidden();
+});

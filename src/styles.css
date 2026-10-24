@@ -2883,3 +2883,15 @@ select {
   font-style: italic;
   fill: var(--path);
 }
+
+/* Controls for SQL only (Import CSV): hidden for a program's languages (app/languageKind.ts). */
+[data-kind="program"] .sql-only {
+  display: none !important;
+}
+.sql-stage.is-current .sql-stage-chip.is-refused,
+.sql-stage-chip.is-refused {
+  fill: var(--redpen);
+}
+.sql-stage-chip.is-refused + .sql-stage-keyword {
+  fill: var(--cell);
+}

@@ -155,6 +155,29 @@ describe("parts of a statement", () => {
   });
 });
 
+describe("windows, passes and refusals", () => {
+  it("name a window's partitions P1, P2, and chip each kind of step", async () => {
+    const trace = await traceOf(`-- viz: database company
+SELECT name, rank() OVER (PARTITION BY department_id ORDER BY salary) FROM employees;`);
+    const at = trace.sql!.stages.findIndex((s) => s.kind === "window");
+    const labels = all(sqlTableDrawing(sqlTableScene(trace, at)!), ".sql-group-label").map((t) => t.textContent);
+    expect(labels[0]).toBe("P1 · department_id = 1 · 4 rows");
+    const chips = all(sqlPipelineDrawing(sqlPipelineScene(trace, at)!), ".sql-stage-keyword").map((t) => t.textContent);
+    expect(chips).toEqual(["FROM", "WINDOW", "SELECT"]);
+  });
+
+  it("chip a recursive query's passes, and a refused statement in red", async () => {
+    const trace =
+      await traceOf(`WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2) SELECT i FROM n;
+CREATE TABLE t (id int PRIMARY KEY);
+INSERT INTO t VALUES (1), (1);`);
+    const chips = all(sqlPipelineDrawing(sqlPipelineScene(trace, 1)!), ".sql-stage-keyword").map((t) => t.textContent);
+    expect(chips).toEqual(["SELECT", "PASS 1", "PASS 2", "ALL", "FROM", "SELECT"]);
+    const last = trace.steps.length - 1;
+    expect(all(sqlPipelineDrawing(sqlPipelineScene(trace, last)!), ".sql-stage-chip.is-refused")).toHaveLength(1);
+  });
+});
+
 describe("the pipeline drawing", () => {
   it("numbers the statements, leaving out the sample database", async () => {
     const trace = await traceOf("-- viz: database shop\nSELECT 1;\nSELECT name FROM products;");
