@@ -242,7 +242,17 @@ export interface LinkedHint {
 }
 
 /** Options a `viz: graph` hint can carry. */
-export type GraphOption = "directed" | "undirected" | "circle" | "layered" | "force" | "matrix" | "edgelist";
+export type GraphOption =
+  | "directed"
+  | "undirected"
+  | "circle"
+  | "layered"
+  | "force"
+  | "matrix"
+  | "edgelist"
+  | "straight"
+  | "curved"
+  | "angled";
 export const GRAPH_OPTIONS: readonly GraphOption[] = [
   "directed",
   "undirected",
@@ -251,6 +261,9 @@ export const GRAPH_OPTIONS: readonly GraphOption[] = [
   "force",
   "matrix",
   "edgelist",
+  "straight",
+  "curved",
+  "angled",
 ];
 
 /**

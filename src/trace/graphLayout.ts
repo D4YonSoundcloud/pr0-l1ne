@@ -92,6 +92,12 @@ export interface LayoutOptions {
   directed: boolean;
   /** What a hint asked for; "auto" picks. */
   mode?: "auto" | "circle" | "layered" | "force";
+  /**
+   * Edges drawn at right angles (a graph hint's `angled`): a stress layout
+   * then lines nodes up in rows and columns, so most edges run straight
+   * across or down.
+   */
+  angled?: boolean;
   /** Where the algorithm starts: drawn on top (layered) or first (circle). */
   start?: string | null;
 }
@@ -511,9 +517,12 @@ export function placeInOrder(want: number[], weight: number[], gaps: number[]): 
   return out;
 }
 
+/** Half the room a node takes in its layer: a real node, or a placeholder. */
+const half = (n: string) => (isDummy(n) ? DUMMY_HALF : REAL_HALF);
+
+/** Positions by least squares (placeInOrder), sweeping up and down: balanced, but long edges may bend. */
 function assignX(g: Grid): Map<string, number> {
   const x = new Map<string, number>();
-  const half = (n: string) => (isDummy(n) ? DUMMY_HALF : REAL_HALF);
   for (const layer of g.layers) {
     let cursor = 0;
     layer.forEach((n, i) => {
@@ -548,6 +557,165 @@ function assignX(g: Grid): Map<string, number> {
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
+/**
+ * Positions by Brandes and Köpf ("Fast and simple horizontal coordinate
+ * assignment", 2001): each node lines up with a median neighbor, long
+ * edges first, so placeholder chains (long edges) run straight down. Four
+ * passes (aligning up or down, packing left or right) are balanced by
+ * taking the middle two of each node's four positions. Returns null if the
+ * result breaks a minimum gap (the original packing step can, rarely).
+ */
+export function brandesKopf(
+  layers: string[][],
+  up: Map<string, string[]>,
+  below: Map<string, string[]>,
+): Map<string, number> | null {
+  if (!layers.length) return new Map();
+  const pos = new Map<string, number>();
+  for (const layer of layers) for (const [i, n] of layer.entries()) pos.set(n, i);
+  // Type 1 conflicts: a segment that isn't between two placeholders crossing one that is.
+  const marked = new Set<string>();
+  for (let i = 0; i + 1 < layers.length; i++) {
+    const upper = layers[i];
+    const lower = layers[i + 1];
+    let k0 = 0;
+    let l = 0;
+    for (let l1 = 0; l1 < lower.length; l1++) {
+      const v = lower[l1];
+      const innerFrom = isDummy(v) ? up.get(v)!.find(isDummy) : undefined;
+      if (l1 === lower.length - 1 || innerFrom !== undefined) {
+        const k1 = innerFrom !== undefined ? pos.get(innerFrom)! : upper.length - 1;
+        for (; l <= l1; l++) {
+          const w = lower[l];
+          for (const u of up.get(w)!) {
+            const k = pos.get(u)!;
+            if (k < k0 || k > k1) marked.add(`${u}\u0001${w}`);
+          }
+        }
+        k0 = k1;
+      }
+    }
+  }
+  const conflict = (a: string, b: string) => marked.has(`${a}\u0001${b}`) || marked.has(`${b}\u0001${a}`);
+
+  /** One pass: aligned toward the layer before (in `order`), packed toward the start of each layer. */
+  const pass = (order: string[][], before: Map<string, string[]>): Map<string, number> => {
+    const at = new Map<string, number>();
+    for (const layer of order) for (const [i, n] of layer.entries()) at.set(n, i);
+    const root = new Map<string, string>();
+    const align = new Map<string, string>();
+    for (const layer of order)
+      for (const n of layer) {
+        root.set(n, n);
+        align.set(n, n);
+      }
+    for (let i = 1; i < order.length; i++) {
+      let r = -1;
+      for (const v of order[i]) {
+        const ns = [...before.get(v)!].sort((a, b) => at.get(a)! - at.get(b)!);
+        if (!ns.length) continue;
+        const d = ns.length;
+        for (const m of [...new Set([Math.floor((d - 1) / 2), Math.ceil((d - 1) / 2)])]) {
+          if (align.get(v) !== v) continue;
+          const u = ns[m];
+          if (!conflict(u, v) && r < at.get(u)!) {
+            align.set(u, v);
+            root.set(v, root.get(u)!);
+            align.set(v, root.get(v)!);
+            r = at.get(u)!;
+          }
+        }
+      }
+    }
+    // Pack the blocks (nodes aligned together) toward the start of each layer.
+    const pred = new Map<string, string>();
+    for (const layer of order)
+      layer.forEach((n, i) => {
+        if (i) pred.set(n, layer[i - 1]);
+      });
+    const sink = new Map<string, string>();
+    const shift = new Map<string, number>();
+    const x = new Map<string, number>();
+    for (const layer of order)
+      for (const n of layer) {
+        sink.set(n, n);
+        shift.set(n, Number.POSITIVE_INFINITY);
+      }
+    const place = (v: string) => {
+      if (x.has(v)) return;
+      x.set(v, 0);
+      let w = v;
+      do {
+        const p = pred.get(w);
+        if (p !== undefined) {
+          const u = root.get(p)!;
+          place(u);
+          if (sink.get(v) === v) sink.set(v, sink.get(u)!);
+          const gap = half(p) + half(w);
+          if (sink.get(v) !== sink.get(u)) {
+            shift.set(sink.get(u)!, Math.min(shift.get(sink.get(u)!)!, x.get(v)! - x.get(u)! - gap));
+          } else x.set(v, Math.max(x.get(v)!, x.get(u)! + gap));
+        }
+        w = align.get(w)!;
+      } while (w !== v);
+    };
+    for (const layer of order) for (const n of layer) if (root.get(n) === n) place(n);
+    const out = new Map<string, number>();
+    for (const layer of order)
+      for (const n of layer) {
+        const r = root.get(n)!;
+        const s = shift.get(sink.get(r)!)!;
+        out.set(n, x.get(r)! + (s < Number.POSITIVE_INFINITY ? s : 0));
+      }
+    return out;
+  };
+
+  const mirrored = (ls: string[][]) => ls.map((l) => [...l].reverse());
+  const flip = (m: Map<string, number>) => new Map([...m].map(([n, v]) => [n, -v]));
+  const passes = [
+    pass(layers, up),
+    flip(pass(mirrored(layers), up)),
+    pass([...layers].reverse(), below),
+    flip(pass(mirrored([...layers].reverse()), below)),
+  ];
+  // Line the four up on the narrowest: the left-packed ones by their left edge, the others by their right.
+  const width = (m: Map<string, number>) => Math.max(...m.values()) - Math.min(...m.values());
+  const narrowest = passes.reduce((a, b) => (width(b) < width(a) ? b : a));
+  const lo = Math.min(...narrowest.values());
+  const hi = Math.max(...narrowest.values());
+  const lined = passes.map((m, k) => {
+    const d = k % 2 === 0 ? lo - Math.min(...m.values()) : hi - Math.max(...m.values());
+    return new Map([...m].map(([n, v]) => [n, v + d]));
+  });
+  const x = new Map<string, number>();
+  for (const n of pos.keys()) {
+    const v = lined.map((m) => m.get(n)!).sort((a, b) => a - b);
+    x.set(n, (v[1] + v[2]) / 2);
+  }
+  for (const layer of layers) {
+    for (let i = 1; i < layer.length; i++) {
+      if (x.get(layer[i])! - x.get(layer[i - 1])! < half(layer[i - 1]) + half(layer[i]) - 1e-6) return null;
+    }
+  }
+  const min = Math.min(...x.values());
+  for (const [n, v] of x) x.set(n, round(v - min));
+  return x;
+}
+
+/**
+ * How well positions draw the layers: long edges that bend (a placeholder
+ * chain not in a straight line), then how far edges lean in total.
+ */
+function placementCost(g: Grid, x: Map<string, number>): [number, number] {
+  let bent = 0;
+  for (const chain of g.chains.values()) {
+    if (chain.length > 1 && chain.some((d) => Math.abs(x.get(d)! - x.get(chain[0])!) > 1e-6)) bent++;
+  }
+  let lean = 0;
+  for (const [n, below] of g.below) for (const m of below) lean += Math.abs(x.get(n)! - x.get(m)!);
+  return [bent, lean];
+}
+
 // ---------------------------------------------------------------------------
 // The layouts
 // ---------------------------------------------------------------------------
@@ -565,7 +733,16 @@ function layeredPiece(
   const g = buildGrid(nodes, lay);
   // A forest is crossing-free in depth-first order: keep it (children stay in program order).
   if (!isForest(nodes, lay)) reduceCrossings(g);
-  const x = assignX(g);
+  // Brandes–Köpf keeps long edges straight; least squares balances better.
+  // Whichever bends fewer long edges, then leans less, wins.
+  const balanced = assignX(g);
+  const straight = brandesKopf(g.layers, g.up, g.below);
+  let x = balanced;
+  if (straight) {
+    const [bentS, leanS] = placementCost(g, straight);
+    const [bentB, leanB] = placementCost(g, balanced);
+    if (bentS < bentB || (bentS === bentB && leanS < leanB - 1e-6)) x = straight;
+  }
   const yOf = new Map<string, number>();
   g.layers.forEach((layer, y) => {
     for (const n of layer) yOf.set(n, y);
@@ -768,7 +945,7 @@ function straightCrossings(p: Point[], pairs: [number, number][]): number {
  * the start) and keeps the result with the fewest crossings, then the
  * least stress. Always the same result.
  */
-function stressPiece(nodes: string[], ls: Link[], start: string | null): Map<string, Point> {
+function stressPiece(nodes: string[], ls: Link[], start: string | null, angled = false): Map<string, Point> {
   const n = nodes.length;
   if (n === 1) return new Map([[nodes[0], { x: 0, y: 0 }]]);
   if (n === 2) return new Map(nodes.map((node, i) => [node, { x: i * EDGE, y: 0 }]));
@@ -812,9 +989,42 @@ function stressPiece(nodes: string[], ls: Link[], start: string | null): Map<str
     }
   }
   const p = best!.p;
-  orient(p, start ? nodes.indexOf(start) : 0, pairs);
+  orient(p, start ? nodes.indexOf(start) : 0, pairs, angled);
+  if (angled) {
+    // Rows and columns: nodes nearly level (or nearly in line) share one.
+    snap(
+      p,
+      (q) => q.x,
+      (q, v) => {
+        q.x = v;
+      },
+    );
+    snap(
+      p,
+      (q) => q.y,
+      (q, v) => {
+        q.y = v;
+      },
+    );
+  }
   separate(p, 0.9);
   return new Map(nodes.map((node, i) => [node, p[i]]));
+}
+
+/** Nearly equal coordinates (within 0.4 units of the next) made equal: their mean. */
+function snap(p: Point[], get: (q: Point) => number, set: (q: Point, v: number) => void): void {
+  const order = p.map((_, i) => i).sort((a, b) => get(p[a]) - get(p[b]) || a - b);
+  let group: number[] = [];
+  const flush = () => {
+    const mean = group.reduce((sum, i) => sum + get(p[i]), 0) / group.length;
+    for (const i of group) set(p[i], mean);
+    group = [];
+  };
+  for (const i of order) {
+    if (group.length && get(p[i]) - get(p[group[group.length - 1]]) > 0.4) flush();
+    group.push(i);
+  }
+  if (group.length) flush();
 }
 
 /**
@@ -823,7 +1033,7 @@ function stressPiece(nodes: string[], ls: Link[], start: string | null): Map<str
  * as a diamond), else its long side horizontal; wider than tall; and with
  * `first` (where the algorithm starts) toward the top left.
  */
-function orient(p: Point[], first: number, pairs: readonly [number, number][]): void {
+function orient(p: Point[], first: number, pairs: readonly [number, number][], align = false): void {
   const n = p.length;
   const rotate = (angle: number) => {
     const cx = p.reduce((s, q) => s + q.x, 0) / n;
@@ -846,7 +1056,7 @@ function orient(p: Point[], first: number, pairs: readonly [number, number][]): 
     s4 += Math.sin(4 * angle);
   }
   const agreement = pairs.length ? Math.hypot(c4, s4) / pairs.length : 0;
-  if (agreement > 0.5) rotate(-Math.atan2(s4, c4) / 4);
+  if (agreement > 0.5 || (align && agreement > 0.05)) rotate(-Math.atan2(s4, c4) / 4);
   else {
     const cx = p.reduce((s, q) => s + q.x, 0) / n;
     const cy = p.reduce((s, q) => s + q.y, 0) / n;
@@ -1081,9 +1291,9 @@ function packPieces(
 }
 
 /** Stress layout for a whole graph: pieces packed, straight edges kept clear of nodes. */
-function stress(nodes: string[], edges: readonly LayoutEdge[], start: string | null): GraphLayout {
+function stress(nodes: string[], edges: readonly LayoutEdge[], start: string | null, angled = false): GraphLayout {
   const ls = links(nodes, edges);
-  const pos = packPieces(nodes, ls, start, stressPiece);
+  const pos = packPieces(nodes, ls, start, (piece, own, first) => stressPiece(piece, own, first, angled));
   const routes = clearEdges(pos, ls);
   for (const [n, q] of pos) pos.set(n, { x: round(q.x), y: round(q.y) });
   const minX = Math.min(...[...pos.values()].map((q) => q.x));
@@ -1172,11 +1382,12 @@ export function computeLayout(nodes: string[], edges: readonly LayoutEdge[], opt
     if (!links(nodes, edges).length)
       return { ...emptyLayout("circle"), pos: nodes.length <= 2 ? circle(nodes) : grid(nodes) };
     if (layersSuit(nodes, edges, directed, start)) return layered(nodes, edges, directed, start);
-    if (smallAndDense(nodes, edges)) return denseCircleOrStress(nodes, edges, start);
+    // Right-angled edges suit rows and columns better than a circle.
+    if (smallAndDense(nodes, edges) && !options.angled) return denseCircleOrStress(nodes, edges, start);
   }
   if (nodes.length <= 2) return { ...emptyLayout("circle"), pos: circle(nodes) };
   // "force" (a hint's name for it, and the mode graphView reads): stress, which looks like force but tidier.
-  return stress(nodes, edges, start);
+  return stress(nodes, edges, start, options.angled);
 }
 
 /** Edges crossing each other in a layout, bends included (for tests: layouts must not get worse). */

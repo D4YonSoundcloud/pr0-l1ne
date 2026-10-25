@@ -47,6 +47,12 @@ export interface GraphData {
   members: Set<string>;
   objectNodes: boolean;
   layout: "auto" | "circle" | "layered" | "force";
+  /**
+   * How edges are drawn (render/graphView.ts): "auto" (straight, or curving
+   * around nodes when they must), "straight", "curved" or "angled" (right
+   * angles). A hint's option.
+   */
+  edgeStyle: EdgeStyle;
   /** Names a hint asked to draw on the graph. */
   names: string[];
   /** Object graphs: true boolean fields per node (is_end, visited...). */
@@ -366,6 +372,7 @@ function objectGraph(
     members,
     objectNodes: true,
     layout: layoutOption(hint?.options ?? []),
+    edgeStyle: edgeStyleOption(hint?.options ?? []),
     names: hint?.names ?? [],
     flags,
   };
@@ -376,6 +383,18 @@ function isDirected(edges: GraphEdge[], options: GraphOption[]): boolean {
   if (options.includes("undirected")) return false;
   const set = new Set(edges.map((e) => `${e.from}>${e.to}`));
   return edges.some((e) => e.from !== e.to && !set.has(`${e.to}>${e.from}`));
+}
+
+export type EdgeStyle = "auto" | "straight" | "curved" | "angled";
+
+function edgeStyleOption(options: GraphOption[]): EdgeStyle {
+  return options.includes("angled")
+    ? "angled"
+    : options.includes("curved")
+      ? "curved"
+      : options.includes("straight")
+        ? "straight"
+        : "auto";
 }
 
 function layoutOption(options: GraphOption[]): GraphData["layout"] {
@@ -414,6 +433,7 @@ function containerGraph(
     members: built.members,
     objectNodes: false,
     layout: layoutOption(options),
+    edgeStyle: edgeStyleOption(options),
     names: hint?.names ?? [],
     flags: new Map(),
   };
@@ -852,6 +872,7 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
         edges: Map<string, GraphEdge>;
         directed: boolean;
         layout: GraphData["layout"];
+        angled: boolean;
         start: string | null;
       }
     >();
@@ -885,6 +906,7 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
           edges: new Map(),
           directed: false,
           layout: g.layout,
+          angled: g.edgeStyle === "angled",
           start: null,
         };
         entry.start ??= startOf(o);
@@ -900,6 +922,7 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
         computeLayout([...entry.nodes.keys()], [...entry.edges.values()], {
           directed: entry.directed,
           mode: entry.layout,
+          angled: entry.angled,
           start: entry.start,
         }),
       );
@@ -909,7 +932,11 @@ export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
   const known = byId.get(graph.id);
   if (known && [...graph.nodes.keys()].every((node) => known.pos.has(node))) return known;
   // A graph found only in this view (say, from a loop's own frame): lay it out alone.
-  const own = computeLayout([...graph.nodes.keys()], graph.edges, { directed: graph.directed, mode: graph.layout });
+  const own = computeLayout([...graph.nodes.keys()], graph.edges, {
+    directed: graph.directed,
+    mode: graph.layout,
+    angled: graph.edgeStyle === "angled",
+  });
   byId.set(graph.id, own);
   return own;
 }

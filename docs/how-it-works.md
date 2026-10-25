@@ -540,7 +540,9 @@ Saved settings are read by `parseAppearance()`, which checks every field and fal
   3. *Layers.* Longest path from the top, then each node nothing points to moves down to just above its highest child, so its edges are short. The start stays on top.
   4. *Placeholders.* An edge spanning several layers gets an invisible point in each layer it crosses, so it bends around the nodes in between.
   5. *Order.* From a depth-first order (subtrees together, children in program order), sweeps down and up order each layer by the median position of its neighbors, and neighbors swap whenever that removes crossings. The order with the fewest crossings wins. A tree keeps its depth-first order, which has no crossings, so children stay left to right as the program has them.
-  6. *Positions.* Each node as close as it can be to the average of its neighbors above and below, keeping the order and a minimum gap, solved exactly per sweep (isotonic regression by pool adjacent violators). Placeholders weigh more, so long edges run straight.
+  6. *Positions*, two ways, keeping whichever bends fewer long edges, then leans edges less:
+     - *Brandes–Köpf* ("Fast and simple horizontal coordinate assignment"): each node lines up with a median neighbor, long edges first (a segment between two placeholders wins over any segment crossing it), so a long edge runs straight down. Four passes (aligning up or down, packing left or right) are balanced by averaging the middle two of each node's four positions. If the packing ever breaks a minimum gap (the original method can, rarely), this result is dropped.
+     - *Least squares*: each node as close as it can be to the average of its neighbors above and below, keeping the order and a minimum gap, solved exactly per sweep (isotonic regression by pool adjacent violators).
 
   Separate pieces are laid out apart and put side by side, the start's first; nodes with no edges go in a block on the right. Layers are used when cycle breaking turns only a few edges, the graph isn't dense, and its edges don't mostly go both ways (that's really an undirected graph).
 - **Circle** for a ring (every node linked to exactly two others, all in one loop), in ring order from the start, at the top. A small dense graph (4 to 8 nodes, most pairs linked) gets a circle too, in program order or breadth-first from the start, unless the stress layout crosses fewer edges.
@@ -560,7 +562,14 @@ The same pass records every kind of state the graph is ever drawn with, so its l
 
 **Drawing.** [`render/graphView.ts`](../src/render/graphView.ts) turns layout units into pixels: one unit is the widest node plus a gap.
 
-- **Edges** are clipped to node outlines. An undirected edge (listed from both ends) is drawn once. A long edge in a layered layout runs through its placeholders as a smooth curve (Catmull-Rom, as cubic Béziers). Repeated edges get lanes side by side, a directed two-way pair two bowed curves, a back edge between neighboring layers a bow, and a self-loop a loop off the node's right side. Weights are labels with a halo, halfway along.
+- **Edges** are shaped in [`render/graphEdges.ts`](../src/render/graphEdges.ts) (pure geometry, tested in `graphEdges.test.ts`), by the graph's edge style, a hint option:
+  - *auto* (the default): straight lines, clipped to node outlines. A long edge in a layered layout runs through its placeholders as a smooth curve (Catmull-Rom, as cubic Béziers), and so does an edge the layout bent around a node.
+  - *curved*: every other edge a gentle arc too, bowing by 12% of its length (10 to 26 pixels).
+  - *straight*: straight lines only, bends ignored.
+  - *angled*: horizontal and vertical lines with rounded corners. In layers, each step between two layers leaves a node straight down (or up), crosses its gap at a track, and arrives straight down; steps crossing the same gap get separate tracks where their spans overlap (greedy interval coloring), between the ▲ names under one layer and the badges over the next. Otherwise an edge is an L, across first or down first, whichever passes fewer nodes; when both run into one (a grid's corner), a straight line if that's clear. The layout helps: an angled graph that isn't in layers has its nodes lined up in rows and columns (coordinates within 0.4 units share one).
+
+  An undirected edge (listed from both ends) is drawn once. Repeated edges get lanes side by side, a directed two-way pair two bowed curves, a back edge between neighboring layers a bow, and a self-loop a loop off the node's right side.
+- **Weight labels** are placed last (`placeLabels()`): halfway along the edge if no node, legend or earlier label is there, else at the first clear spot from a few points along the edge (40%, 60%, 30%...), on it or just beside it; if none is clear, where it covers least. They have a halo.
 - **Nodes** carry classes for their state, plus badges for queue order and labels.
 - **▲ markers** carry `data-flip` keys, so they slide when animated.
 

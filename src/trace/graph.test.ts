@@ -239,6 +239,15 @@ describe("graph hints", () => {
     expect(h.warnings).toEqual([]);
   });
 
+  it("reads how edges are drawn: straight, curved or angled", async () => {
+    const t = await js(`// viz: graph roads angled
+const roads = { A: ["B"], B: ["A", "C"], C: ["B"] };
+let done = 1;`);
+    expect(graphsAtEnd(t)[0].edgeStyle).toBe("angled");
+    const plain = await js(`const roads = { A: ["B"], B: ["A"] };\nlet done = 1;`);
+    expect(graphsAtEnd(plain)[0].edgeStyle).toBe("auto");
+  });
+
   it("explains a bad option", () => {
     const h = parseHints([{ line: 4, text: "graph adj sideways" }]);
     expect(h.warnings[0]).toMatchObject({ line: 4 });

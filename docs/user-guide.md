@@ -505,7 +505,9 @@ A graph is **undirected** when every edge goes both ways, and **directed** (with
 
 A single loop of nodes (a ring) is drawn as a circle, starting at the top, and so is a small graph where most nodes link to each other, when that crosses fewer edges.
 
-Other graphs (undirected graphs with cycles, bigger dense graphs) are laid out so that nodes a few edges apart sit about that far apart on screen. A grid comes out as a grid, edges are kept clear of nodes they don't connect (bending around one when they must), and where the search starts is at the top left. Separate pieces are packed in rows. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. The same graph is always laid out the same way.
+Other graphs (undirected graphs with cycles, bigger dense graphs) are laid out so that nodes a few edges apart sit about that far apart on screen. A grid comes out as a grid, edges are kept clear of nodes they don't connect (bending around one when they must), and where the search starts is at the top left. Separate pieces are packed in rows. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. Edge weights sit halfway along their edge, or nearby when that spot would cover a node or another weight. The same graph is always laid out the same way.
+
+Edges are straight, curving only around a node or through the layers a long edge crosses. A [graph hint](hints.md#graph-options) can ask for `curved` edges (gentle arcs), `straight` ones, or `angled` ones (horizontal and vertical lines with rounded corners, like a circuit diagram): `// viz: graph roads angled`.
 
 ![Topological sort: items already placed in the order are filled in, the ready queue is numbered, and each item shows how many things it still waits on](graph-topo.png)
 

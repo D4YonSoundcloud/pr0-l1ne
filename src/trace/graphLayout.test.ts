@@ -3,7 +3,7 @@ import { JAVASCRIPT_EXAMPLES, TYPESCRIPT_EXAMPLES } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
 import { legacyForce, legacyLayered } from "../testing/legacyGraphLayout";
 import { findGraphs, type GraphEdge, layoutFor, stepScopes } from "./graph";
-import { computeLayout, edgeCrossings, type GraphLayout, placeInOrder, ringOrder } from "./graphLayout";
+import { brandesKopf, computeLayout, edgeCrossings, type GraphLayout, placeInOrder, ringOrder } from "./graphLayout";
 import { applyHints } from "./hints";
 import type { Trace } from "./types";
 
@@ -278,6 +278,70 @@ describe("stress layout (undirected graphs with cycles)", () => {
     expect([...one.routes]).toEqual([...two.routes]);
     expectTidy(one);
     expect(ms).toBeLessThan(5000);
+  });
+});
+
+describe("straight long edges (Brandes–Köpf)", () => {
+  /** Deterministic jumbles of directed acyclic graphs. */
+  const dags = () => {
+    let seed = 7;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    return Array.from({ length: 120 }, () => {
+      const n = 6 + Math.floor(rnd() * 25);
+      const nodes = Array.from({ length: n }, (_, i) => `n${i}`);
+      const edges: { from: string; to: string }[] = [];
+      for (let i = 0; i < n * 1.4; i++) {
+        const a = Math.floor(rnd() * n);
+        const b = Math.floor(rnd() * n);
+        if (a < b) edges.push({ from: nodes[a], to: nodes[b] });
+      }
+      return { nodes, edges };
+    });
+  };
+
+  it("runs a long edge straight down through the layers it crosses", () => {
+    let chains = 0;
+    let straight = 0;
+    for (const { nodes, edges } of dags()) {
+      const layout = computeLayout(nodes, edges, { directed: true, mode: "layered" });
+      expectTidy(layout);
+      for (const { from, to } of edges) {
+        const bends = layout.routes.get(`${from}>${to}`) ?? [];
+        if (bends.length < 2) continue;
+        chains++;
+        if (bends.every((p) => Math.abs(p.x - bends[0].x) < 1e-6)) straight++;
+      }
+    }
+    expect(chains).toBeGreaterThan(10);
+    expect(straight / chains).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("keeps every gap in every layer", () => {
+    const layers = [["a", "b"], ["\u0000d0", "c", "d"], ["e"]];
+    const up = new Map<string, string[]>([
+      ["a", []],
+      ["b", []],
+      ["\u0000d0", ["a"]],
+      ["c", ["a"]],
+      ["d", ["b"]],
+      ["e", ["\u0000d0", "c", "d"]],
+    ]);
+    const below = new Map<string, string[]>([
+      ["a", ["\u0000d0", "c"]],
+      ["b", ["d"]],
+      ["\u0000d0", ["e"]],
+      ["c", ["e"]],
+      ["d", ["e"]],
+      ["e", []],
+    ]);
+    const x = brandesKopf(layers, up, below)!;
+    expect(x).not.toBeNull();
+    expect(x.get("c")! - x.get("\u0000d0")!).toBeGreaterThanOrEqual(0.72 - 1e-6);
+    expect(x.get("d")! - x.get("c")!).toBeGreaterThanOrEqual(1 - 1e-6);
+    expect(x.get("b")! - x.get("a")!).toBeGreaterThanOrEqual(1 - 1e-6);
   });
 });
 

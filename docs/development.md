@@ -358,6 +358,7 @@ pr0-l1ne/
     │   │   └── layout.ts       The rows top to bottom: the whole drawing
     │   ├── loopView.test.ts    The loop renderer drawing scenes, every JS and TS example
     │   ├── graphView.ts        Drawing a graph, for both views
+    │   ├── graphEdges.ts       Edge shapes (auto, curved, straight, angled) and weight label placement
     │   ├── animate.ts          What a step animates (plan), played as FLIP tweening for SVG
     │   ├── animate.test.ts     Animation tests (jsdom)
     │   ├── viewport.ts         Pan, zoom and node dragging for both sections (an SVG, or a surface)

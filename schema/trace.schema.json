@@ -1295,7 +1295,10 @@
         "layered",
         "force",
         "matrix",
-        "edgelist"
+        "edgelist",
+        "straight",
+        "curved",
+        "angled"
       ],
       "description": "Options a `viz: graph` hint can carry."
     },
