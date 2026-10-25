@@ -13,7 +13,7 @@ import { sqlTableScene } from "../scene/sqlScene";
 import type { Settings } from "../settings";
 import { diffSteps } from "../trace/diff";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
-import { storedAutoFit } from "./autoFit";
+import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
 import type { PaneAnimation } from "./styleController";
 
@@ -30,7 +30,10 @@ export interface MemoryElements {
 
 export interface MemoryOptions {
   app: AppStore;
-  settings: Pick<Settings, "memoryMode" | "showOutput" | "dimOutput" | "sizes" | "sizeModel" | "autoFit">;
+  settings: Pick<
+    Settings,
+    "memoryMode" | "showOutput" | "dimOutput" | "sizes" | "sizeModel" | "autoFit" | "controlsCollapsed"
+  >;
   els: MemoryElements;
   /** How to animate the step being drawn (StyleController.animationFor). */
   animation(): PaneAnimation;
@@ -69,6 +72,7 @@ export class MemoryController {
         this.updateResetButton();
       },
       onAutoFitChange: (state) => settings.autoFit("memory").set(JSON.stringify(state)),
+      controls: settings.controlsCollapsed("memory"),
     });
     this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("memory")) });
     this.resetButton = this.renderer.addControl("Reset layout", "Put every box back in its automatic position", () => {
@@ -203,6 +207,7 @@ export class MemoryController {
       sizes: this.sizes(),
       output: this.outputOn,
       dimForOutput: this.dimForOutput,
+      tall: isTall(this.options.els.memory),
     });
     this.renderer.setAppearance({ step: this.options.animation() });
     this.renderer.render(scene, this.drawn);

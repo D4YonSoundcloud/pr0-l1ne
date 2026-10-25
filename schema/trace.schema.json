@@ -1298,7 +1298,8 @@
         "edgelist",
         "straight",
         "curved",
-        "angled"
+        "angled",
+        "sideways"
       ],
       "description": "Options a `viz: graph` hint can carry."
     },

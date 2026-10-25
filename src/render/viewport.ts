@@ -22,6 +22,12 @@ export interface Point {
   y: number;
 }
 
+/** Where a window remembers whether its floating controls are folded away. */
+export interface ControlsSetting {
+  get(): boolean;
+  set(collapsed: boolean): void;
+}
+
 export interface ViewportOptions {
   /** Accessible description, e.g. "Memory diagram". */
   label: string;
@@ -32,6 +38,8 @@ export interface ViewportOptions {
   onNodeMove?(key: string, position: Point, done: boolean): void;
   /** Called when Auto-fit is turned on or off, or its mode changes. */
   onAutoFitChange?(state: AutoFit): void;
+  /** Whether the floating controls are folded away, remembered (see ControlsSetting). */
+  controls?: ControlsSetting;
   /**
    * A drawing that isn't an SVG in the page (the canvas renderer): the
    * viewport tells it where the view is instead of moving an SVG with CSS,
@@ -156,13 +164,21 @@ export class Viewport {
     const autoFitGroup = document.createElement("span");
     autoFitGroup.className = "auto-fit-group";
     autoFitGroup.append(this.autoFitButton, modeButton, this.autoFitMenu);
+    // Folds the controls away to a small button, so they don't cover the
+    // diagram; the choice is remembered for the window.
+    this.collapseButton = this.button("›", "Hide these controls", () =>
+      this.setControlsCollapsed(!this.controlsCollapsed),
+    );
+    this.collapseButton.classList.add("controls-toggle");
     this.controls.append(
       autoFitGroup,
       this.button("−", "Zoom out (−)", () => this.manual(() => this.zoomBy(1 / 1.25))),
       this.zoomLabel,
       this.button("+", "Zoom in (+)", () => this.manual(() => this.zoomBy(1.25))),
       this.button("Fit", "Fit the whole diagram in view once", () => this.fit()),
+      this.collapseButton,
     );
+    this.setControlsCollapsed(options.controls?.get() ?? false, false);
     el.append(this.layer, this.empty, this.controls);
     const signal = this.listening.signal;
     el.addEventListener(
@@ -188,6 +204,22 @@ export class Viewport {
       this.resizes.observe(el);
     }
     this.apply();
+  }
+
+  private controlsCollapsed = false;
+  private readonly collapseButton: HTMLButtonElement;
+
+  /** Fold the floating controls away to one small button, or open them again. */
+  setControlsCollapsed(collapsed: boolean, remember = true): void {
+    this.controlsCollapsed = collapsed;
+    this.controls.classList.toggle("is-collapsed", collapsed);
+    this.collapseButton.textContent = collapsed ? "‹ Zoom" : "›";
+    const title = collapsed ? "Show the zoom controls" : "Hide these controls";
+    this.collapseButton.title = title;
+    this.collapseButton.setAttribute("aria-label", title);
+    this.collapseButton.setAttribute("aria-expanded", String(!collapsed));
+    if (collapsed) this.toggleAutoFitMenu(false);
+    if (remember) this.options.controls?.set(collapsed);
   }
 
   /** Add a button to the floating controls (e.g. "Reset layout"). */

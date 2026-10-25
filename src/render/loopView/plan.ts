@@ -105,6 +105,7 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
     const sample: GraphPicture = graphPicture(firstGraph, layout, overlays[0], {
       flipKey: "g",
       legendOverlays: overlays,
+      tall: scene.tall,
     });
     const labelW = textWidth(firstGraph.name) + 12;
     graphLayout = { x: x + labelW, layout, overlays, h: sample.h };

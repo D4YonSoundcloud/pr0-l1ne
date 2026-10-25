@@ -136,6 +136,8 @@
               <button type="button" class="window-bar" data-window="memory" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Memory</span></button>
               <div class="section-head">
                 <h2 class="section-title" id="memory-title">Memory</h2>
+                <!-- One row, always: what doesn't fit scrolls sideways (app/sectionTools.ts). -->
+                <div class="section-tools" id="memory-tools">
                 <div class="segmented" role="group" aria-label="How references are drawn">
                   <button type="button" id="mode-arrows" class="segment" aria-pressed="false" title="Every object is its own box, connected by arrows">Arrows</button>
                   <button type="button" id="mode-nested" class="segment" aria-pressed="true" title="Objects only one thing refers to are drawn inside it">Nested</button>
@@ -150,6 +152,7 @@
                 <select id="size-model" class="size-model" aria-label="How memory sizes are counted" hidden></select>
                 <span id="memory-total" class="memory-total" hidden></span>
                 <span class="section-hint">Drag boxes to rearrange them</span>
+                </div>
                 <div class="window-controls" role="group" aria-label="Window size">
                   <button type="button" class="window-button" data-window="memory" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
                   <button type="button" class="window-button" data-window="memory" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
@@ -162,6 +165,8 @@
               <button type="button" class="window-bar" data-window="loop" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Loop history</span></button>
               <div class="section-head">
                 <h2 class="section-title" id="loop-title">Loop history</h2>
+                <!-- One row, always: what doesn't fit scrolls sideways (app/sectionTools.ts). -->
+                <div class="section-tools" id="loop-tools">
                 <div class="segmented" role="group" aria-label="How iterations are shown">
                   <button type="button" id="loop-stacked" class="segment" aria-pressed="false" title="One row per iteration, stacked">Stacked</button>
                   <button type="button" id="loop-animated" class="segment" aria-pressed="true" title="One live row that changes as you step">Animated</button>
@@ -173,6 +178,7 @@
                 <label class="toggle small" title="Draw each list, dict, linked list or graph on its own line, one above another, with the iteration and its variables at the middle">
                   <input id="loop-vertical" type="checkbox" /> One above another
                 </label>
+                </div>
                 <div class="window-controls" role="group" aria-label="Window size">
                   <button type="button" class="window-button" data-window="loop" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
                   <button type="button" class="window-button" data-window="loop" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>

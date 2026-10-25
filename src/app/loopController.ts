@@ -7,7 +7,7 @@
  * Its toolbar picks stacked rows or one animated row, hiding variables that
  * don't change, and stacking containers vertically.
  */
-import { loopScene } from "../scene/loopScene";
+import { type LiveRow, loopScene } from "../scene/loopScene";
 import type { LoopRenderer, LoopWindowScene, RendererFactory } from "../scene/renderer";
 import { sqlPipelineScene } from "../scene/sqlScene";
 import type { Settings } from "../settings";
@@ -22,7 +22,7 @@ import {
 } from "../trace/loopHistory";
 import type { SizeModel } from "../trace/memory";
 import { liveFrames, type Trace } from "../trace/types";
-import { storedAutoFit } from "./autoFit";
+import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
 import type { PaneAnimation } from "./styleController";
 
@@ -39,7 +39,7 @@ export interface LoopElements {
 
 export interface LoopOptions {
   app: AppStore;
-  settings: Pick<Settings, "loopMode" | "loopVertical" | "autoFit">;
+  settings: Pick<Settings, "loopMode" | "loopVertical" | "autoFit" | "controlsCollapsed">;
   els: LoopElements;
   /** The memory size model to draw, or null (MemoryController.sizes). */
   sizes(): SizeModel | null;
@@ -64,6 +64,64 @@ export function liveRows(t: Trace, index: number, history: LoopHistory): { prev:
   return { prev: at(index - 1) ?? current, current };
 }
 
+/**
+ * Animated mode with every loop together: a live row for each loop of the
+ * nest, outermost first, so an inner loop runs under the loop around it
+ * instead of replacing it. A loop that isn't running at this step (an inner
+ * one between runs, or one that has finished) shows how it last was.
+ */
+export function liveNestedRows(t: Trace, index: number, history: LoopHistory): LiveRow[] {
+  const frameId = history.context.frame;
+  // Each loop of the nest once, outermost first, in the order they first ran.
+  const levels: { loop: string; depth: number }[] = [];
+  for (const row of history.rows) {
+    if (row.loop !== undefined && !levels.some((l) => l.loop === row.loop))
+      levels.push({ loop: row.loop, depth: row.depth ?? 0 });
+  }
+  levels.sort((a, b) => a.depth - b.depth);
+  const step = t.steps[index];
+  const here = step?.loops.filter((c) => c.frame === frameId) ?? [];
+  const frameAt = (i: number) => {
+    const at = t.steps[i];
+    return at ? liveFrames(at).find((f) => f.id === frameId) : undefined;
+  };
+  const out: LiveRow[] = [];
+  for (const level of levels) {
+    const ctx = here.find((c) => c.loop === level.loop);
+    const frame = frameAt(index);
+    if (ctx && frame) {
+      const current: LoopRow = {
+        iteration: ctx.iteration,
+        stepIndex: index,
+        frame,
+        heap: step.heap,
+        loop: ctx.loop,
+        instance: ctx.instance,
+        depth: level.depth,
+      };
+      const before = t.steps[index - 1]?.loops.find(
+        (c) => c.frame === frameId && c.loop === ctx.loop && c.instance === ctx.instance,
+      );
+      const beforeFrame = frameAt(index - 1);
+      const prev: LoopRow =
+        before && beforeFrame
+          ? {
+              ...current,
+              iteration: before.iteration,
+              stepIndex: index - 1,
+              frame: beforeFrame,
+              heap: t.steps[index - 1].heap,
+            }
+          : current;
+      out.push({ prev, current });
+      continue;
+    }
+    const last = [...history.rows].reverse().find((row) => row.loop === level.loop);
+    if (last) out.push({ prev: last, current: last, done: true });
+  }
+  return out;
+}
+
 export class LoopController {
   readonly renderer: LoopRenderer;
   /** The scene last drawn, for the renderer to animate from. */
@@ -83,6 +141,7 @@ export class LoopController {
 
     this.renderer = options.renderers.loop(els.loop, {
       onAutoFitChange: (state) => settings.autoFit("loop").set(JSON.stringify(state)),
+      controls: settings.controlsCollapsed("loop"),
     });
     this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("loop")) });
     this.renderer.setLayout({ vertical: this.vertical });
@@ -148,10 +207,11 @@ export class LoopController {
       this.drawn = scene;
       return;
     }
-    // Nested loops are drawn together unless one loop is picked (animated
-    // mode always shows one: the live state of a single loop).
+    // Nested loops are drawn together unless one loop is picked: stacked,
+    // each inner pass under the outer pass it's in; animated, each inner
+    // loop's live row under the loop around it.
     const { contexts } = availableLoops(trace, stepIndex);
-    const together = this.mode === "stacked" && nestedLoopsAt(trace, stepIndex).length > 0;
+    const together = nestedLoopsAt(trace, stepIndex).length > 0;
     const wantsAll = together && (this.selected === null || this.selected === ALL_LOOPS);
     const history =
       (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
@@ -177,7 +237,9 @@ export class LoopController {
               "All loops",
               !!history?.nested,
               ALL_LOOPS,
-              "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it",
+              this.mode === "animated"
+                ? "Every loop in this function, together: each inner loop running under the loop around it"
+                : "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it",
             ),
           ]
         : []),
@@ -191,8 +253,18 @@ export class LoopController {
       }),
     );
     if (history?.rows.length) {
-      const live = this.mode === "animated" ? liveRows(trace, stepIndex, history) : undefined;
-      const scene = loopScene(trace, history, { hideQuiet: this.hideQuiet, live, sizes: this.options.sizes() });
+      const live =
+        this.mode !== "animated"
+          ? undefined
+          : history.nested
+            ? liveNestedRows(trace, stepIndex, history)
+            : liveRows(trace, stepIndex, history);
+      const scene = loopScene(trace, history, {
+        hideQuiet: this.hideQuiet,
+        live,
+        sizes: this.options.sizes(),
+        tall: isTall(this.options.els.loop),
+      });
       this.renderer.setAppearance({ step: this.options.animation() });
       this.renderer.render(scene, this.drawn);
       this.drawn = scene;

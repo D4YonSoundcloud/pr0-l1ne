@@ -51,6 +51,7 @@ abstract class SvgWindow {
       label,
       onNodeMove,
       onAutoFitChange: (state) => events.onAutoFitChange?.(state),
+      controls: events.controls,
     });
   }
 

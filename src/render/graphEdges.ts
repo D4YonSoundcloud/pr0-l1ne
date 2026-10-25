@@ -316,6 +316,41 @@ export function angledLayers(
   };
 }
 
+/**
+ * The same, for layers that run left to right: computed with x and y
+ * swapped, then swapped back, so each step leaves a node sideways and
+ * crosses its gap (between two columns) at its track.
+ */
+export function angledLayersSideways(
+  points: Point[],
+  layerOf: (p: Point) => number,
+  fromSize: Size,
+  toSize: Size,
+  trackX: (gap: number, track: number) => number,
+  trackOf: (step: number) => number | undefined,
+  arrow: boolean,
+): EdgeShape {
+  const swap = (p: Point) => ({ x: p.y, y: p.x });
+  const swapped = points.map(swap);
+  const shape = angledLayers(
+    swapped,
+    (p) => layerOf(points[swapped.indexOf(p)]),
+    { w: fromSize.h, h: fromSize.w },
+    { w: toSize.h, h: toSize.w },
+    trackX,
+    trackOf,
+    arrow,
+  );
+  const samples = shape.samples.map(swap);
+  return {
+    d: roundedPath(
+      samples.map((p) => ({ x: r(p.x), y: r(p.y) })),
+      8,
+    ),
+    samples,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------

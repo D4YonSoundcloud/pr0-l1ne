@@ -53,6 +53,8 @@ export interface GraphData {
    * angles). A hint's option.
    */
   edgeStyle: EdgeStyle;
+  /** Layers left to right instead of top to bottom (a hint's `sideways`). */
+  sideways: boolean;
   /** Names a hint asked to draw on the graph. */
   names: string[];
   /** Object graphs: true boolean fields per node (is_end, visited...). */
@@ -373,6 +375,7 @@ function objectGraph(
     objectNodes: true,
     layout: layoutOption(hint?.options ?? []),
     edgeStyle: edgeStyleOption(hint?.options ?? []),
+    sideways: (hint?.options ?? []).includes("sideways"),
     names: hint?.names ?? [],
     flags,
   };
@@ -434,6 +437,7 @@ function containerGraph(
     objectNodes: false,
     layout: layoutOption(options),
     edgeStyle: edgeStyleOption(options),
+    sideways: options.includes("sideways"),
     names: hint?.names ?? [],
     flags: new Map(),
   };

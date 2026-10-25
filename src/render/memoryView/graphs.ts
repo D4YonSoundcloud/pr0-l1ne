@@ -25,6 +25,7 @@ export function graphBoxes(scene: MemoryScene): Map<string, GraphBox> {
       flipKey: `gptr:${graph.graph.id}`,
       prev: graph.previous,
       legendOverlays: graph.legendOverlays,
+      tall: scene.tall,
     });
     boxes.set(hostId, { ...graph, picture });
   }

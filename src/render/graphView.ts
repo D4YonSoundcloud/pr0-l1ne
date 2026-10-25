@@ -20,6 +20,7 @@ import type { Mark } from "./drawing";
 import {
   angledL,
   angledLayers,
+  angledLayersSideways,
   arcOffset,
   assignTracks,
   type EdgeShape,
@@ -50,6 +51,11 @@ export interface GraphPicture {
 }
 
 export interface GraphPictureOptions {
+  /**
+   * The window is taller than it is wide: a layered graph with a very wide
+   * layer is drawn left to right (see sidewaysFits).
+   */
+  tall?: boolean;
   /** For animate.ts: pointer markers slide between nodes under this key. */
   flipKey: string;
   /** Compare with these to mark what changed. */
@@ -142,19 +148,60 @@ function laneOffset(lane: number, lanes: number, twoWay: boolean): number {
   return (lane - (lanes - 1) / 2) * LANE_GAP;
 }
 
-export function graphPicture(
+/** A layered layout turned to run left to right: x and y swapped, bends too. */
+function turned(layout: GraphLayout): GraphLayout {
+  const swap = (p: { x: number; y: number }) => ({ x: p.y, y: p.x });
+  return {
+    ...layout,
+    pos: new Map([...layout.pos].map(([key, p]) => [key, swap(p)])),
+    routes: new Map([...layout.routes].map(([key, bends]) => [key, bends.map(swap)])),
+  };
+}
+
+/**
+ * Should a layered graph run left to right? When a hint asks (`sideways`);
+ * or, by itself, when a layer is very wide (8 nodes or more, the picture
+ * more than 2.5 times wider than tall) and the window is taller than wide,
+ * where a tall picture fits better. In a wide window, top to bottom fits
+ * better, so it stays.
+ */
+export function sidewaysFits(
   graph: GraphData,
   layout: GraphLayout,
+  unitX: number,
+  unitY: number,
+  tall: boolean,
+): boolean {
+  if (layout.mode !== "layered") return false;
+  if (graph.sideways) return true;
+  if (!tall) return false;
+  const perLayer = new Map<number, number>();
+  for (const p of layout.pos.values()) perLayer.set(p.y, (perLayer.get(p.y) ?? 0) + 1);
+  const widest = Math.max(0, ...perLayer.values());
+  const xs = [...layout.pos.values()].map((p) => p.x);
+  const width = (Math.max(...xs) - Math.min(...xs)) * unitX;
+  const height = Math.max(1, perLayer.size - 1) * unitY;
+  return widest >= 8 && width > 2.5 * height;
+}
+
+export function graphPicture(
+  graph: GraphData,
+  given: GraphLayout,
   overlay: GraphOverlay,
   options: GraphPictureOptions,
 ): GraphPicture {
   // Size the grid from every node the graph ever has (the layout), so the
   // picture keeps its size while the graph grows.
   const labelFor = (key: string) => graph.nodes.get(key) ?? (graph.objectNodes ? "" : key.slice(2));
-  const sizes = new Map([...layout.pos.keys()].map((key) => [key, nodeSize(labelFor(key), graph.objectNodes)]));
+  const sizes = new Map([...given.pos.keys()].map((key) => [key, nodeSize(labelFor(key), graph.objectNodes)]));
   const maxW = Math.max(NODE_H, ...[...sizes.values()].map((size) => size.w));
-  const unitX = Math.max(MIN_UNIT, maxW + 46);
-  const unitY = layout.mode === "layered" ? Math.max(76, NODE_H + TOP_ROOM + POINTER_ROOM + 8) : unitX;
+  const rowH = Math.max(76, NODE_H + TOP_ROOM + POINTER_ROOM + 8);
+  // Left to right: the layers become columns (a node's width apart, plus
+  // room for the edges between), and each layer's nodes a column of rows.
+  const sideways = sidewaysFits(graph, given, Math.max(MIN_UNIT, maxW + 46), rowH, !!options.tall);
+  const layout = sideways ? turned(given) : given;
+  const unitX = sideways ? maxW + 64 : Math.max(MIN_UNIT, maxW + 46);
+  const unitY = layout.mode === "layered" ? rowH : unitX;
   const legend = options.legend === false ? [] : legendItems(options.legendOverlays ?? [overlay]);
   const legendH = legend.length ? LEGEND_H : 0;
   const padX = maxW / 2 + 22;
@@ -259,30 +306,35 @@ export function graphPicture(
         ...(layout.routes.get(`${from}>${to}`) ?? []),
         layout.pos.get(to)!,
       ];
+      // A point's layer, and where it is along its layer (sideways: x is the layer).
+      const layerAt = (p: { x: number; y: number }) => (sideways ? p.x : p.y);
+      const along = (p: { x: number; y: number }) => (sideways ? place(p).y : place(p).x);
       const steps: LayerStep[] = [];
       if (style === "angled" && layered) {
         direction.forEach(({ from, to }, i) => {
           if (from === to) return;
           const pts = unitPoints(from, to);
           for (let k = 0; k + 1 < pts.length; k++) {
-            if (pts[k].y === pts[k + 1].y) continue;
+            if (layerAt(pts[k]) === layerAt(pts[k + 1])) continue;
             steps.push({
               edge: i,
               step: k,
-              gap: Math.min(pts[k].y, pts[k + 1].y),
-              x1: place(pts[k]).x,
-              x2: place(pts[k + 1]).x,
+              gap: Math.min(layerAt(pts[k]), layerAt(pts[k + 1])),
+              x1: along(pts[k]),
+              x2: along(pts[k + 1]),
             });
           }
         });
       }
       const tracks = assignTracks(steps);
-      // Tracks run in the gap under a layer, below the ▲ names and above the next layer's badges.
-      const trackY = (gap: number, track: number) => {
-        const top = place({ x: minX, y: gap }).y + NODE_H / 2 + 10;
-        const bottom = place({ x: minX, y: gap + 1 }).y - NODE_H / 2 - 12;
+      // Tracks run in the gap after a layer: below the ▲ names and above the
+      // next layer's badges, or (sideways) between two columns of nodes.
+      const trackAt = (gap: number, track: number) => {
         const count = tracks.count.get(gap) ?? 1;
-        return Math.round(top + ((bottom - top) * (track + 1)) / (count + 1));
+        const [start, end] = sideways
+          ? [place({ x: gap, y: minY }).x + maxW / 2 + 10, place({ x: gap + 1, y: minY }).x - maxW / 2 - 10]
+          : [place({ x: minX, y: gap }).y + NODE_H / 2 + 10, place({ x: minX, y: gap + 1 }).y - NODE_H / 2 - 12];
+        return Math.round(start + ((end - start) * (track + 1)) / (count + 1));
       };
 
       const labels: (LabelRequest & { cls: string })[] = [];
@@ -335,17 +387,20 @@ export function graphPicture(
         let offset = laneOffset(edge.lane, edge.lanes, twoWay);
         const bends = style === "straight" ? [] : (layout.routes.get(`${from}>${to}`) ?? []).map(place);
         if (style === "angled" && !edge.tree) {
-          const shift = { x: offset * 0.5, y: 0 };
-          const unitYs = unitPoints(from, to).map((p) => p.y);
+          const layers = unitPoints(from, to).map(layerAt);
           // In layers, unless both ends share a layer (an undirected graph's odd cycle): that's an L.
-          if (layered && unitYs[0] !== unitYs[unitYs.length - 1]) {
-            const pts = [a, ...bends, b].map((p) => ({ x: p.x + shift.x, y: p.y }));
-            return angledLayers(
+          if (layered && layers[0] !== layers[layers.length - 1]) {
+            // Lanes side by side, across the way the edge runs.
+            const pts = [a, ...bends, b].map((p) =>
+              sideways ? { x: p.x, y: p.y + offset * 0.5 } : { x: p.x + offset * 0.5, y: p.y },
+            );
+            const route = sideways ? angledLayersSideways : angledLayers;
+            return route(
               pts,
-              (p) => unitYs[pts.indexOf(p)] ?? 0,
+              (p) => layers[pts.indexOf(p)] ?? 0,
               sizes.get(from)!,
               sizes.get(to)!,
-              trackY,
+              trackAt,
               (step) => tracks.track.get(`${index}:${step}`),
               arrow,
             );

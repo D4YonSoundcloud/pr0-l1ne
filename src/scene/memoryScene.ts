@@ -40,6 +40,8 @@ export interface MemorySceneOptions {
   output?: boolean;
   /** ...and dim everything else (default false). */
   dimForOutput?: boolean;
+  /** The window is taller than wide: very wide layered graphs run left to right (render/graphView.ts). */
+  tall?: boolean;
 }
 
 /**
@@ -109,6 +111,8 @@ export interface SceneOutput {
 }
 
 export interface MemoryScene {
+  /** The window is taller than wide (MemorySceneOptions.tall). */
+  tall?: boolean;
   step: Step;
   stepIndex: number;
   language: Trace["language"];
@@ -326,6 +330,7 @@ export function memoryScene(
   const printedBefore = show && options.dimForOutput === true && stepIndex > 0 && !!printedAt(trace, stepIndex - 1);
 
   return {
+    tall: options.tall,
     step,
     stepIndex,
     language: trace.language,

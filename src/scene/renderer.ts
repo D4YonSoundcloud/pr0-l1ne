@@ -102,6 +102,8 @@ export interface Renderer<S> {
 export interface RendererEvents {
   /** Auto-fit was turned on or off, or its mode changed (to remember it). */
   onAutoFitChange?(state: AutoFit): void;
+  /** Where the window remembers whether its floating controls are folded away. */
+  controls?: { get(): boolean; set(collapsed: boolean): void };
 }
 
 export interface MemoryRendererEvents extends RendererEvents {

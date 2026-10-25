@@ -174,6 +174,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     sizes: flag("sizes", false),
     /** Which memory-size model, per language family; null for the first choice. */
     sizeModel: (family: SizeFamily) => text(`size-model:${family}`),
+    /** Each window's floating zoom controls folded away to one button (see render/viewport.ts). */
+    controlsCollapsed: (pane: Pane) => flag(`controls-collapsed:${pane}`, false),
     /** Auto-fit state per window, as JSON (see render/viewport.ts). */
     autoFit: (pane: Pane) => text(`auto-fit:${pane}`),
     /** The Style panel's settings, as JSON (see appearance.ts). */

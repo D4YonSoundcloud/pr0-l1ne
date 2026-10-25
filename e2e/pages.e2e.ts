@@ -70,3 +70,25 @@ test("the windows go side by side, and fold to bars that open them again", async
   await expect(page.locator("#loop-section")).toHaveClass(/is-collapsed/);
   await expect(page.locator("#layout-mode")).toHaveAttribute("aria-pressed", "true");
 });
+
+test("window headers stay one row, and the zoom controls fold away and stay folded", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const heights = async () =>
+    Promise.all(
+      ["#memory-section", "#loop-section"].map(
+        async (s) => (await page.locator(`${s} .section-head`).boundingBox())!.height,
+      ),
+    );
+  const before = await heights();
+  await page.locator("#layout-mode").click();
+  expect(await heights()).toEqual(before);
+  expect(before[0]).toBeLessThan(45);
+
+  await page.locator("#memory .controls-toggle").click();
+  await expect(page.locator("#memory .viewport-controls")).toHaveClass(/is-collapsed/);
+  await page.reload();
+  await expect(page.locator("#memory .viewport-controls")).toHaveClass(/is-collapsed/);
+  await expect(page.locator("#loop .viewport-controls")).not.toHaveClass(/is-collapsed/);
+});

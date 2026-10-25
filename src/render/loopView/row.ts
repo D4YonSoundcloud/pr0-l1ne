@@ -262,6 +262,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
         flipKey: "gptr",
         prev: prevGraph ?? null,
         legendOverlays: graphLayout.overlays,
+        tall: scene.tall,
       }).draw(graphLayout.x, y + graphTop, g);
     }
   }

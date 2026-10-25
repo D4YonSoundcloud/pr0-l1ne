@@ -265,9 +265,20 @@ export interface LoopSceneOptions {
    * Animated mode: just the live state (`current`), compared with the
    * previous step (`prev`), instead of a row per iteration. What to show
    * still comes from the full history, so the picture stays steady from
-   * step to step.
+   * step to step. With every loop together (a nested history), one live row
+   * per loop, outermost first: each inner loop under the loop around it.
    */
-  live?: { prev: LoopRow; current: LoopRow };
+  live?: LiveRow | LiveRow[];
+  /** The window is taller than wide: very wide layered graphs run left to right (render/graphView.ts). */
+  tall?: boolean;
+}
+
+/** One loop's live state in animated mode. */
+export interface LiveRow {
+  prev: LoopRow;
+  current: LoopRow;
+  /** The loop isn't running at this step: its row is how it last was. */
+  done?: boolean;
 }
 
 /** The graph in view, drawn in every row with that row's state on it. */
@@ -291,12 +302,15 @@ export interface LoopTrack {
 }
 
 export interface LoopScene {
+  /** The window is taller than wide (LoopSceneOptions.tall). */
+  tall?: boolean;
   history: LoopHistory;
   /** The history's rows (passes). */
   rows: LoopRow[];
   /** Every row measured: the history's, then in animated mode the live previous and current. */
   all: LoopRow[];
-  live: { prev: LoopRow; current: LoopRow } | null;
+  /** Animated mode: each live row, outermost loop first (just one unless every loop is together). */
+  live: LiveRow[] | null;
   /** Containers worth showing (they change, are indexed, or are hinted), and which of them are grids. */
   containers: string[];
   grids: ReadonlySet<string>;
@@ -341,9 +355,9 @@ const graphCache = new WeakMap<Trace, Map<string, GraphData[]>>();
 /** The scene for the loop history of one loop (or every loop together). */
 export function loopScene(trace: Trace, history: LoopHistory, options: LoopSceneOptions): LoopScene {
   const { rows } = history;
-  const live = options.live ?? null;
-  // Every row that will be measured; in animated mode, plus the live ones.
-  const all = live ? [...rows, live.prev, live.current] : rows;
+  const live = options.live ? (Array.isArray(options.live) ? options.live : [options.live]) : null;
+  // Every row that will be measured; in animated mode, plus each live one's previous and current.
+  const all = live ? [...rows, ...live.flatMap((l) => [l.prev, l.current])] : rows;
   // A graph in view (the loop's variables, or globals): drawn in every row
   // with that row's state on it. The first one found wins; hinted ones
   // are found first.
@@ -466,13 +480,27 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   }
   let before: LoopScene["before"] = null;
   if (live) {
-    // One row: the live state, compared with the step before it.
-    items = [{ kind: "row", row: live.current, index: all.length - 1 }];
-    before = { row: live.prev, index: all.length - 2 };
+    // A row per live loop: its state, compared with the step before it.
+    // Each inner loop's row goes under the loop around it, after its header.
+    items = [];
+    live.forEach((l, i) => {
+      const index = rows.length + 2 * i + 1;
+      if (i > 0 && history.nested) {
+        items.push({
+          kind: "header",
+          loop: l.current.loop ?? history.info.id,
+          call: history.calls.get(runOf(l.current)),
+          depth: l.current.depth ?? 0,
+        });
+      }
+      items.push({ kind: "row", row: l.current, index });
+    });
+    before = { row: live[0].prev, index: rows.length };
   }
 
   const tracked = track;
   return {
+    tall: options.tall,
     history,
     rows,
     all,
@@ -509,7 +537,8 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       const call = history.calls.get(runOf(row));
       return loop ? `${loop.header}${call ? `  →  ${evaluatedHeader(loop, call)}` : ""}` : "";
     },
-    isCurrent: (index) => (live ? true : history.running && index === rows.length - 1),
+    isCurrent: (index) =>
+      live ? !live[(index - rows.length - 1) / 2]?.done : history.running && index === rows.length - 1,
     sizes: (row) =>
       options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null,
     pointers: (row, name, changedNames) => pointersFor(name, trace.indexNames, new Map(row.frame.locals), changedNames),

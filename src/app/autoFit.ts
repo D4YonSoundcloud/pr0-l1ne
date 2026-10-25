@@ -16,3 +16,12 @@ export function storedAutoFit(saved: Setting<string | null>): AutoFit {
     return fallback;
   }
 }
+
+/**
+ * Is a window clearly taller than it is wide? Very wide layered graphs are
+ * drawn left to right there (render/graphView.ts, sidewaysFits). False
+ * before it has a size.
+ */
+export function isTall(el: HTMLElement): boolean {
+  return el.clientWidth > 0 && el.clientHeight > el.clientWidth * 1.15;
+}

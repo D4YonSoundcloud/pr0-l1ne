@@ -489,6 +489,8 @@ The loop view adds space above each row for arcs (and below, for a second link f
 
 **Animated mode** passes `live: { prev, current }` to `renderLoopView()`: the loop's state at the current step and the step before, read straight from those steps rather than from iteration ends. It draws just that one row, comparing it with `prev` for highlights, but sizes columns, cells and trees from all of the stacked rows, so the layout is identical from step to step and only the contents change. The animation in the next section does the rest.
 
+With nested loops drawn together, animated mode passes one live row per loop of the nest instead (`liveNestedRows()` in [`app/loopController.ts`](../src/app/loopController.ts)), outermost first: each loop running at this step gets its state now and a step before; one that isn't running (an inner loop between runs) gets its last row, marked `done` so it isn't drawn as the running one. The scene lays them out in order, each inner one after its run's header and indented by its depth, and each row compares with its own `prev` (`all` keeps every live row's `prev` just before its `current`).
+
 ## 12. Hints
 
 Hints are split so that each language does as little as possible:
@@ -560,7 +562,7 @@ Nothing is random and every tie goes to program order, so the same graph gets th
 
 The same pass records every kind of state the graph is ever drawn with, so its legend, and therefore its size, stays the same from the first step to the last.
 
-**Drawing.** [`render/graphView.ts`](../src/render/graphView.ts) turns layout units into pixels: one unit is the widest node plus a gap.
+**Drawing.** [`render/graphView.ts`](../src/render/graphView.ts) turns layout units into pixels: one unit is the widest node plus a gap. A layered graph can run left to right instead (`sidewaysFits()`): when a hint asks (`sideways`), or when a layer has eight nodes or more, the picture would be more than 2.5 times wider than tall, and the window is taller than wide (the controllers pass `tall` into the scenes). The layout is turned (x and y swapped, bends too); layers become columns the widest node plus 64 pixels apart, and angled edges cross between columns instead of between rows.
 
 - **Edges** are shaped in [`render/graphEdges.ts`](../src/render/graphEdges.ts) (pure geometry, tested in `graphEdges.test.ts`), by the graph's edge style, a hint option:
   - *auto* (the default): straight lines, clipped to node outlines. A long edge in a layered layout runs through its placeholders as a smooth curve (Catmull-Rom, as cubic Béziers), and so does an edge the layout bent around a node.

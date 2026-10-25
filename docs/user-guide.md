@@ -192,6 +192,10 @@ Each canvas section is its own sheet of graph paper that you can move around ind
 
 With a section focused (click it or `Tab` to it), `+` and `−` zoom too. The arrow keys still step through the program.
 
+The zoom controls float at the bottom right of each section. If they cover something, **›** at their right end folds them into a small **‹ Zoom** button (click it to open them again). Each section remembers whether its controls are folded.
+
+Each section's header is always one row: when its buttons don't fit (a narrow window, or side by side), the row scrolls sideways, with a fade at the side that has more. Scroll it with a mouse wheel or a trackpad. The header never changes height, so the drawing under it never jumps or rezooms.
+
 Zooming centers on the pointer, so you can zoom into the part you're looking at. Each section keeps its own position and zoom as you step and as your code re-runs. While you step through a loop, the loop history pans just enough to keep the running iteration in view.
 
 ### Auto-fit
@@ -448,6 +452,8 @@ The **Stacked | Animated** switch in the Loop history header picks between two v
 - **Stacked** is the history described above: one row per iteration, so you can compare any iteration with any other.
 - **Animated** (the default) shows a single row: the loop's state at the current step. As you step or [play](#playing-a-program), cells change in place and values slide between cells, so a sort visibly shuffles its values into order and a linked list's arrows turn around one by one. Cells that changed on that step are yellow. The row keeps the same layout (columns, cell widths, tree shape) as the stacked view, so nothing jumps around between steps.
 
+  With nested loops (and **All loops** picked, the default), each loop gets its own live row: when an inner loop starts, its row appears under the loop around it, indented under its header, instead of replacing it. Both change as you step, each compared with its own state a step before. An inner loop that isn't running (between its runs, or once it's done) stays as it last was, without the running highlight. Pick one loop's tab to see just that one.
+
 Stacked is better for seeing the whole story at once, and Animated for following what a single step does.
 
 ### Grids
@@ -506,6 +512,8 @@ A graph is **undirected** when every edge goes both ways, and **directed** (with
 A single loop of nodes (a ring) is drawn as a circle, starting at the top, and so is a small graph where most nodes link to each other, when that crosses fewer edges.
 
 Other graphs (undirected graphs with cycles, bigger dense graphs) are laid out so that nodes a few edges apart sit about that far apart on screen. A grid comes out as a grid, edges are kept clear of nodes they don't connect (bending around one when they must), and where the search starts is at the top left. Separate pieces are packed in rows. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. Edge weights sit halfway along their edge, or nearby when that spot would cover a node or another weight. The same graph is always laid out the same way.
+
+A layered graph with a very wide layer (eight nodes or more, a picture more than two and a half times wider than tall) is drawn **left to right** when its window is taller than it is wide (side by side, say): the layer becomes a column, which fits a tall window far better. In a wide window it stays top to bottom. A `sideways` [graph hint](hints.md#graph-options) draws a layered graph left to right always.
 
 Edges are straight, curving only around a node or through the layers a long edge crosses. A [graph hint](hints.md#graph-options) can ask for `curved` edges (gentle arcs), `straight` ones, or `angled` ones (horizontal and vertical lines with rounded corners, like a circuit diagram): `// viz: graph roads angled`.
 

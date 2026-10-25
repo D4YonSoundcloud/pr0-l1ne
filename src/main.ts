@@ -26,6 +26,7 @@ import { RendererSwitch } from "./app/rendererSwitch";
 import { LanguageRoutes, languageFromPath } from "./app/routing";
 import { RunController } from "./app/runController";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
+import { scrollableTools } from "./app/sectionTools";
 import { ShareController } from "./app/shareController";
 import { installShortcuts } from "./app/shortcuts";
 import { AppStore } from "./app/state";
@@ -336,7 +337,12 @@ installShortcuts({
   step: (event) => playback.handleKey(event),
 });
 // Stacked or side by side, the dividers, and windows folded to bars.
-const layout = new LayoutController(els, settings);
+// Redrawn when the windows change shape: a very wide graph is drawn left to right in a tall window.
+const layout = new LayoutController(els, settings, () => {
+  if (app.get().trace) view.render(false);
+});
+// The windows' headers: one row each, scrolling sideways when their tools don't fit.
+for (const tools of [els.memoryTools, els.loopTools]) scrollableTools(tools);
 // On a phone: which one or two windows show (styles.css lays them out).
 new MobileViewsController(els, settings.mobileViews);
 

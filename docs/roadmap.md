@@ -12,7 +12,6 @@ Everything else:
 
 - Dragging single nodes of a graph to rearrange it, remembered like dragged boxes.
 - Grids drawn as graphs (a maze search over a 2D grid), with the path through the cells highlighted.
-- Graph layout: very wide layers (a node with dozens of children) drawn left to right instead of top to bottom.
 - Hints scoped to a function or a loop, and more hint kinds (`viz: graph`, `viz: matrix`).
 - Morphing arrows between steps, by matching routes point by point.
 - Exporting a played run as a GIF or video, rendered off-screen frame by frame (double-buffered) rather than recorded live: each frame of the memory view and the loop history is drawn to a hidden buffer at a fixed frame rate and only then encoded, so effects too costly to run live (morphing arrows, longer easings) can be used in the export without slowing down stepping.

@@ -124,6 +124,7 @@ abstract class CanvasWindow {
       label,
       onNodeMove,
       onAutoFitChange: (state) => events.onAutoFitChange?.(state),
+      controls: events.controls,
       surface: {
         onView: (view) => {
           this.at = view;

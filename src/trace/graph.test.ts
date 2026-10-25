@@ -249,7 +249,7 @@ let done = 1;`);
   });
 
   it("explains a bad option", () => {
-    const h = parseHints([{ line: 4, text: "graph adj sideways" }]);
+    const h = parseHints([{ line: 4, text: "graph adj upsidedown" }]);
     expect(h.warnings[0]).toMatchObject({ line: 4 });
     expect(h.warnings[0].message).toContain("Unknown graph option");
   });

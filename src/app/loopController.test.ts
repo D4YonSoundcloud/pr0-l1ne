@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { SVG_RENDERERS } from "../render/svgRenderers";
-import { buildLoopHistory } from "../trace/loopHistory";
-import { LoopController, liveRows } from "./loopController";
+import { buildLoopHistory, buildNestedHistory } from "../trace/loopHistory";
+import { LoopController, liveNestedRows, liveRows } from "./loopController";
 import { makeApp, showJavaScript } from "./testHelpers";
 
 const NESTED = `const grid = [[1, 2], [3, 4]];
@@ -102,14 +102,14 @@ describe("LoopController", () => {
     expect(selected()).toBe("All loops");
   });
 
-  it("animated mode shows one loop, live, and is remembered", async () => {
+  it("animated mode is live, offers every loop together, and is remembered", async () => {
     const { app, loop, tabs, redraws, $, storage } = setup();
     await insideInnerLoop(app);
     loop.render();
     $("loop-animated").click();
     expect(redraws).toEqual([false]); // the editor's marks don't change
     expect($("loop-animated").getAttribute("aria-pressed")).toBe("true");
-    expect(tabs().map((t) => t.textContent)).not.toContain("All loops");
+    expect(tabs().map((t) => t.textContent)).toContain("All loops");
     expect(setup(storage).$("loop-animated").getAttribute("aria-pressed")).toBe("true");
   });
 
@@ -139,5 +139,29 @@ describe("liveRows", () => {
     expect(current.stepIndex).toBe(index);
     expect(prev.stepIndex).toBe(index - 1);
     expect(current.iteration).toBe(history.rows.at(-1)?.iteration);
+  });
+});
+
+describe("liveNestedRows", () => {
+  it("is a live row per loop, the inner one under the outer, each against its own step before", async () => {
+    const t = await traceJavaScript(NESTED);
+    const index = lastIndex(t.steps, (s) => s.line === 5);
+    const history = buildNestedHistory(t, index)!;
+    const rows = liveNestedRows(t, index, history);
+    expect(rows.map((r) => r.current.depth)).toEqual([0, 1]);
+    expect(rows.every((r) => r.current.stepIndex === index && !r.done)).toBe(true);
+    expect(rows[1].prev.stepIndex).toBe(index - 1);
+    expect(rows[1].current.loop).not.toBe(rows[0].current.loop);
+  });
+
+  it("keeps an inner loop that isn't running, as it last was", async () => {
+    const t = await traceJavaScript(NESTED);
+    // After the inner loop's first run, back in the outer loop.
+    const firstInner = t.steps.findIndex((s) => s.line === 5);
+    const between = t.steps.findIndex((s, i) => i > firstInner && s.loops.length === 1);
+    const rows = liveNestedRows(t, between, buildNestedHistory(t, between)!);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].done).toBeFalsy();
+    expect(rows[1].done).toBe(true);
   });
 });

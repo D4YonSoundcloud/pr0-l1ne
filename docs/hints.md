@@ -59,6 +59,7 @@ Words between a graph hint's target and its colon change how the graph is read o
 | `edgelist` | Read a list of `(a, b)` or `(a, b, weight)` as edges. Python tuples are read this way without the option. |
 | `layered`, `force`, `circle` | Lay it out in layers from top to bottom, spread out by distance (`force`: nodes a few edges apart sit about that far apart), or in a ring. Without one, it's layered when that reads well (trees, and directed graphs with no or few cycles), a circle for a ring (or a small dense graph, when that crosses fewer edges), and spread out by distance otherwise. `layered` works for any graph: edges that close a cycle point up. |
 
+| `sideways` | Draw a layered graph left to right: each layer a column. Without it, a layered graph with a very wide layer runs left to right only in a window taller than it is wide. |
 | `straight`, `curved`, `angled` | How edges are drawn: straight lines, gentle curves, or right angles (horizontal and vertical lines with rounded corners). Without one, edges are straight, curving only to go around a node or through the layers a long edge crosses. With `angled`, a graph that isn't in layers has its nodes lined up in rows and columns. |
 
 ```python

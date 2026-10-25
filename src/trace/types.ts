@@ -252,7 +252,8 @@ export type GraphOption =
   | "edgelist"
   | "straight"
   | "curved"
-  | "angled";
+  | "angled"
+  | "sideways";
 export const GRAPH_OPTIONS: readonly GraphOption[] = [
   "directed",
   "undirected",
@@ -264,6 +265,7 @@ export const GRAPH_OPTIONS: readonly GraphOption[] = [
   "straight",
   "curved",
   "angled",
+  "sideways",
 ];
 
 /**

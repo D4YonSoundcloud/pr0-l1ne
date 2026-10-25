@@ -58,6 +58,8 @@ export function findElements(doc: Document = document) {
     swap: byId<HTMLButtonElement>("swap"),
     layoutMode: byId<HTMLButtonElement>("layout-mode"),
     loadingCard: byId<HTMLDivElement>("loading-card"),
+    memoryTools: byId<HTMLDivElement>("memory-tools"),
+    loopTools: byId<HTMLDivElement>("loop-tools"),
     style: byId<HTMLButtonElement>("style"),
     complexity: byId<HTMLButtonElement>("complexity"),
     measure: byId<HTMLButtonElement>("measure"),
