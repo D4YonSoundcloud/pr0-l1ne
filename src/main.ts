@@ -29,6 +29,7 @@ import { addSaveSvg, svgFileName } from "./app/saveSvg";
 import { scrollableTools } from "./app/sectionTools";
 import { ShareController } from "./app/shareController";
 import { installShortcuts } from "./app/shortcuts";
+import { SpacingController } from "./app/spacingController";
 import { AppStore } from "./app/state";
 import { StepView } from "./app/stepView";
 import { StyleController } from "./app/styleController";
@@ -190,6 +191,13 @@ const style: StyleController = new StyleController({
   onOpen: () => closePanelsBut("style"),
   rendering: { get: () => settings.renderer.get(), set: useRenderer },
 });
+// The Layout panel: the memory and loop views' spacing, redrawn as it changes.
+const spacing = new SpacingController({
+  settings,
+  els,
+  redraw: () => view.render(false),
+  onOpen: () => closePanelsBut("spacing"),
+});
 const complexity = new ComplexityController({
   app,
   settings,
@@ -210,8 +218,8 @@ const measure = new MeasureController({
   onOpen: () => closePanelsBut("measure"),
 });
 
-function closePanelsBut(open: "style" | "complexity" | "measure"): void {
-  for (const [name, panel] of Object.entries({ style, complexity, measure })) if (name !== open) panel.close();
+function closePanelsBut(open: "style" | "spacing" | "complexity" | "measure"): void {
+  for (const [name, panel] of Object.entries({ style, spacing, complexity, measure })) if (name !== open) panel.close();
 }
 
 // ---------------------------------------------------------------- saved programs and the language

@@ -21,6 +21,7 @@
  * gap run side by side instead of on top of each other. Lanes are ordered to
  * reduce crossings.
  */
+import { onSpacingChange, spacing } from "./spacing";
 
 export interface Point {
   x: number;
@@ -54,12 +55,24 @@ export interface EdgeInput {
   entryY: number;
 }
 
-const LANE = 7; // space between parallel lanes
-const GAP_PAD = 14; // distance from a box edge to the first lane
-const MIN_GAP = 20; // a target must be this far right to count as "forward"
-const CORRIDOR_PAD = 12; // distance from boxes to a corridor
-const SPREAD = 6; // space between arrowheads arriving at the same side
-const TOP_GAP = 14; // how far above a tree node an arrow from outside turns in
+// Spacing, from the Layout panel (spacing.ts); the defaults are in brackets.
+let LANE = 7; // space between parallel lanes (7)
+let GAP_PAD = 14; // distance from a box edge to the first lane (14)
+let MIN_GAP = 20; // a target must be this far right to count as "forward" (20)
+let CORRIDOR_PAD = 12; // distance from boxes to a corridor (12)
+let SPREAD = 6; // space between arrowheads arriving at the same side (6)
+let TOP_GAP = 14; // how far above a tree node an arrow from outside turns in (14)
+/** What a box an arrow passes behind costs, in pixels of extra length (300). */
+let BEHIND_COST = 300;
+onSpacingChange(() => {
+  LANE = spacing.lane;
+  GAP_PAD = spacing.gapPad;
+  MIN_GAP = spacing.forwardGap;
+  CORRIDOR_PAD = spacing.corridorPad;
+  SPREAD = spacing.spread;
+  TOP_GAP = spacing.topGap;
+  BEHIND_COST = spacing.behindCost;
+});
 
 const right = (r: Rect) => r.x + r.w;
 const bottom = (r: Rect) => r.y + r.h;
@@ -120,9 +133,6 @@ interface Plan {
   /** Runs straight across behind the boxes between its ends, instead of around them. */
   tunnel?: boolean;
 }
-
-/** What a box an arrow passes behind costs, in pixels of extra length. */
-const BEHIND_COST = 300;
 
 /** The length of an arrow over or under the boxes between its ends (as assignLanes will route it, roughly). */
 function corridorCost(p: Plan, boxes: Rect[]): number {

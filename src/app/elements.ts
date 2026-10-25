@@ -61,6 +61,7 @@ export function findElements(doc: Document = document) {
     memoryTools: byId<HTMLDivElement>("memory-tools"),
     loopTools: byId<HTMLDivElement>("loop-tools"),
     style: byId<HTMLButtonElement>("style"),
+    layoutSettings: byId<HTMLButtonElement>("layout-settings"),
     complexity: byId<HTMLButtonElement>("complexity"),
     measure: byId<HTMLButtonElement>("measure"),
     measureResults: byId<HTMLButtonElement>("measure-results"),

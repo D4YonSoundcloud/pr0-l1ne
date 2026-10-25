@@ -9,23 +9,39 @@ import type { LoopRow } from "../../trace/loopHistory";
 import type { Value } from "../../trace/types";
 import { CELL_H, s } from "../draw";
 import type { Mark } from "../drawing";
+import { onSpacingChange, spacing } from "../spacing";
 
-export const MARGIN = 20;
+// Spacing. The Layout panel can change most of these (see render/spacing.ts):
+// they're `let`, refreshed below, and every module importing them sees the
+// current value.
+export let MARGIN = 20;
 export const GUTTER_W = 64;
-export const SCALARS_GAP = 28; // space between the last container and "i = 2  j = 0"
-export const ROW_GAP = 34;
+export let SCALARS_GAP = 28; // space between the last container and "i = 2  j = 0"
+export let ROW_GAP = 34;
 export const BAND_H = 30;
-export const CONTAINER_GAP = 44;
+export let CONTAINER_GAP = 44;
 // Linked track (see trace/linked.ts)
 export const SLOT_W = 18; // a node's link slot
-export const NODE_GAP = 30; // room between nodes for a straight arrow
-export const ARC_TOP = 30; // room above the cells for links that arc over
-export const ARC_BOTTOM = 26; // ...and below, for a second link field
-export const LEVEL_H = CELL_H + 34; // one level of a tree drawn top-down
+export let NODE_GAP = 30; // room between nodes for a straight arrow
+export let ARC_TOP = 30; // room above the cells for links that arc over
+export let ARC_BOTTOM = 26; // ...and below, for a second link field
+export let LEVEL_H = CELL_H + 34; // one level of a tree drawn top-down
 /** Indent per level of nesting, in the row labels' gutter. */
-export const INDENT = 16;
+export let INDENT = 16;
 /** Between lanes stacked one above another. */
-export const LANE_GAP = 16;
+export let LANE_GAP = 16;
+onSpacingChange(() => {
+  MARGIN = spacing.loopMargin;
+  SCALARS_GAP = spacing.scalarsGap;
+  ROW_GAP = spacing.rowGap;
+  CONTAINER_GAP = spacing.containerGap;
+  NODE_GAP = spacing.nodeGap;
+  ARC_TOP = spacing.arcTop;
+  ARC_BOTTOM = spacing.arcBottom;
+  LEVEL_H = CELL_H + spacing.loopLevelGap;
+  INDENT = spacing.indent;
+  LANE_GAP = spacing.laneGap;
+});
 
 export const EMPTY: Value = { kind: "prim", type: "none", repr: "" };
 

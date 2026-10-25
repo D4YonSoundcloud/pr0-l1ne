@@ -78,7 +78,9 @@ test("window headers stay one row, and the zoom controls fold away and stay fold
   const heights = async () =>
     Promise.all(
       ["#memory-section", "#loop-section"].map(
-        async (s) => (await page.locator(`${s} .section-head`).boundingBox())!.height,
+        // Rounded: Firefox reports sub-pixel heights (38.0000076) that differ
+        // between layouts by a few millionths of a pixel.
+        async (s) => Math.round((await page.locator(`${s} .section-head`).boundingBox())!.height),
       ),
     );
   const before = await heights();
@@ -91,4 +93,37 @@ test("window headers stay one row, and the zoom controls fold away and stay fold
   await page.reload();
   await expect(page.locator("#memory .viewport-controls")).toHaveClass(/is-collapsed/);
   await expect(page.locator("#loop .viewport-controls")).not.toHaveClass(/is-collapsed/);
+});
+
+test("the Layout panel respaces the memory view as a slider moves, and remembers it", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  // An example with objects in columns, for the column gap to widen.
+  const example = page.locator("#programs option", { hasText: "route planner" });
+  await page.locator("#programs").selectOption({ label: (await example.textContent())! });
+  await page.locator("#mode-arrows").click();
+  await expect(page.locator("#memory .node").nth(4)).toBeAttached({ timeout: 30_000 });
+  const width = async () => Number(await page.locator("#memory svg.memory, #memory svg").first().getAttribute("width"));
+  const before = await width();
+
+  await page.locator("#layout-settings").click();
+  await expect(page.locator("#layout-panel")).toBeVisible();
+  const columnGap = page.locator('#layout-panel input[type=number][data-key="columnGap"]');
+  await columnGap.fill("180");
+  await expect.poll(width).toBeGreaterThan(before + 100);
+  await expect(page.locator('#layout-panel [data-testid="layout-menu"]')).toHaveValue("custom");
+
+  // Saved under a name, and still there (and in use) after a reload.
+  await page.locator('#layout-panel input[type="text"]').fill("Wide");
+  await page.locator("#layout-panel").getByRole("button", { name: "Save", exact: true }).click();
+  await page.waitForTimeout(400); // the spacing is saved once changes pause
+  await page.reload();
+  await expect(page.locator("#memory .node").nth(4)).toBeAttached({ timeout: 30_000 });
+  await expect.poll(width).toBeGreaterThan(before + 100);
+  await page.locator("#layout-settings").click();
+  await expect(page.locator('#layout-panel [data-testid="layout-menu"]')).toHaveValue("saved:Wide");
+
+  await page.locator("#layout-panel").getByRole("button", { name: "Reset all" }).click();
+  await expect.poll(width).toBe(before);
 });

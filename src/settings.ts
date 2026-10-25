@@ -180,6 +180,10 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     autoFit: (pane: Pane) => text(`auto-fit:${pane}`),
     /** The Style panel's settings, as JSON (see appearance.ts). */
     appearance: text("appearance"),
+    /** The Layout panel's spacing, as JSON: only what differs from the defaults (see render/spacing.ts). */
+    spacing: text("spacing"),
+    /** The Layout panel's saved layouts, as JSON (see app/spacingController.ts). */
+    savedLayouts: text("saved-layouts"),
     /** What draws the memory and loop windows (see app/rendererSwitch.ts). */
     renderer: choice("renderer", RENDERER_KINDS, "svg"),
 

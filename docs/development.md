@@ -107,6 +107,7 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/memoryController.ts` | The memory view: builds the step's scene (arrows or nested, memory sizes and their model, output on the canvas) and hands it to the window's renderer; Reset layout |
 | `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically; builds the loop's scene and hands it to the window's renderer |
 | `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
+| `src/app/spacingController.ts` | The Layout panel and the spacing it edits (`render/spacing.ts`): applied, the step redrawn once a frame, saved, and layouts saved by name |
 | `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
 | `src/app/layout.ts` | The window layout on a wide screen: stacked or side by side, the two dividers (drag, arrow keys, double-click to reset), swapping the editor and canvas sides, and windows minimized or maximized to bars. It works out the grid tracks (`layoutTracks`) as CSS variables; styles.css applies them under "window layout" |
 | `src/app/routing.ts` | Each language's address (/python, /sql...): the address follows the language, Back and Forward switch it, and pr0l1ne.com shows the address of the language it opened |
@@ -271,6 +272,7 @@ pr0-l1ne/
     ├── appearance.ts           Canvas style settings, presets, applying them
     ├── appearance.test.ts      Style settings tests
     ├── stylePanel.ts           The Style panel in the toolbar
+    ├── spacingPanel.ts         The Layout panel: spacing sliders and saved layouts
     ├── complexityPanel.ts      The complexity chip, its panel and the editor labels
     ├── measurePanel.ts         Measure's results panel and the editor heat map
     ├── growthView.ts           "How it grows": growth runs' charts and comparisons
@@ -347,6 +349,8 @@ pr0-l1ne/
     │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
+    │   ├── spacing.ts          The layout's spacing, which the Layout panel changes
+    │   ├── spacing.test.ts     Spacing settings, and the layout across their whole ranges
     │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
     │   ├── loopView.ts         The loop view: loopDrawing(), renderLoopHistory() (SVG)
     │   ├── loopView/           Its parts:
@@ -475,7 +479,7 @@ Node can hide browser-only problems. Node has `process` and real built-in module
 
 **Adding a renderer** (WebGL, WebGPU...). Implement `MemoryRenderer` and `LoopRenderer` from `src/scene/renderer.ts` and export a `RendererFactory` like `SVG_RENDERERS` or `CANVAS_RENDERERS`. Add its kind to `RENDERER_KINDS` in `settings.ts`, a source for it in `main.ts`'s `RendererSwitch` (a dynamic `import()` keeps it out of the main bundle), and a line in `RENDERER_INFO` and `RENDERER_COMPARISON` in `stylePanel.ts` so people know what it's like. Nothing else in the app changes. The easiest start is the canvas renderer's: it reuses the SVG layout through a paint list (`render/canvas/paint.ts`), so only `pixiScene.ts` and the window would be new; PixiJS's `autoDetectRenderer` can already make a WebGL or WebGPU renderer instead of `"canvas"`. A renderer with its own layout starts from the scenes, which give everything to draw and nothing about where. Either way, copy the checks that keep the SVG renderer honest (`layout.test.ts`, `loopView.test.ts`, `renderers.test.ts`), and compare its pictures with the SVG renderer's in a browser.
 
-**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. Layout changes in `memory.ts`, `memoryView/`, `loopView.ts` or `loopView/` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
+**Changing the renderer.** Edit the files in `src/render/`. Vite hot-reloads the page. What a step shows is worked out first, in `src/scene/` (see "Scenes and renderers" in how-it-works.md), and drawing is a pure function of that scene, so you can paste a trace JSON into a unit test, build its scene and render it without running any code. A change to *what* is shown belongs in the scene, with a scene test; a change to *where* or *how* belongs in the renderer. A new spacing constant the person should be able to change goes in `render/spacing.ts` (a field in `SPACING_FIELDS` and a default), and the Layout panel shows it with no other change. Layout changes in `memory.ts`, `memoryView/`, `loopView.ts` or `loopView/` reach both renderers at once: they build a drawing (`render/drawing.ts`) that the SVG renderer makes SVG and the canvas renderer paints. A new kind of SVG element or attribute (one `paint.ts` doesn't read yet), or a CSS animation, needs a matching change in `src/render/canvas/` too: look at both renderers in the browser (Style → Rendering).
 
 **Changing the SQL tracer.** Everything in `src/sql/` except the worker entry point runs in Node, on the same PGlite the browser runs: `npx vitest run src/sql` tests it, and the SQL examples are golden traces like the other languages'. A new sample database goes in `databases.ts`, under 15 rows a table; never change one that programs and share links may name, add a new one instead. A new kind of step goes in `select.ts`, with its query written from the parse tree's own pieces (`parser.deparse`), and the check at the end of `selectStages()` keeps a wrong picture from being shown.
 

@@ -123,7 +123,7 @@ Each window (the code, memory and loop history) has two buttons at the right end
 - **Minimize** (–) folds the window to a thin bar with its name, and the other two windows take its room.
 - **Maximize** (□) folds the other two windows to bars, so this one gets the whole workspace. Press it again (it shows two overlapping squares while the window is maximized) to bring all three back.
 
-Click a bar to open its window again. One window always stays open: minimizing the only one still open brings the other two back instead. The Style, Complexity and Measure panels still open while the code window is folded. Which windows are folded is remembered.
+Click a bar to open its window again. One window always stays open: minimizing the only one still open brings the other two back instead. The Style, Layout, Complexity and Measure panels still open while the code window is folded. Which windows are folded is remembered.
 
 ### On a phone
 
@@ -132,7 +132,7 @@ A phone screen can't fit the editor, the memory view and the loop history at onc
 - Tap a window that's hidden to show it. If two were already showing, the one you picked longest ago makes room.
 - Tap one of two that are showing to hide it, and the other fills the screen.
 
-It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
+It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Layout, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
 
 The layout button and the window buttons aren't shown on a phone, which has this layout instead. This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
 
@@ -171,6 +171,24 @@ The **Rendering** section at the top of the Style panel picks how the two window
 Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG.
 
 A few small differences on the canvas: a box doesn't get a soft shadow while you hover over it, and a box being dimmed (by [Dim others](#printed-output)) fades each of its parts rather than the box as a whole, which can show a hint of the box's outline through its cells.
+
+## Spacing the diagrams
+
+**Layout** in the toolbar, next to **Style**, opens a panel for how the memory view and the loop history are spaced: how far apart columns, boxes, rows and arrows are. Like the Style panel, it floats over the editor so the canvas stays in view, and the step on screen is redrawn as you drag each slider, so you see the effect at once. Close it with **×**, `Esc` or the **Layout** button.
+
+Each setting has a slider, a box where you can type the exact number of pixels, and **↺** to put it back to its default (shown once it's changed, with a yellow dot by its name). The settings come in three sections, each with its own **Reset section** button:
+
+| Section | Settings |
+| --- | --- |
+| **Memory view: arrows** | **Lane spacing** (between arrows running side by side), **Lane inset** (from a box's edge to the first lane), **Forward distance** (how far right a target must be for an arrow to go straight to it), **Clearance** (between boxes and an arrow going over or under them), **Arrowhead spacing**, **Tree turn-in** (how far above a tree node an arrow turns in), and **Go around** (how much longer an arrow will be to go around a box instead of [behind it](#following-the-arrows); 0 sends them behind whenever that's shorter) |
+| **Memory view: boxes** | **Column gap**, **Busy column gap** and **Busy after** (a gap with more arrows than that gets the busy width), **Box spacing** (one above another), **Margin**, **Room above** (for arrows that go over the top), **List arrow drop** and **List arrow lanes** (arrows leaving a list's cells), and the spacing of a binary tree's nodes and levels |
+| **Loop history** | **Row spacing**, **Container spacing**, **Variables gap** (before `i = 2  j = 0`), **Stacked spacing** (with One per line), **Nested indent**, the room a linked list leaves for its arrows (**Linked node spacing**, **Room for arcs above** and **below**), **Tree level spacing**, and **Margin** |
+
+Each slider stops where the layout stops working, so no setting can make boxes overlap or send arrows through boxes. Where two settings depend on each other, the layout makes room on its own: a gap is never narrower than its arrows need, however small you set it.
+
+**Saving layouts.** The spacing you set is remembered in this browser. To keep more than one, type a name in **Save as** and press **Save** (or `Enter`): the **Layout** menu then lists it, and picking it, or **Default**, switches the drawing over at once. Saving under a name that's already taken replaces that layout. **Delete** removes the layout selected in the menu, leaving the spacing on screen as it is. Once you change anything, the menu says **Custom (not saved)** until you save it. **Reset all** goes back to the default spacing.
+
+Boxes you've [dragged](#rearranging-the-memory-view) stay where you put them; **Reset layout** in the memory window puts them back in their automatic places, with the new spacing.
 
 ## Saving a picture
 

@@ -138,6 +138,7 @@ body {
 }
 #complexity,
 #style,
+#layout-settings,
 #swap {
   order: 2;
 }
@@ -1879,6 +1880,65 @@ select {
   border-radius: 50%;
   background: var(--highlight);
 }
+/* ------------------------------------------------------------ layout panel */
+
+/* The Layout panel (spacingPanel.ts) is a Style panel with its own rows:
+   label, slider, the exact value, and a way back to the default. */
+.style-panel.spacing-panel {
+  width: min(410px, calc(100% - 20px));
+}
+.spacing-row {
+  grid-template-columns: 11em 1fr 4.4em 1.6em;
+}
+.spacing-number {
+  padding: 3px 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.spacing-reset {
+  width: 1.6em;
+  height: 1.6em;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--chrome-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+.spacing-reset:hover,
+.spacing-reset:focus-visible {
+  background: #2c344b;
+  color: #fff;
+}
+.spacing-reset[hidden] {
+  visibility: hidden;
+  display: block;
+}
+.spacing-help {
+  margin: -2px 0 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--chrome-muted);
+}
+.spacing-field.is-changed > .spacing-row > label {
+  color: #fff;
+}
+.spacing-field.is-changed > .spacing-row > label::after {
+  content: " •";
+  color: var(--highlight);
+}
+.spacing-save {
+  grid-template-columns: 9.5em 1fr auto;
+}
+.spacing-save-buttons {
+  display: flex;
+  gap: 4px;
+}
+.spacing-save-buttons > [hidden] {
+  display: none;
+}
+
 .style-foot {
   display: flex;
   align-items: center;
@@ -2255,7 +2315,8 @@ select {
     order: -1;
   }
   #complexity,
-  #style {
+  #style,
+  #layout-settings {
     order: 0;
   }
   #swap,
@@ -2347,8 +2408,9 @@ select {
     max-height: 22dvh;
   }
 
-  /* The Style, Complexity and Measure panels cover the screen. */
-  .style-panel {
+  /* The Style, Layout, Complexity and Measure panels cover the screen. */
+  .style-panel,
+  .style-panel.spacing-panel {
     position: fixed;
     top: 8px;
     right: 8px;

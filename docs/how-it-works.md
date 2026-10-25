@@ -528,6 +528,14 @@ Every step still draws a fresh SVG, the same way as before. Animation is layered
 
 Saved settings are read by `parseAppearance()`, which checks every field and falls back to the default for anything missing or invalid, so an old or hand-edited setting can't break the canvas. [`stylePanel.ts`](../src/stylePanel.ts) builds the panel from the same field lists. Each control registers a `sync()` that re-reads its value, so choosing a preset updates every control at once.
 
+### Spacing (the Layout panel)
+
+The layout's spacing (column gaps, lanes, row gaps...) lives in [`render/spacing.ts`](../src/render/spacing.ts): `DEFAULT_SPACING` with the designed values, and `SPACING_FIELDS` with each setting's label, help text, range and step, which the panel ([`spacingPanel.ts`](../src/spacingPanel.ts)) is built from. The layout modules keep their named constants (`LANE` in `route.ts`, `MIN_GAP` in `memoryView/layout.ts`, `ROW_GAP` in `loopView/shared.ts`...), but as `let`s that `onSpacingChange()` refreshes from the current spacing. An exported `let` is a live binding, so every module that imports `ROW_GAP` sees the new value, and the layout code reads exactly as it did with fixed numbers.
+
+Unlike the Style panel, spacing can't be a CSS variable: it changes where everything goes. So [`app/spacingController.ts`](../src/app/spacingController.ts) calls `setSpacing()` and then redraws the step, without animation, once per frame however fast a slider moves. Saved spacing stores only what differs from the defaults, so a later change to a default still reaches anyone who never touched that setting. Saved layouts are a list of names and values beside it.
+
+The ranges are what the layout handles, and `spacing.test.ts` checks them: with every setting at its minimum, at its maximum, and each memory setting alone at either end, every JavaScript example draws with no overlapping boxes, no arrow through a box and no `NaN`. Settings that are only safe together are made safe in the layout rather than by narrowing the sliders: a column gap is never narrower than its lanes need (`2 × inset + (lanes − 1) × lane spacing`), a tree's slots are never closer than the lane inset, and a tree keeps room above it and between its levels for arrows that turn in above a node (the tree turn-in). At the default spacing none of these apply, so the defaults draw exactly as before.
+
 ## 15. Graphs
 
 [`trace/graph.ts`](../src/trace/graph.ts) is pure, like `linked.ts`, and has its own tests ([`graph.test.ts`](../src/trace/graph.test.ts)). It does four things.

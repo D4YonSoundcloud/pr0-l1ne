@@ -8,27 +8,41 @@ import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
 import { arrowMarkers, FONT, SMALL, s } from "../draw";
 import type { Mark } from "../drawing";
 import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind } from "../route";
+import { onSpacingChange, spacing } from "../spacing";
 import { GRAPH_BODY_Y, graphBoxes, graphShape, graphSize } from "./graphs";
 import { objectShape, viewOf } from "./objects";
 import { outputShape, outputWidth } from "./output";
 import type { Ctx, MemoryLayout, OutRef, Shape } from "./shapes";
 import { frameShape } from "./tables";
-import { measureBlock, TREE_GAP, type TreeBlock } from "./trees";
+import { measureBlock, type TreeBlock, treeGap } from "./trees";
 
 /**
  * The gap between two columns: narrow, or wide when it holds more than a
  * few arrows' lanes (see gapBefore). Two widths, not one per arrow, so boxes
  * don't shift sideways each time an arrow comes or goes.
  */
-const MIN_GAP = 64;
-const MAX_GAP = 96;
-const STACK_GAP = 22;
-const MARGIN = 24;
+let MIN_GAP = 64;
+let MAX_GAP = 96;
+/** A gap with more lanes than this gets MAX_GAP. */
+let BUSY_AFTER = 4;
+let STACK_GAP = 22;
+let MARGIN = 24;
 /** Room above the boxes for arrows that route over the top (see route.ts). */
-const TOP = 28;
+let TOP = 28;
 /** Arrows leaving a list downward turn this far below it, then a lane apart. */
-const EXIT_DROP = 9;
-const EXIT_LANE = 7;
+let EXIT_DROP = 9;
+let EXIT_LANE = 7;
+// The Layout panel can change all of these (see render/spacing.ts).
+onSpacingChange(() => {
+  MIN_GAP = spacing.columnGap;
+  MAX_GAP = spacing.busyColumnGap;
+  BUSY_AFTER = spacing.busyAfter;
+  STACK_GAP = spacing.stackGap;
+  MARGIN = spacing.memoryMargin;
+  TOP = spacing.memoryTop;
+  EXIT_DROP = spacing.exitDrop;
+  EXIT_LANE = spacing.exitLane;
+});
 
 /**
  * A column's boxes in the order their arrows arrive, top to bottom. Boxes
@@ -153,7 +167,9 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
         lanes++; // into column d from the left
       else if (from === d - 1 && to <= d - 1 && link.from.startsWith("obj:")) lanes++; // back from column d-1
     }
-    return lanes <= 4 ? MIN_GAP : MAX_GAP;
+    // Never narrower than its lanes need (only matters with spacing the Layout panel made tight).
+    const room = 2 * spacing.gapPad + Math.max(0, lanes - 1) * spacing.lane + 8;
+    return Math.max(lanes <= BUSY_AFTER ? MIN_GAP : MAX_GAP, room);
   };
   const columnX: number[] = [];
   let cursorX = MARGIN + framesW + gapBefore(0);
@@ -278,7 +294,17 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       // to its slot in the block.
       if (!block.origin) {
         const want = preferredY.has(block.root) ? preferredY.get(block.root)! - shapes.get(block.root)!.inY : TOP;
-        const y = findFreeY(columnX[d], block.w, block.h, Math.max(columnCursor[d], want), obstacles, STACK_GAP);
+        // Arrows into a tree turn in TOP_GAP above its nodes (route.ts): keep
+        // that clear of the box above, however the gaps are set.
+        const above = Math.max(0, spacing.topGap + 6 - STACK_GAP);
+        const y = findFreeY(
+          columnX[d],
+          block.w,
+          block.h,
+          Math.max(columnCursor[d] + above, want),
+          obstacles,
+          STACK_GAP,
+        );
         block.origin = { x: columnX[d], y };
         columnCursor[d] = y + block.h + STACK_GAP;
       }
@@ -286,7 +312,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       drawNode(
         key,
         shape,
-        block.origin.x + slot.index * (block.slotW + TREE_GAP) + Math.round((block.slotW - shape.w) / 2),
+        block.origin.x + slot.index * (block.slotW + treeGap()) + Math.round((block.slotW - shape.w) / 2),
         block.origin.y + slot.depth * block.levelH,
       );
       return;
