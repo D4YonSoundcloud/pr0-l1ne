@@ -12,7 +12,6 @@ Everything else:
 
 - Dragging single nodes of a graph to rearrange it, remembered like dragged boxes.
 - Grids drawn as graphs (a maze search over a 2D grid), with the path through the cells highlighted.
-- Graph layout, phase 2: stress layout in place of force-directed for undirected graphs and dense ones, and better spacing for separate pieces.
 - Graph layout, phase 3: straighter long edges (Brandes–Köpf placement), right-angled or curved edge routing everywhere, and weight labels placed clear of nodes and other labels.
 - Hints scoped to a function or a loop, and more hint kinds (`viz: graph`, `viz: matrix`).
 - Morphing arrows between steps, by matching routes point by point.

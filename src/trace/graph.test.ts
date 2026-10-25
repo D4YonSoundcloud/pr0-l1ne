@@ -193,9 +193,12 @@ describe("layout", () => {
   });
 
   it("spreads a tangled graph out without overlaps, the same way every time", () => {
-    const nodes = ["a", "b", "c", "d", "e"];
-    // Every node linked to every other, both ways: no layers suit it.
-    const edges = nodes.flatMap((n) => nodes.filter((m) => m !== n).map((m) => ({ from: n, to: m })));
+    const nodes = Array.from({ length: 10 }, (_, i) => `n${i}`);
+    // Each node linked to three others: no layers suit it, and it's too big for a circle.
+    const edges = nodes.flatMap((n, i) => [
+      { from: n, to: nodes[(i + 1) % 10] },
+      { from: n, to: nodes[(i + 4) % 10] },
+    ]);
     const one = computeLayout(nodes, edges, { directed: false });
     const two = computeLayout(nodes, edges, { directed: false });
     expect(one.mode).toBe("force");

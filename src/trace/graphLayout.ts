@@ -6,9 +6,25 @@
  *   layered   trees, DAGs, and directed graphs with a few cycles: the
  *             classic layered ("Sugiyama") pipeline below
  *   circle    a ring (each node linked to two others, all in one loop), a
- *             graph of one or two nodes, or a hint asking for it
- *   force     everything else (undirected graphs with cycles, dense graphs)
+ *             small dense graph (4 to 8 nodes, most pairs linked), a graph
+ *             of one or two nodes, or a hint asking for it
+ *   force     everything else (undirected graphs with cycles, bigger dense
+ *             graphs): stress majorization (below), which looks like a
+ *             force-directed layout but is tidier. "force" is still its name
+ *             in hints.
  *   grid      nodes with no edges at all, in rows
+ *
+ * The stress layout ("force"): each connected piece on its own. Every pair
+ * of nodes should be as far apart as the hops between them (one hop is
+ * EDGE), near pairs mattering most; stress majorization moves each node in
+ * turn to where that fits best. It has local minima, so it starts from a
+ * few fixed places (classical scaling; circles in program order and in
+ * breadth-first order) and keeps the one with the fewest crossings. The
+ * picture is turned so its long side is horizontal, with the start at the
+ * top left. Then straight edges are kept clear of nodes they don't touch:
+ * nodes are nudged off them while that adds no crossings, and an edge still
+ * in the way bends around the node (a route with one bend). The pieces are
+ * packed in rows, the start's first; nodes with no edges go in a block last.
  *
  * The layered pipeline:
  *
@@ -621,95 +637,248 @@ function grid(nodes: readonly string[]): Map<string, Point> {
   return new Map(nodes.map((n, i) => [n, { x: i % columns, y: Math.floor(i / columns) }]));
 }
 
-/** Fruchterman-Reingold, started from a circle so it's the same every run. */
-function force(nodes: string[], edges: readonly LayoutEdge[]): Map<string, Point> {
-  const n = nodes.length;
-  const start = circle(nodes);
-  const p = nodes.map((node) => ({ ...start.get(node)! }));
-  const index = new Map(nodes.map((node, i) => [node, i]));
-  const pairs: [number, number][] = links(nodes, edges).map((l) => [index.get(l.from)!, index.get(l.to)!]);
-  const k = 1;
-  let t = Math.max(0.5, n / 6);
-  const iterations = 300;
-  for (let it = 0; it < iterations; it++) {
-    const d = p.map(() => ({ x: 0, y: 0 }));
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        let dx = p[i].x - p[j].x;
-        let dy = p[i].y - p[j].y;
-        let dist = Math.hypot(dx, dy);
-        if (dist < 1e-6) {
-          dx = 0.01 * (i - j);
-          dy = 0.01;
-          dist = Math.hypot(dx, dy);
-        }
-        const f = (k * k) / dist;
-        d[i].x += (dx / dist) * f;
-        d[i].y += (dy / dist) * f;
-        d[j].x -= (dx / dist) * f;
-        d[j].y -= (dy / dist) * f;
+// ---------------------------------------------------------------------------
+// Stress (undirected graphs with cycles, dense graphs)
+// ---------------------------------------------------------------------------
+
+/** An edge's length in a stress layout, in units. */
+const EDGE = 1.2;
+/** How far a straight edge stays from a node it doesn't touch (center to line), in units. */
+const CLEAR = 0.34;
+/** Between separate pieces, in units. */
+const PIECE_GAP = 1.2;
+
+/** Hops between every pair of nodes in one connected piece (breadth-first from each). */
+function hops(nodes: readonly string[], adj: Map<string, string[]>): number[][] {
+  const index = new Map(nodes.map((n, i) => [n, i]));
+  return nodes.map((root) => {
+    const d = nodes.map(() => Number.POSITIVE_INFINITY);
+    d[index.get(root)!] = 0;
+    const queue = [root];
+    while (queue.length) {
+      const n = queue.shift()!;
+      for (const m of adj.get(n)!) {
+        const j = index.get(m)!;
+        if (d[j] !== Number.POSITIVE_INFINITY) continue;
+        d[j] = d[index.get(n)!] + 1;
+        queue.push(m);
       }
     }
-    for (const [i, j] of pairs) {
-      const dx = p[i].x - p[j].x;
-      const dy = p[i].y - p[j].y;
-      const dist = Math.max(1e-6, Math.hypot(dx, dy));
-      const f = (dist * dist) / k;
-      d[i].x -= (dx / dist) * f;
-      d[i].y -= (dy / dist) * f;
-      d[j].x += (dx / dist) * f;
-      d[j].y += (dy / dist) * f;
+    return d;
+  });
+}
+
+/**
+ * Classical multidimensional scaling: positions whose distances best match
+ * `d`, from the top two eigenvectors of the double-centered squared
+ * distances (power iteration from a fixed start, so always the same).
+ */
+function classicalScaling(d: number[][]): Point[] {
+  const n = d.length;
+  const sq = d.map((row) => row.map((v) => v * v));
+  const rowMean = sq.map((row) => row.reduce((s, v) => s + v, 0) / n);
+  const all = rowMean.reduce((s, v) => s + v, 0) / n;
+  const b = sq.map((row, i) => row.map((v, j) => -0.5 * (v - rowMean[i] - rowMean[j] + all)));
+  const axes: { v: number[]; value: number }[] = [];
+  for (let k = 0; k < 2; k++) {
+    let v = Array.from({ length: n }, (_, i) => Math.sin(i * 1.7 + k * 0.9 + 0.3));
+    let value = 0;
+    for (let it = 0; it < 300; it++) {
+      const next = b.map((row) => row.reduce((s, x, j) => s + x * v[j], 0));
+      // Without the axes already found.
+      for (const axis of axes) {
+        const dot = axis.v.reduce((s, x, j) => s + x * v[j], 0);
+        for (let i = 0; i < n; i++) next[i] -= axis.value * dot * axis.v[i];
+      }
+      const len = Math.hypot(...next);
+      if (len < 1e-12) {
+        value = 0;
+        break;
+      }
+      const unit = next.map((x) => x / len);
+      const change = unit.reduce((s, x, i) => s + Math.abs(x - v[i]), 0);
+      value = len;
+      v = unit;
+      if (change < 1e-9) break;
     }
-    // A little gravity keeps separate pieces from drifting apart.
+    axes.push({ v, value });
+  }
+  return Array.from({ length: n }, (_, i) => ({
+    x: axes[0].v[i] * Math.sqrt(Math.max(0, axes[0].value)),
+    y: axes[1].v[i] * Math.sqrt(Math.max(0, axes[1].value)),
+  }));
+}
+
+/** Stress majorization from `p` (moved in place): each node to where its distances fit best, in turn. */
+function majorize(p: Point[], d: number[][], iterations: number): number {
+  const n = p.length;
+  for (let it = 0; it < iterations; it++) {
+    let moved = 0;
+    for (let i = 0; i < n; i++) {
+      let x = 0;
+      let y = 0;
+      let total = 0;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const w = 1 / (d[i][j] * d[i][j]);
+        const dx = p[i].x - p[j].x;
+        const dy = p[i].y - p[j].y;
+        const dist = Math.hypot(dx, dy) || 1e-9;
+        x += w * (p[j].x + (d[i][j] * dx) / dist);
+        y += w * (p[j].y + (d[i][j] * dy) / dist);
+        total += w;
+      }
+      const nx = x / total;
+      const ny = y / total;
+      moved = Math.max(moved, Math.abs(nx - p[i].x) + Math.abs(ny - p[i].y));
+      p[i].x = nx;
+      p[i].y = ny;
+    }
+    if (moved < 1e-4) break;
+  }
+  // The stress left: how far the distances are from the hops, near pairs weighing most.
+  let stress = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      stress += (Math.hypot(p[i].x - p[j].x, p[i].y - p[j].y) - d[i][j]) ** 2 / (d[i][j] * d[i][j]);
+    }
+  }
+  return stress;
+}
+
+/** Straight edges crossing each other, for positions by index. */
+function straightCrossings(p: Point[], pairs: [number, number][]): number {
+  let count = 0;
+  for (let i = 0; i < pairs.length; i++) {
+    for (let j = i + 1; j < pairs.length; j++) {
+      const [a, b] = pairs[i];
+      const [c, e] = pairs[j];
+      if (a === c || a === e || b === c || b === e) continue;
+      if (properlyCross([p[a], p[b]], [p[c], p[e]])) count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * One connected piece by stress majorization: every pair of nodes as far
+ * apart as the hops between them (times EDGE), near pairs mattering most.
+ * Stress has local minima, so it starts from a few fixed places (classical
+ * scaling, and circles in program order and in breadth-first order from
+ * the start) and keeps the result with the fewest crossings, then the
+ * least stress. Always the same result.
+ */
+function stressPiece(nodes: string[], ls: Link[], start: string | null): Map<string, Point> {
+  const n = nodes.length;
+  if (n === 1) return new Map([[nodes[0], { x: 0, y: 0 }]]);
+  if (n === 2) return new Map(nodes.map((node, i) => [node, { x: i * EDGE, y: 0 }]));
+  const adj = neighborsOf(nodes, ls);
+  const d = hops(nodes, adj).map((row) => row.map((h) => h * EDGE));
+  const index = new Map(nodes.map((node, i) => [node, i]));
+  const pairs = ls.map((l): [number, number] => [index.get(l.from)!, index.get(l.to)!]);
+  const big = n > 120;
+  const starts: Point[][] = [classicalScaling(d)];
+  if (!big) {
+    const ring = (order: string[]) => {
+      const at = circle(order);
+      return nodes.map((node) => ({ ...at.get(node)! }));
+    };
+    starts.push(ring(nodes));
+    const bfs: string[] = [];
+    for (const root of [...(start ? [start] : []), ...nodes]) {
+      if (bfs.includes(root)) continue;
+      const queue = [root];
+      bfs.push(root);
+      while (queue.length) {
+        for (const m of adj.get(queue.shift()!)!) {
+          if (bfs.includes(m)) continue;
+          bfs.push(m);
+          queue.push(m);
+        }
+      }
+    }
+    starts.push(ring(bfs));
+  }
+  let best: { p: Point[]; crossings: number; stress: number } | null = null;
+  for (const p of starts) {
+    // Nodes in the same place (a path is a straight line): a little apart.
+    p.forEach((q, i) => {
+      q.y += Math.sin(i * 2.3) * 1e-3;
+    });
+    const stress = majorize(p, d, big ? 80 : 300);
+    const crossings = straightCrossings(p, pairs);
+    if (!best || crossings < best.crossings || (crossings === best.crossings && stress < best.stress - 1e-9)) {
+      best = { p, crossings, stress };
+    }
+  }
+  const p = best!.p;
+  orient(p, start ? nodes.indexOf(start) : 0, pairs);
+  separate(p, 0.9);
+  return new Map(nodes.map((node, i) => [node, p[i]]));
+}
+
+/**
+ * Turn a picture so it reads well: its edges along the axes when most of
+ * them share directions a right angle apart (a grid comes out square, not
+ * as a diamond), else its long side horizontal; wider than tall; and with
+ * `first` (where the algorithm starts) toward the top left.
+ */
+function orient(p: Point[], first: number, pairs: readonly [number, number][]): void {
+  const n = p.length;
+  const rotate = (angle: number) => {
     const cx = p.reduce((s, q) => s + q.x, 0) / n;
     const cy = p.reduce((s, q) => s + q.y, 0) / n;
-    for (let i = 0; i < n; i++) {
-      d[i].x -= (p[i].x - cx) * 0.08;
-      d[i].y -= (p[i].y - cy) * 0.08;
-      const len = Math.hypot(d[i].x, d[i].y);
-      if (len > 0) {
-        p[i].x += (d[i].x / len) * Math.min(len, t);
-        p[i].y += (d[i].y / len) * Math.min(len, t);
-      }
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    for (const q of p) {
+      const x = q.x - cx;
+      const y = q.y - cy;
+      q.x = x * cos - y * sin;
+      q.y = x * sin + y * cos;
     }
-    t = Math.max(0.01, t * 0.985);
+  };
+  // The edges' directions, four times over, so directions a right angle apart agree.
+  let c4 = 0;
+  let s4 = 0;
+  for (const [i, j] of pairs) {
+    const angle = Math.atan2(p[j].y - p[i].y, p[j].x - p[i].x);
+    c4 += Math.cos(4 * angle);
+    s4 += Math.sin(4 * angle);
   }
-  // Turn the picture so its long side is horizontal.
+  const agreement = pairs.length ? Math.hypot(c4, s4) / pairs.length : 0;
+  if (agreement > 0.5) rotate(-Math.atan2(s4, c4) / 4);
+  else {
+    const cx = p.reduce((s, q) => s + q.x, 0) / n;
+    const cy = p.reduce((s, q) => s + q.y, 0) / n;
+    let sxx = 0;
+    let syy = 0;
+    let sxy = 0;
+    for (const q of p) {
+      sxx += (q.x - cx) ** 2;
+      syy += (q.y - cy) ** 2;
+      sxy += (q.x - cx) * (q.y - cy);
+    }
+    rotate(-0.5 * Math.atan2(2 * sxy, sxx - syy));
+  }
+  const span = (pick: (q: Point) => number) => Math.max(...p.map(pick)) - Math.min(...p.map(pick));
+  if (span((q) => q.y) > span((q) => q.x) + 1e-6) rotate(Math.PI / 2);
   const cx = p.reduce((s, q) => s + q.x, 0) / n;
   const cy = p.reduce((s, q) => s + q.y, 0) / n;
-  let sxx = 0;
-  let syy = 0;
-  let sxy = 0;
-  for (const q of p) {
-    sxx += (q.x - cx) ** 2;
-    syy += (q.y - cy) ** 2;
-    sxy += (q.x - cx) * (q.y - cy);
-  }
-  const angle = -0.5 * Math.atan2(2 * sxy, sxx - syy);
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  for (const q of p) {
-    const x = q.x - cx;
-    const y = q.y - cy;
-    q.x = x * cos - y * sin;
-    q.y = x * sin + y * cos;
-  }
-  // One edge is about one unit long, and no two nodes sit closer than 0.9.
-  const lengths = pairs.map(([i, j]) => Math.hypot(p[i].x - p[j].x, p[i].y - p[j].y));
-  const scale = lengths.length ? 1.15 / (lengths.reduce((a, b) => a + b, 0) / lengths.length) : 1;
-  for (const q of p) {
-    q.x *= scale;
-    q.y *= scale;
-  }
+  if (first >= 0 && p[first].x > cx + 1e-6) for (const q of p) q.x = 2 * cx - q.x;
+  if (first >= 0 && p[first].y > cy + 1e-6) for (const q of p) q.y = 2 * cy - q.y;
+}
+
+/** Push apart any two nodes closer than `gap`. */
+function separate(p: Point[], gap: number): void {
   for (let r = 0; r < 60; r++) {
     let moved = false;
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
+    for (let i = 0; i < p.length; i++) {
+      for (let j = i + 1; j < p.length; j++) {
         const dx = p[j].x - p[i].x;
         const dy = p[j].y - p[i].y;
         const dist = Math.hypot(dx, dy);
-        if (dist >= 0.9) continue;
-        const push = (0.9 - dist) / 2 + 0.001;
+        if (dist >= gap) continue;
+        const push = (gap - dist) / 2 + 0.001;
         const ux = dist > 1e-6 ? dx / dist : 1;
         const uy = dist > 1e-6 ? dy / dist : 0;
         p[i].x -= ux * push;
@@ -721,9 +890,249 @@ function force(nodes: string[], edges: readonly LayoutEdge[]): Map<string, Point
     }
     if (!moved) break;
   }
-  const minX = Math.min(...p.map((q) => q.x));
-  const minY = Math.min(...p.map((q) => q.y));
-  return new Map(nodes.map((node, i) => [node, { x: round(p[i].x - minX), y: round(p[i].y - minY) }]));
+}
+
+/** The closest point to `c` on the segment a–b, and how far along it is (0 at a, 1 at b). */
+function closestOn(a: Point, b: Point, c: Point): { at: Point; t: number; dist: number } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy || 1e-12;
+  const t = Math.max(0, Math.min(1, ((c.x - a.x) * dx + (c.y - a.y) * dy) / len2));
+  const at = { x: a.x + dx * t, y: a.y + dy * t };
+  return { at, t, dist: Math.hypot(c.x - at.x, c.y - at.y) };
+}
+
+/**
+ * Straight edges that pass through (or graze) a node they don't touch.
+ * Each is [edge, node].
+ */
+function edgesThroughNodes(pos: Map<string, Point>, ls: readonly Link[]): [Link, string][] {
+  const hits: [Link, string][] = [];
+  for (const l of ls) {
+    const a = pos.get(l.from)!;
+    const b = pos.get(l.to)!;
+    for (const [node, c] of pos) {
+      if (node === l.from || node === l.to) continue;
+      const { t, dist } = closestOn(a, b, c);
+      if (t > 0.02 && t < 0.98 && dist < CLEAR) hits.push([l, node]);
+    }
+  }
+  return hits;
+}
+
+/**
+ * Keep straight edges clear of the nodes they don't touch: first nudge
+ * each such node off the edge (a few rounds), then bend any edge still in
+ * the way around the node, as a route with one bend.
+ */
+function clearEdges(pos: Map<string, Point>, ls: readonly Link[]): Map<string, Point[]> {
+  const straight = () => edgeCrossings({ pos, mode: "force", routes: new Map(), back: new Set() }, ls);
+  const before = straight();
+  // Nudge nodes off edges, a round at a time, as long as that adds no crossings.
+  for (let round = 0; round < 20; round++) {
+    const hits = edgesThroughNodes(pos, ls);
+    if (!hits.length) break;
+    const saved = new Map(pos);
+    for (const [l, node] of hits) {
+      const c = pos.get(node)!;
+      const a = pos.get(l.from)!;
+      const b = pos.get(l.to)!;
+      const { at, dist } = closestOn(a, b, c);
+      // Away from the line; straight across it if the node sits right on it.
+      let ux = c.x - at.x;
+      let uy = c.y - at.y;
+      if (dist < 1e-6) {
+        const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        ux = -(b.y - a.y) / len;
+        uy = (b.x - a.x) / len;
+      } else {
+        ux /= dist;
+        uy /= dist;
+      }
+      const push = CLEAR - dist + 0.02;
+      pos.set(node, { x: c.x + ux * push, y: c.y + uy * push });
+    }
+    const list = [...pos.values()].map((q) => ({ ...q }));
+    separate(list, 0.9);
+    [...pos.keys()].forEach((node, i) => {
+      pos.set(node, list[i]);
+    });
+    if (straight() > before) {
+      for (const [node, q] of saved) pos.set(node, q);
+      break;
+    }
+  }
+  // Bend each edge still in the way around the node. Of the bends tried (each
+  // side, further out each time), the best: clear of every node if one is,
+  // then the fewest crossings, then the most room.
+  const routes = new Map<string, Point[]>();
+  /** How many other edges (as drawn so far) this edge would cross, drawn through `points`. */
+  const crossingsWith = (edge: Link, points: Point[]) => {
+    let count = 0;
+    for (const other of ls) {
+      if (
+        other === edge ||
+        other.from === edge.from ||
+        other.from === edge.to ||
+        other.to === edge.from ||
+        other.to === edge.to
+      )
+        continue;
+      const theirs = [pos.get(other.from)!, ...(routes.get(`${other.from}>${other.to}`) ?? []), pos.get(other.to)!];
+      for (let i = 0; i + 1 < points.length; i++) {
+        for (let j = 0; j + 1 < theirs.length; j++) {
+          if (properlyCross([points[i], points[i + 1]], [theirs[j], theirs[j + 1]])) count++;
+        }
+      }
+    }
+    return count;
+  };
+  for (const [l, node] of edgesThroughNodes(pos, ls)) {
+    const key = `${l.from}>${l.to}`;
+    if (routes.has(key)) continue;
+    const a = pos.get(l.from)!;
+    const b = pos.get(l.to)!;
+    const { at } = closestOn(a, b, pos.get(node)!);
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = -(b.y - a.y) / len;
+    const ny = (b.x - a.x) / len;
+    let best: { bend: Point; clear: boolean; crossings: number; room: number } | null = null;
+    for (const out of [CLEAR + 0.3, CLEAR + 0.6, CLEAR + 1]) {
+      for (const side of [1, -1]) {
+        const bend = { x: round(at.x + nx * out * side), y: round(at.y + ny * out * side) };
+        let room = Number.POSITIVE_INFINITY;
+        for (const [other, c] of pos) {
+          if (other === l.from || other === l.to) continue;
+          room = Math.min(room, closestOn(a, bend, c).dist, closestOn(bend, b, c).dist);
+        }
+        const trial = { bend, clear: room >= CLEAR, crossings: crossingsWith(l, [a, bend, b]), room };
+        if (
+          !best ||
+          (trial.clear && !best.clear) ||
+          (trial.clear === best.clear &&
+            (trial.crossings < best.crossings || (trial.crossings === best.crossings && trial.room > best.room)))
+        ) {
+          best = trial;
+        }
+      }
+    }
+    routes.set(key, [best!.bend]);
+    routes.set(`${l.to}>${l.from}`, [best!.bend]);
+  }
+  return routes;
+}
+
+/**
+ * Lay out piece by piece and pack the pieces in rows, the start's piece
+ * first, then in the order they first appear; nodes with no edges go last,
+ * in a block.
+ */
+function packPieces(
+  nodes: string[],
+  ls: Link[],
+  start: string | null,
+  layoutPiece: (piece: string[], own: Link[], start: string | null) => Map<string, Point>,
+): Map<string, Point> {
+  const linked = new Set(ls.flatMap((l) => [l.from, l.to]));
+  const pieces = components(
+    nodes.filter((n) => linked.has(n)),
+    ls,
+  ).sort((a, b) => Number(b.includes(start ?? "\u0002")) - Number(a.includes(start ?? "\u0002")));
+  const laid = pieces.map((piece) => {
+    const members = new Set(piece);
+    const pos = layoutPiece(
+      piece,
+      ls.filter((l) => members.has(l.from)),
+      start && members.has(start) ? start : null,
+    );
+    const xs = [...pos.values()].map((q) => q.x);
+    const ys = [...pos.values()].map((q) => q.y);
+    const [minX, minY] = [Math.min(...xs), Math.min(...ys)];
+    for (const [n, q] of pos) pos.set(n, { x: q.x - minX, y: q.y - minY });
+    return { pos, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
+  });
+  const alone = nodes.filter((n) => !linked.has(n));
+  if (alone.length) {
+    const g = grid(alone);
+    laid.push({
+      pos: g,
+      w: Math.max(...[...g.values()].map((q) => q.x)),
+      h: Math.max(...[...g.values()].map((q) => q.y)),
+    });
+  }
+  // Rows about as wide as the pieces would be in a square, and never narrower than the widest.
+  const area = laid.reduce((sum, piece) => sum + (piece.w + PIECE_GAP) * (piece.h + PIECE_GAP), 0);
+  const rowWidth = Math.max(...laid.map((piece) => piece.w), Math.sqrt(area) * 1.5);
+  const out = new Map<string, Point>();
+  let x = 0;
+  let y = 0;
+  let rowH = 0;
+  for (const piece of laid) {
+    if (x > 0 && x + piece.w > rowWidth) {
+      x = 0;
+      y += rowH + PIECE_GAP;
+      rowH = 0;
+    }
+    for (const [n, q] of piece.pos) out.set(n, { x: round(q.x + x), y: round(q.y + y) });
+    x += piece.w + PIECE_GAP;
+    rowH = Math.max(rowH, piece.h);
+  }
+  return out;
+}
+
+/** Stress layout for a whole graph: pieces packed, straight edges kept clear of nodes. */
+function stress(nodes: string[], edges: readonly LayoutEdge[], start: string | null): GraphLayout {
+  const ls = links(nodes, edges);
+  const pos = packPieces(nodes, ls, start, stressPiece);
+  const routes = clearEdges(pos, ls);
+  for (const [n, q] of pos) pos.set(n, { x: round(q.x), y: round(q.y) });
+  const minX = Math.min(...[...pos.values()].map((q) => q.x));
+  const minY = Math.min(...[...pos.values()].map((q) => q.y));
+  for (const [n, q] of pos) pos.set(n, { x: round(q.x - minX), y: round(q.y - minY) });
+  for (const [k, bends] of routes)
+    routes.set(
+      k,
+      bends.map((q) => ({ x: round(q.x - minX), y: round(q.y - minY) })),
+    );
+  return { pos, mode: "force", routes, back: new Set() };
+}
+
+/**
+ * A small dense graph: a circle (in program order, or breadth-first from
+ * the start) unless stress crosses fewer edges. Ties go to the circle.
+ */
+function denseCircleOrStress(nodes: string[], edges: readonly LayoutEdge[], start: string | null): GraphLayout {
+  const ls = links(nodes, edges);
+  const adj = neighborsOf(nodes, ls);
+  const bfs: string[] = [];
+  for (const root of [...(start ? [start] : []), ...nodes]) {
+    if (bfs.includes(root)) continue;
+    const queue = [root];
+    bfs.push(root);
+    while (queue.length) {
+      for (const m of adj.get(queue.shift()!)!) {
+        if (bfs.includes(m)) continue;
+        bfs.push(m);
+        queue.push(m);
+      }
+    }
+  }
+  const candidates: GraphLayout[] = [
+    { ...emptyLayout("circle"), pos: circle(nodes) },
+    { ...emptyLayout("circle"), pos: circle(bfs) },
+    stress(nodes, edges, start),
+  ];
+  let best = candidates[0];
+  for (const c of candidates.slice(1)) if (edgeCrossings(c, ls) < edgeCrossings(best, ls)) best = c;
+  return best;
+}
+
+/** A small graph with most of its possible edges: a circle may show it best. */
+function smallAndDense(nodes: string[], edges: readonly LayoutEdge[]): boolean {
+  const n = nodes.length;
+  if (n < 4 || n > 8) return false;
+  const ls = links(nodes, edges);
+  return components(nodes, ls).length === 1 && ls.length >= 0.6 * ((n * (n - 1)) / 2);
 }
 
 /**
@@ -763,13 +1172,15 @@ export function computeLayout(nodes: string[], edges: readonly LayoutEdge[], opt
     if (!links(nodes, edges).length)
       return { ...emptyLayout("circle"), pos: nodes.length <= 2 ? circle(nodes) : grid(nodes) };
     if (layersSuit(nodes, edges, directed, start)) return layered(nodes, edges, directed, start);
+    if (smallAndDense(nodes, edges)) return denseCircleOrStress(nodes, edges, start);
   }
   if (nodes.length <= 2) return { ...emptyLayout("circle"), pos: circle(nodes) };
-  return { ...emptyLayout("force"), pos: force(nodes, edges) };
+  // "force" (a hint's name for it, and the mode graphView reads): stress, which looks like force but tidier.
+  return stress(nodes, edges, start);
 }
 
-/** Crossings in a layered layout's order (for tests: layouts must not get worse). */
-export function layeredCrossings(layout: GraphLayout, edges: readonly LayoutEdge[]): number {
+/** Edges crossing each other in a layout, bends included (for tests: layouts must not get worse). */
+export function edgeCrossings(layout: GraphLayout, edges: readonly LayoutEdge[]): number {
   // Every segment between neighboring layers, bends included.
   const segments: [Point, Point][] = [];
   const seen = new Set<string>();

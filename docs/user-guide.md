@@ -503,7 +503,9 @@ A graph is **undirected** when every edge goes both ways, and **directed** (with
 - **A tree's children stay in your order**, left to right.
 - **Separate pieces** sit side by side, and nodes with no edges in a block to the right.
 
-A single loop of nodes (a ring) is drawn as a circle, starting at the top. Undirected graphs with cycles, and dense graphs, get a force-directed layout. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. The same graph is always laid out the same way.
+A single loop of nodes (a ring) is drawn as a circle, starting at the top, and so is a small graph where most nodes link to each other, when that crosses fewer edges.
+
+Other graphs (undirected graphs with cycles, bigger dense graphs) are laid out so that nodes a few edges apart sit about that far apart on screen. A grid comes out as a grid, edges are kept clear of nodes they don't connect (bending around one when they must), and where the search starts is at the top left. Separate pieces are packed in rows. Self-loops are drawn as a small loop off the node's side, and an edge listed twice as two edges side by side. The same graph is always laid out the same way.
 
 ![Topological sort: items already placed in the order are filled in, the ready queue is numbered, and each item shows how many things it still waits on](graph-topo.png)
 

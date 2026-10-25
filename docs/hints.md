@@ -57,7 +57,7 @@ Words between a graph hint's target and its colon change how the graph is read o
 | `directed`, `undirected` | Draw arrowheads, or don't. Without either, a graph is undirected when every edge goes both ways. |
 | `matrix` | Read a list of lists as an adjacency matrix: `m[i][j]` is the edge from `i` to `j`. `0`, `False`, `None`, `-1` and infinity mean no edge. Other numbers are weights, and are shown unless every edge is `1` or `True`. |
 | `edgelist` | Read a list of `(a, b)` or `(a, b, weight)` as edges. Python tuples are read this way without the option. |
-| `layered`, `force`, `circle` | Lay it out in layers from top to bottom, force-directed, or in a ring. Without one, it's layered when that reads well (trees, and directed graphs with no or few cycles), a circle for a ring, and force-directed otherwise. `layered` works for any graph: edges that close a cycle point up. |
+| `layered`, `force`, `circle` | Lay it out in layers from top to bottom, spread out by distance (`force`: nodes a few edges apart sit about that far apart), or in a ring. Without one, it's layered when that reads well (trees, and directed graphs with no or few cycles), a circle for a ring (or a small dense graph, when that crosses fewer edges), and spread out by distance otherwise. `layered` works for any graph: edges that close a cycle point up. |
 
 ```python
 # viz: graph flights matrix directed circle: reach, city

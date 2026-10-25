@@ -1,7 +1,8 @@
 /**
- * The graph layout before trace/graphLayout.ts (October 2026), kept only so
- * graphLayout.test.ts can check the new one never draws more crossings on
- * the examples. Not used by the app.
+ * The graph layouts before trace/graphLayout.ts (October 2026): layered, and
+ * force-directed (replaced by stress in phase 2). Kept only so
+ * graphLayout.test.ts can check the new ones never draw more crossings.
+ * Not used by the app.
  */
 interface Edge {
   from: string;
@@ -118,4 +119,129 @@ export function legacyLayered(nodes: string[], edges: Edge[], directed: boolean)
   const layers = directed ? dagLayers(nodes, edges) : forestLayers(nodes, edges);
   if (!layers || !edges.length) return null;
   return layered(nodes, edges, layers);
+}
+
+function legacyCircle(nodes: string[]): Pos {
+  if (nodes.length <= 2) return new Map(nodes.map((n, i) => [n, { x: i * 1.4, y: 0 }]));
+  const r = Math.max(0.9, (nodes.length * 1.25) / (2 * Math.PI));
+  return new Map(
+    nodes.map((n, i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length;
+      return [n, { x: r + r * Math.cos(a), y: r + r * Math.sin(a) }];
+    }),
+  );
+}
+
+/** Fruchterman-Reingold, started from a circle so it's the same every run. */
+/** The old force-directed layout (Fruchterman-Reingold), for comparison only. */
+export function legacyForce(nodes: string[], edges: readonly Edge[]): Pos {
+  const n = nodes.length;
+  const start = legacyCircle(nodes);
+  const p = nodes.map((node) => ({ ...start.get(node)! }));
+  const index = new Map(nodes.map((node, i) => [node, i]));
+  const seen = new Set<string>();
+  const pairs: [number, number][] = [];
+  for (const e of edges) {
+    if (e.from === e.to || !index.has(e.from) || !index.has(e.to)) continue;
+    const key = e.from < e.to ? `${e.from}|${e.to}` : `${e.to}|${e.from}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push([index.get(e.from)!, index.get(e.to)!]);
+  }
+  const k = 1;
+  let t = Math.max(0.5, n / 6);
+  const iterations = 300;
+  for (let it = 0; it < iterations; it++) {
+    const d = p.map(() => ({ x: 0, y: 0 }));
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dx = p[i].x - p[j].x;
+        let dy = p[i].y - p[j].y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < 1e-6) {
+          dx = 0.01 * (i - j);
+          dy = 0.01;
+          dist = Math.hypot(dx, dy);
+        }
+        const f = (k * k) / dist;
+        d[i].x += (dx / dist) * f;
+        d[i].y += (dy / dist) * f;
+        d[j].x -= (dx / dist) * f;
+        d[j].y -= (dy / dist) * f;
+      }
+    }
+    for (const [i, j] of pairs) {
+      const dx = p[i].x - p[j].x;
+      const dy = p[i].y - p[j].y;
+      const dist = Math.max(1e-6, Math.hypot(dx, dy));
+      const f = (dist * dist) / k;
+      d[i].x -= (dx / dist) * f;
+      d[i].y -= (dy / dist) * f;
+      d[j].x += (dx / dist) * f;
+      d[j].y += (dy / dist) * f;
+    }
+    // A little gravity keeps separate pieces from drifting apart.
+    const cx = p.reduce((s, q) => s + q.x, 0) / n;
+    const cy = p.reduce((s, q) => s + q.y, 0) / n;
+    for (let i = 0; i < n; i++) {
+      d[i].x -= (p[i].x - cx) * 0.08;
+      d[i].y -= (p[i].y - cy) * 0.08;
+      const len = Math.hypot(d[i].x, d[i].y);
+      if (len > 0) {
+        p[i].x += (d[i].x / len) * Math.min(len, t);
+        p[i].y += (d[i].y / len) * Math.min(len, t);
+      }
+    }
+    t = Math.max(0.01, t * 0.985);
+  }
+  // Turn the picture so its long side is horizontal.
+  const cx = p.reduce((s, q) => s + q.x, 0) / n;
+  const cy = p.reduce((s, q) => s + q.y, 0) / n;
+  let sxx = 0;
+  let syy = 0;
+  let sxy = 0;
+  for (const q of p) {
+    sxx += (q.x - cx) ** 2;
+    syy += (q.y - cy) ** 2;
+    sxy += (q.x - cx) * (q.y - cy);
+  }
+  const angle = -0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  for (const q of p) {
+    const x = q.x - cx;
+    const y = q.y - cy;
+    q.x = x * cos - y * sin;
+    q.y = x * sin + y * cos;
+  }
+  // One edge is about one unit long, and no two nodes sit closer than 0.9.
+  const lengths = pairs.map(([i, j]) => Math.hypot(p[i].x - p[j].x, p[i].y - p[j].y));
+  const scale = lengths.length ? 1.15 / (lengths.reduce((a, b) => a + b, 0) / lengths.length) : 1;
+  for (const q of p) {
+    q.x *= scale;
+    q.y *= scale;
+  }
+  for (let r = 0; r < 60; r++) {
+    let moved = false;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx = p[j].x - p[i].x;
+        const dy = p[j].y - p[i].y;
+        const dist = Math.hypot(dx, dy);
+        if (dist >= 0.9) continue;
+        const push = (0.9 - dist) / 2 + 0.001;
+        const ux = dist > 1e-6 ? dx / dist : 1;
+        const uy = dist > 1e-6 ? dy / dist : 0;
+        p[i].x -= ux * push;
+        p[i].y -= uy * push;
+        p[j].x += ux * push;
+        p[j].y += uy * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  const minX = Math.min(...p.map((q) => q.x));
+  const minY = Math.min(...p.map((q) => q.y));
+  return new Map(nodes.map((node, i) => [node, { x: p[i].x - minX, y: p[i].y - minY }]));
 }

@@ -289,7 +289,7 @@ pr0-l1ne/
     │   ├── linked.ts           Linked lists and trees (loop history and memory)
     │   ├── linked.test.ts      Linked structure tests
     │   ├── graph.ts            Graphs: detection, the algorithm's state, one layout per run
-    │   ├── graphLayout.ts      Graph layouts: layered (cycles, long edges, crossings), circle, force
+    │   ├── graphLayout.ts      Graph layouts: layered (cycles, long edges, crossings), circle, stress
     │   ├── graph.test.ts       Graph tests
     │   ├── output.ts           What a step printed (text, line, printed objects)
     │   ├── measurement.ts      What a Measure run reports, and formatting it

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { JAVASCRIPT_EXAMPLES, TYPESCRIPT_EXAMPLES } from "../examples/index";
 import { traceJavaScript } from "../js/trace";
-import { legacyLayered } from "../testing/legacyGraphLayout";
+import { legacyForce, legacyLayered } from "../testing/legacyGraphLayout";
 import { findGraphs, type GraphEdge, layoutFor, stepScopes } from "./graph";
-import { computeLayout, type GraphLayout, layeredCrossings, placeInOrder, ringOrder } from "./graphLayout";
+import { computeLayout, edgeCrossings, type GraphLayout, placeInOrder, ringOrder } from "./graphLayout";
 import { applyHints } from "./hints";
 import type { Trace } from "./types";
 
@@ -29,7 +29,7 @@ function expectTidy(layout: GraphLayout): void {
       expect(Math.hypot(a.x - b.x, a.y - b.y), `${points[i][0]} and ${points[j][0]}`).toBeGreaterThanOrEqual(0.85);
     }
   }
-  for (const [key, bends] of layout.routes) {
+  for (const [key, bends] of layout.mode === "layered" ? layout.routes : []) {
     for (const bend of bends) {
       for (const [node, p] of points) {
         if (p.y === bend.y) expect(Math.abs(p.x - bend.x), `${key} by ${node}`).toBeGreaterThanOrEqual(0.7);
@@ -74,7 +74,7 @@ describe("layered layout", () => {
     // In first-seen order, a->d and b->c cross; reordered, nothing does.
     const edges = e("r>a r>b a>d b>c c>x d>x");
     const layout = computeLayout(nodesOf(edges), edges, { directed: true });
-    expect(layeredCrossings(layout, edges)).toBe(0);
+    expect(edgeCrossings(layout, edges)).toBe(0);
   });
 
   it("keeps a tree's children in program order, left to right", () => {
@@ -111,18 +111,26 @@ describe("layered layout", () => {
     expect(layout.mode).toBe("layered");
     expect(layout.pos.get("c")!.y).toBe(0);
     expect(layout.back.size).toBe(0);
-    const square = e("a>b b>c c>d d>a a>c");
-    expect(computeLayout(["a", "b", "c", "d"], square, { directed: false }).mode).toBe("force");
+    // A square with a tail: cycles, not dense.
+    const square = e("a>b b>c c>d d>a d>t t>u u>v v>w");
+    expect(computeLayout(nodesOf(square), square, { directed: false }).mode).toBe("force");
     // ...unless a hint asks: then edges within a layer are fine.
-    const asked = computeLayout(["a", "b", "c", "d"], square, { directed: false, mode: "layered" });
+    const asked = computeLayout(nodesOf(square), square, { directed: false, mode: "layered" });
     expect(asked.mode).toBe("layered");
     expectTidy(asked);
   });
 
-  it("leaves a graph with many cycles to force", () => {
+  it("leaves a graph with many cycles to stress, and draws a small dense one in a circle", () => {
     const nodes = ["a", "b", "c", "d", "e"];
     const edges = nodes.flatMap((n) => nodes.filter((m) => m !== n).map((m) => ({ from: n, to: m })));
-    expect(computeLayout(nodes, edges, { directed: true }).mode).toBe("force");
+    expect(computeLayout(nodes, edges, { directed: true }).mode).toBe("circle");
+    const many = Array.from({ length: 10 }, (_, i) => `n${i}`);
+    const tangle = many.flatMap((n, i) => [
+      { from: n, to: many[(i + 1) % 10] },
+      { from: n, to: many[(i + 3) % 10] },
+      { from: n, to: many[(i + 7) % 10] },
+    ]);
+    expect(computeLayout(many, tangle, { directed: true }).mode).toBe("force");
   });
 
   it("is the same every time, and quick on a big graph", () => {
@@ -141,6 +149,135 @@ describe("layered layout", () => {
     expectTidy(one);
     // Generous for a slow test machine: graphs drawn are 60 nodes at most.
     expect(ms).toBeLessThan(3000);
+  });
+});
+
+/** No edge runs through a node it doesn't touch (straight edges, and edges with bends). */
+function expectClear(layout: GraphLayout, edges: { from: string; to: string }[]): void {
+  if (layout.mode === "layered") return; // layers keep edges clear by construction (placeholders)
+  for (const { from, to } of edges) {
+    if (from === to) continue;
+    const points = [layout.pos.get(from)!, ...(layout.routes.get(`${from}>${to}`) ?? []), layout.pos.get(to)!];
+    for (const [node, c] of layout.pos) {
+      if (node === from || node === to) continue;
+      for (let i = 0; i + 1 < points.length; i++) {
+        const [a, b] = [points[i], points[i + 1]];
+        const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2 || 1e-12;
+        const t = Math.max(0, Math.min(1, ((c.x - a.x) * (b.x - a.x) + (c.y - a.y) * (b.y - a.y)) / len2));
+        const dist = Math.hypot(c.x - (a.x + (b.x - a.x) * t), c.y - (a.y + (b.y - a.y) * t));
+        expect(dist, `${from}>${to} by ${node}`).toBeGreaterThanOrEqual(0.3);
+      }
+    }
+  }
+}
+
+/** An undirected graph from "a-b b-c" pairs, listed from both ends as an adjacency list would. */
+const both = (spec: string) => e(spec.replace(/-/g, ">")).flatMap((x) => [x, { from: x.to, to: x.from }]);
+const gridGraph = (size: number) => {
+  const pairs: string[] = [];
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (c + 1 < size) pairs.push(`${r}_${c}-${r}_${c + 1}`);
+      if (r + 1 < size) pairs.push(`${r}_${c}-${r + 1}_${c}`);
+    }
+  }
+  return both(pairs.join(" "));
+};
+const CUBE = both("000-001 000-010 000-100 001-011 001-101 010-011 010-110 100-101 100-110 011-111 101-111 110-111");
+const PETERSEN = both("o0-o1 o1-o2 o2-o3 o3-o4 o4-o0 o0-i0 o1-i1 o2-i2 o3-i3 o4-i4 i0-i2 i2-i4 i4-i1 i1-i3 i3-i0");
+
+describe("stress layout (undirected graphs with cycles)", () => {
+  it("draws a grid as a grid: no crossings, every edge about the same length", () => {
+    const edges = gridGraph(4);
+    const layout = computeLayout(nodesOf(edges), edges, { directed: false });
+    expect(layout.mode).toBe("force");
+    expect(edgeCrossings(layout, edges)).toBe(0);
+    const lengths = edges.map(({ from, to }) => {
+      const [a, b] = [layout.pos.get(from)!, layout.pos.get(to)!];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    });
+    expect(Math.max(...lengths) / Math.min(...lengths)).toBeLessThan(1.3);
+    expectTidy(layout);
+    expectClear(layout, edges);
+  });
+
+  it("crosses no more edges than the old force layout on classic graphs", () => {
+    for (const edges of [gridGraph(5), CUBE, PETERSEN]) {
+      const nodes = nodesOf(edges);
+      const layout = computeLayout(nodes, edges, { directed: false });
+      const old: GraphLayout = { pos: legacyForce(nodes, edges), mode: "force", routes: new Map(), back: new Set() };
+      expect(edgeCrossings(layout, edges)).toBeLessThanOrEqual(edgeCrossings(old, edges));
+      expectTidy(layout);
+      expectClear(layout, edges);
+    }
+  });
+
+  it("puts where the algorithm starts at the top left", () => {
+    const edges = gridGraph(4);
+    for (const start of ["0_0", "3_3", "0_3"]) {
+      const layout = computeLayout(nodesOf(edges), edges, { directed: false, start });
+      const points = [...layout.pos.values()];
+      const mid = {
+        x: points.reduce((s, q) => s + q.x, 0) / points.length,
+        y: points.reduce((s, q) => s + q.y, 0) / points.length,
+      };
+      expect(layout.pos.get(start)!.x).toBeLessThanOrEqual(mid.x);
+      expect(layout.pos.get(start)!.y).toBeLessThanOrEqual(mid.y);
+    }
+  });
+
+  it("bends an edge around a node it would run through", () => {
+    // A long cycle with a chord across it: stress puts nodes on the chord's line.
+    const edges = both("a-b b-c c-d d-e e-f f-a a-d b-g g-h h-i i-b");
+    const layout = computeLayout(nodesOf(edges), edges, { directed: false });
+    expectClear(layout, edges);
+  });
+
+  it("packs separate pieces in rows, the start's first, lone nodes last", () => {
+    const pieces = [CUBE, both("a-b b-c c-a"), both("p-q q-r r-s s-p"), both("x-y y-z z-x x-w")];
+    const edges = pieces.flat();
+    const layout = computeLayout(nodesOf(edges, ["lone1", "lone2"]), edges, { directed: false, start: "p" });
+    expectTidy(layout);
+    const box = (nodes: string[]) => {
+      const ps = nodes.map((n) => layout.pos.get(n)!);
+      return {
+        x1: Math.min(...ps.map((q) => q.x)),
+        x2: Math.max(...ps.map((q) => q.x)),
+        y1: Math.min(...ps.map((q) => q.y)),
+        y2: Math.max(...ps.map((q) => q.y)),
+      };
+    };
+    const boxes = [...pieces.map((p) => box(nodesOf(p))), box(["lone1", "lone2"])];
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const [a, b] = [boxes[i], boxes[j]];
+        const apart = a.x2 + 0.5 < b.x1 || b.x2 + 0.5 < a.x1 || a.y2 + 0.5 < b.y1 || b.y2 + 0.5 < a.y1;
+        expect(apart, `pieces ${i} and ${j}`).toBe(true);
+      }
+    }
+    // The start's piece is first: top left.
+    expect(boxes[2].x1).toBe(0);
+    expect(boxes[2].y1).toBe(0);
+    // Rows, not one long line.
+    const all = box([...layout.pos.keys()]);
+    expect(all.x2 - all.x1).toBeLessThan(4 * (all.y2 - all.y1 + 1));
+  });
+
+  it("is the same every time, and quick on a big graph", () => {
+    const nodes = Array.from({ length: 150 }, (_, i) => `n${i}`);
+    const edges = nodes.flatMap((n, i) => [
+      { from: n, to: nodes[(i + 1) % 150] },
+      { from: n, to: nodes[(i * 11 + 5) % 150] },
+    ]);
+    const started = performance.now();
+    const one = computeLayout(nodes, edges, { directed: false });
+    const ms = performance.now() - started;
+    const two = computeLayout(nodes, edges, { directed: false });
+    expect(one.mode).toBe("force");
+    expect([...one.pos]).toEqual([...two.pos]);
+    expect([...one.routes]).toEqual([...two.routes]);
+    expectTidy(one);
+    expect(ms).toBeLessThan(5000);
   });
 });
 
@@ -221,11 +358,16 @@ describe("the examples' graphs", () => {
       for (const { nodes, edges, directed, last } of graphs.values()) {
         const layout = layoutFor(trace, last);
         expectTidy(layout);
-        if (layout.mode !== "layered") continue;
-        const before = legacyLayered(nodes, edges, directed);
+        expectClear(layout, edges);
+        const before =
+          layout.mode === "layered"
+            ? legacyLayered(nodes, edges, directed)
+            : layout.mode === "force"
+              ? legacyForce(nodes, edges)
+              : null;
         if (before) {
-          const old: GraphLayout = { pos: before, mode: "layered", routes: new Map(), back: new Set() };
-          expect(layeredCrossings(layout, edges)).toBeLessThanOrEqual(layeredCrossings(old, edges));
+          const old: GraphLayout = { pos: before, mode: layout.mode, routes: new Map(), back: new Set() };
+          expect(edgeCrossings(layout, edges)).toBeLessThanOrEqual(edgeCrossings(old, edges));
         }
       }
     },

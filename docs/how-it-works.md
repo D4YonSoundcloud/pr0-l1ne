@@ -543,11 +543,18 @@ Saved settings are read by `parseAppearance()`, which checks every field and fal
   6. *Positions.* Each node as close as it can be to the average of its neighbors above and below, keeping the order and a minimum gap, solved exactly per sweep (isotonic regression by pool adjacent violators). Placeholders weigh more, so long edges run straight.
 
   Separate pieces are laid out apart and put side by side, the start's first; nodes with no edges go in a block on the right. Layers are used when cycle breaking turns only a few edges, the graph isn't dense, and its edges don't mostly go both ways (that's really an undirected graph).
-- **Circle** for a ring (every node linked to exactly two others, all in one loop), in ring order from the start, at the top.
+- **Circle** for a ring (every node linked to exactly two others, all in one loop), in ring order from the start, at the top. A small dense graph (4 to 8 nodes, most pairs linked) gets a circle too, in program order or breadth-first from the start, unless the stress layout crosses fewer edges.
 - **Grid** (rows) for nodes with no edges at all.
-- **Force-directed** for everything else (Fruchterman–Reingold). It starts from a circle, so it gives the same picture every run. It's then rotated so its long side is horizontal and scaled so an edge is about one unit long, and a last pass pushes apart any nodes closer than 0.9.
+- **Stress** for everything else (still called `force` in hints and in `GraphLayout.mode`). Each connected piece is laid out on its own:
+  1. *Distances.* Breadth-first search from every node gives the hops between every pair; one hop is 1.2 units.
+  2. *Stress majorization.* Each node in turn moves to where its distances to all the others fit best, near pairs mattering most (weights 1/d²), until nothing moves.
+  3. *Several starts.* Stress has local minima, so it runs from classical scaling (the top two eigenvectors of the double-centered squared distances, by power iteration from a fixed vector) and from circles in program order and breadth-first order from the start, and keeps the result with the fewest crossings, then the least stress.
+  4. *Turned.* When most edges share directions a right angle apart, they're lined up with the axes (a grid comes out square, not as a diamond); otherwise the long side goes horizontal. Then wider than tall, with the start at the top left.
+  5. *Edges clear of nodes.* Nodes are nudged off straight edges that would pass through them, as long as that adds no crossings. An edge still in the way bends around the node: a route with one bend, on whichever side passes no node and crosses the fewest edges.
 
-Nothing is random and every tie goes to program order, so the same graph gets the same picture every time, in every browser. `graphLayout.test.ts` checks each of these cases, that nothing overlaps, that a 200-node graph lays out quickly, and that no example graph has more crossings than the previous layout (kept in `src/testing/legacyGraphLayout.ts` for that comparison).
+  The pieces are packed in rows about as wide as a square of them would be, the start's first; nodes with no edges go in a block last.
+
+Nothing is random and every tie goes to program order, so the same graph gets the same picture every time, in every browser. `graphLayout.test.ts` checks each of these cases, that nothing overlaps and no edge runs through a node, that a grid comes out as a grid, that 150- and 200-node graphs lay out quickly, and that no example graph (nor a grid, a cube or the Petersen graph) has more crossings than the previous layouts (kept in `src/testing/legacyGraphLayout.ts` for that comparison).
 
 The same pass records every kind of state the graph is ever drawn with, so its legend, and therefore its size, stays the same from the first step to the last.
 
