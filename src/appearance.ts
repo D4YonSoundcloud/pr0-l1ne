@@ -47,6 +47,11 @@ export interface Appearance {
   font: string;
   /** Changed cells flash briefly when they turn yellow. */
   flash: boolean;
+  /**
+   * X-ray: where an arrow runs behind a box, a faint dashed copy of it shows
+   * through (styles.css, .arrow-xray). Arrows are drawn behind boxes.
+   */
+  xray: boolean;
   /** How the printed-output card arrives, and how the dimming changes. */
   output: OutputMotion;
 }
@@ -162,6 +167,7 @@ const GRAPH_PAPER: Appearance = {
   cellRadius: 3,
   font: FONTS[0].value,
   flash: true,
+  xray: false,
   output: { ...DEFAULT_OUTPUT_MOTION },
 };
 
@@ -349,6 +355,7 @@ export function parseAppearance(json: string | null): Appearance {
     cellRadius: clamp(raw.cellRadius, 0, 15, base.cellRadius),
     font: FONTS.some((f) => f.value === raw.font) ? raw.font! : base.font,
     flash: typeof raw.flash === "boolean" ? raw.flash : base.flash,
+    xray: typeof raw.xray === "boolean" ? raw.xray : base.xray,
     output: readOutputMotion(raw.output, base.output),
   };
 }
@@ -395,6 +402,7 @@ export function applyAppearance(
   canvas.style.setProperty("--cell-radius", `${a.cellRadius}px`);
   canvas.style.setProperty("--diagram-font", a.font);
   canvas.style.setProperty("--flash", a.flash ? "mark 450ms ease-out" : "none");
+  canvas.style.setProperty("--xray-opacity", a.xray ? "0.38" : "0");
   // The output card's entrance: what it starts from, and for how long.
   const o = a.output;
   canvas.style.setProperty("--output-from-opacity", o.fade ? "0" : "1");

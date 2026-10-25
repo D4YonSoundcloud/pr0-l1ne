@@ -572,12 +572,16 @@ body {
 }
 
 /* Focus: hovering a box highlights its arrows and the boxes they connect. */
-.memory-svg.has-focus .ref-arrow {
+.memory-svg.has-focus :is(.ref-arrow, .ref-arrow-part:not(.arrow-xray)) {
   opacity: 0.14;
 }
-.memory-svg.has-focus .ref-arrow.is-focus {
+.memory-svg.has-focus :is(.ref-arrow, .ref-arrow-part).is-focus {
   opacity: 1;
   stroke-width: calc(2.25px * var(--arrow-width));
+}
+/* A hovered box's arrows come out from behind other boxes: their copy over the boxes shows, solid. */
+.memory-svg.has-focus .ref-arrow-part.arrow-xray.is-focus {
+  stroke-dasharray: none;
 }
 .memory-svg .node.is-focus > .node-hit {
   stroke: var(--ballpoint);
@@ -619,9 +623,13 @@ body {
   font-style: italic;
   fill: color-mix(in srgb, var(--output-ink) 60%, var(--output));
 }
-.ref-arrow.print-arrow {
+.ref-arrow.print-arrow,
+.ref-arrow-part.print-arrow:not(.arrow-head) {
   stroke: var(--output);
   stroke-dasharray: 6 4;
+}
+.ref-arrow-part.arrow-head.print-arrow {
+  stroke: var(--output);
 }
 .node.is-output {
   animation: output-pop var(--output-duration, 240ms) cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -629,8 +637,7 @@ body {
   transform-origin: left center;
 }
 .memory-svg.has-output .boxes > .node:not(.is-output):not(.is-printed),
-.memory-svg.has-output .arrows > .ref-arrow:not(.print-arrow),
-.memory-svg.has-output .arrows > :not(.ref-arrow) {
+.memory-svg.has-output .arrows > :not(.print-arrow):not(.arrow-xray) {
   opacity: 0.28;
 }
 .memory-svg.has-output .boxes > .node.is-printed > .node-hit {
@@ -638,11 +645,11 @@ body {
   stroke-width: 2;
 }
 .memory-svg.output-in .boxes > .node:not(.is-output):not(.is-printed),
-.memory-svg.output-in .arrows > :not(.print-arrow) {
+.memory-svg.output-in .arrows > :not(.print-arrow):not(.arrow-xray) {
   animation: output-dim var(--output-dim-duration, 260ms) ease both;
 }
 .memory-svg.output-out .boxes > .node,
-.memory-svg.output-out .arrows > * {
+.memory-svg.output-out .arrows > :not(.arrow-xray) {
   animation: output-undim var(--output-dim-duration, 260ms) ease both;
 }
 @keyframes output-dim {
@@ -667,7 +674,7 @@ body {
   .memory-svg.output-in .boxes > .node,
   .memory-svg.output-in .arrows > *,
   .memory-svg.output-out .boxes > .node,
-  .memory-svg.output-out .arrows > * {
+  .memory-svg.output-out .arrows > :not(.arrow-xray) {
     animation: none;
   }
 }
@@ -1218,13 +1225,22 @@ select {
   font-style: italic;
 }
 
-.ref-arrow {
+.ref-arrow,
+.ref-arrow-part {
   fill: none;
   stroke: var(--ballpoint);
   stroke-width: calc(1.5px * var(--arrow-width));
 }
-.ref-arrow.is-changed {
+.ref-arrow.is-changed,
+.ref-arrow-part.is-changed {
   stroke-width: calc(2.25px * var(--arrow-width));
+}
+/* Arrows run behind boxes (memoryView/layout.ts). X-ray (Style panel): a
+   faint dashed copy over the boxes shows where one passes behind a box. */
+.ref-arrow-part.arrow-xray {
+  opacity: var(--xray-opacity, 0);
+  stroke-dasharray: 4 4;
+  pointer-events: none;
 }
 .arrowhead-ref {
   fill: var(--ballpoint);

@@ -149,7 +149,7 @@ The layout button and the window buttons aren't shown on a phone, which has this
 | **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. Its **duration**, from 0 (no animation) to 1000 ms. And how new things arrive: **Fade in** (on by default) and **Slide in** (from the left, with the window's easing; off by default), together, one or the other, or neither so they just appear. **Same as the memory window** copies all of it to the loop history. |
 | **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, memory sizes, the printed-output card and its text, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
 | **Printed output** | How the [printed-output card](#printed-output) arrives: **Fade in** and **Slide in** (turn both off and it just appears), **Fade the dimming** (with Dim others on, the rest fades down and back up rather than switching at once), and the **duration**, 0 to 1000 ms. |
-| **Lines and text** | **Arrow thickness** (0.5× to 3×), **box outlines**, **cell corners** (square to round), the **code font** used in the diagrams, and whether changed cells **flash** when they turn yellow. |
+| **Lines and text** | **Arrow thickness** (0.5× to 3×), **box outlines**, **cell corners** (square to round), the **code font** used in the diagrams, whether changed cells **flash** when they turn yellow, and **Show arrows through boxes** (x-ray: a faint dashed line where an arrow passes behind a box). |
 
 **Previewing animation.** Next to the easing menu, a curve shows its shape. Click the track beside it and a dot slides across once, with your easing and duration (it stays still until you click). **▶ Replay this step** at the bottom redraws the previous step and animates into the current one, so you can watch the real thing. Bubble sort is a good example to try it on, since its swaps slide.
 
@@ -291,7 +291,7 @@ Arrows are drawn as straight runs with rounded corners, and they travel through 
 - Arrows from list cells leave downward and turn at staggered heights, like the teeth of a comb, so arrows from neighboring cells never run along each other. The leftmost cell turns highest.
 - Arrows sharing a gap each get their own lane, ordered to keep crossings down, and arrows arriving at the same box get separate arrowheads.
 
-**Hover over a box** to see what it's connected to. Its arrows, in and out, are highlighted, the boxes at their other ends get a dashed outline, and every other arrow is dimmed. The highlight follows the box while you drag it, and stays as you step through the program with `F10`.
+**Hover over a box** to see what it's connected to. Its arrows, in and out, are highlighted and drawn over every box (arrows normally run behind boxes, with only their starts and arrowheads on top), the boxes at their other ends get a dashed outline, and every other arrow is dimmed. The highlight follows the box while you drag it, and stays as you step through the program with `F10`.
 
 ## Arrows or nested boxes
 

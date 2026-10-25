@@ -36,14 +36,57 @@ export function inArrowOrder(ids: readonly string[], arrival: (id: string) => nu
   return at.map((a) => (a.y === null ? a.id : sorted[next++].id));
 }
 
+/**
+ * The parts of an arrow drawn over the boxes: its start, from the dot to
+ * where it leaves its own box (`stub`), and its last few pixels, which
+ * carry the arrowhead (`head`). The rest runs behind the boxes.
+ */
+export function arrowEnds(
+  points: { x: number; y: number }[],
+  origin: Rect | undefined,
+): { stub: { x: number; y: number }[]; head: [{ x: number; y: number }, { x: number; y: number }] | null } {
+  const pts = points.filter((p, i) => i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y);
+  const inside = (p: { x: number; y: number }) =>
+    !!origin && p.x > origin.x && p.x < origin.x + origin.w && p.y > origin.y && p.y < origin.y + origin.h;
+  const stub = [pts[0]];
+  if (origin && inside(pts[0])) {
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1], pts[i]];
+      if (inside(b)) {
+        stub.push(b);
+        continue;
+      }
+      // Where this segment leaves the box (segments are level or upright).
+      const x = b.x > a.x ? origin.x + origin.w : b.x < a.x ? origin.x : a.x;
+      const y = b.y > a.y ? origin.y + origin.h : b.y < a.y ? origin.y : a.y;
+      stub.push(a.x === b.x ? { x: a.x, y } : { x, y: a.y });
+      break;
+    }
+  }
+  if (pts.length < 2) return { stub, head: null };
+  const end = pts[pts.length - 1];
+  const before = pts[pts.length - 2];
+  const len = Math.hypot(end.x - before.x, end.y - before.y) || 1;
+  const back = Math.min(10, len);
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return {
+    stub,
+    head: [{ x: r(end.x - ((end.x - before.x) / len) * back), y: r(end.y - ((end.y - before.y) / len) * back) }, end],
+  };
+}
+
 /** Lay out a memory scene as a drawing (drawing.ts). */
 export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { positions: new Map() }): Mark {
   const { step, graphAlias } = scene;
   const svg = s("svg", { class: "memory-svg", xmlns: "http://www.w3.org/2000/svg" });
   svg.append(arrowMarkers());
-  const boxLayer = s("g", { class: "boxes" });
+  // Arrows run behind the boxes; what must stay visible goes over them:
+  // each arrow's start inside its own box, its arrowhead, and (x-ray, or
+  // while its box is hovered) a copy of it. See drawArrow.
   const arrowLayer = s("g", { class: "arrows" });
-  svg.append(boxLayer, arrowLayer);
+  const boxLayer = s("g", { class: "boxes" });
+  const topLayer = s("g", { class: "arrows arrow-tops" });
+  svg.append(arrowLayer, boxLayer, topLayer);
 
   const graphs = graphBoxes(scene);
   const ctx: Ctx = {
@@ -307,15 +350,22 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
     }
-    arrowLayer.append(
-      s("path", {
-        d: roundedPath(points),
-        class: ref.printed ? "ref-arrow print-arrow" : ref.changed ? "ref-arrow is-changed" : "ref-arrow",
-        "marker-end": "url(#arrow-ref)",
-        "data-from": ref.source,
-        "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target),
-      }),
-    );
+    const kind = ref.printed ? "print-arrow" : ref.changed ? "is-changed" : "";
+    const ends = { "data-from": ref.source, "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target) };
+    const d = roundedPath(points);
+    const part = (cls: string, path: string, attrs: Record<string, string> = {}) =>
+      s("path", { d: path, class: ["ref-arrow-part", cls, kind].filter(Boolean).join(" "), ...ends, ...attrs });
+    // The whole arrow, behind every box.
+    arrowLayer.append(s("path", { d, class: ["ref-arrow", kind].filter(Boolean).join(" "), ...ends }));
+    const { stub, head } = arrowEnds(points, edges[i].source);
+    if (stub.length > 1) topLayer.append(part("arrow-stub", roundedPath(stub)));
+    topLayer.append(part("arrow-xray", d));
+    if (head)
+      topLayer.append(
+        part("arrow-head", `M${head[0].x},${head[0].y} L${head[1].x},${head[1].y}`, {
+          "marker-end": "url(#arrow-ref)",
+        }),
+      );
   });
 
   const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - COLUMN_GAP + MARGIN);

@@ -27,7 +27,8 @@ export function applyFocus(svg: Focusable | null, key: string | null): void {
   svg.classList.toggle("has-focus", !!node);
   if (!node || !key) return;
   node.classList.add("is-focus");
-  for (const arrow of svg.querySelectorAll(".ref-arrow")) {
+  // Each arrow's parts: behind the boxes, and over them (memoryView/layout.ts).
+  for (const arrow of svg.querySelectorAll(".ref-arrow, .ref-arrow-part")) {
     const from = arrow.getAttribute("data-from");
     const to = arrow.getAttribute("data-to");
     if (from !== key && to !== key) continue;

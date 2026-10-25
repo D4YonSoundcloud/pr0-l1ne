@@ -11,7 +11,7 @@ import { memoryScene, nodeKey } from "../scene/memoryScene";
 import { diffSteps } from "../trace/diff";
 import type { Trace } from "../trace/types";
 import { renderMemory } from "./memory";
-import { inArrowOrder } from "./memoryView/layout";
+import { arrowEnds, inArrowOrder } from "./memoryView/layout";
 
 const sceneAt = (t: Trace, i: number, options = {}) =>
   memoryScene(t, i, diffSteps(t.steps[i - 1], t.steps[i]), options);
@@ -53,7 +53,7 @@ describe("renderMemory", () => {
     expect(card.classList.contains("is-output")).toBe(true);
     expect(svg.querySelector(".node.is-printed")).not.toBeNull();
     expect([...svg.classList]).toEqual(expect.arrayContaining(["has-output", "output-in"]));
-    expect(svg.querySelectorAll(".print-arrow")).toHaveLength(1);
+    expect(svg.querySelectorAll(".ref-arrow.print-arrow")).toHaveLength(1);
     const after = renderMemory(sceneAt(t, i + 1, { dimForOutput: true }));
     expect(after.classList.contains("output-out")).toBe(true);
     expect(after.querySelector(`.node[data-node-key="${nodeKey.output}"]`)).toBeNull();
@@ -72,5 +72,55 @@ describe("a column's order", () => {
     expect(inArrowOrder(["a", "b", "c", "d"], (id) => y[id])).toEqual(["c", "b", "d", "a"]);
     // Level arrivals keep their first order.
     expect(inArrowOrder(["x", "y"], () => 50)).toEqual(["x", "y"]);
+  });
+});
+
+describe("arrows and boxes", () => {
+  it("run arrows behind the boxes, with each start and arrowhead (and the x-ray copy) over them", async () => {
+    const t = await traceJavaScript("const a = [1, 2];\nconst b = { list: a };\nlet done = 1;");
+    const svg = renderMemory(
+      memoryScene(t, t.steps.length - 1, diffSteps(t.steps.at(-2), t.steps.at(-1)!), { mode: "arrows" }),
+    );
+    const layers = [...svg.children].filter((el) => el.tagName === "g").map((g) => g.getAttribute("class"));
+    expect(layers).toEqual(["arrows", "boxes", "arrows arrow-tops"]);
+    const bodies = svg.querySelectorAll(".arrows:not(.arrow-tops) > .ref-arrow");
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) expect(body.hasAttribute("marker-end")).toBe(false);
+    const tops = svg.querySelector(".arrow-tops")!;
+    expect(tops.querySelectorAll(".arrow-head[marker-end]")).toHaveLength(bodies.length);
+    expect(tops.querySelectorAll(".arrow-xray")).toHaveLength(bodies.length);
+    expect(tops.querySelectorAll(".arrow-stub").length).toBeGreaterThan(0);
+  });
+
+  it("cut an arrow's start where it leaves its own box, and keep its last few pixels for the head", () => {
+    const box = { x: 0, y: 0, w: 100, h: 40 };
+    const { stub, head } = arrowEnds(
+      [
+        { x: 80, y: 20 },
+        { x: 150, y: 20 },
+        { x: 150, y: 90 },
+        { x: 200, y: 90 },
+      ],
+      box,
+    );
+    expect(stub).toEqual([
+      { x: 80, y: 20 },
+      { x: 100, y: 20 },
+    ]);
+    expect(head).toEqual([
+      { x: 190, y: 90 },
+      { x: 200, y: 90 },
+    ]);
+    // Leaving downward (a list cell's arrow): cut at the bottom edge.
+    expect(
+      arrowEnds(
+        [
+          { x: 30, y: 20 },
+          { x: 30, y: 70 },
+          { x: 200, y: 70 },
+        ],
+        box,
+      ).stub.at(-1),
+    ).toEqual({ x: 30, y: 40 });
   });
 });

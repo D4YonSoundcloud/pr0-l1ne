@@ -584,6 +584,16 @@ export class StylePanel {
     this.syncs.push(() => {
       flash.checked = get().flash;
     });
+    const xrayId = nextId("xray");
+    const xray = h("input", { id: xrayId, type: "checkbox" });
+    xray.addEventListener("change", () =>
+      this.update((a) => {
+        a.xray = xray.checked;
+      }),
+    );
+    this.syncs.push(() => {
+      xray.checked = get().xray;
+    });
     return h(
       "div",
       { class: "style-group" },
@@ -626,6 +636,15 @@ export class StylePanel {
       ),
       h("div", { class: "style-row" }, h("label", { for: id }, "Code font"), font),
       h("div", { class: "style-row" }, h("label", { for: flashId }, "Flash changed cells"), flash),
+      h(
+        "div",
+        {
+          class: "style-row",
+          title: "Arrows run behind boxes. With this on, a faint dashed line shows where one passes behind a box.",
+        },
+        h("label", { for: xrayId }, "Show arrows through boxes"),
+        xray,
+      ),
     );
   }
 
