@@ -37,7 +37,7 @@ function tracePython(source: string): Trace | null {
 
 interface Drawn {
   boxes: Map<string, Rect>;
-  arrows: { from: string; to: string; points: Point[] }[];
+  arrows: { from: string; to: string; points: Point[]; behind: boolean }[];
 }
 
 /** Read box rectangles and arrow polylines back out of the rendered SVG. */
@@ -62,7 +62,7 @@ function read(svg: SVGSVGElement): Drawn {
     for (const m of d.matchAll(/Q([\d.-]+),([\d.-]+)/g)) points.push({ x: Number(m[1]), y: Number(m[2]) });
     const end = nums(d.match(/L([^LQ]+)$/)![1]);
     points.push({ x: end[0], y: end[1] });
-    return { from: path.dataset.from!, to: path.dataset.to!, points };
+    return { from: path.dataset.from!, to: path.dataset.to!, points, behind: path.classList.contains("is-behind") };
   });
   return { boxes, arrows };
 }
@@ -112,6 +112,14 @@ describe.each(programs)("%s: %s", (language, example, trace) => {
           }
         }
         for (const arrow of arrows) {
+          // An arrow the router sent behind the boxes between its ends, on purpose
+          // (cheaper than going around them): it may cross those, but never its own box.
+          if (arrow.behind) {
+            const own = boxes.get(arrow.from)!;
+            const across = arrow.points.slice(-2);
+            expect(crosses(across[0], across[1], own), `step ${i + 1}: ${arrow.from} back through itself`).toBe(false);
+            continue;
+          }
           for (let k = 1; k < arrow.points.length; k++) {
             const [p, q] = [arrow.points[k - 1], arrow.points[k]];
             for (const [key, rect] of boxes) {

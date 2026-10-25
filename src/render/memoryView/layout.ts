@@ -7,7 +7,7 @@
 import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
 import { arrowMarkers, FONT, SMALL, s } from "../draw";
 import type { Mark } from "../drawing";
-import { findFreeY, type Rect, roundedPath, routeEdges } from "../route";
+import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind } from "../route";
 import { GRAPH_BODY_Y, graphBoxes, graphShape, graphSize } from "./graphs";
 import { objectShape, viewOf } from "./objects";
 import { outputShape, outputWidth } from "./output";
@@ -15,11 +15,17 @@ import type { Ctx, MemoryLayout, OutRef, Shape } from "./shapes";
 import { frameShape } from "./tables";
 import { measureBlock, TREE_GAP, type TreeBlock } from "./trees";
 
-const COLUMN_GAP = 90;
+/**
+ * The gap between two columns: narrow, or wide when it holds more than a
+ * few arrows' lanes (see gapBefore). Two widths, not one per arrow, so boxes
+ * don't shift sideways each time an arrow comes or goes.
+ */
+const MIN_GAP = 64;
+const MAX_GAP = 96;
 const STACK_GAP = 22;
 const MARGIN = 24;
 /** Room above the boxes for arrows that route over the top (see route.ts). */
-const TOP = 40;
+const TOP = 28;
 /** Arrows leaving a list downward turn this far below it, then a lane apart. */
 const EXIT_DROP = 9;
 const EXIT_LANE = 7;
@@ -133,11 +139,27 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     const d = depth.get(id)!;
     columnW[d] = Math.max(columnW[d] ?? 0, blockOf.get(id)?.w ?? shapes.get(id)!.w);
   }
+  // A gap is wide only when more than four arrows turn in it (in lanes 7
+  // pixels apart). A reference reaches at most the next column: depth is distance.
+  const depthOfKey = (key: string) => (key.startsWith("obj:") ? (depth.get(key.slice(4)) ?? -1) : -1);
+  const gapBefore = (d: number) => {
+    let lanes = 0;
+    for (const link of scene.links) {
+      const [from, to] = [
+        depthOfKey(link.from),
+        depthOfKey(nodeKey.object(graphAlias.get(link.to.slice(4)) ?? link.to.slice(4))),
+      ];
+      if (to === d && from < d)
+        lanes++; // into column d from the left
+      else if (from === d - 1 && to <= d - 1 && link.from.startsWith("obj:")) lanes++; // back from column d-1
+    }
+    return lanes <= 4 ? MIN_GAP : MAX_GAP;
+  };
   const columnX: number[] = [];
-  let cursorX = MARGIN + framesW + COLUMN_GAP;
+  let cursorX = MARGIN + framesW + gapBefore(0);
   for (let d = 0; d < columnW.length; d++) {
     columnX[d] = cursorX;
-    cursorX += (columnW[d] ?? 0) + COLUMN_GAP;
+    cursorX += (columnW[d] ?? 0) + gapBefore(d + 1);
   }
 
   // 3. Place and draw. Frames first, then objects in BFS order so a parent
@@ -356,7 +378,13 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     const part = (cls: string, path: string, attrs: Record<string, string> = {}) =>
       s("path", { d: path, class: ["ref-arrow-part", cls, kind].filter(Boolean).join(" "), ...ends, ...attrs });
     // The whole arrow, behind every box.
-    arrowLayer.append(s("path", { d, class: ["ref-arrow", kind].filter(Boolean).join(" "), ...ends }));
+    arrowLayer.append(
+      s("path", {
+        d,
+        class: ["ref-arrow", kind, runsBehind(points) && "is-behind"].filter(Boolean).join(" "),
+        ...ends,
+      }),
+    );
     const { stub, head } = arrowEnds(points, edges[i].source);
     if (stub.length > 1) topLayer.append(part("arrow-stub", roundedPath(stub)));
     topLayer.append(part("arrow-xray", d));
@@ -368,7 +396,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       );
   });
 
-  const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - COLUMN_GAP + MARGIN);
+  const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - gapBefore(columnW.length) + MARGIN);
   const height = maxY + MARGIN;
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));

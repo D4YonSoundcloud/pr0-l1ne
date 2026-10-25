@@ -117,6 +117,61 @@ interface Plan {
   inLane?: { key: string; x?: number };
   outLane?: { key: string; x?: number };
   corridor?: { top: boolean; level: number; y?: number };
+  /** Runs straight across behind the boxes between its ends, instead of around them. */
+  tunnel?: boolean;
+}
+
+/** What a box an arrow passes behind costs, in pixels of extra length. */
+const BEHIND_COST = 300;
+
+/** The length of an arrow over or under the boxes between its ends (as assignLanes will route it, roughly). */
+function corridorCost(p: Plan, boxes: Rect[]): number {
+  const [x1, x2] = corridorRange(p, boxes);
+  const between = boxes.filter((b) => b.x < x2 && right(b) > x1);
+  const ends = [p.edge.from.y, p.entryY];
+  const top = (between.length ? Math.min(...between.map((b) => b.y)) : Math.min(...ends)) - CORRIDOR_PAD;
+  const under = (between.length ? Math.max(...between.map(bottom)) : Math.max(...ends)) + CORRIDOR_PAD;
+  const vertical = Math.min(
+    top >= 6 ? Math.abs(p.edge.from.y - top) + Math.abs(p.entryY - top) : Number.POSITIVE_INFINITY,
+    Math.abs(p.edge.from.y - under) + Math.abs(p.entryY - under),
+  );
+  return vertical + (x2 - x1) + 2 * GAP_PAD;
+}
+
+/**
+ * The cheapest way straight across behind the boxes between an arrow's ends:
+ * out to the lane right of its column, across at one height (level with
+ * where it arrives, or just above or below its own box, so it never runs
+ * back through it), into the lane right of the target's column, and in.
+ * Its cost is its length plus BEHIND_COST for each box it passes behind.
+ * Null when every height would cut through its own box or the target.
+ */
+function cheapestTunnel(p: Plan, boxes: Rect[]): { cost: number; y: number } | null {
+  const { from, source, target } = p.edge;
+  const out = columnRight(source, boxes) + GAP_PAD;
+  const inX = columnRight(target, boxes) + GAP_PAD;
+  let best: { cost: number; y: number } | null = null;
+  for (const y of [p.entryY, source.y - CORRIDOR_PAD, bottom(source) + CORRIDOR_PAD]) {
+    const a = { x: inX, y };
+    const b = { x: out, y };
+    if (y < 6 || crosses(a, b, source) || crosses(a, b, target)) continue;
+    if (crosses({ x: inX, y }, { x: inX, y: p.entryY }, target)) continue;
+    const passed = boxes.filter(
+      (box) =>
+        box !== source &&
+        box !== target &&
+        (crosses(a, b, box) ||
+          crosses({ x: out, y: from.y }, { x: out, y }, box) ||
+          crosses({ x: inX, y }, { x: inX, y: p.entryY }, box)),
+    ).length;
+    const length = out - from.x + Math.abs(from.y - y) + (out - inX) + Math.abs(y - p.entryY) + (inX - right(target));
+    // Clear of every box, it's just a corridor at another height: corridors
+    // already pick theirs (over or under everything, for fewer crossings).
+    if (passed === 0) continue;
+    const cost = length + BEHIND_COST * passed;
+    if (!best || cost < best.cost) best = { cost, y };
+  }
+  return best;
 }
 
 /** Right edge of the column a box is in: boxes that share its x. */
@@ -150,7 +205,15 @@ export function routeEdges(input: EdgeInput[], boxes: Rect[]): Point[][] {
       }
       return { index, edge, kind: "uturn", side: "right", entryY: edge.entryY };
     }
-    return { index, edge, kind: "corridor", side: "right", entryY: edge.entryY };
+    // An arrow back to an earlier column: over (or under) everything in
+    // between, or, when that detour is long, straight across behind the
+    // boxes in between (arrows are drawn behind boxes): whichever costs less,
+    // a box passed behind costing BEHIND_COST pixels of length.
+    const corridor: Plan = { index, edge, kind: "corridor", side: "right", entryY: edge.entryY };
+    const tunnel = cheapestTunnel(corridor, boxes);
+    return tunnel && tunnel.cost < corridorCost(corridor, boxes)
+      ? { ...corridor, tunnel: true, corridor: { top: false, level: 0, y: tunnel.y } }
+      : corridor;
   });
 
   spreadEntries(plans);
@@ -166,9 +229,14 @@ export function routeEdges(input: EdgeInput[], boxes: Rect[]): Point[][] {
   assignLanes(plans, boxes);
   return plans.map((plan, i) => {
     const points = buildPoints(plan);
-    return input[i].exitDownY === undefined ? points : [input[i].from, ...points];
+    const route = input[i].exitDownY === undefined ? points : [input[i].from, ...points];
+    // Marked for the drawing (and its tests): this one runs behind boxes on purpose.
+    return plan.tunnel ? Object.assign(route, { behind: true }) : route;
   });
 }
+
+/** Does a route from routeEdges run behind the boxes between its ends (instead of around them)? */
+export const runsBehind = (route: Point[]): boolean => (route as Point[] & { behind?: boolean }).behind === true;
 
 /**
  * Arrows arriving at the same side of the same box get separate arrowheads,
@@ -315,6 +383,13 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
   corridorPlans.sort((a, b) => horizontalSpan(a, boxes) - horizontalSpan(b, boxes));
   const tops = { top: 0, bottom: 0 };
   for (const p of corridorPlans) {
+    if (p.tunnel) {
+      // Straight across behind the boxes, at the height already chosen.
+      const key = `L:${Math.round(columnRight(p.edge.target, boxes))}`;
+      p.inLane = { key };
+      addLeft(key, p, "in", Math.abs(p.corridor!.y! - p.entryY));
+      continue;
+    }
     const [x1, x2] = corridorRange(p, boxes);
     const between = boxes.filter((b) => b.x < x2 && right(b) > x1);
     // With nothing in between (possible once boxes are dragged), run the

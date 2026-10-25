@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { crosses, fewestCrossings, findFreeY, overlaps, type Point, type Rect, roundedPath, routeEdges } from "./route";
+import {
+  crosses,
+  fewestCrossings,
+  findFreeY,
+  overlaps,
+  type Point,
+  type Rect,
+  roundedPath,
+  routeEdges,
+  runsBehind,
+} from "./route";
 
 const box = (x: number, y: number, w = 100, h = 60): Rect => ({ x, y, w, h });
 const segments = (points: Point[]) => points.slice(1).map((p, i) => [points[i], p] as const);
@@ -156,5 +166,35 @@ describe("fewestCrossings", () => {
     const start = ["c", "b", "a"];
     expect(total(fewestCrossings(start, cyc))).toBeLessThanOrEqual(total(start));
     expect(total(fewestCrossings(start, cyc))).toBe(1);
+  });
+});
+
+describe("arrows behind boxes", () => {
+  const crossesAny = (route: Point[], box: Rect, from = 1) =>
+    segments(route)
+      .slice(from)
+      .some(([a, b]) => crosses(a, b, box));
+
+  it("go straight across behind a box when going around it is a long way, never back through their own", () => {
+    // Back from the right column to the left one, past a very tall box in between.
+    const target = box(0, 500, 100, 40);
+    const tall = box(200, 0, 100, 1200);
+    const source = box(400, 500, 100, 40);
+    const [route] = routeEdges([{ from: { x: 480, y: 520 }, source, target, entryY: 513 }], [target, tall, source]);
+    expect(runsBehind(route)).toBe(true);
+    expect(isOrthogonal(route)).toBe(true);
+    expect(route.at(-1)).toEqual({ x: 100, y: 513 });
+    expect(crossesAny(route, tall)).toBe(true);
+    // Level with its own box, it goes across just above or below it instead.
+    expect(crossesAny(route, source)).toBe(false);
+  });
+
+  it("go around when that's short", () => {
+    const target = box(0, 500, 100, 40);
+    const small = box(200, 480, 100, 40);
+    const source = box(400, 500, 100, 40);
+    const [route] = routeEdges([{ from: { x: 480, y: 520 }, source, target, entryY: 513 }], [target, small, source]);
+    expect(runsBehind(route)).toBe(false);
+    expect(crossesAny(route, small, 0)).toBe(false);
   });
 });
