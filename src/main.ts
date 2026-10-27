@@ -11,6 +11,7 @@ import "./styles.css";
 import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
 import { CsvImportController } from "./app/csvImport";
+import { WindowDocking } from "./app/docking";
 import { findElements } from "./app/elements";
 import { escapeHtml } from "./app/html";
 import { showLanguageKind } from "./app/languageKind";
@@ -344,10 +345,19 @@ installShortcuts({
   dialogOpen: () => els.saveDialog.open,
   step: (event) => playback.handleKey(event),
 });
-// Stacked or side by side, the dividers, and windows folded to bars.
+// Where the windows go (stacked, side by side, or wherever they were dragged), the dividers, and windows folded to bars.
 // Redrawn when the windows change shape: a very wide graph is drawn left to right in a tall window.
 const layout = new LayoutController(els, settings, () => {
   if (app.get().trace) view.render(false);
+});
+// Windows moved by dragging their headers anywhere on the page (a wide screen only).
+new WindowDocking({
+  layout,
+  announce: (text) => {
+    els.announce.textContent = text;
+  },
+  reducedMotion: prefersReducedMotion,
+  wide: () => matchMedia("(min-width: 821px) and (min-height: 501px)").matches,
 });
 // The windows' headers: one row each, scrolling sideways when their tools don't fit.
 for (const tools of [els.memoryTools, els.loopTools]) scrollableTools(tools);

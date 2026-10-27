@@ -28,6 +28,12 @@ export function showLanguageKind(kind: LanguageKind, doc: Document = document): 
   // A folded window's bar (app/layout.ts) shows its name too.
   set("#memory-section .window-bar-label", titles.memory);
   set("#loop-section .window-bar-label", titles.loop);
+  // The grips that move the windows (app/docking.ts) say which window they move.
+  for (const [pane, title] of [
+    ["memory", titles.memory],
+    ["loop", titles.loop],
+  ] as const)
+    doc.querySelector(`.window-grip[data-dock="${pane}"]`)?.setAttribute("aria-label", `Move the ${title} window`);
   set('.view-choice[data-view="memory"]', titles.memoryView);
   set('.view-choice[data-view="loop"]', titles.loopView);
 }

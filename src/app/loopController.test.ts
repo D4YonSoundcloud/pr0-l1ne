@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
+import { renderLoopHistory } from "../render/loopView";
 import { SVG_RENDERERS } from "../render/svgRenderers";
+import { loopScene } from "../scene/loopScene";
 import { buildLoopHistory, buildNestedHistory } from "../trace/loopHistory";
 import { LoopController, liveNestedRows, liveRows } from "./loopController";
 import { makeApp, showJavaScript } from "./testHelpers";
@@ -163,5 +165,22 @@ describe("liveNestedRows", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].done).toBeFalsy();
     expect(rows[1].done).toBe(true);
+  });
+
+  it("highlights only the innermost loop that's running", async () => {
+    const t = await traceJavaScript(NESTED);
+    const highlighted = (index: number) => {
+      const history = buildNestedHistory(t, index)!;
+      const live = liveNestedRows(t, index, history);
+      const scene = loopScene(t, history, { hideQuiet: false, live });
+      const svg = renderLoopHistory(scene);
+      return [...svg.querySelectorAll(".loop-row")].map((row) => row.classList.contains("is-current"));
+    };
+    // Inside the inner loop: the inner row, not the outer one around it.
+    expect(highlighted(lastIndex(t.steps, (s) => s.line === 5))).toEqual([false, true]);
+    // Back in the outer loop, with the inner one finished: the outer row.
+    const firstInner = t.steps.findIndex((s) => s.line === 5);
+    const between = t.steps.findIndex((s, i) => i > firstInner && s.loops.length === 1);
+    expect(highlighted(between)).toEqual([true, false]);
   });
 });

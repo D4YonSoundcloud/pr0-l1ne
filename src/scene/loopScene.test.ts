@@ -138,7 +138,8 @@ for (let i = 0; i < 2; i++) {
     const live = loopScene(trace, history, { hideQuiet: false, live: liveRows(trace, at, history) });
     expect(live.items).toEqual([{ kind: "row", row: live.live![0].current, index: live.all.length - 1 }]);
     expect(live.before?.row).toBe(live.live![0].prev);
-    expect(live.isCurrent(0)).toBe(true);
+    expect(live.isCurrent(live.all.length - 1)).toBe(true);
+    expect(live.isCurrent(0)).toBe(false);
   });
 });
 

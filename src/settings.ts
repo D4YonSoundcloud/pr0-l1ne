@@ -200,6 +200,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     /** Playback speed in steps per second; null for the default. */
     speed: number("speed"),
 
+    // The next five are how the layout was saved before windows could be
+    // moved anywhere: read once, to start `arrangement` from (app/arrangement.ts).
     /** Editor and canvas swapped (canvas on the left). */
     swapped: setting(
       "layout",
@@ -214,6 +216,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     columnSplit: number("column-split"),
     /** On a wide screen: memory over loop history beside the code, or all three side by side (see app/layout.ts). */
     layoutMode: choice("layout-mode", ["stacked", "columns"] as const, "stacked"),
+    /** Where the windows go and their sizes, as JSON (see app/arrangement.ts); null until anything changes. */
+    arrangement: text("arrangement"),
     /** The windows folded to bars, as "memory,loop" (see app/layout.ts); null or "" for none. */
     collapsed: text("collapsed"),
     /** On a phone, the one or two windows shown, as "editor,memory" (see app/mobileViews.ts); null for the default. */

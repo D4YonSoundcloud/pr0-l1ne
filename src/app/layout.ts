@@ -3,111 +3,51 @@
  * memory and loop history; for SQL, the code, Tables and Query steps) go,
  * and how big they are.
  *
- *   Stacked        the code on one side; memory over loop history on the other
- *   Side by side   the code, memory and loop history in three columns
+ * Where they go is an arrangement (arrangement.ts): a row or column of the
+ * three, or one window beside a pair of the others. Windows are moved by
+ * dragging them by their headers (docking.ts). The toolbar's layout button
+ * switches between the two usual arrangements (the code beside memory over
+ * loop history, or all three side by side), and ⇄ mirrors the page.
  *
- * The dividers between windows can be dragged, moved with the arrow keys and
- * reset with a double-click, and their positions are remembered (for each
- * layout). The ⇄ button swaps the code and the canvas sides.
+ * The two dividers between windows can be dragged, moved with the arrow
+ * keys and reset with a double-click. Each window can be minimized (it
+ * folds to a thin bar with its name, and the others take its room) or
+ * maximized (the other two fold to bars). Clicking a bar opens its window
+ * again. One window always stays open. All of it is remembered.
  *
- * Each window can be minimized (it folds to a thin bar with its name, and
- * the others take its room) or maximized (the other two fold to bars).
- * Clicking a bar opens its window again. One window always stays open.
- *
- * styles.css, "Wide screens", reads what this sets: CSS variables for the
- * grid tracks, and classes on the windows. Phones have their own layout
+ * The windows sit straight in the workspace's grid (the canvas wrappers
+ * are `display: contents` on a wide screen). styles.css, "Wide screens",
+ * reads what this sets: the grid's tracks and each window's place as CSS
+ * variables, and classes on the windows. Phones have their own layout
  * (mobileViews.ts), which ignores all of this.
  */
-import type { Setting, Settings } from "../settings";
+import type { Settings } from "../settings";
+import {
+  type Arrangement,
+  columnsPreset,
+  type DividerTrack,
+  defaultSizes,
+  editorAtEnd,
+  type Item,
+  isColumns,
+  isPair,
+  isWindow,
+  legacyArrangement,
+  order,
+  parseArrangement,
+  placeCss,
+  stackedPreset,
+  swapSides,
+  type Tracks,
+  trackCss,
+  tracks,
+  WINDOWS,
+  type WindowName,
+} from "./arrangement";
 
-type Value<T> = T | (() => T);
-const resolve = <T>(value: Value<T>): T => (typeof value === "function" ? (value as () => T)() : value);
-
-export interface DividerOptions {
-  /** Which way it moves: "x" (a vertical bar, dragged sideways) or "y". Can change (see reload). */
-  axis: Value<"x" | "y">;
-  /** The element whose size the divider splits. */
-  container: HTMLElement;
-  min: number;
-  max: number;
-  initial: Value<number>;
-  /** Where the position is remembered. */
-  saved: Value<Setting<number | null>>;
-  /** Apply a value (a percentage). */
-  apply(value: number): void;
-  /**
-   * Turn a pointer position (percent along the container) into a value, and
-   * say which way arrow keys move it. Defaults suit a value measured from
-   * the left or top edge.
-   */
-  fromPointer?(percent: number): number;
-  keyDirection?(): 1 | -1;
-}
-
-/** Moves a divider; `reload()` goes back to its saved position (after its axis or setting changes). */
-export type DividerMove = ((value: number) => void) & { reload(): void };
-
-/** A draggable, keyboard-operable divider whose position is remembered. */
-export function makeDivider(divider: HTMLElement, options: DividerOptions): DividerMove {
-  const { container, min, max } = options;
-  let value = resolve(options.initial);
-  const set = (next: number) => {
-    value = Math.round(Math.max(min, Math.min(max, next)));
-    options.apply(value);
-    divider.setAttribute("aria-valuenow", String(value));
-    resolve(options.saved).set(value);
-  };
-  const reload = () => {
-    divider.setAttribute("aria-orientation", resolve(options.axis) === "x" ? "vertical" : "horizontal");
-    set(resolve(options.saved).get() || resolve(options.initial));
-  };
-  reload();
-
-  divider.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    divider.setPointerCapture(event.pointerId);
-    divider.classList.add("is-dragging");
-    const move = (e: PointerEvent) => {
-      const rect = container.getBoundingClientRect();
-      const percent =
-        resolve(options.axis) === "x"
-          ? ((e.clientX - rect.left) / rect.width) * 100
-          : ((e.clientY - rect.top) / rect.height) * 100;
-      set(options.fromPointer ? options.fromPointer(percent) : percent);
-    };
-    const stop = () => {
-      divider.classList.remove("is-dragging");
-      divider.removeEventListener("pointermove", move);
-      divider.removeEventListener("pointerup", stop);
-      divider.removeEventListener("pointercancel", stop);
-    };
-    divider.addEventListener("pointermove", move);
-    divider.addEventListener("pointerup", stop);
-    divider.addEventListener("pointercancel", stop);
-  });
-
-  divider.addEventListener("dblclick", () => set(resolve(options.initial)));
-
-  divider.addEventListener("keydown", (event) => {
-    const [back, forward] = resolve(options.axis) === "x" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
-    const direction = event.key === back ? -1 : event.key === forward ? 1 : 0;
-    if (!direction) return;
-    event.preventDefault();
-    event.stopPropagation(); // arrow keys elsewhere step through the program
-    set(value + direction * 3 * (options.keyDirection?.() ?? 1));
-  });
-
-  return Object.assign(set, { reload });
-}
+export { BAR, DIVIDER, WINDOWS, type WindowName } from "./arrangement";
 
 // ---------------------------------------------------------------- which windows are open
-
-export type WindowName = "editor" | "memory" | "loop";
-export const WINDOWS: readonly WindowName[] = ["editor", "memory", "loop"];
-export type LayoutMode = "stacked" | "columns";
-
-const isWindow = (value: string): value is WindowName => (WINDOWS as readonly string[]).includes(value);
 
 /** Saved as "memory,loop". Anything that isn't a window is dropped; all three folded means none. */
 export function parseCollapsed(raw: string | null): WindowName[] {
@@ -135,89 +75,43 @@ export const expand = (collapsed: readonly WindowName[], name: WindowName): Wind
 export const isMaximized = (collapsed: readonly WindowName[], name: WindowName): boolean =>
   collapsed.length === WINDOWS.length - 1 && !collapsed.includes(name);
 
-/** A folded window's bar, in pixels: the width of a column, or the height of a row. */
-export const BAR = 32;
-/** A divider's thickness, in pixels. */
-export const DIVIDER = 6;
-
-export interface Tracks {
-  /** The workspace's columns: the code, its divider, and the canvas (in page order). */
-  workspace: string;
-  /** The canvas's tracks, memory / divider / loop history: rows when stacked, columns side by side. */
-  canvas: string;
-  /** Which divider can be used (the others are folded away). */
-  divider: boolean;
-  canvasDivider: boolean;
-  /** Does this window's bar stand upright (in a column), or lie across (in a row)? */
-  upright: Record<WindowName, boolean>;
-}
-
-/**
- * The grid for a layout: where each window goes and how big it is. Sizes
- * come from CSS variables, --split (the code's share of the width) and
- * --canvas-split (memory's share of the canvas), which the dividers set.
- */
-export function layoutTracks(mode: LayoutMode, collapsed: readonly WindowName[], swapped: boolean): Tracks {
-  const folded = (w: WindowName) => collapsed.includes(w);
-  const canvasFolded = folded("memory") && folded("loop");
-  const columns = mode === "columns";
-
-  // The canvas: memory, a divider, loop history.
-  let canvas: string;
-  if (canvasFolded) canvas = columns ? `${BAR}px 0 ${BAR}px` : "minmax(0, 1fr) 0 minmax(0, 1fr)";
-  else if (folded("memory")) canvas = `${BAR}px 0 minmax(0, 1fr)`;
-  else if (folded("loop")) canvas = `minmax(0, 1fr) 0 ${BAR}px`;
-  else canvas = `minmax(0, var(--canvas-split)) ${DIVIDER}px minmax(0, 1fr)`;
-
-  // The workspace: the code, a divider, the canvas.
-  const canvasBars = columns ? 2 * BAR : BAR;
-  let code: string;
-  let rest: string;
-  let gap = `${DIVIDER}px`;
-  if (folded("editor")) [code, rest, gap] = [`${BAR}px`, "minmax(0, 1fr)", "0"];
-  else if (canvasFolded) [code, rest, gap] = ["minmax(0, 1fr)", `${canvasBars}px`, "0"];
-  else [code, rest] = ["minmax(0, var(--split))", "minmax(0, 1fr)"];
-  const workspace = (swapped ? [rest, gap, code] : [code, gap, rest]).join(" ");
-
-  const upright = columns || canvasFolded;
-  return {
-    workspace,
-    canvas,
-    divider: !folded("editor") && !canvasFolded,
-    canvasDivider: !folded("memory") && !folded("loop"),
-    upright: { editor: true, memory: upright, loop: upright },
-  };
-}
-
 // ---------------------------------------------------------------- the controller
 
 export interface LayoutElements {
   workspace: HTMLElement;
   editorPane: HTMLElement;
   canvasPane: HTMLElement;
-  /** Between the editor and the canvas. */
+  /** The page's two dividers: the first and second boundary between windows. */
   divider: HTMLElement;
   canvas: HTMLElement;
-  /** Between the memory view and loop history. */
   canvasDivider: HTMLElement;
   swap: HTMLButtonElement;
-  /** Stacked, or side by side. */
+  /** The usual two arrangements: stacked, or side by side. */
   layoutMode: HTMLButtonElement;
   memorySection: HTMLElement;
   loopSection: HTMLElement;
+  /** Covers the memory window while Python or PostgreSQL downloads. */
+  loadingCard?: HTMLElement;
 }
 
-type LayoutSettings = Pick<Settings, "split" | "canvasSplit" | "columnSplit" | "swapped" | "layoutMode" | "collapsed">;
+type LayoutSettings = Pick<
+  Settings,
+  "split" | "canvasSplit" | "columnSplit" | "swapped" | "layoutMode" | "collapsed" | "arrangement"
+>;
 
 /** Each window's buttons: data-window="memory" and data-action="maximize" | "minimize" | "expand". */
 const ACTIONS = ["maximize", "minimize", "expand"] as const;
 type Action = (typeof ACTIONS)[number];
 
+/** The workspace's first grid row is the banner's (it spans the page when shown). */
+const BANNER_ROWS = 1;
+/** A divider can't make either side smaller than this share of the two. */
+const MIN_SHARE = 0.1;
+
 export class LayoutController {
-  private swapped: boolean;
-  private modeNow: LayoutMode;
+  private arrangementNow: Arrangement;
   private folded: WindowName[];
-  private readonly canvasDivider: DividerMove;
+  private current!: Tracks;
 
   constructor(
     private readonly els: LayoutElements,
@@ -225,40 +119,24 @@ export class LayoutController {
     /** Told when the windows change size (the drawings refit). */
     private readonly onResize: () => void = () => {},
   ) {
-    this.swapped = settings.swapped.get();
-    this.modeNow = settings.layoutMode.get();
+    this.arrangementNow =
+      parseArrangement(settings.arrangement.get()) ??
+      legacyArrangement({
+        columns: settings.layoutMode.get() === "columns",
+        swapped: settings.swapped.get(),
+        split: settings.split.get(),
+        canvasSplit: settings.canvasSplit.get(),
+        columnSplit: settings.columnSplit.get(),
+      });
     this.folded = parseCollapsed(settings.collapsed.get());
 
-    // The editor/canvas split. The value is always the editor's share of the
-    // width, whichever side it's on.
-    makeDivider(els.divider, {
-      axis: "x",
-      container: els.workspace,
-      min: 15,
-      max: 75,
-      initial: 40,
-      saved: settings.split,
-      apply: (value) => els.workspace.style.setProperty("--split", `${value}%`),
-      // Dragging or pressing arrows moves the divider itself, so which way the
-      // editor grows depends on which side it's on.
-      fromPointer: (percent) => (this.swapped ? 100 - percent : percent),
-      keyDirection: () => (this.swapped ? -1 : 1),
-    });
-
-    // The memory / loop history split inside the canvas: memory's share of
-    // its height (stacked) or width (side by side), remembered for each.
-    this.canvasDivider = makeDivider(els.canvasDivider, {
-      axis: () => (this.modeNow === "columns" ? "x" : "y"),
-      container: els.canvas,
-      min: 15,
-      max: 85,
-      initial: () => (this.modeNow === "columns" ? 50 : 55),
-      saved: () => (this.modeNow === "columns" ? settings.columnSplit : settings.canvasSplit),
-      apply: (value) => els.canvas.style.setProperty("--canvas-split", `${value}%`),
-    });
+    for (const [index, divider] of [els.divider, els.canvasDivider].entries()) this.makeDivider(divider, index);
 
     els.swap.addEventListener("click", () => this.toggleSwapped());
-    els.layoutMode.addEventListener("click", () => this.setMode(this.modeNow === "columns" ? "stacked" : "columns"));
+    els.layoutMode.addEventListener("click", () => {
+      const end = editorAtEnd(this.arrangementNow);
+      this.setArrangement(isColumns(this.arrangementNow) ? stackedPreset(end) : columnsPreset(end));
+    });
     // The windows' own buttons, and their bars.
     for (const button of els.workspace.querySelectorAll<HTMLButtonElement>("button[data-window][data-action]")) {
       button.addEventListener("click", () => {
@@ -267,7 +145,7 @@ export class LayoutController {
         if (isWindow(name) && ACTIONS.includes(action)) this.act(name, action);
       });
     }
-    this.setSwapped(this.swapped);
+    this.apply();
   }
 
   /** The windows folded to bars. */
@@ -275,33 +153,29 @@ export class LayoutController {
     return this.folded;
   }
 
-  get mode(): LayoutMode {
-    return this.modeNow;
+  get arrangement(): Arrangement {
+    return this.arrangementNow;
   }
 
+  /** The two usual arrangements' names (the layout button): all three side by side, or not. */
+  get mode(): "stacked" | "columns" {
+    return isColumns(this.arrangementNow) ? "columns" : "stacked";
+  }
+
+  /** Each window's element. */
+  get windows(): Record<WindowName, HTMLElement> {
+    return { editor: this.els.editorPane, memory: this.els.memorySection, loop: this.els.loopSection };
+  }
+
+  /** The code to the other side of the page (⇄). */
   toggleSwapped(): void {
-    this.setSwapped(!this.swapped);
+    this.setArrangement(swapSides(this.arrangementNow));
   }
 
-  /** Put the canvas on the left (or back on the right). */
-  setSwapped(value: boolean): void {
-    const { els } = this;
-    this.swapped = value;
-    this.settings.swapped.set(value);
-    // Reorder the DOM, not just the visual order, so Tab moves through the
-    // panes in the order they appear.
-    const order = value ? [els.canvasPane, els.divider, els.editorPane] : [els.editorPane, els.divider, els.canvasPane];
-    if (els.workspace.firstElementChild !== order[0]) els.workspace.append(...order);
-    els.workspace.classList.toggle("is-swapped", value);
-    els.swap.setAttribute("aria-pressed", String(value));
-    this.apply();
-  }
-
-  /** Stacked, or side by side. */
-  setMode(mode: LayoutMode): void {
-    this.modeNow = mode;
-    this.settings.layoutMode.set(mode);
-    this.canvasDivider.reload();
+  /** Put the windows somewhere else (and remember it). */
+  setArrangement(next: Arrangement): void {
+    this.arrangementNow = next;
+    this.settings.arrangement.set(JSON.stringify(next));
     this.apply();
   }
 
@@ -320,38 +194,163 @@ export class LayoutController {
     this.apply();
   }
 
+  // ---------------------------------------------------------------- dividers
+
+  /** A divider's share: the first side's part of the two it sits between, 0 to 1. */
+  private share(d: DividerTrack): number {
+    const a = this.arrangementNow;
+    if (d.between === "pair") return a.pairSplit / 100;
+    const [x, y] = [a.weights[d.between.root], a.weights[d.between.root + 1]];
+    return x / (x + y);
+  }
+
+  private setShare(d: DividerTrack, share: number): void {
+    const s = Math.min(1 - MIN_SHARE, Math.max(MIN_SHARE, share));
+    const a = this.arrangementNow;
+    if (d.between === "pair") {
+      this.setArrangement({ ...a, pairSplit: Math.round(s * 1000) / 10 });
+      return;
+    }
+    const i = d.between.root;
+    const total = a.weights[i] + a.weights[i + 1];
+    const weights = [...a.weights];
+    weights[i] = Math.round(total * s * 100) / 100;
+    weights[i + 1] = Math.round((total - weights[i]) * 100) / 100;
+    this.setArrangement({ ...a, weights });
+  }
+
+  /** The two things a divider sits between, as one span along its axis (in page pixels). */
+  private span(d: DividerTrack): [number, number] {
+    const a = this.arrangementNow;
+    const rectOf = (names: WindowName[]) => {
+      const rects = names.map((n) => this.windows[n].getBoundingClientRect());
+      return {
+        start: Math.min(...rects.map((r) => (d.axis === "x" ? r.left : r.top))),
+        end: Math.max(...rects.map((r) => (d.axis === "x" ? r.right : r.bottom))),
+      };
+    };
+    const namesOf = (index: number) => {
+      const item = a.items[index];
+      return isPair(item) ? [item.a, item.b] : [item];
+    };
+    if (d.between === "pair") {
+      const pair = a.items.find(isPair)!;
+      return [rectOf([pair.a]).start, rectOf([pair.b]).end];
+    }
+    return [rectOf(namesOf(d.between.root)).start, rectOf(namesOf(d.between.root + 1)).end];
+  }
+
+  /** A divider: dragged, moved with the arrow keys, reset with a double-click. */
+  private makeDivider(divider: HTMLElement, index: number): void {
+    const track = () => this.current.dividers[index];
+    divider.addEventListener("pointerdown", (event) => {
+      const d = track();
+      if (event.button !== 0 || !d.active) return;
+      event.preventDefault();
+      divider.setPointerCapture(event.pointerId);
+      divider.classList.add("is-dragging");
+      const [start, end] = this.span(d);
+      const move = (e: PointerEvent) => {
+        const at = d.axis === "x" ? e.clientX : e.clientY;
+        if (end > start) this.setShare(track(), (at - start) / (end - start));
+      };
+      const stop = () => {
+        divider.classList.remove("is-dragging");
+        divider.removeEventListener("pointermove", move);
+        divider.removeEventListener("pointerup", stop);
+        divider.removeEventListener("pointercancel", stop);
+      };
+      divider.addEventListener("pointermove", move);
+      divider.addEventListener("pointerup", stop);
+      divider.addEventListener("pointercancel", stop);
+    });
+    divider.addEventListener("dblclick", () => {
+      const d = track();
+      const usual = defaultSizes(this.arrangementNow);
+      if (d.between === "pair") this.setShare(d, usual.pairSplit / 100);
+      else {
+        const [x, y] = [usual.weights[d.between.root], usual.weights[d.between.root + 1]];
+        this.setShare(d, x / (x + y));
+      }
+    });
+    divider.addEventListener("keydown", (event) => {
+      const d = track();
+      const [back, forward] = d.axis === "x" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
+      const direction = event.key === back ? -1 : event.key === forward ? 1 : 0;
+      if (!direction || !d.active) return;
+      event.preventDefault();
+      event.stopPropagation(); // arrow keys elsewhere step through the program
+      this.setShare(d, this.share(d) + direction * 0.03);
+    });
+  }
+
+  // ---------------------------------------------------------------- applying it
+
   private apply(): void {
     const { els } = this;
-    const tracks = layoutTracks(this.modeNow, this.folded, this.swapped);
-    const columns = this.modeNow === "columns";
-    els.workspace.style.setProperty("--workspace-columns", tracks.workspace);
-    els.canvas.style.setProperty("--canvas-rows", columns ? "minmax(0, 1fr)" : tracks.canvas);
-    els.canvas.style.setProperty("--canvas-columns", columns ? tracks.canvas : "minmax(0, 1fr)");
-    els.canvas.classList.toggle("is-columns", columns);
+    const a = this.arrangementNow;
+    const t = tracks(a, this.folded);
+    this.current = t;
+    const ws = els.workspace.style;
+    ws.setProperty("--workspace-columns", trackCss(t.columns));
+    ws.setProperty("--workspace-rows", `auto ${trackCss(t.rows)}`);
+    const placeAt = (el: HTMLElement, place: (typeof t.windows)[WindowName]) => {
+      const css = placeCss(place, BANNER_ROWS);
+      el.style.setProperty("--grid-column", css.column);
+      el.style.setProperty("--grid-row", css.row);
+    };
+    for (const w of WINDOWS) placeAt(this.windows[w], t.windows[w]);
+
+    // The dividers, in the page's order.
+    [els.divider, els.canvasDivider].forEach((divider, i) => {
+      const d = t.dividers[i];
+      placeAt(divider, d.place);
+      divider.setAttribute("aria-orientation", d.axis === "x" ? "vertical" : "horizontal");
+      divider.classList.toggle("is-inactive", !d.active);
+      divider.tabIndex = d.active ? 0 : -1;
+      divider.setAttribute("aria-valuenow", String(Math.round(this.share(d) * 100)));
+      divider.setAttribute("aria-label", `Resize ${this.dividerLabel(d)}`);
+      // Between memory and loop history, the divider is drawn in the canvas's colors.
+      divider.classList.toggle("is-paper", !this.besideEditor(d));
+    });
+
+    // While Python downloads, the card covers the memory window (or the loop history's, if memory is folded).
+    if (els.loadingCard) {
+      const under: WindowName = this.folded.includes("memory") ? "loop" : "memory";
+      placeAt(els.loadingCard, t.windows[under]);
+    }
+
+    // Tab follows the page: the code before or after the canvas, memory before or after loop history.
+    const reading = order(a);
+    const editorFirst = reading[0] === "editor";
+    const paneOrder = editorFirst
+      ? [els.editorPane, els.divider, els.canvasPane]
+      : [els.canvasPane, els.divider, els.editorPane];
+    if (
+      [...els.workspace.children].filter((c) => paneOrder.includes(c as HTMLElement)).some((c, i) => c !== paneOrder[i])
+    )
+      els.workspace.append(...paneOrder);
+    const memoryFirst = reading.indexOf("memory") < reading.indexOf("loop");
+    const sectionOrder = memoryFirst
+      ? [els.memorySection, els.canvasDivider, els.loopSection]
+      : [els.loopSection, els.canvasDivider, els.memorySection];
+    if (els.canvas.firstElementChild !== sectionOrder[0]) els.canvas.append(...sectionOrder);
+
+    const columns = isColumns(a);
+    // The code on the right: panels that open over it open at its right edge when it's folded.
+    els.workspace.classList.toggle("is-swapped", editorAtEnd(a));
     els.workspace.classList.toggle("is-columns", columns);
+    els.swap.setAttribute("aria-pressed", String(editorAtEnd(a)));
     els.layoutMode.setAttribute("aria-pressed", String(columns));
     els.layoutMode.title = columns
       ? "Stack memory over loop history, beside the code"
       : "Put the code, memory and loop history side by side";
 
-    for (const [divider, on] of [
-      [els.divider, tracks.divider],
-      [els.canvasDivider, tracks.canvasDivider],
-    ] as const) {
-      divider.classList.toggle("is-inactive", !on);
-      divider.tabIndex = on ? 0 : -1;
-    }
-
-    const panes: Record<WindowName, HTMLElement> = {
-      editor: els.editorPane,
-      memory: els.memorySection,
-      loop: els.loopSection,
-    };
     for (const name of WINDOWS) {
-      const pane = panes[name];
+      const pane = this.windows[name];
       const folded = this.folded.includes(name);
       pane.classList.toggle("is-collapsed", folded);
-      pane.classList.toggle("is-upright", tracks.upright[name]);
+      pane.classList.toggle("is-upright", t.upright[name]);
       const max = isMaximized(this.folded, name);
       for (const button of pane.querySelectorAll<HTMLButtonElement>(`button[data-window="${name}"]`)) {
         if (button.dataset.action === "maximize") {
@@ -364,5 +363,28 @@ export class LayoutController {
       }
     }
     this.onResize();
+  }
+
+  /** Is the code on either side of this divider? */
+  private besideEditor(d: DividerTrack): boolean {
+    const a = this.arrangementNow;
+    const has = (item: Item) => (isPair(item) ? item.a === "editor" || item.b === "editor" : item === "editor");
+    if (d.between === "pair") return has(a.items.find(isPair)!);
+    return has(a.items[d.between.root]) || has(a.items[d.between.root + 1]);
+  }
+
+  /** "the code and memory", for a divider's label. */
+  private dividerLabel(d: DividerTrack): string {
+    const a = this.arrangementNow;
+    const names: Record<WindowName, string> = { editor: "the code", memory: "memory", loop: "loop history" };
+    const of = (index: number) => {
+      const item = a.items[index];
+      return isPair(item) ? `${names[item.a]} and ${names[item.b]}` : names[item];
+    };
+    if (d.between === "pair") {
+      const pair = a.items.find(isPair)!;
+      return `${names[pair.a]} and ${names[pair.b]}`;
+    }
+    return `${of(d.between.root)} and ${of(d.between.root + 1)}`;
   }
 }

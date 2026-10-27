@@ -2021,6 +2021,111 @@ select {
   display: block;
 }
 
+/* A window's grip: drag it (or its name) to move the window anywhere, or
+   focus it and press an arrow key (app/docking.ts). Wide screens only. */
+.window-grip {
+  display: none;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 26px;
+  margin: 0 -4px 0 -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.45;
+  cursor: grab;
+}
+.window-grip svg {
+  width: 10px;
+  height: 16px;
+  fill: currentColor;
+}
+.window-grip:hover,
+.window-grip:focus-visible {
+  opacity: 0.9;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.section-head > .window-grip {
+  color: var(--paper-ink);
+}
+.editor-head > .window-grip {
+  color: var(--chrome-text);
+}
+.is-docking,
+.is-docking * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+.is-being-moved {
+  opacity: 0.55;
+}
+/* Where the window would go: it glides there as the pointer moves. */
+.dock-preview {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px dashed color-mix(in srgb, #f6d743 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, #f6d743 10%, transparent);
+  pointer-events: none;
+  transition:
+    left 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    top 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    width 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 200ms,
+    border-color 200ms;
+}
+.dock-preview.is-target {
+  border-style: solid;
+  border-color: #f6d743;
+  background: color-mix(in srgb, #f6d743 22%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.dock-preview > span {
+  max-width: 90%;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #1c2233;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dock-preview > span:empty {
+  display: none;
+}
+.dock-preview[hidden],
+.dock-ghost[hidden] {
+  display: none;
+}
+.dock-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 61;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f6d743;
+  color: #1c2233;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-preview {
+    transition: none;
+  }
+}
+
 /* A folded window: a bar with its name. Clicking it opens the window again. */
 .window-bar {
   display: none;
@@ -2100,21 +2205,66 @@ select {
 }
 
 @media (min-width: 821px) and (min-height: 501px) {
+  /* The windows sit straight in the workspace's grid, wherever the
+     arrangement puts them (app/layout.ts sets the tracks and each window's
+     place). The canvas wrappers step aside, but stay in the page, so the
+     diagram colors set on #canvas still reach both windows. */
   .workspace,
   .workspace.is-swapped {
-    grid-template-columns: var(--workspace-columns, var(--split) 6px 1fr);
+    position: relative;
+    grid-template-columns: var(--workspace-columns, minmax(0, 40fr) 6px minmax(0, 60fr));
+    grid-template-rows: var(--workspace-rows, auto minmax(0, 55fr) 6px minmax(0, 45fr));
   }
+  .canvas-pane,
   .canvas {
-    grid-template-rows: var(--canvas-rows, minmax(0, var(--canvas-split)) 6px minmax(0, 1fr));
-    grid-template-columns: var(--canvas-columns, minmax(0, 1fr));
+    display: contents;
   }
-  /* Side by side: the divider between memory and loop history stands upright. */
-  .canvas.is-columns > .divider.horizontal {
+  .editor-pane,
+  .canvas-section,
+  .workspace .divider,
+  .canvas-pane > .loading-card {
+    grid-column: var(--grid-column);
+    grid-row: var(--grid-row);
+  }
+  .canvas-section {
+    background-color: var(--paper);
+  }
+  /* The banner spans the page, above the windows. */
+  .canvas-pane > .banner {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-bottom: 8px;
+  }
+  .divider[aria-orientation="vertical"] {
     cursor: col-resize;
+  }
+  .divider[aria-orientation="horizontal"] {
+    cursor: row-resize;
+  }
+  /* The second divider is drawn in the canvas's colors only between memory and loop history. */
+  .canvas > .divider.horizontal:not(.is-paper) {
+    background: #262d42;
+    border: 0;
+  }
+  .canvas > .divider.horizontal:not(.is-paper):is(:hover, :focus-visible, .is-dragging) {
+    background: var(--ink-soft);
+  }
+  .divider.horizontal[aria-orientation="vertical"] {
     border-block: 0;
     border-inline: 1px solid color-mix(in srgb, var(--paper) 70%, var(--ink));
   }
+  .divider:not(.horizontal)[aria-orientation="horizontal"] {
+    border-block: 1px solid #1a2030;
+  }
 
+  /* Each window's grip, and its name, move it (app/docking.ts). */
+  .window-grip {
+    display: inline-grid;
+  }
+  [data-dock] {
+    cursor: grab;
+    touch-action: none;
+  }
   /* Folded: only the bar shows. The editor's panels (Style, Complexity,
      Measure) stay where they open, at their own width. */
   .is-collapsed {
@@ -2139,7 +2289,7 @@ select {
   .canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed > .window-bar {
     box-shadow: inset 0 1px 0 var(--paper-edge);
   }
-  .canvas.is-columns > .canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed > .window-bar {
+  .canvas-section.is-upright.is-collapsed + .divider + .canvas-section.is-upright.is-collapsed > .window-bar {
     box-shadow: inset 1px 0 0 var(--paper-edge);
   }
 }

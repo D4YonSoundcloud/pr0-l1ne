@@ -109,7 +109,9 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
 | `src/app/spacingController.ts` | The Layout panel and the spacing it edits (`render/spacing.ts`): applied, the step redrawn once a frame, saved, and layouts saved by name |
 | `src/app/complexityController.ts` | The complexity chip and panel, and the cost labels beside loops and functions |
-| `src/app/layout.ts` | The window layout on a wide screen: stacked or side by side, the two dividers (drag, arrow keys, double-click to reset), swapping the editor and canvas sides, and windows minimized or maximized to bars. It works out the grid tracks (`layoutTracks`) as CSS variables; styles.css applies them under "window layout" |
+| `src/app/layout.ts` | The window layout on a wide screen: where the windows go (any arrangement, from `arrangement.ts`), the two dividers (drag, arrow keys, double-click to reset), the layout and ⇄ buttons, and windows minimized or maximized to bars. It writes the grid tracks and each window's place as CSS variables; styles.css applies them under "Wide screens" |
+| `src/app/arrangement.ts` | Where the windows go, as a tree of three: the arrangements, moving a window (beside another, along an edge, or swapping), the grid tracks for one, and where a drop goes. Pure, with its own tests |
+| `src/app/docking.ts` | Moving windows by dragging their headers: the preview box that glides to where a window would go, the drop, the windows gliding to their places, and arrow keys on a window's grip |
 | `src/app/routing.ts` | Each language's address (/python, /sql...): the address follows the language, Back and Forward switch it, and pr0l1ne.com shows the address of the language it opened |
 | `src/app/sectionTools.ts` | A window header's tools: one row that never wraps, scrolling sideways (a mouse wheel too), with a fade at the side that has more |
 | `src/app/loadingCard.ts` | The card over the canvas, with a spinner, while Python or PostgreSQL downloads |

@@ -108,13 +108,19 @@ If you're mid-edit and the code has a syntax error, the canvas keeps showing the
 
 ## Layout
 
-There are two layouts on a wide screen. **Stacked** (the default) puts the code on one side and the memory view over the loop history on the other. **Side by side** puts all three in columns: the code, then memory, then loop history (for SQL: the code, Tables, Query steps), which suits a wide monitor. The layout button next to **⇄** in the toolbar switches between them, and your choice is remembered.
+On a wide screen, the code, the memory view and the loop history can go anywhere on the page. To begin with, the code is on the left and the memory view sits over the loop history on the right.
 
-The **⇄** button at the right end of the toolbar swaps the editor and canvas, so the canvas can be on the left if you prefer. It's also in the command palette as "AlgoViz: Swap Editor and Canvas". Your choice is remembered.
+**Moving a window.** Drag a window by the grip (⠿) at the left of its header, or by its name. A box shows where the window will go and glides there as you move:
 
-Drag the divider between the panels to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the default size. The editor keeps its width when you swap sides, and the width is remembered too.
+- **Near another window's side**, it goes beside that window on that side. Drop the memory view on the left of the code to put it there, or under the code to stack the two.
+- **In the middle of another window**, the two swap places, keeping their sizes.
+- **Near an edge of the page**, it goes along that whole edge: the code across the bottom, say, with memory and loop history side by side above it.
 
-Inside the canvas, **Memory** and **Loop history** are separate sections with a divider of their own. It works the same way: drag it, use `↑`/`↓` when it's focused (`←`/`→` side by side), or double-click to reset. Its position is remembered, separately for each layout.
+Let go to move it; the windows glide to their new places. Press `Esc`, or drop it back on itself, to leave everything where it was. Any arrangement of the three works: the code in the middle with memory and loop history either side, all three in a column, one window across the top with the other two below it, and so on. From the keyboard, focus a window's grip with `Tab` and press an arrow key to move the window to that edge of the page.
+
+Two buttons in the toolbar set the usual arrangements. The **layout button** switches between **stacked** (the code beside memory over loop history) and **side by side** (all three in columns, for SQL: the code, Tables, Query steps), which suits a wide monitor. **⇄** moves the code to the other side of the page, the other windows keeping their order. It's also in the command palette as "AlgoViz: Swap Editor and Canvas". Wherever the windows are, it's remembered.
+
+Drag a divider between windows to resize them, or focus it with `Tab` and use the arrow keys. Double-click it to go back to the usual size. Sizes are remembered too.
 
 ### Maximizing and minimizing windows
 
@@ -470,7 +476,7 @@ The **Stacked | Animated** switch in the Loop history header picks between two v
 - **Stacked** is the history described above: one row per iteration, so you can compare any iteration with any other.
 - **Animated** (the default) shows a single row: the loop's state at the current step. As you step or [play](#playing-a-program), cells change in place and values slide between cells, so a sort visibly shuffles its values into order and a linked list's arrows turn around one by one. Cells that changed on that step are yellow. The row keeps the same layout (columns, cell widths, tree shape) as the stacked view, so nothing jumps around between steps.
 
-  With nested loops (and **All loops** picked, the default), each loop gets its own live row: when an inner loop starts, its row appears under the loop around it, indented under its header, instead of replacing it. Both change as you step, each compared with its own state a step before. An inner loop that isn't running (between its runs, or once it's done) stays as it last was, without the running highlight. Pick one loop's tab to see just that one.
+  With nested loops (and **All loops** picked, the default), each loop gets its own live row: when an inner loop starts, its row appears under the loop around it, indented under its header, instead of replacing it. Both change as you step, each compared with its own state a step before. Only the innermost loop that's running has the running highlight: the loops around it are waiting on it. An inner loop that isn't running (between its runs, or once it's done) stays as it last was, and the highlight goes back to the loop around it. Pick one loop's tab to see just that one.
 
 Stacked is better for seeing the whole story at once, and Animated for following what a single step does.
 

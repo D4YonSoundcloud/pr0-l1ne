@@ -498,6 +498,14 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     before = { row: live[0].prev, index: rows.length };
   }
 
+  /** The live row (by its place in `live`) of the deepest loop still running, or -1. */
+  let innermostRunning = -1;
+  live?.forEach((l, i) => {
+    if (l.done) return;
+    if (innermostRunning < 0 || (l.current.depth ?? 0) >= (live[innermostRunning].current.depth ?? 0))
+      innermostRunning = i;
+  });
+
   const tracked = track;
   return {
     tall: options.tall,
@@ -537,8 +545,11 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       const call = history.calls.get(runOf(row));
       return loop ? `${loop.header}${call ? `  →  ${evaluatedHeader(loop, call)}` : ""}` : "";
     },
+    // Animated nested loops: only the innermost loop running gets the
+    // running row's highlight; the loops around it are running too, but
+    // they're waiting on it.
     isCurrent: (index) =>
-      live ? !live[(index - rows.length - 1) / 2]?.done : history.running && index === rows.length - 1,
+      live ? (index - rows.length - 1) / 2 === innermostRunning : history.running && index === rows.length - 1,
     sizes: (row) =>
       options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null,
     pointers: (row, name, changedNames) => pointersFor(name, trace.indexNames, new Map(row.frame.locals), changedNames),

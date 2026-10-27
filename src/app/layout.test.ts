@@ -1,92 +1,15 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import {
-  BAR,
-  expand,
-  isMaximized,
-  LayoutController,
-  layoutTracks,
-  makeDivider,
-  maximize,
-  minimize,
-  parseCollapsed,
-} from "./layout";
+import { BAR, columnsPreset, moveWindow, parseArrangement, stackedPreset } from "./arrangement";
+import { expand, isMaximized, LayoutController, maximize, minimize, parseCollapsed } from "./layout";
 import { makeApp } from "./testHelpers";
-
-function divider(saved: number | null = null) {
-  document.body.innerHTML = `<div id="box"><div id="divider" tabindex="0"></div></div>`;
-  const box = document.getElementById("box")!;
-  const el = document.getElementById("divider")!;
-  box.getBoundingClientRect = () => ({ left: 100, top: 0, width: 1000, height: 500 }) as DOMRect;
-  el.setPointerCapture = () => {};
-  const { settings } = makeApp();
-  if (saved !== null) settings.split.set(saved);
-  const applied: number[] = [];
-  let direction: 1 | -1 = 1;
-  const set = makeDivider(el, {
-    axis: "x",
-    container: box,
-    min: 20,
-    max: 75,
-    initial: 40,
-    saved: settings.split,
-    apply: (v) => applied.push(v),
-    keyDirection: () => direction,
-  });
-  const key = (k: string) => {
-    const event = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
-    el.dispatchEvent(event);
-    return event;
-  };
-  const pointer = (type: string, clientX: number) =>
-    el.dispatchEvent(Object.assign(new MouseEvent(type, { button: 0, clientX, bubbles: true }), { pointerId: 1 }));
-  return { el, set, applied, settings, key, pointer, reverse: () => (direction = -1) };
-}
-
-describe("makeDivider", () => {
-  it("starts where it was left, within its limits", () => {
-    expect(divider(60).applied).toEqual([60]);
-    expect(divider().applied).toEqual([40]);
-    const { set, applied, el, settings } = divider();
-    set(90);
-    expect(applied.at(-1)).toBe(75);
-    expect(el.getAttribute("aria-valuenow")).toBe("75");
-    expect(settings.split.get()).toBe(75);
-  });
-
-  it("moves with the arrow keys, which then don't step the program", () => {
-    const { key, applied, reverse } = divider(50);
-    const event = key("ArrowRight");
-    expect(applied.at(-1)).toBe(53);
-    expect(event.defaultPrevented).toBe(true);
-    reverse(); // e.g. the panes are swapped
-    key("ArrowRight");
-    expect(applied.at(-1)).toBe(50);
-    key("ArrowUp"); // the other axis
-    expect(applied).toHaveLength(3);
-  });
-
-  it("follows the pointer while dragged, and resets on double-click", () => {
-    const { pointer, applied, el } = divider(50);
-    pointer("pointerdown", 400);
-    pointer("pointermove", 700); // 60% of the way along
-    expect(applied.at(-1)).toBe(60);
-    expect(el.classList.contains("is-dragging")).toBe(true);
-    pointer("pointerup", 700);
-    pointer("pointermove", 200);
-    expect(applied.at(-1)).toBe(60);
-    expect(el.classList.contains("is-dragging")).toBe(false);
-    el.dispatchEvent(new MouseEvent("dblclick"));
-    expect(applied.at(-1)).toBe(40);
-  });
-});
 
 const controls = (name: string) =>
   `<button data-window="${name}" data-action="expand"></button><button data-window="${name}" data-action="minimize"></button><button data-window="${name}" data-action="maximize"></button>`;
 
 function page() {
   document.body.innerHTML = `
-    <main id="workspace"><section id="editor-pane">${controls("editor")}</section><div id="divider"></div><section id="canvas-pane"><div id="canvas"><section id="memory-section">${controls("memory")}</section><div id="canvas-divider"></div><section id="loop-section">${controls("loop")}</section></div></section></main>
+    <main id="workspace"><section id="editor-pane">${controls("editor")}</section><div id="divider" tabindex="0"></div><section id="canvas-pane"><div id="loading-card"></div><div id="canvas"><section id="memory-section">${controls("memory")}</section><div id="canvas-divider" tabindex="0"></div><section id="loop-section">${controls("loop")}</section></div></section></main>
     <button id="swap"></button><button id="layout-mode"></button>`;
   const $ = (id: string) => document.getElementById(id)!;
   const els = {
@@ -100,30 +23,55 @@ function page() {
     layoutMode: $("layout-mode") as HTMLButtonElement,
     memorySection: $("memory-section"),
     loopSection: $("loop-section"),
+    loadingCard: $("loading-card"),
   };
   const click = (name: string, action: string) =>
     document.querySelector<HTMLButtonElement>(`[data-window="${name}"][data-action="${action}"]`)!.click();
+  const place = (id: string) => [
+    $(id).style.getPropertyValue("--grid-column"),
+    $(id).style.getPropertyValue("--grid-row"),
+  ];
   return {
     $,
     els,
     click,
+    place,
     order: () => [...$("workspace").children].map((c) => c.id),
+    canvasOrder: () => [...$("canvas").children].map((c) => c.id),
     folded: () =>
       ["editor-pane", "memory-section", "loop-section"].filter((id) => $(id).classList.contains("is-collapsed")),
   };
 }
 
 describe("LayoutController", () => {
-  it("applies the saved splits", () => {
+  it("starts with the code beside memory over loop history, each window in its grid place", () => {
+    const { els, place } = page();
+    new LayoutController(els, makeApp().settings);
+    // Row 1 is the banner's.
+    expect(place("editor-pane")).toEqual(["1 / 2", "2 / 5"]);
+    expect(place("memory-section")).toEqual(["3 / 4", "2 / 3"]);
+    expect(place("loop-section")).toEqual(["3 / 4", "4 / 5"]);
+    expect(place("divider")).toEqual(["2 / 3", "2 / 5"]);
+    expect(place("canvas-divider")).toEqual(["3 / 4", "3 / 4"]);
+    expect(place("loading-card")).toEqual(place("memory-section"));
+    expect(els.workspace.style.getPropertyValue("--workspace-rows")).toBe("auto minmax(0, 55fr) 6px minmax(0, 45fr)");
+    expect(els.divider.getAttribute("aria-orientation")).toBe("vertical");
+    expect(els.canvasDivider.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(els.canvasDivider.classList.contains("is-paper")).toBe(true);
+  });
+
+  it("starts from the layout saved before windows could move", () => {
     const { els } = page();
     const { settings } = makeApp();
     settings.split.set(30);
-    new LayoutController(els, settings);
-    expect(els.workspace.style.getPropertyValue("--split")).toBe("30%");
-    expect(els.canvas.style.getPropertyValue("--canvas-split")).toBe("55%");
+    settings.swapped.set(true);
+    settings.layoutMode.set("columns");
+    const layout = new LayoutController(els, settings);
+    expect(layout.arrangement.items).toEqual(["memory", "loop", "editor"]);
+    expect(layout.arrangement.weights.at(-1)).toBe(30);
   });
 
-  it("swaps the panes in the page itself (so Tab follows), and remembers it", () => {
+  it("mirrors the page with ⇄, in the page itself too (so Tab follows), and remembers it", () => {
     const { els, order } = page();
     const { settings, storage } = makeApp();
     const layout = new LayoutController(els, settings);
@@ -134,11 +82,112 @@ describe("LayoutController", () => {
     expect(els.swap.getAttribute("aria-pressed")).toBe("true");
     layout.toggleSwapped();
     expect(order()).toEqual(["editor-pane", "divider", "canvas-pane"]);
-    layout.setSwapped(true);
+    layout.toggleSwapped();
 
     const again = page();
     new LayoutController(again.els, makeApp(storage).settings);
     expect(again.order()).toEqual(["canvas-pane", "divider", "editor-pane"]);
+  });
+
+  it("switches to side by side and back with the layout button, keeping the code's side", () => {
+    const { els } = page();
+    const { settings, storage } = makeApp();
+    const layout = new LayoutController(els, settings);
+    els.swap.click();
+    els.layoutMode.click();
+    expect(layout.mode).toBe("columns");
+    expect(layout.arrangement.items).toEqual(["memory", "loop", "editor"]);
+    expect(els.layoutMode.getAttribute("aria-pressed")).toBe("true");
+    expect(els.canvasDivider.getAttribute("aria-orientation")).toBe("vertical");
+    els.layoutMode.click();
+    expect(layout.mode).toBe("stacked");
+    expect(layout.arrangement.items.at(-1)).toBe("editor");
+    els.layoutMode.click();
+    expect(new LayoutController(page().els, makeApp(storage).settings).mode).toBe("columns");
+  });
+
+  it("puts windows anywhere, in the page's tab order too", () => {
+    const { els, place, canvasOrder, order } = page();
+    const layout = new LayoutController(els, makeApp().settings);
+    // Loop history on the left, then the code, then memory.
+    layout.setArrangement({ ...columnsPreset(), items: ["loop", "editor", "memory"] });
+    expect(place("loop-section")[0]).toBe("1 / 2");
+    expect(place("editor-pane")[0]).toBe("3 / 4");
+    expect(place("memory-section")[0]).toBe("5 / 6");
+    expect(canvasOrder()).toEqual(["loop-section", "canvas-divider", "memory-section"]);
+    expect(order()).toEqual(["canvas-pane", "divider", "editor-pane"]);
+    // Neither divider is between memory and loop history now: neither takes the canvas's colors.
+    expect(els.canvasDivider.classList.contains("is-paper")).toBe(false);
+    expect(els.canvasDivider.getAttribute("aria-label")).toBe("Resize the code and memory");
+  });
+});
+
+describe("dividers", () => {
+  function setup() {
+    const p = page();
+    const { settings } = makeApp();
+    const layout = new LayoutController(p.els, settings);
+    layout.setArrangement({ ...stackedPreset(), weights: [40, 60], pairSplit: 50 });
+    // The windows' places on the page: the code 0-400, the canvas 406-1006; memory 0-400, loop 406-806.
+    const rect = (x: number, y: number, w: number, h: number) => () =>
+      ({ left: x, top: y, right: x + w, bottom: y + h, width: w, height: h }) as DOMRect;
+    p.els.editorPane.getBoundingClientRect = rect(0, 0, 400, 806);
+    p.els.memorySection.getBoundingClientRect = rect(406, 0, 600, 400);
+    p.els.loopSection.getBoundingClientRect = rect(406, 406, 600, 400);
+    for (const d of [p.els.divider, p.els.canvasDivider]) d.setPointerCapture = () => {};
+    const pointer = (el: HTMLElement, type: string, clientX: number, clientY = 0) =>
+      el.dispatchEvent(
+        Object.assign(new MouseEvent(type, { button: 0, clientX, clientY, bubbles: true }), { pointerId: 1 }),
+      );
+    const key = (el: HTMLElement, k: string) => {
+      const event = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+      el.dispatchEvent(event);
+      return event;
+    };
+    return { ...p, layout, settings, pointer, key };
+  }
+
+  it("follows the pointer while dragged, and resets on double-click", () => {
+    const { els, layout, pointer, settings } = setup();
+    pointer(els.divider, "pointerdown", 400);
+    pointer(els.divider, "pointermove", 503); // half way along the code and the canvas
+    expect(layout.arrangement.weights).toEqual([50, 50]);
+    expect(els.divider.classList.contains("is-dragging")).toBe(true);
+    pointer(els.divider, "pointerup", 503);
+    pointer(els.divider, "pointermove", 100);
+    expect(layout.arrangement.weights).toEqual([50, 50]);
+    expect(parseArrangement(settings.arrangement.get())?.weights).toEqual([50, 50]);
+    els.divider.dispatchEvent(new MouseEvent("dblclick"));
+    expect(layout.arrangement.weights[0] / (layout.arrangement.weights[0] + layout.arrangement.weights[1])).toBeCloseTo(
+      0.4,
+    );
+  });
+
+  it("splits a pair: memory's share of the canvas", () => {
+    const { els, layout, pointer } = setup();
+    pointer(els.canvasDivider, "pointerdown", 0, 400);
+    pointer(els.canvasDivider, "pointermove", 0, 605);
+    expect(layout.arrangement.pairSplit).toBeCloseTo(75, 0);
+    pointer(els.canvasDivider, "pointermove", 0, 2000);
+    expect(layout.arrangement.pairSplit).toBe(90); // never all of it
+  });
+
+  it("moves with the arrow keys along its own axis, which then don't step the program", () => {
+    const { els, layout, key } = setup();
+    expect(key(els.divider, "ArrowRight").defaultPrevented).toBe(true);
+    expect(layout.arrangement.weights[0]).toBeCloseTo(43);
+    expect(key(els.divider, "ArrowDown").defaultPrevented).toBe(false); // not its axis
+    key(els.canvasDivider, "ArrowUp");
+    expect(layout.arrangement.pairSplit).toBe(47);
+  });
+
+  it("does nothing when one side is folded", () => {
+    const { els, layout, key, click } = setup();
+    click("editor", "minimize");
+    expect(els.divider.classList.contains("is-inactive")).toBe(true);
+    expect(els.divider.tabIndex).toBe(-1);
+    key(els.divider, "ArrowRight");
+    expect(layout.arrangement.weights).toEqual([40, 60]);
   });
 });
 
@@ -160,55 +209,6 @@ describe("folding windows", () => {
     expect(parseCollapsed("nonsense")).toEqual([]);
     expect(parseCollapsed(null)).toEqual([]);
   });
-});
-
-describe("layoutTracks", () => {
-  it("stacks memory over loop history beside the code, or puts all three side by side", () => {
-    const stacked = layoutTracks("stacked", [], false);
-    expect(stacked.workspace).toBe("minmax(0, var(--split)) 6px minmax(0, 1fr)");
-    expect(stacked.canvas).toBe("minmax(0, var(--canvas-split)) 6px minmax(0, 1fr)");
-    expect(stacked.upright).toEqual({ editor: true, memory: false, loop: false });
-    expect(layoutTracks("columns", [], false).upright).toEqual({ editor: true, memory: true, loop: true });
-    expect(layoutTracks("stacked", [], true).workspace).toBe("minmax(0, 1fr) 6px minmax(0, var(--split))");
-  });
-
-  it("gives a folded window a bar, and its room to the others", () => {
-    const code = layoutTracks("stacked", ["editor"], false);
-    expect(code.workspace).toBe(`${BAR}px 0 minmax(0, 1fr)`);
-    expect(code.divider).toBe(false);
-    const loop = layoutTracks("stacked", ["loop"], false);
-    expect(loop.canvas).toBe(`minmax(0, 1fr) 0 ${BAR}px`);
-    expect(loop.canvasDivider).toBe(false);
-    // Both canvas windows folded: a strip of bars, two wide side by side.
-    const canvas = layoutTracks("columns", ["memory", "loop"], true);
-    expect(canvas.workspace).toBe(`${2 * BAR}px 0 minmax(0, 1fr)`);
-    expect(canvas.canvas).toBe(`${BAR}px 0 ${BAR}px`);
-    expect(layoutTracks("stacked", ["memory", "loop"], false).upright.memory).toBe(true);
-  });
-});
-
-describe("LayoutController's windows", () => {
-  it("switches to side by side, with the canvas divider upright and its own remembered split", () => {
-    const { els } = page();
-    const { settings, storage } = makeApp();
-    settings.canvasSplit.set(70);
-    const layout = new LayoutController(els, settings);
-    expect(els.canvasDivider.getAttribute("aria-orientation")).toBe("horizontal");
-    els.layoutMode.click();
-    expect(layout.mode).toBe("columns");
-    expect(els.layoutMode.getAttribute("aria-pressed")).toBe("true");
-    expect(els.canvas.classList.contains("is-columns")).toBe(true);
-    expect(els.canvasDivider.getAttribute("aria-orientation")).toBe("vertical");
-    expect(els.canvas.style.getPropertyValue("--canvas-split")).toBe("50%");
-    expect(els.canvas.style.getPropertyValue("--canvas-columns")).toContain("var(--canvas-split)");
-    expect(els.canvas.style.getPropertyValue("--canvas-rows")).toBe("minmax(0, 1fr)");
-    layout.setMode("stacked");
-    expect(els.canvas.style.getPropertyValue("--canvas-split")).toBe("70%");
-
-    layout.setMode("columns");
-    const again = page();
-    expect(new LayoutController(again.els, makeApp(storage).settings).mode).toBe("columns");
-  });
 
   it("maximizes, minimizes and opens windows from their buttons and bars, and remembers them", () => {
     const { els, click, folded } = page();
@@ -217,13 +217,12 @@ describe("LayoutController's windows", () => {
     click("memory", "maximize");
     expect(folded()).toEqual(["editor-pane", "loop-section"]);
     expect(els.divider.classList.contains("is-inactive")).toBe(true);
-    expect(els.divider.tabIndex).toBe(-1);
     const max = document.querySelector('[data-window="memory"][data-action="maximize"]')!;
     expect(max.getAttribute("aria-pressed")).toBe("true");
     expect(max.getAttribute("aria-label")).toBe("Restore all windows");
     click("loop", "expand"); // its bar
     expect(folded()).toEqual(["editor-pane"]);
-    expect(els.workspace.style.getPropertyValue("--workspace-columns")).toBe(`${BAR}px 0 minmax(0, 1fr)`);
+    expect(els.workspace.style.getPropertyValue("--workspace-columns")).toBe(`${BAR}px 0px minmax(0, 60fr)`);
     click("loop", "minimize");
     expect(folded()).toEqual(["editor-pane", "loop-section"]);
     click("memory", "maximize"); // again: back to all three
@@ -233,5 +232,19 @@ describe("LayoutController's windows", () => {
     const again = page();
     new LayoutController(again.els, makeApp(storage).settings);
     expect(again.folded()).toEqual(["editor-pane"]);
+  });
+
+  it("stands a folded window's bar upright when its column folded", () => {
+    const { els, $ } = page();
+    const layout = new LayoutController(els, makeApp().settings);
+    layout.setCollapsed(["loop"]);
+    expect($("loop-section").classList.contains("is-upright")).toBe(false);
+    layout.setArrangement(moveWindow(layout.arrangement, "loop", { edge: "right" }));
+    expect($("loop-section").classList.contains("is-upright")).toBe(true);
+    // The loading card covers loop history while memory is folded.
+    layout.setCollapsed(["memory"]);
+    expect($("loading-card").style.getPropertyValue("--grid-column")).toBe(
+      $("loop-section").style.getPropertyValue("--grid-column"),
+    );
   });
 });

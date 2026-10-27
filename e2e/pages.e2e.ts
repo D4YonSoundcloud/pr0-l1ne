@@ -71,6 +71,43 @@ test("the windows go side by side, and fold to bars that open them again", async
   await expect(page.locator("#layout-mode")).toHaveAttribute("aria-pressed", "true");
 });
 
+test("a window dragged by its header moves where the preview shows, and stays there", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+  const grip = await box("#memory-section .window-grip");
+  const code = await box("#editor-pane");
+
+  // Memory to the left of the code.
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 40, grip.y + 40, { steps: 4 });
+  await page.mouse.move(code.x + code.width * 0.12, code.y + code.height / 2, { steps: 10 });
+  const preview = page.locator(".dock-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveText("left of Code");
+  await expect(preview).toHaveClass(/is-target/);
+  await page.waitForTimeout(300); // it glides there
+  const shown = (await preview.boundingBox())!;
+  await page.mouse.up();
+  await expect(preview).toBeHidden();
+
+  await page.waitForTimeout(400); // the windows glide too
+  const [memory, editor, loop] = [await box("#memory-section"), await box("#editor-pane"), await box("#loop-section")];
+  expect(memory.x).toBeLessThan(editor.x);
+  expect(editor.x).toBeLessThan(loop.x);
+  // Where the preview said, give or take the dividers.
+  expect(Math.abs(memory.x - shown.x)).toBeLessThan(8);
+  expect(Math.abs(memory.width - shown.width)).toBeLessThan(8);
+
+  // Remembered on the next visit, and the code still works.
+  await page.reload();
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  expect((await box("#memory-section")).x).toBeLessThan((await box("#editor-pane")).x);
+  await expect(page.locator("#editor .view-lines")).toBeVisible();
+});
+
 test("window headers stay one row, and the zoom controls fold away and stay folded", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto("/javascript");
