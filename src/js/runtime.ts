@@ -19,6 +19,7 @@ import {
   inspect,
   isListLike,
   MAX_ITEMS,
+  newReuseCache,
   Serializer,
 } from "./inspector";
 import { type LoopState, RECORD, Sampler } from "./sampling";
@@ -63,6 +64,8 @@ export class Runtime {
   private closed = false;
   private loopInstances = new Map<string, number>();
   private objectIds = new WeakMap<object, string>();
+  /** Last step's heap objects and frames, reused while they don't change (see Serializer). */
+  private reuse = newReuseCache();
   private objectCounter = 0;
   // biome-ignore lint/complexity/noBannedTypes: keys are the user's own functions and classes, of any shape
   private closures = new WeakMap<Function, { name: string; captured: Getter }>();
@@ -438,8 +441,8 @@ export class Runtime {
     return focus;
   }
 
-  /** The last committed step's heap, to share unchanged objects with. */
-  private prevHeap: Record<string, HeapObject> = {};
+  /** Every object's last version in a committed step, to share unchanged objects with. */
+  private known = new Map<string, HeapObject>();
 
   private commit(step: Step): void {
     if (this.sampler.skipped) {
@@ -449,12 +452,13 @@ export class Runtime {
     // An object that didn't change since the step before is the same
     // object: steps share it, here and (structured clone keeps sharing)
     // on the page. See trace/delta.ts.
-    const prev = this.prevHeap;
+    // (Its last version from any step before: an object out of reach for a while is shared when it's back.)
+    const known = this.known;
     for (const id in step.heap) {
-      const before = prev[id];
+      const before = known.get(id);
       if (before && before !== step.heap[id] && sameData(before, step.heap[id])) step.heap[id] = before;
+      else known.set(id, step.heap[id]);
     }
-    this.prevHeap = step.heap;
     this.steps.push(step);
   }
 
@@ -491,6 +495,13 @@ export class Runtime {
     // Sampling: is this step in a pass of a long loop that isn't recorded?
     const into = this.sampler.sampled ? this.sampler.place(this.activeStates()) : RECORD;
     if (into === null) return;
+    // A recorded step can take milliseconds (a big heap): check the clock each
+    // time, not only every thousand events, or a run can go far past its time.
+    if ((typeof performance !== "undefined" ? performance.now() : Date.now()) > this.deadline) {
+      this.aborted = true;
+      this.stoppedBy = "time";
+      throw this.ABORT;
+    }
     this.recording = true;
     try {
       const serializer = new Serializer(
@@ -498,13 +509,9 @@ export class Runtime {
         () => `o${++this.objectCounter}`,
         this.closures,
         this.focusOf(),
+        this.reuse,
       );
-      const describe = (frame: FrameState) => ({
-        id: frame.id,
-        func: frame.func,
-        line: frame.line,
-        locals: serializer.locals(frame.getter),
-      });
+      const describe = (frame: FrameState) => serializer.frame(frame.id, frame.func, frame.line, frame.getter);
       const stack = this.frames.map(describe);
       const paused = [...this.suspended].filter((frame) => !this.frames.includes(frame));
       // Loops in paused frames stay active, so their history isn't cut short.

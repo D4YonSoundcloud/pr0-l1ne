@@ -1,4 +1,5 @@
 /** The whole loop view as a drawing: the plan's rows, top to bottom, with the bands between them. */
+import { timed } from "../../perf";
 import type { LoopScene } from "../../scene/loopScene";
 import { arrowMarkers, s } from "../draw";
 import type { Mark } from "../drawing";
@@ -9,6 +10,10 @@ import { type LoopViewOptions, MARGIN, ROW_GAP } from "./shared";
 
 /** Lay out a loop scene as a drawing (drawing.ts). */
 export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Mark {
+  return timed("loop.layout", () => drawLoop(scene, options));
+}
+
+function drawLoop(scene: LoopScene, options: LoopViewOptions): Mark {
   const plan = planLoop(scene, options);
   const { items, hiddenRows, live } = scene;
 

@@ -169,12 +169,53 @@ class ObjectTests(unittest.TestCase):
 
     def test_the_heap_is_capped(self):
         s = S.Serializer({}, {})
-        s.value([[[j] for j in range(10)] for _ in range(S.MAX_ITEMS)])  # 660 objects, 60 per list
+        s.value([[[j] for j in range(S.MAX_ITEMS)] for _ in range(S.MAX_ITEMS)])  # 3,661 objects, 60 per list
         # Past the cap, objects still appear (so arrows have somewhere to
         # point) but as "…" placeholders instead of full descriptions.
         placeholders = [o for o in s.heap.values() if o["kind"] == "opaque" and o["repr"] == "…"]
         self.assertTrue(placeholders)
         self.assertLessEqual(len(s.heap) - len(placeholders), S.MAX_OBJECTS)
+
+
+class ReuseTests(unittest.TestCase):
+    """An object that holds the same things as last step gets the same heap object back."""
+
+    def serialize(self, value, cache, ids):
+        s = S.Serializer({}, ids, cache=cache)
+        ref = s.value(value)
+        return s.heap[ref["id"]], s.heap
+
+    def test_unchanged_objects_are_reused_and_changed_ones_described_again(self):
+        cache, ids = {}, {}
+
+        class Node:
+            def __init__(self, val, next=None):
+                self.val = val
+                self.next = next
+
+        second = Node(2)
+        head = Node(1, second)
+        items = [head, "x"]
+        first, heap1 = self.serialize(items, cache, ids)
+        again, heap2 = self.serialize(items, cache, ids)
+        self.assertIs(again, first)
+        # What it holds is still in the step's heap, though it wasn't described again.
+        self.assertEqual(set(heap2), set(heap1))
+        second.val = 3
+        _, heap3 = self.serialize(items, cache, ids)
+        changed = heap3[ids[id(second)]]
+        self.assertIsNot(changed, heap1[ids[id(second)]])
+        self.assertEqual(dict(changed["fields"])["val"]["repr"], "3")
+        self.assertIs(heap3[ids[id(items)]], first)
+
+    def test_equal_but_different_values_are_a_change(self):
+        cache, ids = {}, {}
+        items = [1]
+        first, _ = self.serialize(items, cache, ids)
+        items[0] = True  # == 1, but not the same
+        second, _ = self.serialize(items, cache, ids)
+        self.assertIsNot(second, first)
+        self.assertEqual(second["items"][0]["repr"], "True")
 
 
 class EdgeCaseTests(unittest.TestCase):

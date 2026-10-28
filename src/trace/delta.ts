@@ -1,32 +1,67 @@
 /**
  * Heaps sent as deltas (Trace.heapDelta): each step carries only the
- * objects that changed since the step before, plus every id in order.
- * Rebuilt here into full heaps that share unchanged objects, so a long
- * trace costs memory for what changes rather than for every snapshot.
+ * objects that differ from their last version sent (in any step before), plus every id in order
+ * (heapIds), or `sameIds` when they're the same ids as the step before, or
+ * `heapIdsPart` [first ids kept, last ids kept, the ids between]. A
+ * frame that didn't change since the step before comes as just its id and
+ * `same` (Python's tracer: a deep call stack is otherwise most of a
+ * trace). Rebuilt here into full heaps and stacks that share what didn't
+ * change, so a long trace costs memory for what changes rather than for
+ * every snapshot.
  *
  * Objects are shared between steps, so nothing may change a trace's
  * objects in place (nothing does: renderers and applyHints only read).
  */
-import type { HeapObject, Trace } from "./types";
+import type { Frame, HeapObject, Step, Trace } from "./types";
+
+/** A frame as sent: whole, or only its id when it's the same as in the step before. */
+type SentFrame = Frame | { id: string; same: true };
 
 export function expandHeaps(trace: Trace): Trace {
   if (!trace.heapDelta) return trace;
-  let prev: Record<string, HeapObject> = {};
-  for (const step of trace.steps) {
-    const ids = step.heapIds;
+  /** Every object's last version, from whichever step sent it. */
+  const known = new Map<string, HeapObject>();
+  let prevIds: string[] = [];
+  let prevFrames = new Map<string, Frame>();
+  for (const step of trace.steps as (Step & { sameIds?: boolean; heapIdsPart?: [number, number, string[]] })[]) {
+    // Frames first: the same as last step's, by id.
+    const frames = new Map<string, Frame>();
+    const rebuild = (list: SentFrame[] | undefined): Frame[] | undefined =>
+      list?.map((sent) => {
+        const frame = "same" in sent ? prevFrames.get(sent.id) : sent;
+        if (!frame) throw new Error(`frame ${sent.id} isn't in the step before`);
+        frames.set(frame.id, frame);
+        return frame;
+      });
+    step.stack = rebuild(step.stack as SentFrame[]) ?? [];
+    if (step.suspended) step.suspended = rebuild(step.suspended as SentFrame[]);
+    prevFrames = frames;
+
+    // The ids: as sent, the same as before, or a change to the step before's.
+    const part = step.heapIdsPart;
+    const ids = step.sameIds
+      ? prevIds
+      : part
+        ? [...prevIds.slice(0, part[0]), ...part[2], ...prevIds.slice(prevIds.length - part[1])]
+        : step.heapIds;
     if (!ids) {
-      prev = step.heap; // a full heap
+      // A full heap.
+      for (const id in step.heap) known.set(id, step.heap[id]);
+      prevIds = Object.keys(step.heap);
       continue;
     }
     const changed = step.heap;
     const heap: Record<string, HeapObject> = {};
+    for (const id in changed) known.set(id, changed[id]);
     for (const id of ids) {
-      const obj = changed[id] ?? prev[id];
+      const obj = changed[id] ?? known.get(id);
       if (obj) heap[id] = obj;
     }
     step.heap = heap;
     delete step.heapIds;
-    prev = heap;
+    delete step.sameIds;
+    delete step.heapIdsPart;
+    prevIds = ids;
   }
   delete trace.heapDelta;
   return trace;

@@ -10,6 +10,7 @@
  * box by its <g data-node-key>, highlighting a hovered box's arrows,
  * keeping the running row in view by its data-top / data-bottom.
  */
+import { timed } from "../perf";
 import type {
   Hit,
   LoopRenderer,
@@ -166,7 +167,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
         : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
     // The focus is part of the drawing, so the patch carries it over.
     applyFocus(drawing, this.dragging ?? this.hovered);
-    this.view.updateContent(() => this.patcher.show(drawing), duration, easing, enter);
+    this.view.updateContent(() => timed("svg.patch", () => this.patcher.show(drawing)), duration, easing, enter);
   }
 
   /** Hovering changed: another box in focus, on screen and in the drawing (so they stay the same). */
@@ -198,7 +199,12 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     const sql = "kind" in scene;
     const drawing = sql ? sqlPipelineDrawing(scene) : loopDrawing(scene, { vertical: this.vertical });
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
-    this.view.updateContent(() => this.patcher.show(drawing), !sql && scene.live ? duration : 0, easing, enter);
+    this.view.updateContent(
+      () => timed("svg.patch", () => this.patcher.show(drawing)),
+      !sql && scene.live ? duration : 0,
+      easing,
+      enter,
+    );
     // As you step, keep the iteration that's running in view.
     const current = this.el.querySelector(".loop-row.is-current");
     if (current)

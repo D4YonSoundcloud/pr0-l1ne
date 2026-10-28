@@ -9,8 +9,10 @@
  * before starting (`whenIdle`), and hands back queued edits when it's done
  * (`resumeQueued`).
  */
+
 import { type HintContext, hintContext } from "../hintAssist";
 import { LANGUAGES, type LanguageId } from "../languages";
+import { perf, timed, traceStats } from "../perf";
 import { applyHints } from "../trace/hints";
 import { POLICY } from "../trace/policy";
 import type { Trace } from "../trace/types";
@@ -211,7 +213,9 @@ export class RunController {
     }
     this.inFlight = true;
     const seconds = budget === "live" ? POLICY.liveSeconds : POLICY.runSeconds;
+    const started = perf.on ? performance.now() : 0;
     const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling);
+    if (perf.on) perf.record("run.trace", performance.now() - started);
     this.lastBudget = budget;
     this.inFlight = false;
     // Report a crash whatever the language now; show results only for the language on screen.
@@ -266,14 +270,15 @@ export class RunController {
     // Stay on the last step if we were there, so live edits show the result.
     const { trace: before, stepIndex } = app.get();
     const wasAtEnd = !before || stepIndex >= before.steps.length - 1;
-    const trace = applyHints(next);
+    const trace = timed("run.hints", () => applyHints(next));
+    if (perf.on) perf.lastTrace = traceStats(trace);
     const warnings = trace.viz?.warnings ?? [];
     editor.setHintWarnings(warnings);
     // Before hints are applied, so hidden variables still count as the program's.
     if (!next.sql) editor.setHintContext?.(hintContext(next));
     const last = trace.steps.length - 1;
     const first = trace.sql ? 0 : firstStepFor(trace.steps.length);
-    app.showTrace(trace, code, wasAtEnd ? last : Math.max(first, Math.min(stepIndex, last)));
+    timed("run.show", () => app.showTrace(trace, code, wasAtEnd ? last : Math.max(first, Math.min(stepIndex, last))));
 
     if (trace.truncated) {
       setBanner(this.truncationBanner(trace), "budget");

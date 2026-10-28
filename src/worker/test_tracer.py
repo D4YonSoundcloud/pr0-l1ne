@@ -8,13 +8,28 @@ from tracer import run_trace
 
 
 def expand_heaps(t):
-    """Rebuild full heaps from deltas, as trace/delta.ts does."""
-    prev = {}
+    """Rebuild full heaps and stacks from deltas, as trace/delta.ts does."""
+    known, prev_ids, prev_frames = {}, [], {}
     for step in t["steps"]:
-        ids = step.pop("heapIds", None)
+        frames = {}
+        for key in ("stack", "suspended"):
+            if key in step:
+                step[key] = [prev_frames[f["id"]] if f.get("same") else f for f in step[key]]
+                frames.update((f["id"], f) for f in step[key])
+        prev_frames = frames
+        part = step.pop("heapIdsPart", None)
+        if step.pop("sameIds", False):
+            ids = prev_ids
+        elif part is not None:
+            ids = prev_ids[: part[0]] + part[2] + prev_ids[len(prev_ids) - part[1] :]
+        else:
+            ids = step.pop("heapIds", None)
+        known.update(step["heap"])
         if ids is not None:
-            step["heap"] = {oid: step["heap"].get(oid, prev.get(oid)) for oid in ids}
-        prev = step["heap"]
+            step["heap"] = {oid: known[oid] for oid in ids}
+            prev_ids = ids
+        else:
+            prev_ids = list(step["heap"])
     t.pop("heapDelta", None)
     return t
 

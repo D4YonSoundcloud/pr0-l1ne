@@ -6,7 +6,9 @@
  * them back). Its toolbar picks arrows or nested objects, memory sizes and
  * their model, and whether output is shown on the canvas.
  */
+
 import type { LanguageId } from "../languages";
+import { timed } from "../perf";
 import { type MemoryMode, memoryScene } from "../scene/memoryScene";
 import type { MemoryRenderer, MemoryWindowScene, RendererFactory } from "../scene/renderer";
 import { sqlTableScene } from "../scene/sqlScene";
@@ -202,15 +204,17 @@ export class MemoryController {
       return;
     }
     const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
-    const scene = memoryScene(trace, stepIndex, diff, {
-      mode: this.mode,
-      sizes: this.sizes(),
-      output: this.outputOn,
-      dimForOutput: this.dimForOutput,
-      tall: isTall(this.options.els.memory),
-    });
+    const scene = timed("memory.scene", () =>
+      memoryScene(trace, stepIndex, diff, {
+        mode: this.mode,
+        sizes: this.sizes(),
+        output: this.outputOn,
+        dimForOutput: this.dimForOutput,
+        tall: isTall(this.options.els.memory),
+      }),
+    );
     this.renderer.setAppearance({ step: this.options.animation() });
-    this.renderer.render(scene, this.drawn);
+    timed("memory.render", () => this.renderer.render(scene, this.drawn));
     this.drawn = scene;
     this.updateTotal();
   }

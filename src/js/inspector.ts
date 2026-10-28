@@ -6,14 +6,14 @@
  * user code: getters are shown, not called.
  */
 
-import type { HeapObject, PrimValue, SequenceObject, Value } from "../trace/types";
+import type { Frame, HeapObject, PrimValue, SequenceObject, Value } from "../trace/types";
 
 /** [name, () => value] for each visible variable, produced by the instrumenter. */
 export type Getter = () => [string, () => unknown][];
 
 export const MAX_ITEMS = 60;
 const MAX_REPR = 48;
-const MAX_OBJECTS = 400;
+export const MAX_OBJECTS = 2000;
 
 const prim = (type: string, repr: string): PrimValue => ({
   kind: "prim",
@@ -144,6 +144,70 @@ function stripOf(read: (i: number) => unknown, n: number): { values: number[]; m
 export const isListLike = (v: unknown): v is ArrayLike<unknown> =>
   Array.isArray(v) || (ArrayBuffer.isView(v) && !(v instanceof DataView));
 
+/** What a heap object or frame was made from (slotsOf), and what it was. */
+export interface Reused<T> {
+  slots: unknown[];
+  made: T;
+}
+
+/** Each object's last heap object, and each frame's last view, kept between steps (Serializer). */
+export interface ReuseCache {
+  objects: Map<string, Reused<HeapObject>>;
+  frames: Map<string, Reused<Frame>>;
+}
+
+export const newReuseCache = (): ReuseCache => ({ objects: new Map(), frames: new Map() });
+
+/** A getter in a slot (its value isn't read) or a variable before its declaration. */
+const UNREAD = Symbol("unread");
+
+/** The same things in the same order (Object.is: -0 and 0 differ, as their reprs do). */
+function sameSlots(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false;
+  return true;
+}
+
+/**
+ * What an object's heap object is made from, flat: its prototype and
+ * length, then what it holds (and its keys), to tell cheaply whether it
+ * changed since the last step. Null for what isn't worth it or can't be
+ * told this way: long lists (their window follows the index variables),
+ * functions (their closures), and anything that isn't an array, a Map, a
+ * Set or an object with plain own properties.
+ */
+function slotsOf(obj: object): unknown[] | null {
+  const own = (key: PropertyKey) => {
+    const read = readOwn(obj, key);
+    return "getter" in read ? UNREAD : read.value;
+  };
+  if (Array.isArray(obj)) {
+    if (obj.length > MAX_ITEMS) return null;
+    const slots: unknown[] = [Object.getPrototypeOf(obj), obj.length];
+    for (let i = 0; i < obj.length; i++) slots.push(own(i));
+    return slots;
+  }
+  if (typeof obj === "function" || ArrayBuffer.isView(obj)) return null;
+  if (obj instanceof Map) {
+    if (obj.size > MAX_ITEMS) return null;
+    const slots: unknown[] = [Map, obj.size];
+    for (const [k, v] of Map.prototype.entries.call(obj)) slots.push(k, v);
+    return slots;
+  }
+  if (obj instanceof Set) {
+    if (obj.size > MAX_ITEMS) return null;
+    return [Set, obj.size, ...Set.prototype.values.call(obj)];
+  }
+  const tag = Object.prototype.toString.call(obj).slice(8, -1);
+  if (tag !== "Object") return null; // Dates, generators, promises...
+  if (OPAQUE_TYPES.some(([type]) => obj instanceof type)) return null;
+  const keys = Object.keys(obj);
+  if (keys.length > MAX_ITEMS) return null;
+  const slots: unknown[] = [Object.getPrototypeOf(obj), keys.length];
+  for (const key of keys) slots.push(key, own(key));
+  return slots;
+}
+
 export class Serializer {
   readonly heap: Record<string, HeapObject> = {};
   private count = 0;
@@ -155,7 +219,45 @@ export class Serializer {
     private readonly closures: WeakMap<Function, { name: string; captured: Getter }>,
     /** Long lists' index variables' values (see windowStart). */
     private readonly focus: Map<object, number[]> = new Map(),
+    /**
+     * Last step's heap objects and frames, by id, with what they were made
+     * from: one holding the same things gets the same object back, without
+     * being described again (and the trace shares it between steps). Only
+     * what it holds is visited, so the heap still has everything reachable.
+     */
+    private readonly reuse: ReuseCache = newReuseCache(),
   ) {}
+
+  /** A frame of the stack: the same view as last step if its line and variables are the same. */
+  frame(id: string, func: string, line: number, getter: Getter): Frame {
+    const slots: unknown[] = [line];
+    for (const [name, read] of getter()) {
+      let value: unknown;
+      try {
+        value = read();
+      } catch {
+        value = UNREAD; // let/const before its declaration (temporal dead zone)
+      }
+      slots.push(name, value);
+    }
+    const known = this.reuse.frames.get(id);
+    if (known && known.made.func === func && sameSlots(known.slots, slots)) {
+      for (let i = 2; i < slots.length; i += 2) this.visit(slots[i]);
+      return known.made;
+    }
+    const locals: [string, Value][] = [];
+    for (let i = 1; i < slots.length; i += 2) {
+      if (slots[i + 1] !== UNREAD) locals.push([slots[i] as string, this.value(slots[i + 1])]);
+    }
+    const made: Frame = { id, func, line, locals };
+    this.reuse.frames.set(id, { slots, made });
+    return made;
+  }
+
+  /** Put an object (and what it holds) in this step's heap. */
+  private visit(v: unknown): void {
+    if ((typeof v === "object" && v !== null) || typeof v === "function") this.ref(v as object);
+  }
 
   locals(getter: Getter): [string, Value][] {
     const out: [string, Value][] = [];
@@ -207,7 +309,16 @@ export class Serializer {
     }
     this.count++;
     this.heap[id] = { kind: "opaque", id, typeName: "", repr: "" }; // placeholder for cycles
+    const slots = slotsOf(obj);
+    const known = slots ? this.reuse.objects.get(id) : undefined;
+    if (slots && known && sameSlots(known.slots, slots)) {
+      // Unchanged: the same heap object, and only what it holds visited (keys and values).
+      this.heap[id] = known.made;
+      for (let i = 2; i < slots.length; i++) this.visit(slots[i]);
+      return id;
+    }
     this.heap[id] = this.describe(obj, id);
+    if (slots) this.reuse.objects.set(id, { slots, made: this.heap[id] });
     return id;
   }
 

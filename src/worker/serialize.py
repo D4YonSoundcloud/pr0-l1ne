@@ -9,17 +9,18 @@ one per step, sharing the ids so an object keeps its id across steps.
 """
 
 import inspect
+import operator
 import types
 import weakref
 from collections import deque
-from itertools import islice
+from itertools import chain, islice
 from typing import Any
 
 from sizes import list_capacity, size64
 
 MAX_ITEMS = 60  # items shown per container before truncating
 MAX_REPR = 48  # characters shown for a primitive before truncating
-MAX_OBJECTS = 400  # heap objects serialized per step
+MAX_OBJECTS = 2000  # heap objects serialized per step
 
 PRIMITIVE_TYPES = (bool, int, float, complex, str, bytes, type(None))
 SEQUENCE_TYPES = (list, tuple, set, frozenset, deque)
@@ -115,10 +116,62 @@ def strip_of(seq: Any) -> dict[str, Any] | None:
     return {"values": values, "min": min(values), "max": max(values)}
 
 
-class Serializer:
-    """Serializes one snapshot. A fresh instance is used per step."""
+def same_items(a: tuple, b: tuple) -> bool:
+    """The same header (a tuple of plain numbers and types, compared by value), then
+    the same objects in the same order: by identity, never ==, which could run the
+    program's own __eq__ (and would call 1, 1.0 and True the same)."""
+    return len(a) == len(b) and a[0] == b[0] and all(map(operator.is_, islice(a, 1, None), islice(b, 1, None)))
 
-    def __init__(self, keepalive: dict[str, object], ids: dict[Any, Any], focus: dict[int, list[int]] | None = None):
+
+def slots_of(v: Any) -> tuple | None:
+    """What an object's heap object is made from, as a flat tuple of the objects it
+    holds (and its names), after a header of its length or class and size, to tell
+    cheaply whether it changed since the last step.
+    None for what isn't worth it, or can't be told this way: long lists (whose
+    window follows the index variables), sets (whose order depends on ids),
+    generators (whose state isn't in their slots)."""
+    kind = type(v)
+    # The header: what describe() shows that isn't an object held (its size changes
+    # with a list's room, or an instance's dict as its class gains attributes).
+    if kind is list or kind is tuple or kind is deque:
+        slots = ((len(v), size64(v)), *v) if len(v) <= MAX_ITEMS else None
+    elif kind is dict:
+        slots = ((len(v), size64(v)), *chain.from_iterable(v.items())) if len(v) <= MAX_ITEMS else None
+    elif isinstance(v, (SEQUENCE_TYPES, dict, PAUSABLE_OBJECTS, types.ModuleType, type)) or callable(v):
+        return None
+    else:
+        attrs = getattr(v, "__dict__", None)
+        if type(attrs) is not dict or getattr(type(v), "__slots__", None):
+            return None
+        slots = ((kind, size64(v), size64(attrs)), *chain.from_iterable(attrs.items()))
+    return slots if slots is None or keeps_nothing_alive(slots) else None
+
+
+def keeps_nothing_alive(items: tuple) -> bool:
+    """Can these be kept (to compare with next step's) without keeping a generator
+    alive? A dropped generator must be able to close, as it would untraced."""
+    return not any(isinstance(item, PAUSABLE_OBJECTS) for item in items)
+
+
+class Serializer:
+    """Serializes one snapshot. A fresh instance is used per step.
+
+    Most objects don't change from one step to the next, so each heap object
+    is kept with what it was made from (slots_of); an object holding the
+    same things as last time gets the same heap object back, without being
+    described again. The step log then sees it's the same and leaves it out
+    of the step (steplog.py). Only the objects it holds are visited, so the
+    step's heap still has everything reachable.
+    """
+
+    def __init__(
+        self,
+        keepalive: dict[str, object],
+        ids: dict[Any, Any],
+        focus: dict[int, list[int]] | None = None,
+        cache: dict[str, tuple[tuple, HeapObject]] | None = None,
+    ):
+        self.cache = cache if cache is not None else {}
         self.heap: dict[str, HeapObject] = {}
         # Every object ever seen, kept alive for the run (see ref).
         self.keepalive = keepalive
@@ -154,7 +207,19 @@ class Serializer:
         # Reserve the slot before recursing so cycles terminate (None until
         # describe returns; nothing reads the heap in between).
         self.heap[oid] = None  # pyright: ignore[reportArgumentType]
+        slots = slots_of(v)
+        known = self.cache.get(oid) if slots is not None else None
+        if known is not None and same_items(known[0], slots):  # pyright: ignore[reportArgumentType]
+            # Unchanged: the same heap object, and only what it holds visited.
+            self.heap[oid] = known[1]
+            # (The first slot is the header, not something it holds.)
+            for item in islice(slots, 1, None):  # pyright: ignore[reportArgumentType]
+                if not isinstance(item, PRIMITIVE_TYPES):
+                    self.value(item)
+            return oid
         self.heap[oid] = self.describe(v, oid)
+        if slots is not None:
+            self.cache[oid] = (slots, self.heap[oid])
         return oid
 
     def new_id(self, v: object) -> str:

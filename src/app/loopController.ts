@@ -7,6 +7,7 @@
  * Its toolbar picks stacked rows or one animated row, hiding variables that
  * don't change, and stacking containers vertically.
  */
+import { timed } from "../perf";
 import { type LiveRow, loopScene } from "../scene/loopScene";
 import type { LoopRenderer, LoopWindowScene, RendererFactory } from "../scene/renderer";
 import { sqlPipelineScene } from "../scene/sqlScene";
@@ -219,9 +220,12 @@ export class LoopController {
       this.selected ??
       (focus === "all" ? ALL_LOOPS : focus && contexts.some((ctx) => ctx.loop === focus) ? focus : null);
     const wantsAll = together && (selected === null || selected === ALL_LOOPS);
-    const history =
-      (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
-      buildLoopHistory(trace, stepIndex, selected === ALL_LOOPS ? null : selected);
+    const history = timed(
+      "loop.history",
+      () =>
+        (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
+        buildLoopHistory(trace, stepIndex, selected === ALL_LOOPS ? null : selected),
+    );
     const tab = (text: string, selected: boolean, pick: string, title = "") => {
       const button = document.createElement("button");
       button.type = "button";
@@ -272,7 +276,7 @@ export class LoopController {
         tall: isTall(this.options.els.loop),
       });
       this.renderer.setAppearance({ step: this.options.animation() });
-      this.renderer.render(scene, this.drawn);
+      timed("loop.render", () => this.renderer.render(scene, this.drawn));
       this.drawn = scene;
     } else {
       this.drawn = null;

@@ -1,0 +1,319 @@
+[
+  {
+    "program": "1-long-list.js",
+    "trace": {
+      "steps": 5021,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 1001,
+      "meanHeap": 419,
+      "ran": 6795,
+      "ms": 6065.396689,
+      "parseMs": 0,
+      "size": 21603463
+    },
+    "hintsMs": 1.1170420000007653,
+    "stages": {
+      "memory.scene.arrows": 4.159093999999641,
+      "memory.route": 0.44433699999990495,
+      "memory.layout.arrows": 107.77902499999982,
+      "memory.scene.nested": 3.8226290000002336,
+      "memory.layout.nested": 20.25599499999953,
+      "loop.history": 3.7130850000003193,
+      "loop.scene": 214.53437499999927,
+      "loop.layout": 19.346788000000743
+    },
+    "marks": {
+      "arrows": 20106,
+      "nested": 12384
+    }
+  },
+  {
+    "program": "1-long-list.py",
+    "trace": {
+      "steps": 808,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 2001,
+      "meanHeap": 1666,
+      "ran": 12635,
+      "ms": 6017.953469,
+      "parseMs": 455.1049459999995,
+      "size": 936907
+    },
+    "hintsMs": 0.05281199999990349,
+    "stages": {
+      "memory.scene.arrows": 10.168430000001536,
+      "memory.route": 2.5977919999968435,
+      "memory.layout.arrows": 807.2657130000007,
+      "memory.scene.nested": 11.757181999999375,
+      "memory.layout.nested": 69.43762400000196,
+      "loop.history": 0.43190099999992526,
+      "loop.scene": 174.3919939999978,
+      "loop.layout": 39.64422199999899
+    },
+    "marks": {
+      "arrows": 40110,
+      "nested": 24675
+    }
+  },
+  {
+    "program": "2-big-tree.js",
+    "trace": {
+      "steps": 12847,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 1027,
+      "meanHeap": 59,
+      "ran": 71703,
+      "ms": 2356.0373130000007,
+      "parseMs": 0,
+      "size": 13828029
+    },
+    "hintsMs": 0.0539939999980561,
+    "stages": {
+      "memory.scene.arrows": 0.3928959999975632,
+      "memory.route": 0.09307799999805866,
+      "memory.layout.arrows": 2.042975000000297,
+      "memory.scene.nested": 0.21081199999753153,
+      "memory.layout.nested": 1.6295480000007956,
+      "loop.history": 0.6518730000025243,
+      "loop.scene": 33.76235400000223,
+      "loop.layout": 4.717435999998997
+    },
+    "marks": {
+      "arrows": 26402,
+      "nested": 18968
+    }
+  },
+  {
+    "program": "2-big-tree.py",
+    "trace": {
+      "steps": 12853,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 1027,
+      "meanHeap": 59,
+      "ran": 71709,
+      "ms": 6120.925762,
+      "parseMs": 352.40981199999806,
+      "size": 11456836
+    },
+    "hintsMs": 0.046264000000519445,
+    "stages": {
+      "memory.scene.arrows": 0.1864209999985178,
+      "memory.route": 0.05785200000173063,
+      "memory.layout.arrows": 7.617977999998402,
+      "memory.scene.nested": 0.25971800000115763,
+      "memory.layout.nested": 1.4442749999980151,
+      "loop.history": 0.7924679999996442,
+      "loop.scene": 32.53394000000117,
+      "loop.layout": 3.319046000004164
+    },
+    "marks": {
+      "arrows": 26402,
+      "nested": 18968
+    }
+  },
+  {
+    "program": "3-big-grid.js",
+    "trace": {
+      "steps": 2813,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 61,
+      "meanHeap": 60,
+      "ran": 10689,
+      "ms": 1173.9755670000013,
+      "parseMs": 0,
+      "size": 5585731
+    },
+    "hintsMs": 769.703981000006,
+    "stages": {
+      "memory.scene.arrows": 1.9378359999973327,
+      "memory.route": 0.024748000003455672,
+      "memory.layout.arrows": 42.576208999998926,
+      "memory.scene.nested": 1.9722029999975348,
+      "memory.layout.nested": 35.283832000000984,
+      "loop.history": 1.5526850000023842,
+      "loop.scene": 357.34328500000265,
+      "loop.layout": 3313.2218009999997
+    },
+    "marks": {
+      "arrows": 11027,
+      "nested": 11017
+    }
+  },
+  {
+    "program": "3-big-grid.py",
+    "trace": {
+      "steps": 2752,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 61,
+      "meanHeap": 60,
+      "ran": 10628,
+      "ms": 2313.982237,
+      "parseMs": 91.93142900000385,
+      "size": 4759312
+    },
+    "hintsMs": 943.2178339999955,
+    "stages": {
+      "memory.scene.arrows": 1.4269880000065314,
+      "memory.route": 0.0247799999997369,
+      "memory.layout.arrows": 27.895936000000802,
+      "memory.scene.nested": 2.0023660000006203,
+      "memory.layout.nested": 24.6104090000008,
+      "loop.history": 1.1741239999973914,
+      "loop.scene": 321.5295990000013,
+      "loop.layout": 3060.0785030000043
+    },
+    "marks": {
+      "arrows": 11027,
+      "nested": 11017
+    }
+  },
+  {
+    "program": "4-dense-graph.js",
+    "trace": {
+      "steps": 6538,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 64,
+      "meanHeap": 63,
+      "ran": 27565,
+      "ms": 1889.6847229999985,
+      "parseMs": 0,
+      "size": 11766066
+    },
+    "hintsMs": 0.38000899998587556,
+    "stages": {
+      "memory.scene.arrows": 0.8818060000048717,
+      "memory.route": 1.1886439999943832,
+      "memory.layout.arrows": 13.091631999996025,
+      "memory.scene.nested": 0.8423859999893466,
+      "memory.layout.nested": 5.7792740000004414,
+      "loop.history": 1.510708000001614,
+      "loop.scene": 149.6116239999974,
+      "loop.layout": 149.786254000006
+    },
+    "marks": {
+      "arrows": 3336,
+      "nested": 2700
+    }
+  },
+  {
+    "program": "4-dense-graph.py",
+    "trace": {
+      "steps": 5847,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 64,
+      "meanHeap": 59,
+      "ran": 17556,
+      "ms": 3772.8187,
+      "parseMs": 153.20229899999686,
+      "size": 8170585
+    },
+    "hintsMs": 0.04475299999467097,
+    "stages": {
+      "memory.scene.arrows": 0.7652500000112923,
+      "memory.route": 0.9477760000008857,
+      "memory.layout.arrows": 16.003856000010273,
+      "memory.scene.nested": 1.1640120000083698,
+      "memory.layout.nested": 4.187930000000051,
+      "loop.history": 2.3534990000043763,
+      "loop.scene": 145.66825600000448,
+      "loop.layout": 168.76623399999517
+    },
+    "marks": {
+      "arrows": 3341,
+      "nested": 2705
+    }
+  },
+  {
+    "program": "5-deep-recursion.js",
+    "trace": {
+      "steps": 1248,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 250,
+      "meanHeap": 125,
+      "ran": 1248,
+      "ms": 387.7571259999968,
+      "parseMs": 0,
+      "size": 2185819
+    },
+    "hintsMs": 0.046210999993490987,
+    "stages": {
+      "memory.scene.arrows": 1.2992430000012973,
+      "memory.route": 23.731933000002755,
+      "memory.layout.arrows": 53.34556000000157,
+      "memory.scene.nested": 1.6966790000005858,
+      "memory.layout.nested": 52.45324800000526,
+      "loop.history": 0.08951400000660215
+    },
+    "marks": {
+      "arrows": 11272,
+      "nested": 11253
+    }
+  },
+  {
+    "program": "5-deep-recursion.py",
+    "trace": {
+      "steps": 3218,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 402,
+      "meanHeap": 301,
+      "ran": 3218,
+      "ms": 5584.30525,
+      "parseMs": 402.59878300000855,
+      "size": 13773508
+    },
+    "hintsMs": 0.04405100000440143,
+    "stages": {
+      "memory.scene.arrows": 1.865432000005967,
+      "memory.route": 61.10453399999824,
+      "memory.layout.arrows": 112.40124300000025,
+      "memory.scene.nested": 5.025466000006418,
+      "memory.layout.nested": 114.34822200000053,
+      "loop.history": 0.29930400000012014,
+      "loop.scene": 15.628003000005265,
+      "loop.layout": 3.1004069999908097
+    },
+    "marks": {
+      "arrows": 18121,
+      "nested": 18112
+    }
+  },
+  {
+    "program": "6-everything.py",
+    "trace": {
+      "steps": 4470,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 1583,
+      "meanHeap": 307,
+      "ran": 4471,
+      "ms": 6071.743929,
+      "parseMs": 509.6319999999978,
+      "size": 5302652
+    },
+    "hintsMs": 0.043841999999131076,
+    "stages": {
+      "memory.scene.arrows": 2.2670599999983096,
+      "memory.route": 7.470211000007112,
+      "memory.layout.arrows": 83.21356299999752,
+      "memory.scene.nested": 2.030598999990616,
+      "memory.layout.nested": 7.689185000010184,
+      "loop.history": 0.8222069999901578,
+      "loop.scene": 58.31182700001227,
+      "loop.layout": 14.035917000001064
+    },
+    "marks": {
+      "arrows": 46804,
+      "nested": 33506
+    }
+  }
+]

@@ -25,13 +25,23 @@ import re
 import sys
 import time
 import warnings
+from itertools import chain
 from types import CodeType, FrameType
 from typing import Any
 
 from analysis import USER_FILENAME, analyze, collect_hints, last_user_line
 from policy import SamplingPolicy, load_policy
 from sampling import RECORD, LoopLengths, Sampler, user_frames
-from serialize import CONVENTIONAL_POINTERS, MAX_ITEMS, PRIMITIVE_TYPES, Serializer, is_hidden_name
+from serialize import (
+    CONVENTIONAL_POINTERS,
+    MAX_ITEMS,
+    MAX_OBJECTS,
+    PRIMITIVE_TYPES,
+    Serializer,
+    is_hidden_name,
+    keeps_nothing_alive,
+    same_items,
+)
 from shape import cost_analysis
 from steplog import Step, StepLog
 from virtual_asyncio import virtual_asyncio
@@ -79,6 +89,10 @@ class Tracer:
         # reuse its id() for another (see Serializer.new_id).
         self.keepalive: dict[str, object] = {}
         self.object_ids: dict[Any, Any] = {}
+        # Each object's last heap object, and each frame's last view, with what
+        # they were made from: reused while nothing in them changes.
+        self.heap_cache: dict[str, Any] = {}
+        self.frame_cache: dict[str, tuple[tuple, dict[str, Any]]] = {}
         self.frame_ids: dict[int, str] = {}
         self.frame_counter = 0
         self.sampler = Sampler(self.log, self.frame_ids, sampling)
@@ -214,15 +228,27 @@ class Tracer:
         if into is None and self.log.full():
             self.stopped_by = "steps"
             raise StepLimitExceeded()
+        # A recorded step can take milliseconds (a big heap): check the clock
+        # each time, not only every CLOCK_EVERY events, or a run can go far past its time.
+        if self.deadline is not None and time.perf_counter() > self.deadline:
+            self.stopped_by = "time"
+            raise StepLimitExceeded()
         frames = user_frames(frame)
-        serializer = Serializer(self.keepalive, self.object_ids, focus=self.focus_of(frames))
-        stack = [self.frame_view(fr, serializer) for fr in frames]
-        on_stack = {s["id"] for s in stack}
-        suspended = [
-            dict(self.frame_view(fr, serializer), state="suspended")
-            for fid, fr in self.suspended.items()
-            if fid not in on_stack
-        ]
+        serializer = Serializer(self.keepalive, self.object_ids, focus=self.focus_of(frames), cache=self.heap_cache)
+        # Serializing follows references depth first: a long chain of objects
+        # needs more room than the program's own recursion limit leaves.
+        limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(limit + 4 * MAX_OBJECTS + 100)
+        try:
+            stack = [self.frame_view(fr, serializer) for fr in frames]
+            on_stack = {s["id"] for s in stack}
+            suspended = [
+                dict(self.frame_view(fr, serializer), state="suspended")
+                for fid, fr in self.suspended.items()
+                if fid not in on_stack
+            ]
+        finally:
+            sys.setrecursionlimit(limit)
         step = {
             "event": event,
             "line": frame.f_lineno,
@@ -247,21 +273,34 @@ class Tracer:
             self.log.commit(step)
 
     def frame_view(self, fr: FrameType, serializer: Serializer) -> dict[str, Any]:
-        """One frame of the stack: its function, line and variables."""
+        """One frame of the stack: its function, line and variables. A frame whose
+        line and variables are the same objects as last time gets the same view
+        back (the step log then sends it as unchanged), its objects still visited."""
         is_module = fr.f_code.co_name == "<module>"
-        variables = []
-        for name, val in list(fr.f_locals.items()):
-            if is_hidden_name(name, val):
-                continue
-            if is_module and name in ("input", "print"):
-                continue
-            variables.append([name, serializer.value(val)])
-        return {
-            "id": self.frame_id(fr),
+        fid = self.frame_id(fr)
+        shown = [
+            (name, val)
+            for name, val in list(fr.f_locals.items())
+            if not is_hidden_name(name, val) and not (is_module and name in ("input", "print"))
+        ]
+        made_from = (fr.f_lineno, *chain.from_iterable(shown))
+        known = self.frame_cache.get(fid)
+        if known is not None and same_items(known[0], made_from):
+            for _, val in shown:
+                if not isinstance(val, PRIMITIVE_TYPES):
+                    serializer.value(val)
+            return known[1]
+        view = {
+            "id": fid,
             "func": "Global" if is_module else fr.f_code.co_name,
             "line": fr.f_lineno,
-            "locals": variables,
+            "locals": [[name, serializer.value(val)] for name, val in shown],
         }
+        if keeps_nothing_alive(made_from):
+            self.frame_cache[fid] = (made_from, view)
+        else:
+            self.frame_cache.pop(fid, None)
+        return view
 
     def printed(self, serializer: Serializer) -> dict[str, Any]:
         """What print() was given since the last step: the line, and the printed objects

@@ -25,7 +25,9 @@
  * This module imports PixiJS, so main.ts loads it only when the person
  * picks the canvas renderer.
  */
+
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
+import { timed } from "../../perf";
 // PixiJS builds some of its code with new Function(), which the app's
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
 // versions that don't.
@@ -236,13 +238,13 @@ abstract class CanvasWindow {
     const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
     this.drawing = drawing;
-    this.paint = paintDrawing(drawing, this.styles, this.keptPaint);
+    this.paint = timed("canvas.paint", () => paintDrawing(drawing, this.styles, this.keptPaint));
     const effects = motion !== null && !prefersReducedMotion() && !this.el.classList.contains("is-dragging-node");
-    this.build(effects);
+    timed("canvas.build", () => this.build(effects));
     this.view.setDrawn({ width: this.paint.width, height: this.paint.height });
     if (before && motion) this.animate(before, motion);
     if (effects) this.playEffects();
-    this.drawNow();
+    timed("canvas.draw", () => this.drawNow());
   }
 
   /** Paint the drawing on screen again (styles or fonts changed, or a hover), without animating. */

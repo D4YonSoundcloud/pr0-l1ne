@@ -286,32 +286,40 @@ function spreadEntries(plans: Plan[]): void {
  * result is the same every time.
  */
 export function fewestCrossings<T>(items: readonly T[], cost: (a: T, b: T) => number): T[] {
-  const order = items.slice();
-  const n = order.length;
-  if (n < 2) return order;
-  const total = (list: T[]) => {
-    let sum = 0;
-    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) sum += cost(list[i], list[j]);
-    return sum;
-  };
-  let best = total(order);
+  const n = items.length;
+  if (n < 2) return items.slice();
+  // Every pair's cost, once (by the items' first places): a move is then
+  // worked out from sums, not by totalling every pair again. Moving an item
+  // to place k of the others costs ins[k], the crossings it has with those
+  // left of it and right of it; the rest's own crossings don't change, so
+  // the best place is where ins[k] is smallest.
+  const pair = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) if (a !== b) pair[a * n + b] = cost(items[a], items[b]);
+  let order = items.map((_, i) => i);
+  let best = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) best += pair[order[i] * n + order[j]];
+  const ins = new Float64Array(n);
   for (let round = 0; round < 8 && best > 0; round++) {
     let improved = false;
-    for (const item of order.slice()) {
-      const rest = order.filter((x) => x !== item);
-      for (let at = 0; at <= rest.length; at++) {
-        const trial = [...rest.slice(0, at), item, ...rest.slice(at)];
-        const t = total(trial);
-        if (t < best) {
-          best = t;
-          improved = true;
-          order.splice(0, n, ...trial);
-        }
+    for (const x of order.slice()) {
+      const rest = order.filter((y) => y !== x);
+      const current = order.indexOf(x);
+      let at = 0;
+      for (const y of rest) at += pair[x * n + y];
+      ins[0] = at;
+      for (let k = 0; k < rest.length; k++) ins[k + 1] = ins[k] - pair[x * n + rest[k]] + pair[rest[k] * n + x];
+      // The first place with the fewest crossings, if it's fewer than where it is.
+      let place = current;
+      for (let k = 0; k <= rest.length; k++) if (ins[k] < ins[place]) place = k;
+      if (place !== current && ins[place] < ins[current]) {
+        best += ins[place] - ins[current];
+        improved = true;
+        order = [...rest.slice(0, place), x, ...rest.slice(place)];
       }
     }
     if (!improved) break;
   }
-  return order;
+  return order.map((i) => items[i]);
 }
 
 /** How many boxes a group of forward arrows would run through, with their lanes placed. */

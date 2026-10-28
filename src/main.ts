@@ -6,6 +6,7 @@
  */
 
 import { prefersReducedMotion } from "./appearance";
+import { perf } from "./perf";
 import { SVG_RENDERERS } from "./render/svgRenderers";
 import "./styles.css";
 import { Banner, type BannerTone } from "./app/banner";
@@ -38,6 +39,12 @@ import { createEditor } from "./editor";
 import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
 import { ProgramStore } from "./programs";
 import { createSettings, type RendererKind } from "./settings";
+
+// ?perf: time each stage of drawing a step, for the browser benchmark (src/perf.ts, bench/README.md).
+if (new URLSearchParams(window.location.search).has("perf")) {
+  perf.on = true;
+  (window as unknown as { __pr0l1nePerf: typeof perf }).__pr0l1nePerf = perf;
+}
 
 /** Everything remembered between visits (see settings.ts). */
 const settings = createSettings();

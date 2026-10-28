@@ -2,7 +2,7 @@
 
 import unittest
 
-from steplog import StepLog
+from steplog import StepLog, ids_part
 
 
 def step(heap):
@@ -49,3 +49,34 @@ class StepLogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeltaTests(unittest.TestCase):
+    def test_the_same_ids_in_the_same_order_are_sent_once(self):
+        log = StepLog(10)
+        a = {"kind": "list", "items": []}
+        log.commit(step({"o1": a}))
+        log.commit(step({"o1": a}))
+        log.commit(step({"o1": {"kind": "list", "items": [1]}}))
+        self.assertEqual(log.steps[0]["heapIds"], ["o1"])
+        self.assertTrue(log.steps[1]["sameIds"])
+        self.assertNotIn("heapIds", log.steps[1])
+        self.assertEqual(log.steps[1]["heap"], {})
+        self.assertTrue(log.steps[2]["sameIds"])  # one object changed: its ids didn't
+
+    def test_a_frame_that_didnt_change_is_sent_as_its_id(self):
+        log = StepLog(10)
+        outer = {"id": "f1", "func": "Global", "line": 3, "locals": []}
+        inner = {"id": "f2", "func": "f", "line": 1, "locals": []}
+        log.commit({"event": "call", "heap": {}, "stack": [outer, inner]})
+        moved = {"id": "f2", "func": "f", "line": 2, "locals": []}
+        log.commit({"event": "line", "heap": {}, "stack": [outer, moved]})
+        self.assertEqual(log.steps[0]["stack"], [outer, inner])
+        self.assertEqual(log.steps[1]["stack"], [{"id": "f1", "same": True}, moved])
+
+    def test_ids_are_sent_as_a_change_to_the_step_befores(self):
+        before = ["o%d" % i for i in range(40)]
+        self.assertEqual(ids_part(before, ["new", *before]), [0, 40, ["new"]])
+        self.assertEqual(ids_part(before, [*before[:10], "x", *before[11:]]), [10, 29, ["x"]])
+        self.assertIsNone(ids_part(before, list(reversed(before))))  # nothing kept: all of them
+        self.assertIsNone(ids_part(None, before))

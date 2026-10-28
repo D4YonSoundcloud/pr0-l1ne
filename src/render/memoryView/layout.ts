@@ -5,6 +5,7 @@
  * put), then route the arrows through the gaps (route.ts).
  */
 
+import { timed } from "../../perf";
 import { type ArrowPaint, arrowColoring, type LegendEntry } from "../../scene/arrowColors";
 import { type LinkKind, linkKinds } from "../../scene/arrowKinds";
 import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
@@ -101,6 +102,10 @@ export function arrowEnds(
 
 /** Lay out a memory scene as a drawing (drawing.ts). */
 export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { positions: new Map() }): Mark {
+  return timed("memory.layout", () => layoutMemory(scene, layout));
+}
+
+function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
   const { step, graphAlias } = scene;
   const svg = s("svg", { class: "memory-svg", xmlns: "http://www.w3.org/2000/svg" });
   svg.append(arrowMarkers());
@@ -434,7 +439,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     if (source.x + source.w + 20 <= block.origin.x) return { ...base, enterTopFrom: block.origin.x };
     return base;
   });
-  const routes = routeEdges(inputs, [...rects.values()]);
+  const routes = timed("memory.route", () => routeEdges(inputs, [...rects.values()]));
   let maxX = 0;
   let maxY = 0;
   for (const rect of rects.values()) {

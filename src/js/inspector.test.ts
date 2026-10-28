@@ -7,6 +7,8 @@ import {
   type Getter,
   inspect,
   MAX_ITEMS,
+  MAX_OBJECTS,
+  newReuseCache,
   parseParams,
   Serializer,
   windowStart,
@@ -133,10 +135,10 @@ describe("maps, sets and objects", () => {
   });
 
   it("stop drawing new objects past the limit", () => {
-    const many = Array.from({ length: 50 }, () => Array.from({ length: 10 }, () => ({})));
+    const many = Array.from({ length: 60 }, () => Array.from({ length: 60 }, () => ({})));
     const { heap } = serialize(many);
     const cut = Object.values(heap).filter((o) => o.kind === "opaque" && o.repr === "…");
-    expect(Object.keys(heap).length - cut.length).toBe(400); // drawn in full
+    expect(Object.keys(heap).length - cut.length).toBe(MAX_OBJECTS); // drawn in full
     expect(cut.length).toBeGreaterThan(0); // named only, and what they hold isn't reached
   });
 });
@@ -310,5 +312,47 @@ describe("console.log formatting", () => {
         },
       }),
     ).toBe("{ x: [Getter] }");
+  });
+});
+
+describe("reusing what didn't change", () => {
+  const ids = new WeakMap<object, string>();
+  let next = 0;
+  const reuse = newReuseCache();
+  const snapshot = (v: unknown) => {
+    const s = new Serializer(ids, () => `o${++next}`, new WeakMap(), new Map(), reuse);
+    const ref = s.value(v);
+    return { heap: s.heap, id: ref.kind === "ref" ? ref.id : "" };
+  };
+
+  it("gives an object holding the same things the same heap object, with what it holds still in the heap", () => {
+    const inner = { v: 1 };
+    const list = [inner, "a", -0];
+    const first = snapshot(list);
+    const again = snapshot(list);
+    expect(again.heap[again.id]).toBe(first.heap[first.id]);
+    expect(Object.keys(again.heap).sort()).toEqual(Object.keys(first.heap).sort());
+    inner.v = 2;
+    const changed = snapshot(list);
+    expect(changed.heap[changed.id]).toBe(first.heap[first.id]); // the list still holds the same things
+    expect(changed.heap[ids.get(inner)!]).not.toBe(first.heap[ids.get(inner)!]);
+    list[2] = 0; // -0 and 0 show differently
+    expect(snapshot(list).heap[first.id]).not.toBe(first.heap[first.id]);
+  });
+
+  it("gives a frame with the same line and variables the same view", () => {
+    const obj = { a: 1 };
+    let x = 1;
+    const getter = () =>
+      [
+        ["x", () => x],
+        ["obj", () => obj],
+      ] as [string, () => unknown][];
+    const frame = () =>
+      new Serializer(ids, () => `o${++next}`, new WeakMap(), new Map(), reuse).frame("f1", "f", 3, getter);
+    const first = frame();
+    expect(frame()).toBe(first);
+    x = 2;
+    expect(frame()).not.toBe(first);
   });
 });

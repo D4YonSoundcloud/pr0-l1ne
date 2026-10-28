@@ -76,6 +76,10 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 - **Checks against it.** Every golden trace and every conformance trace is validated in the tests. In development builds (`npm run dev`), `src/worker/runner.ts` also checks every trace a worker sends. A bad trace then fails right away with a banner naming the field (`steps[3].heap.o4: needs "items"`), and the full trace in the console. Production builds leave the check, the validator and the schema out.
 - **A conformance suite.** `src/trace/conformance.cases.ts` holds 32 small programs written in both Python and JavaScript. `conformance.test.ts` traces each pair and checks both have the same shape (`src/trace/shape.ts`): the output, how the program ended, loops and their passes (including which passes a sampled loop kept), and the final globals with every object and link they reach. Type names, sizes, ids and step counts aren't compared, since the languages differ there on purpose. If the two tracers drift apart, a case fails. To add a case, follow the notes at the top of `conformance.cases.ts`.
 
+### Benchmarks
+
+`bench/` holds programs much bigger than the examples (a 2,000-node linked list, a 1,023-node tree, a 60 × 60 grid, a dense graph, deep recursion, and all of it at once), and two scripts that time tracing and drawing them: `npx tsx scripts/bench.ts` outside the browser, and `node scripts/bench-browser.mjs` in the page (against `npm run preview`). Both can save a run and compare a later one with it (`--save baseline`, `--compare baseline`). They aren't tests: run them before and after a change to the tracers or the drawing. [bench/README.md](../bench/README.md) has the details, and `src/perf.ts` the stages they time (`timed()`; `?perf` turns it on in the page).
+
 ### Coverage
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
@@ -241,6 +245,7 @@ pr0-l1ne/
 ├── playwright.config.ts        Browser tests: Chromium, Firefox, WebKit, against npm run preview
 ├── docs/                       The documentation, and the images it uses: also the docs site (pr0l1ne.com/docs)
 │   └── .vitepress/             The docs site's configuration and theme
+├── bench/                      Big programs, and the benchmarks' saved results (see bench/README.md)
 ├── e2e/
 │   ├── sandbox.e2e.ts          What a hostile program or page would try, in real browsers
 │   ├── share.e2e.ts            Share links: open, run, edit, save, a broken link, Share
@@ -272,6 +277,7 @@ pr0-l1ne/
     ├── monaco.ts               Lean Monaco build: editor features + 3 languages
     ├── editor.ts               Monaco setup, theme, commands and line markers
     ├── appearance.ts           Canvas style settings, presets, applying them
+    ├── perf.ts                 Timing each stage of drawing a step, for the benchmarks
     ├── appearance.test.ts      Style settings tests
     ├── stylePanel.ts           The Style panel in the toolbar
     ├── hintAssist.ts           Help writing viz: hints: completions, hovers, name checks, suggestions

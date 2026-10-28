@@ -1,11 +1,13 @@
 /**
  * The Python tracer in Pyodide, for tests running in Node: set up as
  * src/worker/pyodide.worker.ts does in the browser (the same Python build,
- * a fixed hash seed, the same modules loaded the same way). Loaded once per
+ * a fixed hash seed, the same modules loaded the same way), its traces'
+ * heaps and stacks rebuilt as the worker rebuilds them. Loaded once per
  * test file.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { loadPyodide } from "pyodide";
+import { expandHeaps } from "../trace/delta";
 import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { loadPythonTracer, type PyodideFiles } from "../worker/pythonModules";
@@ -29,8 +31,9 @@ export function pythonTracer(): Promise<TracePython> {
   loading ??= (async () => {
     const pyodide = (await loadPyodide({ env: { PYTHONHASHSEED: "0" } })) as unknown as PyodideFiles;
     const { runTrace } = loadPythonTracer(pyodide, pythonFiles());
+    // Heaps and stacks rebuilt from their deltas, as the worker does before sending a trace to the page.
     return (source, maxSteps, maxSeconds, sampling = POLICY.sampling) =>
-      JSON.parse(runTrace(source, maxSteps, maxSeconds, JSON.stringify(sampling))) as Trace;
+      expandHeaps(JSON.parse(runTrace(source, maxSteps, maxSeconds, JSON.stringify(sampling))) as Trace);
   })();
   return loading;
 }
