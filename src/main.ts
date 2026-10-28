@@ -27,7 +27,7 @@ import { RendererSwitch } from "./app/rendererSwitch";
 import { LanguageRoutes, languageFromPath } from "./app/routing";
 import { RunController } from "./app/runController";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
-import { scrollableTools } from "./app/sectionTools";
+import { toolsMenu } from "./app/sectionTools";
 import { ShareController } from "./app/shareController";
 import { installShortcuts } from "./app/shortcuts";
 import { SpacingController } from "./app/spacingController";
@@ -359,8 +359,9 @@ new WindowDocking({
   reducedMotion: prefersReducedMotion,
   wide: () => matchMedia("(min-width: 821px) and (min-height: 501px)").matches,
 });
-// The windows' headers: one row each, scrolling sideways when their tools don't fit.
-for (const tools of [els.memoryTools, els.loopTools]) scrollableTools(tools);
+// The windows' headers: one row each, with a ⋯ menu for the tools that don't fit.
+toolsMenu(els.memoryTools, "More memory view tools");
+toolsMenu(els.loopTools, "More loop history tools");
 // On a phone: which one or two windows show (styles.css lays them out).
 new MobileViewsController(els, settings.mobileViews);
 

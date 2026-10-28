@@ -108,6 +108,46 @@ test("a window dragged by its header moves where the preview shows, and stays th
   await expect(page.locator("#editor .view-lines")).toBeVisible();
 });
 
+test("a window's tools that don't fit go into its ⋯ menu, and still work there", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const more = page.locator("#loop-section .tools-more");
+  await expect(more).toBeVisible();
+  await more.click();
+  const menu = page.locator("#loop-section .tools-menu");
+  await expect(menu).toBeVisible();
+  await menu.getByText("One above another").click();
+  await expect(page.locator("#loop-vertical")).toBeChecked();
+  // Clicking elsewhere closes it.
+  await page.locator("#loop").click({ position: { x: 20, y: 200 } });
+  await expect(menu).toBeHidden();
+
+  // With room again, the tools are back on the row and the ⋯ button goes.
+  await page.setViewportSize({ width: 1900, height: 800 });
+  await page.locator('#loop-section [data-action="maximize"]').click();
+  await expect(more).toBeHidden();
+  await expect(page.locator("#loop-section .section-tools #loop-vertical")).toBeAttached();
+});
+
+test("a window can be dragged from anywhere on its header that isn't a control", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+  const head = await box("#editor-pane .editor-head");
+  const loop = await box("#loop-section");
+  // The code's header, between its name and its buttons.
+  await page.mouse.move(head.x + head.width / 2, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(head.x + head.width / 2 + 40, head.y + 60, { steps: 4 });
+  await page.mouse.move(loop.x + loop.width / 2, loop.y + loop.height * 0.8, { steps: 10 });
+  await expect(page.locator(".dock-preview")).toHaveText("below Loop history");
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  expect((await box("#editor-pane")).y).toBeGreaterThan((await box("#loop-section")).y);
+});
+
 test("window headers stay one row, and the zoom controls fold away and stay folded", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto("/javascript");

@@ -9,9 +9,9 @@ import { WindowDocking } from "./docking";
  */
 function setup(options: { wide?: boolean } = {}) {
   document.body.innerHTML = `
-    <section id="editor"><button class="window-grip" data-dock="editor"></button><span data-dock="editor" data-dock-name>Code</span></section>
-    <section id="memory"><button class="window-grip" data-dock="memory"></button><h2 data-dock="memory" data-dock-name>Memory</h2></section>
-    <section id="loop"><button class="window-grip" data-dock="loop"></button><h2 data-dock="loop" data-dock-name>Loop history</h2></section>`;
+    <section id="editor"><div class="head" data-dock="editor"><button class="window-grip"></button><span data-dock-name>Code</span></div></section>
+    <section id="memory"><div class="head" data-dock="memory"><button class="window-grip"></button><h2 data-dock-name>Memory</h2><button class="tool">Arrows</button><label><input type="checkbox"> Sizes</label></div></section>
+    <section id="loop"><div class="head" data-dock="loop"><button class="window-grip"></button><h2 data-dock-name>Loop history</h2></div></section>`;
   const $ = (id: string) => document.getElementById(id)!;
   const windows = { editor: $("editor"), memory: $("memory"), loop: $("loop") };
   const rect = (x: number, y: number, w: number, h: number) => () =>
@@ -38,10 +38,12 @@ function setup(options: { wide?: boolean } = {}) {
     reducedMotion: () => true,
     wide: () => options.wide ?? true,
   });
-  const grip = (w: WindowName) => document.querySelector<HTMLElement>(`.window-grip[data-dock="${w}"]`)!;
-  for (const w of ["editor", "memory", "loop"] as const) grip(w).setPointerCapture = () => {};
-  const pointer = (w: WindowName, type: string, x: number, y: number) =>
-    grip(w).dispatchEvent(
+  const grip = (w: WindowName) => document.querySelector<HTMLElement>(`#${w} .window-grip`)!;
+  const head = (w: WindowName) => document.querySelector<HTMLElement>(`[data-dock="${w}"]`)!;
+  for (const w of ["editor", "memory", "loop"] as const) head(w).setPointerCapture = () => {};
+  /** A pointer event on a window's grip (or another part of its header). */
+  const pointer = (w: WindowName, type: string, x: number, y: number, on: Element = grip(w)) =>
+    on.dispatchEvent(
       Object.assign(new MouseEvent(type, { button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true }), {
         pointerId: 1,
       }),
@@ -112,6 +114,28 @@ describe("dragging a window", () => {
     pointer("memory", "pointermove", 60, 400);
     expect(docking.preview.hidden).toBe(true);
     pointer("memory", "pointerup", 60, 400);
+    expect(moves).toEqual([]);
+  });
+});
+
+describe("where a drag starts", () => {
+  it("anywhere on the header: its name, its background", () => {
+    const { pointer, arrangement } = setup();
+    const name = document.querySelector("#memory h2")!;
+    pointer("memory", "pointerdown", 450, 10, name);
+    pointer("memory", "pointermove", 60, 400, name);
+    pointer("memory", "pointerup", 60, 400, name);
+    expect(order(arrangement())).toEqual(["memory", "editor", "loop"]);
+  });
+
+  it("not on the header's own controls, which work as usual", () => {
+    const { pointer, moves, docking } = setup();
+    for (const control of [document.querySelector("#memory .tool")!, document.querySelector("#memory input")!]) {
+      pointer("memory", "pointerdown", 450, 10, control);
+      pointer("memory", "pointermove", 60, 400, control);
+      expect(docking.preview.hidden).toBe(true);
+      pointer("memory", "pointerup", 60, 400, control);
+    }
     expect(moves).toEqual([]);
   });
 });

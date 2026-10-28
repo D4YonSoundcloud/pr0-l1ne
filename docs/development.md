@@ -113,7 +113,7 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/arrangement.ts` | Where the windows go, as a tree of three: the arrangements, moving a window (beside another, along an edge, or swapping), the grid tracks for one, and where a drop goes. Pure, with its own tests |
 | `src/app/docking.ts` | Moving windows by dragging their headers: the preview box that glides to where a window would go, the drop, the windows gliding to their places, and arrow keys on a window's grip |
 | `src/app/routing.ts` | Each language's address (/python, /sql...): the address follows the language, Back and Forward switch it, and pr0l1ne.com shows the address of the language it opened |
-| `src/app/sectionTools.ts` | A window header's tools: one row that never wraps, scrolling sideways (a mouse wheel too), with a fade at the side that has more |
+| `src/app/sectionTools.ts` | A window header's tools: one row that never wraps, with the tools that don't fit moved (not copied) into the header's ⋯ menu, from the end, and back as the window widens |
 | `src/app/loadingCard.ts` | The card over the canvas, with a spinner, while Python or PostgreSQL downloads |
 | `src/site/pages.ts` | The site's pages for search engines: each language's title, description, canonical address, structured data and introduction, and the sitemap. The build (`sitePages` in vite.shared.ts) writes python.html and the others from index.html with them |
 | `src/app/mobileViews.ts` | On a phone: which one or two of the editor, memory view and loop history show (the Code / Memory / Loops bar); styles.css lays them out under "Phones and narrow windows" |

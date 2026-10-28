@@ -1,5 +1,6 @@
 /**
- * Moving windows by dragging them by their headers (a wide screen only).
+ * Moving windows by dragging them by their headers, from anywhere that
+ * isn't one of the header's own controls (a wide screen only).
  *
  * While a window is dragged, a preview box glides to where it would go if
  * dropped there: beside the window under the pointer (on its nearest side),
@@ -49,6 +50,9 @@ const DRAG_START = 4;
 const ARM = 24;
 const GLIDE_MS = 240;
 const GLIDE_EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+
+/** What in a header is a control of its own, not somewhere to drag the window from. */
+const CONTROLS = "button, input, select, textarea, a, label, [role='tab'], [role='tablist'] > *, .tools-menu";
 
 const KEY_EDGES: Record<string, Side> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "top", ArrowDown: "bottom" };
 
@@ -102,8 +106,10 @@ export class WindowDocking {
         handle.addEventListener("pointerup", (e) => this.release(e));
         handle.addEventListener("pointercancel", () => this.cancel());
         handle.addEventListener("lostpointercapture", () => this.cancel());
-        if (handle.tagName === "BUTTON") handle.addEventListener("keydown", (e) => this.key(name, e));
       }
+      // The grip moves it from the keyboard.
+      for (const grip of options.layout.windows[name].querySelectorAll<HTMLElement>(".window-grip"))
+        grip.addEventListener("keydown", (e) => this.key(name, e));
     }
     doc.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.drag?.started) {
@@ -132,6 +138,9 @@ export class WindowDocking {
 
   private press(window: WindowName, handle: HTMLElement, e: PointerEvent): void {
     if (e.button !== 0 || !this.wide() || this.options.layout.collapsed.includes(window)) return;
+    // The header's own buttons, menus and checkboxes work as usual: anywhere else on it (the grip too) drags.
+    const control = (e.target as Element | null)?.closest?.(CONTROLS);
+    if (control && handle.contains(control) && !control.classList.contains("window-grip")) return;
     e.preventDefault();
     handle.setPointerCapture?.(e.pointerId);
     this.drag = {

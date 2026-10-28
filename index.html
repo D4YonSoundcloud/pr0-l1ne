@@ -94,9 +94,9 @@
       <main class="workspace" id="workspace">
         <section class="editor-pane" id="editor-pane" aria-label="Code editor">
           <button type="button" class="window-bar" data-window="editor" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Code</span></button>
-          <div class="pane-head editor-head">
-            <button type="button" class="window-grip" data-dock="editor" aria-label="Move the code window" title="Drag to move this window anywhere. Or press an arrow key to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
-            <span class="pane-name" data-dock="editor" data-dock-name>Code</span>
+          <div class="pane-head editor-head" data-dock="editor">
+            <button type="button" class="window-grip" aria-label="Move the code window" title="Drag the header to move this window anywhere. Or press an arrow key here to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
+            <span class="pane-name" data-dock-name>Code</span>
             <div class="window-controls" role="group" aria-label="Window size">
               <button type="button" class="window-button" data-window="editor" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
               <button type="button" class="window-button" data-window="editor" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
@@ -136,9 +136,9 @@
           <div class="canvas" id="canvas">
             <section class="canvas-section" id="memory-section" aria-labelledby="memory-title">
               <button type="button" class="window-bar" data-window="memory" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Memory</span></button>
-              <div class="section-head">
-                <button type="button" class="window-grip" data-dock="memory" aria-label="Move the memory window" title="Drag to move this window anywhere. Or press an arrow key to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
-                <h2 class="section-title" id="memory-title" data-dock="memory" data-dock-name>Memory</h2>
+              <div class="section-head" data-dock="memory">
+                <button type="button" class="window-grip" aria-label="Move the memory window" title="Drag the header to move this window anywhere. Or press an arrow key here to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
+                <h2 class="section-title" id="memory-title" data-dock-name>Memory</h2>
                 <!-- One row, always: what doesn't fit scrolls sideways (app/sectionTools.ts). -->
                 <div class="section-tools" id="memory-tools">
                 <div class="segmented" role="group" aria-label="How references are drawn">
@@ -166,9 +166,9 @@
             <div id="canvas-divider" class="divider horizontal" role="separator" aria-orientation="horizontal" aria-label="Resize memory and loop history" aria-valuemin="15" aria-valuemax="85" aria-valuenow="55" tabindex="0" title="Drag to resize. Double-click to reset."></div>
             <section class="canvas-section" id="loop-section" aria-labelledby="loop-title">
               <button type="button" class="window-bar" data-window="loop" data-action="expand" aria-expanded="true" title="Open this window again"><span class="visually-hidden">Open </span><span class="window-bar-label">Loop history</span></button>
-              <div class="section-head">
-                <button type="button" class="window-grip" data-dock="loop" aria-label="Move the loop history window" title="Drag to move this window anywhere. Or press an arrow key to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
-                <h2 class="section-title" id="loop-title" data-dock="loop" data-dock-name>Loop history</h2>
+              <div class="section-head" data-dock="loop">
+                <button type="button" class="window-grip" aria-label="Move the loop history window" title="Drag the header to move this window anywhere. Or press an arrow key here to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
+                <h2 class="section-title" id="loop-title" data-dock-name>Loop history</h2>
                 <!-- One row, always: what doesn't fit scrolls sideways (app/sectionTools.ts). -->
                 <div class="section-tools" id="loop-tools">
                 <div class="segmented" role="group" aria-label="How iterations are shown">

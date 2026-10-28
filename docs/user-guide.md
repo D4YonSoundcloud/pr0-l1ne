@@ -110,7 +110,7 @@ If you're mid-edit and the code has a syntax error, the canvas keeps showing the
 
 On a wide screen, the code, the memory view and the loop history can go anywhere on the page. To begin with, the code is on the left and the memory view sits over the loop history on the right.
 
-**Moving a window.** Drag a window by the grip (⠿) at the left of its header, or by its name. A box shows where the window will go and glides there as you move:
+**Moving a window.** Drag a window by its header: anywhere on it that isn't a button, a menu or a checkbox, such as its name, the grip (⠿) at its left, or the space between its tools. A box shows where the window will go and glides there as you move:
 
 - **Near another window's side**, it goes beside that window on that side. Drop the memory view on the left of the code to put it there, or under the code to stack the two.
 - **In the middle of another window**, the two swap places, keeping their sizes.
@@ -138,7 +138,7 @@ A phone screen can't fit the editor, the memory view and the loop history at onc
 - Tap a window that's hidden to show it. If two were already showing, the one you picked longest ago makes room.
 - Tap one of two that are showing to hide it, and the other fills the screen.
 
-It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; the window headers scroll sideways the same way. The Style, Layout, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
+It starts with the code and the memory view, and remembers what you pick. On a phone the toolbar's buttons are one row that scrolls sideways, with **Run** first; a window header's tools that don't fit are in its **⋯** menu. The Style, Layout, Complexity and Measure panels open over the whole screen, so they work whichever windows are showing. Both windows start with [Auto-fit](#auto-fit) on, so the whole diagram fits.
 
 The layout button and the window buttons aren't shown on a phone, which has this layout instead. This layout is used on any screen narrower than 820 pixels, or shorter than 500 (a phone on its side); a tablet held upright gets it too.
 
@@ -218,7 +218,7 @@ With a section focused (click it or `Tab` to it), `+` and `−` zoom too. The ar
 
 The zoom controls float at the bottom right of each section. If they cover something, **›** at their right end folds them into a small **‹ Zoom** button (click it to open them again). Each section remembers whether its controls are folded.
 
-Each section's header is always one row: when its buttons don't fit (a narrow window, or side by side), the row scrolls sideways, with a fade at the side that has more. Scroll it with a mouse wheel or a trackpad. The header never changes height, so the drawing under it never jumps or rezooms.
+Each section's header is always one row: when its buttons don't fit (a narrow window, or side by side), the ones at the end go into a **⋯** menu at its right, and come back as the window gets wider. They work the same in the menu; click anywhere else, or press `Esc`, to close it. The header never changes height, so the drawing under it never jumps or rezooms.
 
 Zooming centers on the pointer, so you can zoom into the part you're looking at. Each section keeps its own position and zoom as you step and as your code re-runs. While you step through a loop, the loop history pans just enough to keep the running iteration in view.
 

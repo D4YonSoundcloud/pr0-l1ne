@@ -252,9 +252,8 @@ body {
 }
 
 /* A window's header is always one row, the same height, so the window
-   below never changes size (which would also change Auto-fit's zoom). Its
-   tools scroll sideways when they don't fit (app/sectionTools.ts), with a
-   fade at the edge that has more. */
+   below never changes size (which would also change Auto-fit's zoom). The
+   tools that don't fit go into the header's ⋯ menu (app/sectionTools.ts). */
 .section-head {
   display: flex;
   flex-wrap: nowrap;
@@ -277,26 +276,67 @@ body {
   gap: 12px;
   min-width: 0;
   height: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-.section-tools::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 .section-tools > * {
   flex: none;
   white-space: nowrap;
 }
-.section-tools.more-right {
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+/* The ⋯ button: the tools that didn't fit. */
+.tools-more {
+  flex: none;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
 }
-.section-tools.more-left {
-  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+.tools-more:hover,
+.tools-more.is-open {
+  background: color-mix(in srgb, var(--paper) 82%, var(--ink));
 }
-.section-tools.more-left.more-right {
-  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+.tools-more[hidden] {
+  display: none;
+}
+/* The menu, under the header at its right end. */
+.canvas-section {
+  position: relative;
+}
+.tools-menu {
+  position: absolute;
+  top: 42px;
+  right: 8px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 56px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 8px;
+  background: var(--paper-band);
+  color: var(--paper-ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.tools-menu[hidden] {
+  display: none;
+}
+.tools-menu > * {
+  flex: none;
+  max-width: 100%;
+}
+.tools-menu > .loop-tabs {
+  flex-wrap: wrap;
 }
 .section-head > .window-controls {
   flex: none;
@@ -2276,9 +2316,13 @@ select {
   .window-grip {
     display: inline-grid;
   }
+  /* Anywhere on a header that isn't a control drags the window. */
   [data-dock] {
     cursor: grab;
     touch-action: none;
+  }
+  [data-dock] :is(button, input, select, label, a, .loop-tab) {
+    cursor: pointer;
   }
   /* Folded: only the bar shows. The editor's panels (Style, Complexity,
      Measure) stay where they open, at their own width. */
@@ -3230,7 +3274,14 @@ select {
 
 /* A query has no variables, loops or lines to count: the controls for them go (app/languageKind.ts). */
 [data-kind="query"]
-:is(.measure-group, #complexity, #memory-section .section-tools > *, #loop-section .section-tools > *) {
+:is(
+  .measure-group,
+  #complexity,
+  #memory-section :is(.section-tools, .tools-menu) > *,
+  #loop-section :is(.section-tools, .tools-menu) > *,
+  .tools-more,
+  .tools-menu
+) {
   display: none !important;
 }
 

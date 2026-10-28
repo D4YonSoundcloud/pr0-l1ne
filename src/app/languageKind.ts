@@ -33,7 +33,7 @@ export function showLanguageKind(kind: LanguageKind, doc: Document = document): 
     ["memory", titles.memory],
     ["loop", titles.loop],
   ] as const)
-    doc.querySelector(`.window-grip[data-dock="${pane}"]`)?.setAttribute("aria-label", `Move the ${title} window`);
+    doc.querySelector(`#${pane}-section .window-grip`)?.setAttribute("aria-label", `Move the ${title} window`);
   set('.view-choice[data-view="memory"]', titles.memoryView);
   set('.view-choice[data-view="loop"]', titles.loopView);
 }
