@@ -5,6 +5,9 @@
  */
 import {
   type Appearance,
+  ARROW_KEYS,
+  ARROW_THEMES,
+  type ArrowMode,
   COLOR_FIELDS,
   clone,
   EASINGS,
@@ -162,6 +165,7 @@ export class StylePanel {
       this.section("memory", "Memory window", this.paneControls("memory")),
       this.section("loop", "Loop history window", this.paneControls("loop")),
       this.section("colors", "Colors", this.colorControls()),
+      this.section("arrows", "Arrows", this.arrowControls()),
       this.section("lines", "Lines and text", this.lineControls()),
       this.section("output", "Printed output", this.outputControls()),
       this.footer(),
@@ -543,6 +547,7 @@ export class StylePanel {
     const box = h("div", { class: "style-group" });
     let group = "";
     for (const field of COLOR_FIELDS) {
+      if (field.group === "Arrows") continue; // their own section
       if (field.group !== group) {
         group = field.group;
         box.append(h("h3", { class: "style-subhead" }, group));
@@ -558,6 +563,73 @@ export class StylePanel {
         ),
       );
     }
+    return box;
+  }
+
+  /** Arrows: colored by kind or all one color, a set of colors to start from, dashes, and each kind's color. */
+  private arrowControls(): HTMLElement {
+    const box = h("div", { class: "style-group" });
+    box.append(
+      this.choice<ArrowMode>(
+        "Colors",
+        [
+          { label: "By kind", value: "kind" },
+          { label: "One color", value: "one" },
+        ],
+        () => this.options.get().arrowMode,
+        (v) =>
+          this.update((a) => {
+            a.arrowMode = v;
+          }),
+      ),
+    );
+    const id = nextId("arrow-theme");
+    const themes = h("select", { id, class: "style-select" });
+    themes.append(new Option("Choose a set…", ""));
+    for (const theme of ARROW_THEMES) themes.append(new Option(theme.name, theme.name));
+    themes.addEventListener("change", () => {
+      const theme = ARROW_THEMES.find((t) => t.name === themes.value);
+      themes.value = "";
+      if (!theme) return;
+      this.update((a) => {
+        ARROW_KEYS.forEach((key, i) => {
+          a.colors[key] = theme.colors[i];
+        });
+        a.arrowDashes = !!theme.dashes;
+        a.arrowMode = "kind";
+      });
+      this.sync();
+    });
+    box.append(h("div", { class: "style-row" }, h("label", { for: id }, "Start from"), themes));
+    box.append(
+      this.checkbox(
+        "Dashes for each kind",
+        () => this.options.get().arrowDashes,
+        (v) =>
+          this.update((a) => {
+            a.arrowDashes = v;
+          }),
+        "Tell the kinds apart by dashes too, not only color: for printing, or for color blindness",
+      ),
+    );
+    for (const field of COLOR_FIELDS.filter((f) => f.group === "Arrows"))
+      box.append(
+        this.color(
+          field.label,
+          () => this.options.get().colors[field.key],
+          (v) =>
+            this.update((a) => {
+              a.colors[field.key] = v;
+            }),
+        ),
+      );
+    box.append(
+      h(
+        "p",
+        { class: "style-help" },
+        "References are variables, lists and dicts pointing at things. Tree links go from a parent to its child; links (next) from an object to another of its class; back links are the way back of a two-way link, dashed; a link that closes a loop points back into the links it came along. In One color, every arrow uses the References color.",
+      ),
+    );
     return box;
   }
 

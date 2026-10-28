@@ -12,6 +12,7 @@
  * "Scenes and renderers".
  */
 import { valueKey } from "../trace/diff";
+import { evaluateText, showVal, truthy } from "../trace/expr";
 import {
   findGraphs,
   type GraphData,
@@ -36,7 +37,7 @@ import {
   type Value,
 } from "../trace/types";
 import { type Pointer, pointersFor } from "./pointers";
-import { type WindowSpan, windowsFor } from "./windows";
+import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
 // ---------------------------------------------------------------------------
 // Reading a row
@@ -67,7 +68,12 @@ export function cellsOf(obj: ContainerObject): Cell[] {
     default: {
       // A long list's items are a window of it: keys and labels are real indices.
       const offset = obj.offset ?? 0;
-      return obj.items.map((value, index) => ({ key: String(offset + index), label: String(offset + index), value }));
+      // A number's bits (viz: bits) count from the right: bit 0 is the last cell.
+      return obj.items.map((value, index) => ({
+        key: String(offset + index),
+        label: String(obj.typeName === "bits" ? obj.length - 1 - (offset + index) : offset + index),
+        value,
+      }));
     }
   }
 }
@@ -341,8 +347,16 @@ export interface LoopScene {
   sizes(row: LoopRow): StepSizes | null;
   /** Index pointers into a container in a row (`name[]`: a grid's columns). */
   pointers(row: LoopRow, name: string, changedNames?: Set<string>): Pointer[];
-  /** Sliding windows over a list in a row (`viz: window`). */
+  /** Sliding windows and labeled regions over a list in a row (`viz: window`, `viz: region`). */
   windows(row: LoopRow, name: string, changedNames?: Set<string>): WindowSpan[];
+  /** The two cells of a list being compared in a row (`viz: compare`). */
+  compares(row: LoopRow, name: string, changedNames?: Set<string>): CompareSpan[];
+  /** Does a container have labeled regions (room for their labels above it)? */
+  regionLabels(name: string): boolean;
+  /** `viz: watch` expressions, worked out in a row: their text, and value ("?" where it can't be worked out). */
+  watches(row: LoopRow): { text: string; value: string }[];
+  /** `viz: check` invariants that are false in a row. */
+  failedChecks(row: LoopRow): string[];
   /** The grid cell a row's step reads or writes. */
   gridFocus(row: LoopRow, name: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** The loop's info, by id (the history's own when not given). */
@@ -401,6 +415,7 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   let track = findLinkedTrack(
     all.map((row) => ({ locals: row.frame.locals, heap: row.heap })),
     trace.viz?.linked,
+    trace.viz?.labels,
   );
   if (track && firstGraph?.objectNodes && track.typeName === firstGraph.name) track = null;
   const trackRows: (LinkedRow | null)[] = all.map((row) =>
@@ -421,6 +436,23 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       ? runKey(row.loop, row.instance ?? 0)
       : runKey(history.context.loop, history.context.instance);
   const nameOf = (row: LoopRow) => (history.nested ? loopVariable(info(row.loop)) : null);
+  const language =
+    trace.language === "python" ? "python" : trace.language === "typescript" ? "typescript" : "javascript";
+  /** "i = 3" for `viz: rows by i`: the first name in its loop's header, or else the first it has. */
+  const rowsBy = (row: LoopRow): string | null => {
+    const names = trace.viz?.rowsBy;
+    if (!names?.length) return null;
+    const locals = new Map(row.frame.locals);
+    const header = info(row.loop ?? history.info.id)?.header ?? "";
+    const words = new Set(header.match(/[A-Za-z_$][\w$]*/g) ?? []);
+    // With nested loops together, a loop without one of the names in its header keeps "j #3".
+    const candidates = history.nested
+      ? names.filter((n) => words.has(n))
+      : [...names.filter((n) => words.has(n)), ...names];
+    const name = candidates.find((n) => locals.get(n)?.kind === "prim");
+    const value = name ? locals.get(name) : undefined;
+    return name && value?.kind === "prim" ? `${name} = ${value.repr}` : null;
+  };
   const hasContent = containers.length > 0 || !!track || !!firstGraph;
 
   // Which rows changed something compared with the row before?
@@ -541,7 +573,13 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     items,
     hiddenRows,
     before,
-    label: (row) => (row.iteration === 0 ? "before" : `${nameOf(row) ? `${nameOf(row)} ` : ""}#${row.iteration}`),
+    label: (row) => {
+      if (row.iteration === 0) return "before";
+      // `viz: rows by i`: the loop's own variable's value, where it has one.
+      const by = rowsBy(row);
+      if (by) return by;
+      return `${nameOf(row) ? `${nameOf(row)} ` : ""}#${row.iteration}`;
+    },
     depth: (row) => (history.nested ? (row.depth ?? 0) : 0),
     header(row) {
       const loop = info(row.loop ?? history.info.id);
@@ -557,6 +595,20 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null,
     pointers: (row, name, changedNames) => pointersFor(name, trace.indexNames, new Map(row.frame.locals), changedNames),
     windows: (row, name, changedNames) => windowsFor(name, trace.viz?.windows, new Map(row.frame.locals), changedNames),
+    compares: (row, name, changedNames) =>
+      comparesFor(name, trace.viz?.compares, new Map(row.frame.locals), changedNames),
+    regionLabels: (name) => hasRegionLabels(name, trace.viz?.windows),
+    watches: (row) =>
+      (trace.viz?.watches ?? []).map((w) => {
+        const value = evaluateText(w.text, new Map(row.frame.locals), row.heap, language);
+        return { text: w.text, value: value === undefined ? "?" : showVal(value, language) };
+      }),
+    failedChecks: (row) =>
+      (trace.viz?.checks ?? []).flatMap((c) => {
+        const value = evaluateText(c.text, new Map(row.frame.locals), row.heap, language);
+        // Only a check that can be worked out here, and is false, fails.
+        return value !== undefined && !truthy(value) ? [c.text] : [];
+      }),
     gridFocus: (row, name, size) =>
       gridFocus(
         trace.gridAccesses,

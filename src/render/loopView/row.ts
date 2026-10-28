@@ -10,9 +10,11 @@ import { formatBytes } from "../../trace/memory";
 import {
   CELL_H,
   changeArrow,
+  compareMarks,
   INDEX_H,
   POINTER_H,
   pointerMarkers,
+  REGION_H,
   STRIP_H,
   s,
   stripBar,
@@ -65,6 +67,21 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
     "data-top": y - 6,
     "data-bottom": y + rowH + 4,
   });
+  // A `viz: check` that's false here: the row turns red.
+  const failed = scene.failedChecks(row);
+  if (failed.length) {
+    g.classList.add("is-failing");
+    g.append(
+      s("rect", {
+        class: "failing-band",
+        x: MARGIN - 8,
+        y: y - 6,
+        width: contentW - MARGIN + 16,
+        height: rowH + 10,
+        rx: 6,
+      }),
+    );
+  }
   if (isCurrent) {
     g.append(
       s("rect", {
@@ -111,6 +128,23 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
     scalarLine.append(
       s("tspan", { class: isChanged ? "is-changed" : null, dx: first ? 0 : 22 }, `${name} = ${value.repr}`),
     );
+    first = false;
+  }
+  // `viz: watch` expressions, with their values, after the variables; then `viz: check`s that are false.
+  const prevWatches = prevRow ? scene.watches(prevRow) : [];
+  scene.watches(row).forEach((w, i) => {
+    const isChanged = !!prevRow && prevWatches[i]?.value !== w.value;
+    scalarLine.append(
+      s(
+        "tspan",
+        { class: ["watch", isChanged && "is-changed"].filter(Boolean).join(" "), dx: first ? 0 : 22 },
+        `${w.text} = ${w.value}`,
+      ),
+    );
+    first = false;
+  });
+  for (const text of failed) {
+    scalarLine.append(s("tspan", { class: "check-failed", dx: first ? 0 : 22 }, `✗ ${text}`));
     first = false;
   }
   g.append(scalarLine);
@@ -184,11 +218,16 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
         const offset = obj.offset ?? 0;
         const shown = windows.map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
         containerG.append(
-          windowBands(shown, (i) => column.x + i * column.cellW, column.cellW, cellsY, CELL_H, cells.length, {
-            key: `win:${column.name}`,
-            originX: 0,
-            originY: 0,
-          }),
+          windowBands(
+            shown,
+            (i) => column.x + i * column.cellW,
+            column.cellW,
+            cellsY,
+            CELL_H,
+            cells.length,
+            { key: `win:${column.name}`, originX: 0, originY: 0 },
+            labelsY - REGION_H,
+          ),
         );
       }
     }
@@ -205,6 +244,17 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
     if (obj.kind !== "dict" && obj.kind !== "set") {
       const pointers = scene.pointers(row, column.name, changedNames);
       const offset = obj.offset ?? 0;
+      // The cells being compared (viz: compare), over the cells.
+      const compares = scene.compares(row, column.name, changedNames);
+      if (compares.length) {
+        const shown = compares.map((c) => ({
+          ...c,
+          indexes: [c.indexes[0] - offset, c.indexes[1] - offset] as [number, number],
+        }));
+        containerG.append(
+          compareMarks(shown, (i) => column.x + i * column.cellW, column.cellW, cellsY, CELL_H, cells.length),
+        );
+      }
       if (pointers.length) {
         const shown = pointers.map((p) => ({ ...p, index: p.index - offset }));
         containerG.append(
@@ -225,7 +275,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
               pointers,
             },
             column.x,
-            labelsY - STRIP_H,
+            labelsY - STRIP_H - (scene.regionLabels(column.name) ? REGION_H : 0),
             column.cellsW ?? cells.length * column.cellW,
             `strip:${column.name}`,
           ),

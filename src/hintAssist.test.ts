@@ -216,3 +216,36 @@ let x = 1.5;`);
     expect(c.classes.get("Node")).toEqual({ fields: ["v", "next"], links: ["next"] });
   });
 });
+
+describe("the newer hints in the editor", () => {
+  it("completes each with the right kinds of name", () => {
+    expect(complete("// viz: bits ")?.labels).toEqual(["best", "left", "right"]);
+    expect(complete("// viz: chars ")?.labels).toEqual(["s"]);
+    expect(complete("// viz: region ")?.labels).toEqual(["nums", "s"]);
+    expect(complete("// viz: region nums: ")?.labels[0]).toBe("[left, right]");
+    expect(complete("// viz: compare ")?.labels).toEqual(["nums", "s"]);
+    expect(complete("// viz: format best ")?.labels).toEqual(expect.arrayContaining(["hex", ".2f", ".1%"]));
+    expect(complete("// viz: rows ")?.labels).toEqual(["by"]);
+    expect(complete("// viz: rows by ")?.labels).toContain("left");
+    expect(complete("// viz: focus ")?.labels).toEqual(["line", "for", "while", "all"]);
+    expect(complete("// viz: label ")?.items[0]).toMatchObject({ label: "Node", insert: "Node by " });
+    expect(complete("// viz: label Node by ")?.labels).toEqual(["val"]);
+    expect(complete("// viz: watch ")?.labels).toContain("nums");
+  });
+
+  it("checks their names, leaving out labels, formats, widths and functions", () => {
+    const quiet = [
+      '// viz: region nums: [0, left) "sorted"',
+      "// viz: format best .2f",
+      "// viz: bits best 8",
+      "// viz: rows by left",
+      "// viz: focus line 3",
+      "// viz: watch sum(nums[0:left]) + len(s)",
+      "// viz: check left <= right and not seen",
+      "// viz: label Node by val",
+    ];
+    for (const line of quiet) expect(nameProblems(line, "javascript", ctx), line).toEqual([]);
+    expect(nameProblems("// viz: watch rigth - left", "javascript", ctx)[0].suggestion).toBe("right");
+    expect(nameProblems("// viz: label Node by vall", "javascript", ctx)[0].suggestion).toBe("val");
+  });
+});

@@ -8,7 +8,7 @@
  * turning around while the nodes stay put.
  */
 import { valueKey } from "./diff";
-import type { HeapObject, LinkedHint, Value } from "./types";
+import type { HeapObject, LabelHint, LinkedHint, Value } from "./types";
 
 /** The parts of a loop row this module needs. */
 export interface RowSnapshot {
@@ -86,7 +86,16 @@ function roots(row: RowSnapshot, nodeType: string | null): { name: string; id: s
 }
 
 /** Find the linked class in a loop's rows, if there is one. */
-export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): LinkedTrack | null {
+export function findLinkedTrack(
+  rows: RowSnapshot[],
+  hints: LinkedHint[] = [],
+  labels: LabelHint[] = [],
+): LinkedTrack | null {
+  // `viz: label Node by val` says which field a node shows.
+  const labelOf = (type: string, fields: string[]) => {
+    const field = labels.find((l) => l.typeName === type)?.field;
+    return field && fields.includes(field) ? field : undefined;
+  };
   // A `viz: tree` / `viz: list` hint for a class in these rows wins over
   // detection: it says exactly which fields are the links.
   for (const hint of hints) {
@@ -95,7 +104,8 @@ export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): 
       ...new Set(rows.flatMap((row) => nodesOfType(row, hint.typeName).flatMap(([, f]) => f.map(([n]) => n)))),
     ];
     const others = fields.filter((f) => !hint.links.includes(f));
-    const valueField = others.find((f) => isMostlyPrimitive(rows, hint.typeName, f)) ?? null;
+    const valueField =
+      labelOf(hint.typeName, others) ?? others.find((f) => isMostlyPrimitive(rows, hint.typeName, f)) ?? null;
     const track: LinkedTrack = { typeName: hint.typeName, links: hint.links, valueField, order: [], shape: hint.shape };
     track.order = columnOrder(rows, track);
     if (track.order.length) return track;
@@ -141,7 +151,13 @@ export function findLinkedTrack(rows: RowSnapshot[], hints: LinkedHint[] = []): 
       linkFields.get(best!)!.includes(f) ||
       (LINK_NAMES.has(f) && linkFields.get(best!)!.length > 0 && isAlwaysNullOrNode(rows, best!, f)),
   );
-  const valueField = fields.find((f) => !links.includes(f) && isMostlyPrimitive(rows, best!, f)) ?? null;
+  const valueField =
+    labelOf(
+      best,
+      fields.filter((f) => !links.includes(f)),
+    ) ??
+    fields.find((f) => !links.includes(f) && isMostlyPrimitive(rows, best!, f)) ??
+    null;
   const track: LinkedTrack = { typeName: best, links, valueField, order: [], shape: "list" };
   if (links.length === 2 && rows.every((row) => maxIndegree(row, best!, links) <= 1)) track.shape = "tree";
   track.order = columnOrder(rows, track);

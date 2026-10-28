@@ -15,6 +15,7 @@ import {
   cellWidth,
   INDEX_H,
   POINTER_H,
+  REGION_H,
   rowPointersWidth,
   STRIP_H,
   textWidth,
@@ -241,7 +242,13 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   const { hasContent } = scene;
 
   const scalarsX = hasContent ? x - CONTAINER_GAP + SCALARS_GAP : MARGIN + GUTTER;
-  const scalarsW = Math.max(0, ...all.map((row) => scalarText(row, scalars).length)) * 12.5 * 0.6;
+  // The variables, then `viz: watch` values and failed `viz: check`s, each 22 apart.
+  const extrasW = (row: LoopRow) =>
+    [
+      ...scene.watches(row).map((w) => `${w.text} = ${w.value}`),
+      ...scene.failedChecks(row).map((c) => `✗ ${c}`),
+    ].reduce((w, text) => w + 22 + text.length * 12.5 * 0.6, 0);
+  const scalarsW = Math.max(0, ...all.map((row) => scalarText(row, scalars).length * 12.5 * 0.6 + extrasW(row)));
   // Loop headers sit beside the cells, in the scalars' column, so change
   // arrows between rows never cross them.
   const headersW = Math.max(0, ...rows.map((row) => textWidth(scene.header(row), 12.5)));
@@ -250,7 +257,9 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   // nodes. Below: whatever is tallest (a grid, a tree, pointer markers).
   const isTree = track?.shape === "tree";
   const stripTop = columns.some((c) => c.strip) ? STRIP_H : 0;
-  const rowTop = (track && !isTree ? ARC_TOP : INDEX_H) + stripTop;
+  // Labeled regions (viz: region): a row for their labels, above the index numbers.
+  const regionTop = columns.some((c) => scene.regionLabels(c.name)) ? REGION_H : 0;
+  const rowTop = (track && !isTree ? ARC_TOP : INDEX_H + regionTop) + stripTop;
   const trackPointers = trackRows.some((r) => !!r?.pointers.length);
   let trackBodyH = 0;
   if (track && isTree) {
@@ -277,7 +286,8 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
         graphTop = at;
         at += graphLayout!.h + LANE_GAP;
       } else if (lane.kind === "column") {
-        const top = INDEX_H + (lane.column!.strip ? STRIP_H : 0);
+        const top =
+          INDEX_H + (lane.column!.strip ? STRIP_H : 0) + (scene.regionLabels(lane.column!.name) ? REGION_H : 0);
         lane.column!.dy = at + top;
         at += top + lane.column!.bodyH + LANE_GAP;
       } else {

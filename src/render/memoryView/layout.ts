@@ -4,6 +4,8 @@
  * them down their columns without overlaps (boxes the person dragged stay
  * put), then route the arrows through the gaps (route.ts).
  */
+
+import { type LinkKind, linkKinds } from "../../scene/arrowKinds";
 import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
 import { arrowMarkers, FONT, SMALL, s } from "../draw";
 import type { Mark } from "../drawing";
@@ -117,6 +119,9 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     functionKeyword: scene.functionKeyword,
     pointersFor: (id, level) => scene.pointers(id, level),
     windowsFor: (id) => scene.windows(id),
+    comparesFor: (id) => scene.compares(id),
+    regionLabelsFor: (id) => scene.regionLabels(id),
+    titleOf: (obj) => scene.title(obj),
     gridFocus: (id, size) => scene.gridFocus(id, size),
     view: (value, cellH) => viewOf(value, ctx, cellH),
   };
@@ -361,32 +366,37 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
         !!e.source && !!e.target,
     );
   const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
-  const routes = routeEdges(
-    edges.map(({ ref, source, target }) => {
-      const block = blockOf.get(ref.target);
-      const sourceId = idOf(ref.source);
-      // An arrow to a node of a graph lands level with that node.
-      const host = graphAlias.get(ref.target) ?? ref.target;
-      const center = graphs.get(host)?.picture.centers.get(ref.target);
-      const entryY =
-        center && graphs.get(host)!.graph.objectNodes ? target.y + GRAPH_BODY_Y + center.y : target.y + target.inY;
-      const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY };
-      if (!block?.origin) return base;
-      // Parent to child inside a tree: drop from the parent to the child's top.
-      const parent = block.nodes.get(sourceId);
-      if (parent && blockOf.get(sourceId) === block && parent.children.includes(ref.target)) {
-        return {
-          ...base,
-          tree: block.nodes.get(ref.target)!.index < parent.index ? ("left" as const) : ("right" as const),
-        };
-      }
-      // From outside, to the left of the tree: come down beside the tree and
-      // in from above, so the arrow doesn't run through the node's neighbors.
-      if (source.x + source.w + 20 <= block.origin.x) return { ...base, enterTopFrom: block.origin.x };
-      return base;
-    }),
-    [...rects.values()],
-  );
+  const inputs = edges.map(({ ref, source, target }) => {
+    const block = blockOf.get(ref.target);
+    const sourceId = idOf(ref.source);
+    // An arrow to a node of a graph lands level with that node.
+    const host = graphAlias.get(ref.target) ?? ref.target;
+    const center = graphs.get(host)?.picture.centers.get(ref.target);
+    const entryY =
+      center && graphs.get(host)!.graph.objectNodes ? target.y + GRAPH_BODY_Y + center.y : target.y + target.inY;
+    const base = { from: ref.from, exitDownY: ref.exitDownY, source, target, entryY };
+    if (!block?.origin) return base;
+    // Parent to child inside a tree: drop from the parent to the child's top.
+    const parent = block.nodes.get(sourceId);
+    if (parent && blockOf.get(sourceId) === block && parent.children.includes(ref.target)) {
+      return {
+        ...base,
+        tree: block.nodes.get(ref.target)!.index < parent.index ? ("left" as const) : ("right" as const),
+      };
+    }
+    // From outside, to the left of the tree: come down beside the tree and
+    // in from above, so the arrow doesn't run through the node's neighbors.
+    if (source.x + source.w + 20 <= block.origin.x) return { ...base, enterTopFrom: block.origin.x };
+    return base;
+  });
+  const routes = routeEdges(inputs, [...rects.values()]);
+  // Each arrow's kind (scene/arrowKinds.ts), for Style → Arrow colors.
+  const kindOf = linkKinds(scene.step);
+  const arrowKind = (i: number): LinkKind => {
+    const { ref } = edges[i];
+    if ("tree" in inputs[i] && inputs[i].tree) return "tree";
+    return ref.owner ? kindOf(ref.owner, ref.target) : "ref";
+  };
   let maxX = 0;
   let maxY = 0;
   for (const rect of rects.values()) {
@@ -399,7 +409,10 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
     }
-    const kind = ref.printed ? "print-arrow" : ref.changed ? "is-changed" : "";
+    const linkKind = ref.printed ? null : arrowKind(i);
+    const kind = [ref.printed ? "print-arrow" : ref.changed ? "is-changed" : "", linkKind && `kind-${linkKind}`]
+      .filter(Boolean)
+      .join(" ");
     const ends = { "data-from": ref.source, "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target) };
     const d = roundedPath(points);
     const part = (cls: string, path: string, attrs: Record<string, string> = {}) =>
@@ -418,7 +431,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     if (head)
       topLayer.append(
         part("arrow-head", `M${head[0].x},${head[0].y} L${head[1].x},${head[1].y}`, {
-          "marker-end": "url(#arrow-ref)",
+          "marker-end": linkKind && linkKind !== "ref" ? `url(#arrow-kind-${linkKind})` : "url(#arrow-ref)",
         }),
       );
   });

@@ -32,6 +32,7 @@ export const LABEL_H = 18; // small label above a list
 export const INDEX_H = 14; // index numbers above list cells
 export const POINTER_H = 24; // room under a list for i / j markers
 export const STRIP_H = 22; // a long list's color strip, above its cells
+export const REGION_H = 17; // labels of a list's regions (viz: region), above its index numbers
 export const STRIP_MAX_W = 480;
 
 /** Width of monospace text. */
@@ -140,6 +141,11 @@ export function arrowMarkers(): Mark {
     {},
     marker("arrow-ref", "arrowhead-ref"),
     marker("arrow-change", "arrowhead-change"),
+    // References by kind (Style → Arrow colors; scene/arrowKinds.ts).
+    marker("arrow-kind-tree", "arrowhead-kind-tree"),
+    marker("arrow-kind-next", "arrowhead-kind-next"),
+    marker("arrow-kind-back", "arrowhead-kind-back"),
+    marker("arrow-kind-cycle", "arrowhead-kind-cycle"),
     fixed("arrow-graph", "arrowhead-graph"),
     fixed("arrow-tree", "arrowhead-tree"),
     fixed("arrow-path", "arrowhead-path"),
@@ -206,39 +212,99 @@ export function pointerMarkers(
 }
 
 /**
- * Sliding windows (`viz: window`): a band behind the cells from a window's
- * first item to its last, drawn before the cells so they sit on top of it.
- * An empty window is a bar between two cells, where it starts. Parts out of
- * view (a long list shows some of its items) are cut off at the edge.
+ * Sliding windows (`viz: window`) and labeled regions (`viz: region`): a
+ * band behind the cells from a window's first item to its last, drawn
+ * before the cells so they sit on top of it. An empty window is a bar
+ * between two cells, where it starts. Parts out of view (a long list shows
+ * some of its items) are cut off at the edge.
+ *
+ * A region is a flatter band in its own color (one of four, by its place
+ * among the list's regions), inside its cells' edges so neighboring regions
+ * don't overlap. Its label goes above the index numbers, at `labelTop`,
+ * over a line as wide as the region.
  */
 export function windowBands(
-  windows: { label: string; start: number; end: number; changed: boolean }[],
+  windows: {
+    label: string;
+    start: number;
+    end: number;
+    changed: boolean;
+    region?: { label: string | null; index: number };
+  }[],
   cellX: (index: number) => number,
   cellW: number,
   top: number,
   height: number,
   length: number,
   flip?: FlipInfo,
+  labelTop?: number,
 ): Mark {
   const g = s("g", { class: "windows" });
   for (const w of windows) {
     const start = Math.max(0, Math.min(length, w.start));
     const end = Math.max(start, Math.min(length, w.end));
     const count = w.end - w.start;
-    const cls = ["window-band", end === start && "is-empty", w.changed && "is-changed"].filter(Boolean).join(" ");
+    const region = w.region;
+    const cls = [
+      region ? `region-band region-${region.index % 4}` : "window-band",
+      end === start && "is-empty",
+      w.changed && "is-changed",
+    ]
+      .filter(Boolean)
+      .join(" ");
     const x = cellX(start);
+    const width = (end - start) * cellW;
     const band =
-      end > start
-        ? s("rect", { x: x - 3, y: top - 3, width: (end - start) * cellW + 6, height: height + 6, rx: 6 })
-        : s("rect", { x: x - 1.5, y: top - 3, width: 3, height: height + 6, rx: 1.5 });
-    g.append(
-      s(
-        "g",
-        { class: cls, ...flipAttrs(flip, `win:${w.label}`, x, top) },
-        s("title", {}, `${w.label}: ${count === 1 ? "1 item" : `${Math.max(0, count)} items`}`),
-        band,
-      ),
+      end <= start
+        ? s("rect", { x: x - 1.5, y: top - 3, width: 3, height: height + 6, rx: 1.5 })
+        : region
+          ? s("rect", { x: x + 1, y: top - 2, width: width - 2, height: height + 4, rx: 4 })
+          : s("rect", { x: x - 3, y: top - 3, width: width + 6, height: height + 6, rx: 6 });
+    const what = `${region?.label ? `${region.label} ` : ""}${w.label}`;
+    const part = s(
+      "g",
+      { class: cls, ...flipAttrs(flip, `${region ? "reg" : "win"}:${what}`, x, top) },
+      s("title", {}, `${what}: ${count === 1 ? "1 item" : `${Math.max(0, count)} items`}`),
+      band,
     );
+    if (region?.label && labelTop !== undefined && end > start) {
+      const lineY = labelTop + REGION_H - 4;
+      part.append(
+        s("path", {
+          class: "region-line",
+          d: `M${x + 2},${lineY + 3} V${lineY} H${x + width - 2} V${lineY + 3}`,
+        }),
+        s("text", { class: "region-label", x: x + 4, y: labelTop + 8 }, region.label),
+      );
+    }
+    g.append(part);
+  }
+  return g;
+}
+
+/**
+ * The two cells being compared (`viz: compare`): an outline around each,
+ * drawn over the cells. They flash when the indexes change (styles.css).
+ */
+export function compareMarks(
+  compares: { label: string; indexes: [number, number]; changed: boolean }[],
+  cellX: (index: number) => number,
+  cellW: number,
+  top: number,
+  height: number,
+  length: number,
+): Mark {
+  const g = s("g", { class: "compares" });
+  for (const c of compares) {
+    const part = s("g", { class: ["compare", c.changed && "is-changed"].filter(Boolean).join(" ") });
+    part.append(s("title", {}, `compared: ${c.label}`));
+    for (const i of c.indexes) {
+      if (i < 0 || i >= length) continue;
+      part.append(
+        s("rect", { class: "compare-mark", x: cellX(i) - 2, y: top - 2, width: cellW + 4, height: height + 4, rx: 4 }),
+      );
+    }
+    g.append(part);
   }
   return g;
 }

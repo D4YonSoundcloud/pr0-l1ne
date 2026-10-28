@@ -28,6 +28,22 @@
   --path: #7a4fb5;
   --mem: #0a7d86;
   --window: #14a37f;
+  --region-0: #e0a400;
+  --region-1: #7a4fb5;
+  --region-2: #2a8fbd;
+  --region-3: #d1497b;
+  --compare: #e0662b;
+  --failing: #c2362f;
+  /* Arrows by kind (Style → Arrows; scene/arrowKinds.ts). */
+  --arrow-ref: #2f6fb0;
+  --arrow-tree: #2e7a57;
+  --arrow-next: #0f7f8c;
+  --arrow-back: #7a879b;
+  --arrow-cycle: #d9822b;
+  --dash-tree: none;
+  --dash-next: none;
+  --dash-back: 5 3;
+  --dash-cycle: none;
   --output: #232a3d;
   --output-ink: #f2f5fb;
   --tree: #2e7a57;
@@ -735,6 +751,77 @@ body {
   stroke: none;
 }
 
+/* Labeled regions (viz: region): a flat band in the region's color, its label above. */
+.region-band rect {
+  fill: color-mix(in srgb, var(--region-color) 20%, transparent);
+  stroke: none;
+}
+.region-band.is-empty rect {
+  fill: var(--region-color);
+}
+.region-band.region-0 {
+  --region-color: var(--region-0);
+}
+.region-band.region-1 {
+  --region-color: var(--region-1);
+}
+.region-band.region-2 {
+  --region-color: var(--region-2);
+}
+.region-band.region-3 {
+  --region-color: var(--region-3);
+}
+.region-line {
+  fill: none;
+  stroke: var(--region-color);
+  stroke-width: 1.5;
+}
+.region-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--region-color);
+}
+
+/* The cells being compared (viz: compare): outlined, flashing when they move. */
+.compare-mark {
+  fill: none;
+  stroke: var(--compare);
+  stroke-width: 2;
+}
+.compare.is-changed .compare-mark {
+  animation: compare-flash 600ms ease-out;
+}
+@keyframes compare-flash {
+  from {
+    stroke-width: 5;
+    stroke-opacity: 0.4;
+  }
+  to {
+    stroke-width: 2;
+    stroke-opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .compare.is-changed .compare-mark {
+    animation: none;
+  }
+}
+
+/* viz: watch values beside a loop row's variables, and viz: check failures. */
+.scalars .watch {
+  font-style: italic;
+}
+.scalars .check-failed {
+  fill: var(--failing);
+  font-weight: 700;
+}
+.failing-band {
+  fill: color-mix(in srgb, var(--failing) 12%, transparent);
+  stroke: var(--failing);
+  stroke-width: 1.5;
+}
+
 /* Grids (lists of lists): the cell that grid[i][j] points at. */
 .grid-focus {
   fill: none;
@@ -1284,8 +1371,41 @@ select {
 .ref-arrow,
 .ref-arrow-part {
   fill: none;
-  stroke: var(--ballpoint);
+  stroke: var(--arrow-ref);
   stroke-width: calc(1.5px * var(--arrow-width));
+}
+/* Each kind of link in its own color, and dashes where the Style panel asks. */
+:is(.ref-arrow, .ref-arrow-part, .link-arrow).kind-tree {
+  stroke: var(--arrow-tree);
+  stroke-dasharray: var(--dash-tree);
+}
+:is(.ref-arrow, .ref-arrow-part, .link-arrow).kind-next {
+  stroke: var(--arrow-next);
+  stroke-dasharray: var(--dash-next);
+}
+:is(.ref-arrow, .ref-arrow-part, .link-arrow).kind-back {
+  stroke: var(--arrow-back);
+  stroke-dasharray: var(--dash-back);
+}
+:is(.ref-arrow, .ref-arrow-part, .link-arrow).kind-cycle {
+  stroke: var(--arrow-cycle);
+  stroke-dasharray: var(--dash-cycle);
+}
+/* The few pixels with the arrowhead, and the part inside its own box, are never dashed. */
+.ref-arrow-part:is(.arrow-head, .arrow-stub) {
+  stroke-dasharray: none;
+}
+.arrowhead-kind-tree {
+  fill: var(--arrow-tree);
+}
+.arrowhead-kind-next {
+  fill: var(--arrow-next);
+}
+.arrowhead-kind-back {
+  fill: var(--arrow-back);
+}
+.arrowhead-kind-cycle {
+  fill: var(--arrow-cycle);
 }
 .ref-arrow.is-changed,
 .ref-arrow-part.is-changed {
@@ -1299,7 +1419,7 @@ select {
   pointer-events: none;
 }
 .arrowhead-ref {
-  fill: var(--ballpoint);
+  fill: var(--arrow-ref);
 }
 .change-arrow {
   fill: none;
@@ -1405,7 +1525,7 @@ select {
 }
 .link-arrow {
   fill: none;
-  stroke: var(--ballpoint);
+  stroke: var(--arrow-ref);
   stroke-width: calc(1.5px * var(--arrow-width));
 }
 .link-arrow.is-changed {

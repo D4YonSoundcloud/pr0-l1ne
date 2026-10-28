@@ -9,10 +9,12 @@ import type { HeapObject, SequenceObject } from "../../trace/types";
 import {
   CELL_H,
   CELL_MIN_W,
+  compareMarks,
   INDEX_H,
   LABEL_H,
   POINTER_H,
   pointerMarkers,
+  REGION_H,
   rowPointerMarkers,
   rowPointersWidth,
   STRIP_H,
@@ -212,8 +214,12 @@ export function sequenceShape(
   const labelH = showLabel ? LABEL_H : 2;
   const hasPointers = opts.pointers.length > 0;
   const w = Math.max(count * cellW, showLabel ? sizedLabelWidth(label, size) + 8 : 0);
-  const cellsY = labelH + stripH + sizeH + (hasIndices ? INDEX_H : 0);
+  // Labeled regions (viz: region): a row for their labels, above the index numbers.
+  const regionH = ctx.regionLabelsFor(obj.id) ? REGION_H : 0;
+  const cellsY = labelH + stripH + sizeH + regionH + (hasIndices ? INDEX_H : 0);
   const h = cellsY + cellH + (hasPointers ? POINTER_H : 0);
+  // A number's bits (viz: bits) count from the right: bit 0 is the last cell.
+  const indexText = (slot: number) => (obj.typeName === "bits" ? String(obj.length - 1 - slot) : String(slot));
 
   return {
     w,
@@ -280,11 +286,16 @@ export function sequenceShape(
       if (windows.length) {
         const shown = windows.map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
         g.append(
-          windowBands(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY, cellH, obj.items.length, {
-            key: `win:${obj.id}`,
-            originX: x,
-            originY: y,
-          }),
+          windowBands(
+            shown,
+            (i) => x + firstX + i * cellW,
+            cellW,
+            y + cellsY,
+            cellH,
+            obj.items.length,
+            { key: `win:${obj.id}`, originX: x, originY: y },
+            y + labelH + stripH + sizeH,
+          ),
         );
       }
       obj.items.forEach((_item, i) => {
@@ -304,8 +315,13 @@ export function sequenceShape(
           g.append(
             s(
               "text",
-              { class: "index", x: cx + cellW / 2, y: y + labelH + stripH + sizeH + 9, "text-anchor": "middle" },
-              slot,
+              {
+                class: "index",
+                x: cx + cellW / 2,
+                y: y + labelH + stripH + sizeH + regionH + 9,
+                "text-anchor": "middle",
+              },
+              indexText(offset + i),
             ),
           );
         }
@@ -342,6 +358,15 @@ export function sequenceShape(
             "…",
           ),
         );
+      }
+      // The cells being compared (viz: compare), over the cells.
+      const compares = ctx.comparesFor(obj.id);
+      if (compares.length) {
+        const shown = compares.map((c) => ({
+          ...c,
+          indexes: [c.indexes[0] - offset, c.indexes[1] - offset] as [number, number],
+        }));
+        g.append(compareMarks(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY, cellH, obj.items.length));
       }
       if (hasPointers) {
         const shown = opts.pointers.map((p) => ({ ...p, index: p.index - offset }));

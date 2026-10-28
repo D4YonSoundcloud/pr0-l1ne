@@ -293,6 +293,8 @@ pr0-l1ne/
     │   ├── loopHistory.ts      Group steps into loop iterations
     │   ├── hints.ts            Parse and apply viz: comment hints
     │   ├── hints.test.ts       Hint tests (all three languages)
+    │   ├── expr.ts             Expressions for watch and check: parse, evaluate (read only)
+    │   ├── expr.test.ts        Expression tests
     │   ├── linked.ts           Linked lists and trees (loop history and memory)
     │   ├── linked.test.ts      Linked structure tests
     │   ├── graph.ts            Graphs: detection, the algorithm's state, one layout per run
@@ -319,6 +321,8 @@ pr0-l1ne/
     │   ├── nesting.ts          Nested mode: which objects are drawn inside others
     │   ├── nesting.test.ts     Tests for choosing what to nest
     │   ├── pointers.ts         Index pointers: which variables point into which lists
+    │   ├── arrowKinds.ts       What kind of link each arrow is (ref, tree, next, back, cycle)
+    │   ├── arrowKinds.test.ts  Arrow kind tests
     │   └── renderer.ts         The renderer contract: what the app asks of whatever draws a window
     ├── render/
     │   ├── svgRenderers.ts     The SVG renderers behind the contract (SVG_RENDERERS)
@@ -354,6 +358,7 @@ pr0-l1ne/
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
     │   ├── spacing.ts          The layout's spacing, which the Layout panel changes
+    │   ├── hintDrawing.test.ts The hints that change what's drawn, drawn
     │   ├── spacing.test.ts     Spacing settings, and the layout across their whole ranges
     │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
     │   ├── loopView.ts         The loop view: loopDrawing(), renderLoopHistory() (SVG)

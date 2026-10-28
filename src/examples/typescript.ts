@@ -1101,4 +1101,90 @@ for (let i = 1; i + k <= nums.length; i++) {
 console.log(best);
 `,
   },
+  {
+    group: HINTS,
+    name: "13 · region, compare, rows: insertion sort",
+    code: `// Insertion sort. Each pass takes the next number and walks it left
+// until it's in place. Three hints, each just above what it's about:
+//  - region: the part of nums that's sorted so far, and the part
+//    that isn't, each in its own color with a label.
+//  - compare: the two cells being compared, outlined.
+//  - rows by i: loop rows labeled "i = 3" instead of "#3".
+const nums: number[] = [5, 2, 4, 6, 1, 3];
+// viz: region nums: [0, i) "sorted"
+// viz: region nums: [i, 6) "to do"
+// viz: rows by i
+for (let i = 1; i < nums.length; i++) {
+  let j = i;
+  // viz: compare nums: j - 1, j
+  while (j > 0 && nums[j - 1] > nums[j]) {
+    [nums[j - 1], nums[j]] = [nums[j], nums[j - 1]];
+    j--;
+  }
+}
+
+console.log(nums);
+`,
+  },
+  {
+    group: HINTS,
+    name: "14 · watch, check, focus: running totals",
+    code: `// Running totals. "watch" shows an expression's value in every loop
+// row; "check" is something that should always be true: a row where it
+// isn't turns red. Try changing "total += nums[i - 1]" to "total += 1"
+// and watch the check fail. "focus" opens the loop history on the loop
+// below it.
+const nums: number[] = [3, 1, 4, 1, 5, 9, 2, 6];
+let total = 0;
+let seen = 0;
+for (const x of nums) {
+  seen += 1;
+}
+
+// viz: focus
+// viz: watch total - seen
+// viz: check total == sum(nums[0:i])
+for (let i = 0; i <= nums.length; i++) {
+  if (i > 0) total += nums[i - 1];
+}
+
+console.log(total);
+`,
+  },
+  {
+    group: HINTS,
+    name: "15 · chars, bits, format, label: values your way",
+    code: `// Four hints for how values look:
+//  - chars: a string as a row of letters (with pointers, like a list).
+//  - bits: a number as its binary digits, bit 0 on the right.
+//  - format: numbers as hex, with decimals, with thousands...
+//  - label: a class's boxes named by a field (Node 3).
+// viz: chars word
+// viz: bits mask 5
+// viz: format share .1%
+// viz: label Node by val
+const word = "level";
+let lo = 0;
+let hi = word.length - 1;
+let mask = 0;
+while (lo < hi && word[lo] === word[hi]) {
+  mask |= 1 << lo;
+  lo++;
+  hi--;
+}
+const share = lo / word.length;
+
+class Node {
+  val: number;
+  next: Node | null;
+  constructor(val: number, next: Node | null = null) {
+    this.val = val;
+    this.next = next;
+  }
+}
+
+const head = new Node(1, new Node(2, new Node(3)));
+console.log(word, mask.toString(2), share, head.val);
+`,
+  },
 ];

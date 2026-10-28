@@ -971,4 +971,81 @@ for i in range(1, len(nums) - k + 1):
 print(best)
 `,
   },
+  {
+    group: HINTS,
+    name: "13 · region, compare, rows: insertion sort",
+    code: `# Insertion sort. Each pass takes the next number and walks it left
+# until it's in place. Three hints, each just above what it's about:
+#  - region: the part of nums that's sorted so far, and the part
+#    that isn't, each in its own color with a label.
+#  - compare: the two cells being compared, outlined.
+#  - rows by i: loop rows labeled "i = 3" instead of "#3".
+nums = [5, 2, 4, 6, 1, 3]
+# viz: region nums: [0, i) "sorted"
+# viz: region nums: [i, 6) "to do"
+# viz: rows by i
+for i in range(1, len(nums)):
+    j = i
+    # viz: compare nums: j - 1, j
+    while j > 0 and nums[j - 1] > nums[j]:
+        nums[j - 1], nums[j] = nums[j], nums[j - 1]
+        j -= 1
+
+print(nums)
+`,
+  },
+  {
+    group: HINTS,
+    name: "14 · watch, check, focus: running totals",
+    code: `# Running totals. "watch" shows an expression's value in every loop
+# row; "check" is something that should always be true: a row where it
+# isn't turns red. Try changing "total += nums[i - 1]" to "total += 1"
+# and watch the check fail. "focus" opens the loop history on the loop
+# below it.
+nums = [3, 1, 4, 1, 5, 9, 2, 6]
+total = 0
+seen = 0
+for x in nums:
+    seen += 1
+
+# viz: focus
+# viz: watch total - seen
+# viz: check total == sum(nums[0:i])
+for i in range(len(nums) + 1):
+    if i > 0:
+        total += nums[i - 1]
+
+print(total)
+`,
+  },
+  {
+    group: HINTS,
+    name: "15 · chars, bits, format, label: values your way",
+    code: `# Four hints for how values look:
+#  - chars: a string as a row of letters (with pointers, like a list).
+#  - bits: a number as its binary digits, bit 0 on the right.
+#  - format: numbers as hex, with decimals, with thousands...
+#  - label: a class's boxes named by a field (Node 3).
+# viz: chars word
+# viz: bits mask 5
+# viz: format share .1%
+# viz: label Node by val
+word = "level"
+lo, hi = 0, len(word) - 1
+mask = 0
+while lo < hi and word[lo] == word[hi]:
+    mask |= 1 << lo
+    lo += 1
+    hi -= 1
+share = lo / len(word)
+
+class Node:
+    def __init__(self, val, next=None):
+        self.val = val
+        self.next = next
+
+head = Node(1, Node(2, Node(3)))
+print(word, bin(mask), share, head.val)
+`,
+  },
 ];

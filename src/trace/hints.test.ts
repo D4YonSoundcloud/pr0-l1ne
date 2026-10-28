@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
-import { applyHints, charsOf, parseHints } from "./hints";
+import { applyHints, charsOf, focusedLoop, formatNumber, parseHints } from "./hints";
 import { findLinkedTrack, linkedRow } from "./linked";
 import { buildLoopHistory } from "./loopHistory";
 import type { Trace } from "./types";
@@ -248,5 +248,112 @@ for (let i = 0; i + k <= nums.length; i++) total = nums[i] + nums[i + k - 1];`;
     expect(applyHints(raw).indexNames.nums).toEqual(["i"]);
     // ...unless a pointers hint asks for it.
     expect(applyHints(await traceJavaScript(`// viz: pointers nums: k\n${code}`)).indexNames.nums).toEqual(["i", "k"]);
+  });
+});
+
+describe("more hints", () => {
+  it("reads each of them", () => {
+    const h = parseHints([
+      hint("chars s, word"),
+      hint("bits mask 8"),
+      hint("bits flags"),
+      hint("format price .2f"),
+      hint("hex a, b"),
+      hint("label Node by val"),
+      hint("rows by i, j"),
+      hint("focus while"),
+      hint("watch right - left + 1"),
+      hint("check total == sum(nums[0:i])"),
+      hint('region nums: [0, i) "sorted"'),
+      hint("region nums: [i, n)"),
+      hint("compare nums: j - 1, j"),
+    ]);
+    expect(h.warnings).toEqual([]);
+    expect(h.chars).toEqual(["s", "word"]);
+    expect(h.bits).toEqual([
+      { names: ["mask"], width: 8, line: 1 },
+      { names: ["flags"], line: 1 },
+    ]);
+    expect(h.formats).toEqual([
+      { names: ["price"], spec: ".2f", line: 1 },
+      { names: ["a", "b"], spec: "hex", line: 1 },
+    ]);
+    expect(h.labels).toEqual([{ typeName: "Node", field: "val", line: 1 }]);
+    expect(h.rowsBy).toEqual(["i", "j"]);
+    expect(h.focus).toEqual({ target: { kind: "while" }, line: 1 });
+    expect(h.watches).toEqual([{ text: "right - left + 1", line: 1 }]);
+    expect(h.checks).toEqual([{ text: "total == sum(nums[0:i])", line: 1 }]);
+    // Regions: several on one list, each with its place for its color; a window is separate.
+    expect(h.windows?.map((w) => [w.text, w.region])).toEqual([
+      ["[0, i)", { label: "sorted", index: 0 }],
+      ["[i, n)", { label: null, index: 1 }],
+    ]);
+    expect(h.compares?.[0]).toMatchObject({ container: "nums", text: "j - 1, j" });
+    expect(parseHints([hint("focus")]).focus?.target).toEqual({ next: true });
+    expect(parseHints([hint("focus line 12")]).focus?.target).toEqual({ line: 12 });
+  });
+
+  it("says what each should look like when it can't read one", () => {
+    const cases: [string, RegExp][] = [
+      ["chars 1x", /"chars" needs string variables/],
+      ["bits mask 99", /"bits" looks like/],
+      ["format price fancy", /"format" looks like/],
+      ["hex", /"hex" needs variable names/],
+      ["label Node", /"label" looks like/],
+      ["rows i", /"rows" looks like/],
+      ["focus sideways", /"focus" looks like/],
+      ["watch a +", /"watch" needs an expression/],
+      ["check open(x)", /"check" needs an expression/],
+      ['region nums "x"', /"region" looks like/],
+      ["compare nums: j", /"compare" looks like/],
+    ];
+    for (const [text, message] of cases) expect(parseHints([hint(text)]).warnings[0]?.message, text).toMatch(message);
+  });
+
+  it("formats numbers", () => {
+    expect(formatNumber("255", "hex")).toBe("0xff");
+    expect(formatNumber("-5", "bin")).toBe("-0b101");
+    expect(formatNumber("8", "oct")).toBe("0o10");
+    expect(formatNumber("3", ".2f")).toBe("3.00");
+    expect(formatNumber("1234567.891", ",.1f")).toBe("1,234,567.9");
+    expect(formatNumber("1234567", ",")).toBe("1,234,567");
+    expect(formatNumber("0.4251", ".1%")).toBe("42.5%");
+    expect(formatNumber("12345", ".2e")).toBe("1.23e+4");
+    expect(formatNumber("12345678901234567890", "hex")).toBe("0xab54a98ceb1f0ad2");
+    expect(formatNumber("'a'", "hex")).toBeNull();
+  });
+
+  it("draws numbers as their bits, as wide as the widest, and formats numbers in lists", async () => {
+    const code = `// viz: bits mask
+// viz: format prices .2f
+const prices = [1, 2.5];
+let mask = 1;
+mask = 5;
+mask = 2;`;
+    const t = applyHints(await traceJavaScript(code));
+    const last = t.steps.at(-1)!;
+    const value = last.stack[0].locals.find(([n]) => n === "mask")![1];
+    expect(value.kind).toBe("ref");
+    const bits = value.kind === "ref" ? last.heap[value.id] : null;
+    expect(bits).toMatchObject({ kind: "list", typeName: "bits", length: 3 });
+    expect(bits?.kind === "list" && bits.items.map((v) => (v.kind === "prim" ? v.repr : ""))).toEqual(["0", "1", "0"]);
+    const prices = last.stack[0].locals.find(([n]) => n === "prices")![1];
+    const list = prices.kind === "ref" ? last.heap[prices.id] : null;
+    expect(list?.kind === "list" && list.items.map((v) => (v.kind === "prim" ? v.repr : ""))).toEqual(["1.00", "2.50"]);
+  });
+
+  it("finds the loop a focus hint means", () => {
+    const loops = [
+      { id: "L1", kind: "for" as const, line: 2, bodyStart: 3, bodyEnd: 3, header: "" },
+      { id: "L2", kind: "while" as const, line: 6, bodyStart: 7, bodyEnd: 7, header: "" },
+    ];
+    const at = (text: string, line = 1) => focusedLoop({ loops, viz: parseHints([hint(text, line)]) });
+    expect(at("focus", 5)).toBe("L2"); // the loop below it
+    expect(at("focus", 1)).toBe("L1");
+    expect(at("focus line 6")).toBe("L2");
+    expect(at("focus for")).toBe("L1");
+    expect(at("focus all")).toBe("all");
+    expect(at("focus line 9")).toBeNull();
+    expect(focusedLoop({ loops, viz: parseHints([]) })).toBeNull();
   });
 });

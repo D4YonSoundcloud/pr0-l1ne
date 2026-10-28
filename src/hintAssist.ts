@@ -120,6 +120,70 @@ export const HINT_DOCS: Record<(typeof KEYWORDS)[number], HintDoc> = {
       "Draws the part of a list or string between two indexes as a band over its cells: a sliding window. Both ends are in the window; write `)` to leave the end out, as in `[i, i + k)`. Ends can add and take away names and numbers. A string is drawn as a row of its characters.",
     example: "viz: window s: [left, right]",
   },
+  region: {
+    syntax: 'viz: region nums: [0, i) "sorted"',
+    summary:
+      "Marks part of a list with a band in its own color and a label above it. Several regions can sit on one list, like the sorted and unsorted parts of insertion sort. Ends work as in `window`; the label is optional.",
+    example: 'viz: region nums: [0, i) "sorted"',
+  },
+  compare: {
+    syntax: "viz: compare nums: j, j + 1",
+    summary:
+      "Outlines the two cells of a list being compared, and flashes them when they change. Each index can add and take away names and whole numbers.",
+    example: "viz: compare nums: j, j + 1",
+  },
+  chars: {
+    syntax: "viz: chars s",
+    summary: "Draws a string as a row of its characters, with index numbers and pointers, like a list.",
+    example: "viz: chars s, word",
+  },
+  bits: {
+    syntax: "viz: bits mask 8",
+    summary:
+      "Draws a whole number as its binary digits, bit 0 on the right. The number says how many digits; without it, as many as the number ever needs.",
+    example: "viz: bits mask",
+  },
+  format: {
+    syntax: "viz: format price .2f",
+    summary:
+      "Shows numbers in a format: `hex`, `bin`, `oct`, `,` (thousands), `.2f` (2 decimals), `.3e` (exponent), `.1%` (percent). It applies to the variable, and to the numbers in a list or dict it holds.",
+    example: "viz: format total ,.2f",
+  },
+  hex: {
+    syntax: "viz: hex flags",
+    summary: "Shows these numbers in hexadecimal: the same as `viz: format flags hex`.",
+    example: "viz: hex flags, mask",
+  },
+  label: {
+    syntax: "viz: label Node by val",
+    summary:
+      "Names a class's boxes by one of its fields (Node 5), and shows that field in its nodes in the loop history.",
+    example: "viz: label TreeNode by key",
+  },
+  rows: {
+    syntax: "viz: rows by i",
+    summary:
+      "Labels the loop history's rows by a variable's value (i = 3) instead of #3. With several names, each loop uses the one in its own header.",
+    example: "viz: rows by i, j",
+  },
+  focus: {
+    syntax: "viz: focus",
+    summary:
+      "Opens the loop history on the loop just below the hint. Or: `focus line 12`, `focus while` (the first while loop), `focus all` (nested loops together).",
+    example: "viz: focus",
+  },
+  watch: {
+    syntax: "viz: watch right - left + 1",
+    summary:
+      "Shows an expression's value in every loop row, next to the variables. It can use arithmetic, comparisons, `len`, `sum`, `min`, `max`, `abs`, indexing and slices.",
+    example: "viz: watch right - left + 1",
+  },
+  check: {
+    syntax: "viz: check total == sum(nums[:i])",
+    summary:
+      "An invariant: a loop row where it's false turns red, with the expression beside it. Good for checking a loop does what you think.",
+    example: "viz: check lo <= hi",
+  },
   tree: {
     syntax: "viz: tree Node(left, right)",
     summary: "Draws objects of this class as a binary tree, with these two fields as the children.",
@@ -262,12 +326,68 @@ export function completionsAt(
         ...[...ctx.classes.keys()].map((c) => ({ label: c, insert: c, kind: "class" as const, detail: "a class" })),
       ]);
     case "size":
+    case "hex":
       return done(vars(["int"], whole));
+    case "bits":
+      return done(vars(["int"], whole));
+    case "chars":
+      return done(vars(["str"], describe));
+    case "watch":
+    case "check":
+      return done(vars(["int", "number", "str", "list", "grid", "dict", "set", "other"], describe));
+    case "format": {
+      // A name, then how to show it.
+      if (!/^[\w$]+(\s*,\s*[\w$]+)*\s+/.test(rest))
+        return done(
+          vars(["int", "number", "list", "dict"], describe).map((c) => ({
+            ...c,
+            insert: `${c.label} `,
+            retrigger: true,
+          })),
+        );
+      return done(
+        FORMAT_EXAMPLES.map(([spec, what]) => ({ label: spec, insert: spec, kind: "option" as const, detail: what })),
+      );
+    }
+    case "rows":
+      if (!/^by\s/.test(rest)) return done([{ label: "by", insert: "by ", kind: "keyword", retrigger: true }]);
+      return done(vars(["int", "number", "str"], describe));
+    case "focus":
+      return done(
+        [
+          ["line ", "the loop on a line"],
+          ["for", "the first for loop"],
+          ["while", "the first while loop"],
+          ["all", "nested loops together"],
+        ].map(([label, detail]) => ({ label: label.trim(), insert: label, kind: "option" as const, detail })),
+      );
+    case "label": {
+      const by = /^([\w$.]+)\s+by\s+/.exec(rest);
+      if (by) {
+        const info = ctx.classes.get(by[1]);
+        return done(
+          (info?.fields ?? [])
+            .filter((f) => !info?.links.includes(f))
+            .map((f) => ({ label: f, insert: f, kind: "field" as const })),
+        );
+      }
+      return done(
+        [...ctx.classes.keys()].map((c) => ({
+          label: c,
+          insert: `${c} by `,
+          kind: "class" as const,
+          detail: "a class",
+          retrigger: true,
+        })),
+      );
+    }
     case "pointers":
+    case "region":
+    case "compare":
     case "window": {
       const colon = rest.indexOf(":");
       if (colon < 0) {
-        const kinds: VarKind[] = keyword === "window" ? ["list", "str"] : ["list", "grid"];
+        const kinds: VarKind[] = keyword === "pointers" ? ["list", "grid"] : ["list", "str"];
         const items: Completion[] = vars(kinds, describe).map((c) => ({
           ...c,
           insert: `${c.label}: `,
@@ -285,7 +405,7 @@ export function completionsAt(
         return done(items);
       }
       const ints = vars(["int"], whole);
-      if (keyword === "window" && !/[[(]/.test(rest.slice(colon + 1))) {
+      if ((keyword === "window" || keyword === "region") && !/[[(]/.test(rest.slice(colon + 1))) {
         // Nothing after the colon yet: whole windows first, from the program's pairs of names.
         return done([...windowPairs(ctx), ...ints]);
       }
@@ -409,6 +529,18 @@ function windowPairs(ctx: HintContext): Completion[] {
   }));
 }
 
+/** Number formats for `viz: format`, with what each does. */
+const FORMAT_EXAMPLES: [string, string][] = [
+  ["hex", "hexadecimal: 0xff"],
+  ["bin", "binary: 0b1011"],
+  ["oct", "octal: 0o17"],
+  [",", "thousands: 1,234,567"],
+  [".2f", "2 decimals: 3.14"],
+  [",.2f", "thousands and 2 decimals"],
+  [".3e", "exponent: 1.234e+5"],
+  [".1%", "percent: 42.5%"],
+];
+
 // ---------------------------------------------------------------- names that aren't in the program
 
 export interface NameProblem {
@@ -525,8 +657,48 @@ export function nameProblems(line: string, language: HintLanguage, ctx: HintCont
     for (const n of identifiers(rest, 0)) check(n.name, n.at, [...variables, ...classes], "a variable or class");
     return out;
   }
-  // hide, show, pointers, window: every name is a variable (dotted names are fields: left alone).
-  for (const n of identifiers(rest, 0)) {
+  if (keyword === "focus") return out; // line numbers and loop kinds, not names
+  if (keyword === "label") {
+    const m = /^([\w$.]+)(\s+by\s+)([\w$]+)/.exec(rest);
+    if (!m) return out;
+    check(m[1], 0, classes, "a class with objects");
+    const info = ctx.classes.get(m[1]);
+    if (info) check(m[3], m[1].length + m[2].length, info.fields, `a field of ${m[1]}`);
+    return out;
+  }
+  // The rest name variables, among other words: leave out quoted labels,
+  // "by", number formats and widths, functions and words in expressions.
+  const blank = (text: string) => " ".repeat(text.length);
+  let names = rest.replace(/(["'])[^"']*\1/g, blank);
+  if (keyword === "rows") names = names.replace(/^by\b/, blank);
+  if (keyword === "format") names = names.replace(/\s+\S+$/, blank);
+  if (keyword === "bits") names = names.replace(/\b\d+\s*$/, blank);
+  const notNames = new Set([
+    "len",
+    "sum",
+    "min",
+    "max",
+    "abs",
+    "round",
+    "int",
+    "and",
+    "or",
+    "not",
+    "in",
+    "True",
+    "False",
+    "None",
+    "true",
+    "false",
+    "null",
+    "undefined",
+    "length",
+    "size",
+  ]);
+  // hide, show, pointers, window, region, compare, chars, bits, hex, rows, watch, check:
+  // every name is a variable (dotted names are fields: left alone).
+  for (const n of identifiers(names, 0)) {
+    if ((keyword === "watch" || keyword === "check") && notNames.has(n.name)) continue;
     const prevChar = rest[n.at - 1];
     if (prevChar === ".") continue;
     if (rest[n.at + n.name.length] === ".") continue;

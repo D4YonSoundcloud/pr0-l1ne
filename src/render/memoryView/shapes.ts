@@ -6,11 +6,11 @@
  * everything before anything is drawn.
  */
 import type { Pointer } from "../../scene/pointers";
-import type { WindowSpan } from "../../scene/windows";
+import type { CompareSpan, WindowSpan } from "../../scene/windows";
 import { type StepDiff, valueKey } from "../../trace/diff";
 import type { GridFocus } from "../../trace/gridFocus";
 import { formatBytes, type StepSizes } from "../../trace/memory";
-import type { Step, Value } from "../../trace/types";
+import type { HeapObject, Step, Value } from "../../trace/types";
 import { s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
 
@@ -20,6 +20,8 @@ export interface OutRef {
   changed: boolean;
   /** From the printed-output node to an object it printed. */
   printed?: boolean;
+  /** The object whose cell the arrow starts in (none: a variable in a frame). */
+  owner?: string;
   /** Key of the top-level box the arrow starts in (set by drawNode). */
   source?: string;
   /** From a list cell: leave downward, then turn at exitDownY (set by drawNode). */
@@ -61,6 +63,12 @@ export interface Ctx {
   pointersFor(id: string, level?: 0 | 1): Pointers;
   /** Sliding windows over a list (`viz: window`). */
   windowsFor(id: string): WindowSpan[];
+  /** The two cells of a list being compared (`viz: compare`). */
+  comparesFor(id: string): CompareSpan[];
+  /** Does a list have labeled regions (room for their labels above it)? */
+  regionLabelsFor(id: string): boolean;
+  /** A box's title: its type, or with `viz: label`, its type and a field's value. */
+  titleOf(obj: HeapObject): string;
   /** The grid cell this step reads or writes (trace/gridFocus.ts); null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** Memory sizes, when they're shown. */

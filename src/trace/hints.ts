@@ -26,6 +26,7 @@
  *   viz: size n = 40000, k             rerun the program at smaller sizes
  *                                    to see how its cost grows
  */
+import { parseExpr } from "./expr";
 import {
   GRAPH_OPTIONS,
   type GraphOption,
@@ -44,7 +45,31 @@ const NAME = /^[A-Za-z_$][\w$]*$/;
 const CONTAINER = /^([A-Za-z_$][\w$]*)(\[\])?$/;
 const CLASS_LINKS = /^([A-Za-z_$][\w$.]*)\s*\(([^)]*)\)$/;
 
-export const KEYWORDS = ["hide", "show", "pointers", "window", "tree", "list", "graph", "plain", "size"] as const;
+export const KEYWORDS = [
+  "hide",
+  "show",
+  "pointers",
+  "window",
+  "region",
+  "compare",
+  "chars",
+  "bits",
+  "format",
+  "hex",
+  "label",
+  "rows",
+  "focus",
+  "watch",
+  "check",
+  "tree",
+  "list",
+  "graph",
+  "plain",
+  "size",
+] as const;
+
+/** Number formats `viz: format` knows: hex, bin, oct, or [,][.N](f|e|%), or just "," or ".N". */
+export const FORMAT_SPEC = /^(hex|bin|oct|,?(?:\.\d{1,2})?[fe%]?)$/;
 /** n, or n = 40000 */
 const SIZE = /^([A-Za-z_$][\w$]*)\s*(?:=\s*([0-9][0-9_]*))?$/;
 const DOTTED = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
@@ -112,6 +137,134 @@ export function parseHints(raw: RawHint[]): VizHints {
       continue;
     }
 
+    if (keyword === "region") {
+      // Like a window, with an optional label in quotes at the end; a list can have several.
+      const m = /^(.*?)\s*(?:(["'])(.*)\2)?$/.exec(rest)!;
+      const region = parseWindow(m[1], line);
+      if (!region) {
+        warn(line, `"region" looks like: viz: region nums: [0, i) "sorted"  (the label is optional)`);
+        continue;
+      }
+      const same = (hints.windows ?? []).filter((w) => w.container === region.container && w.region);
+      region.region = { label: m[3] ?? null, index: same.length };
+      hints.windows = [...(hints.windows ?? []), region];
+      continue;
+    }
+
+    if (keyword === "compare") {
+      const m = /^([A-Za-z_$][\w$.]*)\s*:\s*([^,]+?)\s*,\s*([^,]+?)\s*$/.exec(rest);
+      const a = m && parseBound(m[2]);
+      const b = m && parseBound(m[3]);
+      if (!m || !a || !b) {
+        warn(line, `"compare" looks like: viz: compare nums: j, j + 1  (two cells of a list)`);
+        continue;
+      }
+      hints.compares = [
+        ...(hints.compares ?? []),
+        { container: m[1], a, b, text: `${m[2].trim()}, ${m[3].trim()}`, line },
+      ];
+      continue;
+    }
+
+    if (keyword === "chars") {
+      const list = names(rest);
+      if (!list.length || list.some((n) => !NAME.test(n))) {
+        warn(line, `"chars" needs string variables, like: viz: chars s, word`);
+        continue;
+      }
+      hints.chars = [...new Set([...(hints.chars ?? []), ...list])];
+      continue;
+    }
+
+    if (keyword === "bits") {
+      const m = /^(.*?)(?:\s+(\d+))?$/.exec(rest)!;
+      const list = names(m[1]);
+      const width = m[2] !== undefined ? Number(m[2]) : undefined;
+      if (!list.length || list.some((n) => !NAME.test(n)) || (width !== undefined && (width < 1 || width > 64))) {
+        warn(line, `"bits" looks like: viz: bits mask  or  viz: bits mask 8  (how many digits, 1 to 64)`);
+        continue;
+      }
+      hints.bits = [...(hints.bits ?? []), { names: list, ...(width !== undefined ? { width } : {}), line }];
+      continue;
+    }
+
+    if (keyword === "format" || keyword === "hex") {
+      // format price .2f / format flags hex / hex flags, mask
+      const parts = rest.split(/\s+/);
+      const spec = keyword === "hex" ? "hex" : parts.length > 1 ? parts.pop()! : "";
+      const list = names(keyword === "hex" ? rest : parts.join(" "));
+      if (!list.length || list.some((n) => !NAME.test(n)) || !spec || !FORMAT_SPEC.test(spec)) {
+        warn(
+          line,
+          keyword === "hex"
+            ? `"hex" needs variable names, like: viz: hex flags`
+            : `"format" looks like: viz: format price .2f  (formats: hex, bin, oct, ",", .2f, .3e, .1%)`,
+        );
+        continue;
+      }
+      hints.formats = [...(hints.formats ?? []), { names: list, spec, line }];
+      continue;
+    }
+
+    if (keyword === "label") {
+      const m = /^([A-Za-z_$][\w$.]*)\s+by\s+([A-Za-z_$][\w$]*)$/.exec(rest);
+      if (!m) {
+        warn(line, `"label" looks like: viz: label Node by val  (a class, and the field to name its boxes by)`);
+        continue;
+      }
+      hints.labels = [
+        ...(hints.labels ?? []).filter((l) => l.typeName !== m[1]),
+        { typeName: m[1], field: m[2], line },
+      ];
+      continue;
+    }
+
+    if (keyword === "rows") {
+      const m = /^by\s+(.+)$/.exec(rest);
+      const list = m ? names(m[1]) : [];
+      if (!list.length || list.some((n) => !NAME.test(n))) {
+        warn(line, `"rows" looks like: viz: rows by i  (label the loop's rows by a variable)`);
+        continue;
+      }
+      hints.rowsBy = [...new Set([...(hints.rowsBy ?? []), ...list])];
+      continue;
+    }
+
+    if (keyword === "focus") {
+      const lineMatch = /^line\s+(\d+)$/.exec(rest);
+      const target: NonNullable<VizHints["focus"]>["target"] | null = !rest
+        ? { next: true }
+        : lineMatch
+          ? { line: Number(lineMatch[1]) }
+          : rest === "for" || rest === "while"
+            ? { kind: rest }
+            : rest === "all"
+              ? { all: true }
+              : null;
+      if (!target) {
+        warn(line, `"focus" looks like: viz: focus  (the loop below it), or focus line 12, focus while, focus all`);
+        continue;
+      }
+      hints.focus = { target, line };
+      continue;
+    }
+
+    if (keyword === "watch" || keyword === "check") {
+      try {
+        parseExpr(rest);
+      } catch (error) {
+        const why = error instanceof Error ? error.message : String(error);
+        warn(
+          line,
+          `"${keyword}" needs an expression, like: viz: ${keyword === "watch" ? "watch right - left + 1" : "check total == sum(nums)"} (${why})`,
+        );
+        continue;
+      }
+      if (keyword === "watch") hints.watches = [...(hints.watches ?? []), { text: rest, line }];
+      else hints.checks = [...(hints.checks ?? []), { text: rest, line }];
+      continue;
+    }
+
     if (keyword === "window") {
       const window = parseWindow(rest, line);
       if (!window) {
@@ -121,7 +274,7 @@ export function parseHints(raw: RawHint[]): VizHints {
         );
         continue;
       }
-      hints.windows = [...(hints.windows ?? []).filter((w) => w.container !== window.container), window];
+      hints.windows = [...(hints.windows ?? []).filter((w) => w.container !== window.container || w.region), window];
       continue;
     }
 
@@ -327,45 +480,159 @@ export function charsOf(value: Value): string[] | null {
 /** Strings longer than this stay strings: a window over them would be too wide to read. */
 const MAX_STRING_CELLS = 200;
 
+/** How a number is shown with a `format` spec (FORMAT_SPEC), from its repr; null if it isn't a number. */
+export function formatNumber(repr: string, spec: string): string | null {
+  const trimmed = repr.replace(/n$/, ""); // JavaScript BigInt
+  if (!/^-?(\d+\.?\d*(e[-+]?\d+)?|\.\d+|inf|Infinity)$/i.test(trimmed)) return null;
+  if (spec === "hex" || spec === "bin" || spec === "oct") {
+    if (!/^-?\d+$/.test(trimmed)) return null;
+    const big = BigInt(trimmed);
+    const abs = big < 0n ? -big : big;
+    const [base, prefix] = spec === "hex" ? [16, "0x"] : spec === "bin" ? [2, "0b"] : [8, "0o"];
+    return `${big < 0n ? "-" : ""}${prefix}${abs.toString(base)}`;
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return repr;
+  const m = /^(,)?(?:\.(\d{1,2}))?([fe%])?$/.exec(spec);
+  if (!m) return null;
+  const [, comma, digits, kind] = m;
+  const places = digits !== undefined ? Number(digits) : undefined;
+  let text: string;
+  if (kind === "e") return n.toExponential(places ?? 6);
+  if (kind === "%") text = `${(n * 100).toFixed(places ?? 0)}`;
+  else if (kind === "f" || places !== undefined) text = n.toFixed(places ?? 6);
+  else text = trimmed;
+  if (comma) {
+    const [whole, frac] = text.split(".");
+    const sign = whole.startsWith("-") ? "-" : "";
+    const grouped = whole.replace("-", "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    text = `${sign}${grouped}${frac !== undefined ? `.${frac}` : ""}`;
+  }
+  return kind === "%" ? `${text}%` : text;
+}
+
+const NUMERIC = new Set(["int", "float", "number", "bigint"]);
+
+/** A whole number's binary digits, `width` of them; null for a negative or non-whole number. */
+function bitsOf(value: Value, width: number): string[] | null {
+  if (value.kind !== "prim" || !NUMERIC.has(value.type)) return null;
+  const repr = value.repr.replace(/n$/, "");
+  if (!/^\d+$/.test(repr)) return null;
+  const digits = BigInt(repr).toString(2);
+  return (digits.length > width ? digits : digits.padStart(width, "0")).split("");
+}
+
+/** What `viz: chars`, `bits` and `format` turn a program's values into. */
+interface ValueRules {
+  /** Strings drawn as lists of their characters. */
+  chars: Set<string>;
+  /** Whole numbers drawn as their bits, this many. */
+  bits: Map<string, number>;
+  /** Numbers shown in a format. */
+  formats: Map<string, string>;
+}
+
 /**
- * A string a window is over becomes a list of its characters on every
- * step, so it's drawn (and animated) like any list, with its window and
- * pointers. Its id is the frame and name, so it's the same object from step
- * to step.
+ * Hinted values, as they're drawn, on every step: a string as a list of
+ * its characters, a number as a list of its bits, numbers formatted. The
+ * new lists' ids are the frame and name, so each is the same object from
+ * step to step and animates like any list.
  */
-function stringsAsLists(steps: Step[], names: Set<string>): Step[] {
-  if (!names.size) return steps;
+function transformValues(steps: Step[], rules: ValueRules): Step[] {
+  if (!rules.chars.size && !rules.bits.size && !rules.formats.size) return steps;
   return steps.map((step) => {
     let heap: Record<string, HeapObject> | null = null;
+    const writable = () => {
+      heap ??= { ...step.heap };
+      return heap;
+    };
+    const formatted = (value: Value, spec: string): Value => {
+      if (value.kind !== "prim" || !NUMERIC.has(value.type)) return value;
+      const repr = formatNumber(value.repr, spec);
+      return repr === null ? value : { ...value, repr };
+    };
     const convert = (frame: Step["stack"][number]) => {
       let changed = false;
       const locals = frame.locals.map(([name, value]): [string, Value] => {
-        if (!names.has(name)) return [name, value];
-        const chars = charsOf(value);
-        if (!chars || chars.length > MAX_STRING_CELLS) return [name, value];
-        const id = `str:${frame.id}:${name}`;
-        heap ??= { ...step.heap };
-        const type = value.kind === "prim" && value.type === "str" ? "str" : "string";
-        heap[id] = {
-          kind: "list",
-          id,
-          typeName: type,
-          items: chars.map((c) => ({ kind: "prim", type, repr: type === "str" ? pyRepr(c) : JSON.stringify(c) })),
-          length: chars.length,
-          ...(value.kind === "prim" && value.size !== undefined ? { size: value.size } : {}),
-        };
-        changed = true;
-        return [name, { kind: "ref", id }];
+        const spec = rules.formats.get(name);
+        if (spec !== undefined) {
+          if (value.kind === "prim") {
+            const next = formatted(value, spec);
+            if (next !== value) {
+              changed = true;
+              return [name, next];
+            }
+          } else {
+            // The numbers in a list or dict it holds.
+            const obj = (heap ?? step.heap)[value.id];
+            if (obj && (obj.kind === "list" || obj.kind === "tuple" || obj.kind === "set")) {
+              writable()[obj.id] = { ...obj, items: obj.items.map((v) => formatted(v, spec)) };
+            } else if (obj?.kind === "dict") {
+              writable()[obj.id] = { ...obj, entries: obj.entries.map(([k, v]) => [k, formatted(v, spec)]) };
+            }
+          }
+        }
+        const width = rules.bits.get(name);
+        if (width !== undefined) {
+          const digits = bitsOf(value, width);
+          if (digits) {
+            const id = `bits:${frame.id}:${name}`;
+            const type = value.kind === "prim" ? value.type : "int";
+            writable()[id] = {
+              kind: "list",
+              id,
+              typeName: "bits",
+              items: digits.map((d) => ({ kind: "prim", type, repr: d })),
+              length: digits.length,
+            };
+            changed = true;
+            return [name, { kind: "ref", id }];
+          }
+        }
+        if (rules.chars.has(name)) {
+          const chars = charsOf(value);
+          if (chars && chars.length <= MAX_STRING_CELLS) {
+            const id = `str:${frame.id}:${name}`;
+            const type = value.kind === "prim" && value.type === "str" ? "str" : "string";
+            writable()[id] = {
+              kind: "list",
+              id,
+              typeName: type,
+              items: chars.map((c) => ({ kind: "prim", type, repr: type === "str" ? pyRepr(c) : JSON.stringify(c) })),
+              length: chars.length,
+              ...(value.kind === "prim" && value.size !== undefined ? { size: value.size } : {}),
+            };
+            changed = true;
+            return [name, { kind: "ref", id }];
+          }
+        }
+        return [name, value];
       });
       return changed ? { ...frame, locals } : frame;
     };
     const stack = step.stack.map(convert);
     const suspended = step.suspended?.map(convert);
-    return heap ? { ...step, stack, ...(suspended ? { suspended } : {}), heap } : step;
+    const out = heap ? { ...step, heap } : step;
+    return stack.some((f, i) => f !== step.stack[i]) || heap
+      ? { ...out, stack, ...(suspended ? { suspended } : {}) }
+      : step;
   });
 }
 
-/** One character as Python writes it: 'a', '\'', '\n'. */
+/** The most binary digits a hinted number takes anywhere in the run: its bits' width, so it doesn't change. */
+function widestBits(steps: Step[], names: Set<string>): Map<string, number> {
+  const widths = new Map<string, number>();
+  for (const step of steps)
+    for (const frame of [...step.stack, ...(step.suspended ?? [])])
+      for (const [name, value] of frame.locals) {
+        if (!names.has(name)) continue;
+        const digits = bitsOf(value, 1);
+        if (digits) widths.set(name, Math.max(widths.get(name) ?? 1, digits.length));
+      }
+  return widths;
+}
+
+/** One character as Python writes it: 'a', '\\'', '\\n'. */
 function pyRepr(c: string): string {
   if (c === "'") return `"'"`;
   const escaped = c.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r");
@@ -400,7 +667,20 @@ export function applyHints(trace: Trace): Trace {
       }))
     : trace.steps;
   const windows = viz.windows ?? [];
-  const steps = stringsAsLists(filtered, new Set(windows.map((w) => w.container)));
+  const compares = viz.compares ?? [];
+  // A string a window, region or compare is over is drawn as its characters too.
+  const chars = new Set([
+    ...(viz.chars ?? []),
+    ...windows.map((w) => w.container),
+    ...compares.map((c) => c.container),
+  ]);
+  const bitNames = new Set((viz.bits ?? []).flatMap((b) => b.names));
+  const widest = widestBits(filtered, bitNames);
+  const bits = new Map<string, number>();
+  for (const hint of viz.bits ?? []) for (const name of hint.names) bits.set(name, hint.width ?? widest.get(name) ?? 1);
+  const formats = new Map<string, string>();
+  for (const hint of viz.formats ?? []) for (const name of hint.names) formats.set(name, hint.spec);
+  const steps = transformValues(filtered, { chars, bits, formats });
 
   const indexNames = { ...trace.indexNames };
   const addIndexNames = (key: string, list: string[]) => {
@@ -410,14 +690,37 @@ export function applyHints(trace: Trace): Trace {
   // A window's ends, when each is just a name, are pointers too. A name
   // only ever added to an end (k in [i, i + k)) is a length, not a place:
   // it isn't drawn as a pointer, unless a pointers hint says so.
-  for (const w of windows) {
-    const lone = [loneName(w.start), loneName(w.end)].filter((n) => n !== null);
-    addIndexNames(w.container, lone);
-    const asked = new Set([...lone, ...(viz.pointers[w.container] ?? [])]);
-    const lengths = [...w.start.terms, ...w.end.terms].flatMap((term) =>
-      term.name && !asked.has(term.name) ? [term.name] : [],
+  const ends = [
+    ...windows.map((w) => ({ container: w.container, bounds: [w.start, w.end] })),
+    ...compares.map((c) => ({ container: c.container, bounds: [c.a, c.b] })),
+  ];
+  const lone = new Map<string, Set<string>>();
+  for (const { container, bounds } of ends) {
+    const names = bounds.map(loneName).filter((n) => n !== null);
+    addIndexNames(container, names);
+    lone.set(container, new Set([...(lone.get(container) ?? []), ...names, ...(viz.pointers[container] ?? [])]));
+  }
+  for (const { container, bounds } of ends) {
+    const asked = lone.get(container)!;
+    const lengths = bounds.flatMap((b) =>
+      b.terms.flatMap((term) => (term.name && !asked.has(term.name) ? [term.name] : [])),
     );
-    indexNames[w.container] = indexNames[w.container].filter((n) => !lengths.includes(n));
+    indexNames[container] = indexNames[container].filter((n) => !lengths.includes(n));
   }
   return { ...trace, steps, indexNames, viz };
+}
+
+/**
+ * The loop a `viz: focus` hint picks, by its id, or "all" for nested loops
+ * together; null without one (or when no loop matches).
+ */
+export function focusedLoop(trace: Pick<Trace, "loops" | "viz">): string | "all" | null {
+  const focus = trace.viz?.focus;
+  if (!focus) return null;
+  const target = focus.target;
+  if ("all" in target) return "all";
+  const loops = [...trace.loops].sort((a, b) => a.line - b.line);
+  if ("next" in target) return loops.find((l) => l.line > focus.line)?.id ?? null;
+  if ("line" in target) return loops.find((l) => l.line === target.line)?.id ?? null;
+  return loops.find((l) => l.kind === target.kind)?.id ?? null;
 }

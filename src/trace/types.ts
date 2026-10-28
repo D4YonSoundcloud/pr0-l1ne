@@ -282,6 +282,56 @@ export interface GraphHint {
   line: number;
 }
 
+/**
+ * How a number is shown (`viz: format price .2f`, `viz: hex flags`): "hex",
+ * "bin", "oct", or a format spec: an optional "," (thousands), an
+ * optional ".N" (decimals), and "f" (fixed), "e" (exponent) or "%".
+ */
+export interface FormatHint {
+  names: string[];
+  spec: string;
+  line: number;
+}
+
+/** `viz: bits mask 8`: a whole number drawn as its binary digits, `width` of them (the widest it gets, without one). */
+export interface BitsHint {
+  names: string[];
+  width?: number;
+  line: number;
+}
+
+/** `viz: label Node by val`: a class's boxes (and its nodes in the loop history) named by one of its fields. */
+export interface LabelHint {
+  typeName: string;
+  field: string;
+  line: number;
+}
+
+/**
+ * `viz: focus`: which loop the loop history opens on. With nothing after
+ * it, the loop right below the hint; or `line 12`, `for`, `while` (the
+ * first of that kind), or `all` (nested loops together).
+ */
+export interface FocusHint {
+  target: { next: true } | { line: number } | { kind: "for" | "while" } | { all: true };
+  line: number;
+}
+
+/** `viz: watch right - left + 1` and `viz: check total == sum(window)`: an expression, as written. */
+export interface ExprHint {
+  text: string;
+  line: number;
+}
+
+/** `viz: compare nums: j, j + 1`: two cells of a list marked as the ones being compared. */
+export interface CompareHint {
+  container: string;
+  a: WindowBound;
+  b: WindowBound;
+  text: string;
+  line: number;
+}
+
 /** One end of a sliding window: names and whole numbers added up, like `i + k - 1`. */
 export interface WindowBound {
   terms: { sign: 1 | -1; name?: string; value?: number }[];
@@ -303,6 +353,11 @@ export interface WindowHint {
   /** As written, for its label: `[left, right]`. */
   text: string;
   line: number;
+  /**
+   * `viz: region nums: [0, i) "sorted"`: one of several labeled parts of a
+   * list, each in its own color (`index`, from 0), instead of the one window.
+   */
+  region?: { label: string | null; index: number };
 }
 
 /** Parsed hints (trace/hints.ts), kept on the trace for the renderers. */
@@ -315,8 +370,20 @@ export interface VizHints {
   graphs: GraphHint[];
   /** Variables or classes never to draw as a graph. */
   plain: string[];
-  /** Sliding windows over lists or strings. Optional: traces from before it existed have none. */
+  /** Sliding windows and labeled regions over lists or strings. Optional: traces from before it existed have none. */
   windows?: WindowHint[];
+  // Each of these is optional for the same reason.
+  /** Strings drawn as a row of their characters. */
+  chars?: string[];
+  bits?: BitsHint[];
+  formats?: FormatHint[];
+  labels?: LabelHint[];
+  /** Loop rows labeled by these variables' values instead of "#3". */
+  rowsBy?: string[];
+  focus?: FocusHint;
+  watches?: ExprHint[];
+  checks?: ExprHint[];
+  compares?: CompareHint[];
   /** `viz: size n = 40000, k`: input sizes, for Measure's growth runs. */
   sizes: { name: string; value?: number; line: number }[];
   /** Hints that couldn't be understood, to show to the person. */

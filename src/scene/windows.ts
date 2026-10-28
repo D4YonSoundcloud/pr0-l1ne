@@ -3,7 +3,7 @@
  * a window covers at a step. Part of the scene, like pointers.ts: what the
  * band says, not where it goes.
  */
-import type { Value, WindowBound, WindowHint } from "../trace/types";
+import type { CompareHint, Value, WindowBound, WindowHint } from "../trace/types";
 
 /** A window over a list at one step: items `start` up to (not including) `end`. */
 export interface WindowSpan {
@@ -14,6 +14,8 @@ export interface WindowSpan {
   end: number;
   /** One of its ends moved since the step before. */
   changed: boolean;
+  /** A labeled region (`viz: region`): its label and which of the list's regions it is, for its color. */
+  region?: { label: string | null; index: number };
 }
 
 /** A whole number from a variable, or null. */
@@ -56,6 +58,39 @@ export function windowsFor(
       start,
       end: Math.max(start, end),
       changed: [...namesIn(hint.start), ...namesIn(hint.end)].some((n) => changedNames.has(n)),
+      ...(hint.region ? { region: hint.region } : {}),
+    });
+  }
+  return out;
+}
+
+/** Does a container have labeled regions (so its drawing needs a row for their labels)? */
+export const hasRegionLabels = (containerName: string, hints: readonly WindowHint[] | undefined): boolean =>
+  !!hints?.some((h) => h.container === containerName && h.region?.label);
+
+/** The two cells a `viz: compare` hint marks in a list at a step. */
+export interface CompareSpan {
+  label: string;
+  indexes: [number, number];
+  changed: boolean;
+}
+
+export function comparesFor(
+  containerName: string,
+  hints: readonly CompareHint[] | undefined,
+  locals: Map<string, Value>,
+  changedNames: Set<string> = new Set(),
+): CompareSpan[] {
+  const out: CompareSpan[] = [];
+  for (const hint of hints ?? []) {
+    if (hint.container !== containerName) continue;
+    const a = evaluateBound(hint.a, locals);
+    const b = evaluateBound(hint.b, locals);
+    if (a === null || b === null) continue;
+    out.push({
+      label: hint.text,
+      indexes: [a, b],
+      changed: [...namesIn(hint.a), ...namesIn(hint.b)].some((n) => changedNames.has(n)),
     });
   }
   return out;

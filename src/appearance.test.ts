@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
+  ARROW_KEYS,
+  ARROW_THEMES,
   applyAppearance,
   COLOR_FIELDS,
   clone,
@@ -114,5 +116,45 @@ describe("printed output motion", () => {
     const copy = clone(PRESETS[0]);
     copy.output.fade = false;
     expect(PRESETS[0].output.fade).toBe(true);
+  });
+});
+
+describe("arrow colors", () => {
+  const apply = (a: ReturnType<typeof clone>) => {
+    const [canvas, memory, loop] = [
+      document.createElement("div"),
+      document.createElement("div"),
+      document.createElement("div"),
+    ];
+    applyAppearance(a, { canvas, memory, loop }, () => {});
+    return (name: string) => canvas.style.getPropertyValue(name);
+  };
+
+  it("colors arrows by kind to begin with, back links dashed, and reads what was saved", () => {
+    expect(DEFAULT_APPEARANCE.arrowMode).toBe("kind");
+    expect(parseAppearance(JSON.stringify({ arrowMode: "rainbow", arrowDashes: "yes" }))).toMatchObject({
+      arrowMode: "kind",
+      arrowDashes: false,
+    });
+    const css = apply(clone(DEFAULT_APPEARANCE));
+    expect(css("--arrow-next")).toBe(DEFAULT_APPEARANCE.colors.arrowNext);
+    expect(css("--dash-back")).toBe("5 3");
+    expect(css("--dash-next")).toBe("none");
+  });
+
+  it("uses the References color for every arrow in One color, and dashes every kind when asked", () => {
+    const one = { ...clone(DEFAULT_APPEARANCE), arrowMode: "one" as const };
+    const css = apply(one);
+    for (const name of ["--arrow-tree", "--arrow-next", "--arrow-back", "--arrow-cycle"])
+      expect(css(name)).toBe(one.colors.arrowRef);
+    expect(css("--dash-back")).toBe("none");
+    const dashed = apply({ ...clone(DEFAULT_APPEARANCE), arrowDashes: true });
+    expect([dashed("--dash-next"), dashed("--dash-back"), dashed("--dash-cycle")]).toEqual(["8 3", "5 3", "2 3"]);
+  });
+
+  it("has every arrow color in every preset, and five colors in every arrow theme", () => {
+    for (const preset of PRESETS)
+      for (const key of ARROW_KEYS) expect(preset.colors[key], preset.theme).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const theme of ARROW_THEMES) expect(theme.colors).toHaveLength(ARROW_KEYS.length);
   });
 });

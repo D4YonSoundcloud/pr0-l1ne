@@ -25,10 +25,10 @@ import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
 import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
 import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
 import { type Printed, printedAt } from "../trace/output";
-import { type Frame, liveFrames, type Step, type Trace, type Value } from "../trace/types";
+import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
 import { chooseNested, valuesOf } from "./nesting";
 import { type Pointer, pointersFor } from "./pointers";
-import { type WindowSpan, windowsFor } from "./windows";
+import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
 /** Arrows: every object is its own box. Nested: an object only one thing refers to is drawn inside it. */
 export type MemoryMode = "arrows" | "nested";
@@ -141,6 +141,12 @@ export interface MemoryScene {
   pointers(id: string, level?: 0 | 1): Pointer[];
   /** Sliding windows over a list (`viz: window`). */
   windows(id: string): WindowSpan[];
+  /** The two cells of a list being compared (`viz: compare`). */
+  compares(id: string): CompareSpan[];
+  /** Does a list have labeled regions (room for their labels above it)? */
+  regionLabels(id: string): boolean;
+  /** A box's title: its type, and with `viz: label Node by val`, that field's value. */
+  title(obj: HeapObject): string;
   /** The grid cell this step reads or writes (trace/gridFocus.ts), given the grid's shape; null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** What this step printed, or null (or output turned off). */
@@ -166,7 +172,7 @@ function longestLine(trace: Trace): number {
 function findTrees(trace: Trace, step: Step, mode: MemoryMode): SceneTree[] {
   if (mode === "nested") return [];
   const row = { locals: liveFrames(step).flatMap((frame) => frame.locals), heap: step.heap };
-  const track = findLinkedTrack([row], trace.viz?.linked);
+  const track = findLinkedTrack([row], trace.viz?.linked, trace.viz?.labels);
   if (track?.shape !== "tree") return [];
   const state = linkedRow(track, row);
   const depths = treeDepths(state);
@@ -364,6 +370,24 @@ export function memoryScene(
         owner.frame.locals.map(([n]) => n).filter((n) => changes.changedLocals.has(localKey(owner.frame.id, n))),
       );
       return windowsFor(owner.name, trace.viz.windows, new Map(owner.frame.locals), changedNames);
+    },
+    compares(id) {
+      const owner = pointerOwner.get(id);
+      if (!owner || !trace.viz?.compares?.length) return [];
+      const changedNames = new Set(
+        owner.frame.locals.map(([n]) => n).filter((n) => changes.changedLocals.has(localKey(owner.frame.id, n))),
+      );
+      return comparesFor(owner.name, trace.viz.compares, new Map(owner.frame.locals), changedNames);
+    },
+    regionLabels(id) {
+      const owner = pointerOwner.get(id);
+      return !!owner && hasRegionLabels(owner.name, trace.viz?.windows);
+    },
+    title(obj) {
+      const label = trace.viz?.labels?.find((l) => l.typeName === obj.typeName);
+      if (!label || obj.kind !== "object") return obj.typeName;
+      const value = obj.fields.find(([name]) => name === label.field)?.[1];
+      return value?.kind === "prim" ? `${obj.typeName} ${value.repr}` : obj.typeName;
     },
     gridFocus(id, size) {
       const owner = pointerOwner.get(id);

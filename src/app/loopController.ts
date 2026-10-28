@@ -11,6 +11,7 @@ import { type LiveRow, loopScene } from "../scene/loopScene";
 import type { LoopRenderer, LoopWindowScene, RendererFactory } from "../scene/renderer";
 import { sqlPipelineScene } from "../scene/sqlScene";
 import type { Settings } from "../settings";
+import { focusedLoop } from "../trace/hints";
 import {
   ALL_LOOPS,
   availableLoops,
@@ -212,10 +213,15 @@ export class LoopController {
     // loop's live row under the loop around it.
     const { contexts } = availableLoops(trace, stepIndex);
     const together = nestedLoopsAt(trace, stepIndex).length > 0;
-    const wantsAll = together && (this.selected === null || this.selected === ALL_LOOPS);
+    // Nothing picked in the tabs: a `viz: focus` hint's loop, when it's one of the loops here.
+    const focus = focusedLoop(trace);
+    const selected =
+      this.selected ??
+      (focus === "all" ? ALL_LOOPS : focus && contexts.some((ctx) => ctx.loop === focus) ? focus : null);
+    const wantsAll = together && (selected === null || selected === ALL_LOOPS);
     const history =
       (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
-      buildLoopHistory(trace, stepIndex, this.selected === ALL_LOOPS ? null : this.selected);
+      buildLoopHistory(trace, stepIndex, selected === ALL_LOOPS ? null : selected);
     const tab = (text: string, selected: boolean, pick: string, title = "") => {
       const button = document.createElement("button");
       button.type = "button";

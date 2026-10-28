@@ -35,7 +35,21 @@ export function viewOf(value: Value, ctx: Ctx, cellH: number): View {
   };
 }
 
+/** An object's shape, with each arrow leaving its cells marked as starting in it (for its arrow's kind). */
 export function objectShape(obj: HeapObject, ctx: Ctx, nested = false): Shape {
+  const shape = shapeOf(obj, ctx, nested);
+  return {
+    ...shape,
+    draw(x, y, layer, refs, ...rest) {
+      const before = refs.length;
+      const result = shape.draw(x, y, layer, refs, ...rest);
+      for (let k = before; k < refs.length; k++) refs[k].owner ??= obj.id;
+      return result;
+    },
+  };
+}
+
+function shapeOf(obj: HeapObject, ctx: Ctx, nested: boolean): Shape {
   const changed = ctx.diff.changedSlots.get(obj.id) ?? new Set<string>();
   const isNew = ctx.diff.newObjects.has(obj.id);
   switch (obj.kind) {
@@ -52,7 +66,7 @@ export function objectShape(obj: HeapObject, ctx: Ctx, nested = false): Shape {
       );
     case "object":
       return tableShape(
-        obj.typeName,
+        ctx.titleOf(obj),
         obj.fields.map(([name, value]) => ({ label: name, value, changed: changed.has(name) })),
         ctx,
         { variant: "instance", isNew, emptyText: "no fields", nested, sizeText: sizeLabel(ctx, obj.id) },

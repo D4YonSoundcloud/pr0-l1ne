@@ -1163,7 +1163,60 @@
           "items": {
             "$ref": "#/definitions/WindowHint"
           },
-          "description": "Sliding windows over lists or strings. Optional: traces from before it existed have none."
+          "description": "Sliding windows and labeled regions over lists or strings. Optional: traces from before it existed have none."
+        },
+        "chars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Strings drawn as a row of their characters."
+        },
+        "bits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BitsHint"
+          }
+        },
+        "formats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FormatHint"
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LabelHint"
+          }
+        },
+        "rowsBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Loop rows labeled by these variables' values instead of \"#3\"."
+        },
+        "focus": {
+          "$ref": "#/definitions/FocusHint"
+        },
+        "watches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExprHint"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExprHint"
+          }
+        },
+        "compares": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CompareHint"
+          }
         },
         "sizes": {
           "type": "array",
@@ -1336,6 +1389,26 @@
         },
         "line": {
           "type": "number"
+        },
+        "region": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "index": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "label",
+            "index"
+          ],
+          "additionalProperties": false,
+          "description": "`viz: region nums: [0, i) \"sorted\"`: one of several labeled parts of a list, each in its own color (`index`, from 0), instead of the one window."
         }
       },
       "required": [
@@ -1384,6 +1457,192 @@
       ],
       "additionalProperties": false,
       "description": "One end of a sliding window: names and whole numbers added up, like `i + k - 1`."
+    },
+    "BitsHint": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "width": {
+          "type": "number"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "names",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: bits mask 8`: a whole number drawn as its binary digits, `width` of them (the widest it gets, without one)."
+    },
+    "FormatHint": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spec": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "names",
+        "spec",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "How a number is shown (`viz: format price .2f`, `viz: hex flags`): \"hex\", \"bin\", \"oct\", or a format spec: an optional \",\" (thousands), an optional \".N\" (decimals), and \"f\" (fixed), \"e\" (exponent) or \"%\"."
+    },
+    "LabelHint": {
+      "type": "object",
+      "properties": {
+        "typeName": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "typeName",
+        "field",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: label Node by val`: a class's boxes (and its nodes in the loop history) named by one of its fields."
+    },
+    "FocusHint": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "next": {
+                  "type": "boolean",
+                  "const": true
+                }
+              },
+              "required": [
+                "next"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "line": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "line"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "for",
+                    "while"
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "all": {
+                  "type": "boolean",
+                  "const": true
+                }
+              },
+              "required": [
+                "all"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "target",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: focus`: which loop the loop history opens on. With nothing after it, the loop right below the hint; or `line 12`, `for`, `while` (the first of that kind), or `all` (nested loops together)."
+    },
+    "ExprHint": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: watch right - left + 1` and `viz: check total == sum(window)`: an expression, as written."
+    },
+    "CompareHint": {
+      "type": "object",
+      "properties": {
+        "container": {
+          "type": "string"
+        },
+        "a": {
+          "$ref": "#/definitions/WindowBound"
+        },
+        "b": {
+          "$ref": "#/definitions/WindowBound"
+        },
+        "text": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "container",
+        "a",
+        "b",
+        "text",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: compare nums: j, j + 1`: two cells of a list marked as the ones being compared."
     },
     "SqlTrace": {
       "type": "object",

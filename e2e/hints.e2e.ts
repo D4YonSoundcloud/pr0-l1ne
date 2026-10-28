@@ -62,3 +62,53 @@ test("typing viz: in a comment lists the hints", async ({ page }) => {
   await expect(suggest).toContainText("window");
   await expect(suggest).toContainText("pointers");
 });
+
+const insertion = `const nums = [5, 2, 4, 6, 1, 3];
+let total = 0;
+// viz: region nums: [0, i) "sorted"
+// viz: compare nums: j - 1, j
+// viz: watch i - j
+// viz: check total == 1
+for (let i = 1; i < nums.length; i++) {
+  let j = i;
+  while (j > 0 && nums[j - 1] > nums[j]) {
+    [nums[j - 1], nums[j]] = [nums[j], nums[j - 1]];
+    j--;
+  }
+  total += 1;
+}
+`;
+
+test("region, compare, watch and check are drawn", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  await page.evaluate((c) => localStorage.setItem("pr0l1ne:code:javascript", c), insertion);
+  await page.reload();
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  await page.locator("#scrubber").fill("40");
+  await expect(page.locator("#memory .region-band").first()).toBeAttached();
+  await expect(page.locator("#memory .region-label").first()).toBeAttached();
+  await expect(page.locator("#memory .compare-mark")).toHaveCount(2);
+  await expect(page.locator("#loop .watch").first()).toBeAttached();
+  // total is 1 only after the first pass: other rows fail.
+  await expect(page.locator("#loop .loop-row.is-failing").first()).toBeAttached();
+  await expect(page.locator("#loop .check-failed").first()).toHaveText("✗ total == 1");
+});
+
+test("the Style panel's arrow colors: a set to start from, and one color for all", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const cssVar = (name: string) =>
+    page.evaluate((n) => document.getElementById("canvas")!.style.getPropertyValue(n), name);
+  await page.locator("#style").click();
+  await page.locator("#style-panel summary", { hasText: "Arrows" }).click();
+  await page
+    .locator("#style-panel select", { has: page.locator("option", { hasText: "Neon" }) })
+    .selectOption({ label: "Neon (dark canvases)" });
+  await expect.poll(() => cssVar("--arrow-cycle")).toBe("#ffb703");
+  await expect.poll(() => cssVar("--arrow-next")).toBe("#f72585");
+  await page.locator("#style-panel .segment", { hasText: "One color" }).click();
+  await expect.poll(() => cssVar("--arrow-next")).toBe("#4cc9f0");
+  await expect.poll(() => cssVar("--arrow-cycle")).toBe("#4cc9f0");
+});

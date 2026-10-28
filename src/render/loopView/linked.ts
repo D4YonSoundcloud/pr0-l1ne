@@ -1,4 +1,6 @@
 /** The linked track: a linked list (nodes in fixed columns, links as arrows) or a binary tree, one per row. */
+
+import { trackLinkKind } from "../../scene/arrowKinds";
 import { valueKey } from "../../trace/diff";
 import { type LinkedRow, treeDepths } from "../../trace/linked";
 import { CELL_H, POINTER_H, pointerMarkers, s, valueCell } from "../draw";
@@ -84,11 +86,22 @@ export function drawTrack(
         const ex = tx + Math.min(8, valueW / 4);
         d = `M${cx},${cellsY + CELL_H} C${cx},${bottom} ${ex},${bottom} ${ex},${cellsY + CELL_H + 2}`;
       }
+      // Its kind, for Style → Arrow colors: a link closes a loop when following
+      // the same field from where it points leads back here.
+      let closes = false;
+      for (let at: string | null = target, n = 0; at !== null && n <= track.order.length; n++) {
+        if (at === id) {
+          closes = true;
+          break;
+        }
+        at = state.nodes.get(at)?.links[k] ?? null;
+      }
+      const kind = trackLinkKind(track.links[k], "list", closes);
       arrowLayer.append(
         s("path", {
           d,
-          class: ["link-arrow", linkChanged && "is-changed"].filter(Boolean).join(" "),
-          "marker-end": linkChanged ? "url(#arrow-change)" : "url(#arrow-ref)",
+          class: ["link-arrow", `kind-${kind}`, linkChanged && "is-changed"].filter(Boolean).join(" "),
+          "marker-end": linkChanged ? "url(#arrow-change)" : `url(#arrow-kind-${kind})`,
         }),
       );
     });
@@ -181,11 +194,12 @@ export function drawTree(
         ty > from.y
           ? `M${from.x},${from.y} C${from.x},${from.y + 18} ${tx},${ty - 18} ${tx},${ty - 2}`
           : `M${from.x},${from.y} C${from.x},${from.y + 30} ${tx},${ty - 30} ${tx},${ty - 2}`;
+      const kind = trackLinkKind(track.links[k], "tree", false);
       edgesG.append(
         s("path", {
           d,
-          class: ["link-arrow", linkChanged && "is-changed"].filter(Boolean).join(" "),
-          "marker-end": linkChanged ? "url(#arrow-change)" : "url(#arrow-ref)",
+          class: ["link-arrow", `kind-${kind}`, linkChanged && "is-changed"].filter(Boolean).join(" "),
+          "marker-end": linkChanged ? "url(#arrow-change)" : `url(#arrow-kind-${kind})`,
         }),
       );
     });
