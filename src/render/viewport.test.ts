@@ -5,7 +5,7 @@
  * the browser checks.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type View, Viewport, type ViewSurface } from "./viewport";
+import { gridStep, type View, Viewport, type ViewSurface, zoomText } from "./viewport";
 
 function windowEl(): HTMLElement {
   document.body.innerHTML = `<div id="w"></div>`;
@@ -108,6 +108,67 @@ describe("Viewport with a surface", () => {
     const count = views.length;
     vi.advanceTimersByTime(200);
     expect(views.length).toBe(count);
+    view.dispose();
+  });
+});
+
+describe("zoomed far out", () => {
+  it("goes down to 1%, with the zoom said as it is and the graph paper coarser", () => {
+    const el = windowEl();
+    const view = new Viewport(el, { label: "Test" });
+    view.moveTo(undefined, 0.001);
+    expect(view.view.zoom).toBe(0.01);
+    expect(el.querySelector(".zoom-label")!.textContent).toBe("1%");
+    expect(zoomText(0.025)).toBe("2.5%");
+    expect(zoomText(0.35)).toBe("35%");
+    // 24 px squares at 1% would be a quarter of a pixel: five times coarser until they're 8 px or more.
+    expect(gridStep(24, 0.01)).toBe(30);
+    expect(gridStep(24, 1)).toBe(24);
+    view.dispose();
+  });
+
+  it("says when the level of detail changes, and marks the window with it", () => {
+    const el = windowEl();
+    const levels: number[] = [];
+    const view = new Viewport(el, { label: "Test", onLod: (lod) => levels.push(lod) });
+    view.moveTo(undefined, 0.2);
+    view.moveTo(undefined, 0.19);
+    view.moveTo(undefined, 0.01);
+    view.moveTo(undefined, 1);
+    expect(levels).toEqual([2, 4, 0]);
+    expect(view.lod).toBe(0);
+    expect(el.dataset.lod).toBe("0");
+    view.dispose();
+  });
+
+  it("shows landmarks over the drawing only when it's too small to read, where their boxes are", () => {
+    const el = windowEl();
+    const view = new Viewport(el, { label: "Test" });
+    view.setLandmarks([{ x: 100, y: 200, text: "Global", kind: "frame" }]);
+    const layer = el.querySelector<HTMLElement>(".viewport-landmarks")!;
+    expect(layer.hidden).toBe(true);
+    view.moveTo({ x: 10, y: 20 }, 0.05);
+    expect(layer.hidden).toBe(false);
+    const label = layer.querySelector<HTMLElement>(".landmark.is-frame")!;
+    expect(label.textContent).toBe("Global");
+    expect(label.style.transform).toBe("translate(15px, 30px)");
+    view.dispose();
+  });
+
+  it("says what a box is under the pointer, and zooms in on it with a double-click", () => {
+    const el = windowEl();
+    const { s } = surface({ key: "obj:o1", x: 1000, y: 500, w: 200, h: 100, title: "list, 2,000 items" } as never);
+    const view = new Viewport(el, { label: "Test", surface: s });
+    view.setDrawn({ width: 4000, height: 3000 });
+    view.moveTo({ x: 0, y: 0 }, 0.05);
+    pointer("pointermove", el, 60, 30);
+    const tip = el.querySelector<HTMLElement>(".viewport-tip")!;
+    expect(tip.hidden).toBe(false);
+    expect(tip.textContent).toContain("list, 2,000 items");
+    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 60, clientY: 30 }));
+    // As big as fits in the 800 × 600 window, up to 100%: the box is 200 × 100.
+    expect(view.view.zoom).toBe(1);
+    expect(view.view.pan).toEqual({ x: 400 - 1100, y: 300 - 550 });
     view.dispose();
   });
 });

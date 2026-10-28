@@ -60,6 +60,21 @@ each memory mode, with animation off. **Step** is the time from asking for a
 step to the frame after it's drawn; the stage times are medians from
 `src/perf.ts`.
 
+### At each zoom
+
+```sh
+node scripts/bench-browser.mjs --zooms                # steps and drawing at 100%, 41%, 21%, 5.5% and 1%
+node scripts/bench-browser.mjs --zooms --save phase2  # and keep them in results/zooms-phase2.json
+```
+
+Each program is opened twice, with levels of detail (`src/render/lod.ts`)
+and without (`?nolod`, which keeps every zoom at full detail), in each
+renderer. At each zoom it steps through the run as above, and times panning
+(the median frame while it pans). **Step** is the whole step as above;
+**drawing** is only the renderer's part (SVG's patch, or canvas's paint),
+which is what the levels change: the layout before it is the same at any
+zoom.
+
 ## Timing a stage
 
 `timed("stage", () => work())` (src/perf.ts) records how long `work` takes

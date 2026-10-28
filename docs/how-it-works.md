@@ -777,3 +777,25 @@ The id is what ties the steps together: it's how a row in the ORDER BY step is t
 **Errors** keep Postgres's message, and [`explain.ts`](../src/sql/explain.ts) adds what usually causes it, by its SQLSTATE code, using what the run knows: the tables there are, their columns, and the names the query gives columns with AS.
 
 **The trace.** A SQL trace is an ordinary trace (one step per stage, at the clause's line, so the timeline, the editor's marks, share links and the output all work as they do for any language), with the tables in `Trace.sql`. The two windows draw it with their own scenes ([`scene/sqlScene.ts`](../src/scene/sqlScene.ts)) and drawings ([`render/sqlView.ts`](../src/render/sqlView.ts)), through the same renderers as everything else: rows are groups keyed by their id, so the animation of section 13 slides them between steps.
+
+## 23. Levels of detail
+
+Both windows zoom from 400% down to 1% ([`viewport.ts`](../src/render/viewport.ts), `MIN_ZOOM`). Zoomed out, most of a drawing is too small to see (13 px text at 25% is 3 px tall) but costs as much to put on screen as ever, so the zoom picks a **level of detail** ([`lod.ts`](../src/render/lod.ts)), and each level leaves out what's become too small:
+
+| Level | Below | Leaves out |
+| --- | --- | --- |
+| 0 full | | nothing |
+| 1 reduced | 60% | small text (`SMALL_TEXT`: index numbers, sizes, field names, the legend) and pointer names |
+| 2 blocks | 35% | all text; cells become blocks colored by their value's type (`has-v-num`... from `valueCell`), without borders |
+| 3 outline | 12% | arrowheads; arrows are thick, plain lines |
+| 4 overview | 3% | everything in a box but its outline (`node-outline`), in its kind's color |
+
+`lodFor` adds hysteresis: the level changes only once the zoom is 10% past a threshold, so a zoom resting on one doesn't flicker.
+
+**The level belongs to the view, never the drawing.** The layout makes the same full drawing at any zoom, and the viewport tells the renderer the level (`onLod`). The renderer puts a `lod-N` class on what holds the drawing (SVG: the viewport's layer; canvas: its style probe, one per level, so the canvas reads each level's CSS as it does the full drawing's), and styles.css ("Levels of detail") says how each level looks. What a level hides isn't only hidden: `atLevel(drawing, lod)` copies the drawing without it, so it's never patched into the page or painted. Changing level redraws from the full drawing it keeps (`full`), without laying the step out again; the canvas keeps a paint cache per level, so zooming back and forth repaints from cache.
+
+**Too small to read, but still there.** From blocks on, the viewport shows what a box is when it's hovered (`data-title` on each box, from `describeNode`), and double-clicking one glides to it (`zoomToBox`). From outline on, the layout's **landmarks** (`landmarksOf` in memoryView/layout.ts: the call stack's frames and the biggest structures, at most 30, in `data-landmarks` on the drawing) are HTML labels over the drawing, at their own size, moved with it as it pans. The graph paper gets coarser as it zooms out (`gridStep`: ×5 until lines are 8 px apart), and from outline on, arrows and outlines are drawn thicker in diagram units, so they stay about a pixel wide on screen.
+
+**What it doesn't change.** Levels make putting a drawing on screen cheaper, not the layout before it, which is the same at any zoom: for the biggest programs that's most of a step (bench/README.md, "At each zoom").
+
+**Resizing.** Dragging a divider resizes the windows many times a second. The viewport just moves the drawing; the canvas resizes its surface at most every 120 ms (`resizeSoon`), and the step is drawn again only once resizing pauses, and only if the windows' shape changed ([`resizeRedraw.ts`](../src/app/resizeRedraw.ts)), since that's all about a size that changes the drawing.

@@ -225,6 +225,22 @@ Each section's header is always one row: when its buttons don't fit (a narrow wi
 
 Zooming centers on the pointer, so you can zoom into the part you're looking at. Each section keeps its own position and zoom as you step and as your code re-runs. While you step through a loop, the loop history pans just enough to keep the running iteration in view.
 
+### Zooming far out
+
+Both windows zoom out as far as 1%, so even a drawing of thousands of boxes fits on screen. The graph paper gets coarser as you go, so it never turns into a gray haze, and lines never get thinner than you can see. Text too small to read isn't drawn at all, which also keeps a big drawing quick to step through. The drawing gets simpler in stages:
+
+| Zoom | What's drawn |
+| --- | --- |
+| 60% and up | Everything |
+| 35% to 60% | No small text: index numbers, sizes, field names on arrows, the legend |
+| 12% to 35% | No text: each cell is a block colored by what it holds (numbers, strings, booleans, references), or a heatmap's colors |
+| 3% to 12% | Blocks, thin arrows without heads, and the names of the call stack's functions and the biggest structures written over the drawing, at a size you can read |
+| 1% to 3% | Each box one rectangle in its kind's color, arrows faint; the names stay |
+
+Zooming a little either side of one of these doesn't flicker between them: the drawing changes only once you're clearly past it. From 35% down, hovering a box says what it is, and double-clicking it zooms in on it. **Auto-fit** zooms as far out as it needs to, down to 1%.
+
+Dragging a divider or resizing the window just moves the drawing while you drag; it's drawn again once you stop, and only if the windows changed shape (taller than wide, or the other way).
+
 ### Auto-fit
 
 **Auto-fit**, next to the zoom buttons, keeps the whole diagram in view on every step. When a step needs a different zoom (a new object appears, a tree grows a level, the loop history gains a row), the canvas glides there with the same easing and duration as that window's step animation in the [Style panel](#styling-the-canvas). The memory view and the loop history each have their own Auto-fit. It's on to begin with, and turning it off (or changing its mode) is remembered.

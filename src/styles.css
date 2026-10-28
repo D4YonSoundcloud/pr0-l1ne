@@ -4060,3 +4060,145 @@ select {
 .sql-stage-chip.is-refused + .sql-stage-keyword {
   fill: var(--cell);
 }
+
+/* ------------------------------------------------------------ levels of detail
+   Zoomed out, a drawing is drawn in less detail (render/lod.ts). The level is
+   a class on what holds the drawing: the SVG renderer's layer, or the canvas
+   renderer's style probe, so these rules decide it for both. Save SVG always
+   draws in full. Stroke widths here are in diagram units, picked so lines
+   stay about a pixel wide across each level's range of zooms. */
+
+/* The box drawn in place of everything inside it, from outline down. */
+.node-outline {
+  display: none;
+}
+
+/* 1 reduced: text too small to read (index numbers, sizes, labels, pointer names). */
+:is(.lod-1, .lod-2, .lod-3, .lod-4)
+:is(
+  .index,
+  .seq-label,
+  .mem-size,
+  .cell-size,
+  .box-size,
+  .arrow-label,
+  .pointer text,
+  .interval-text,
+  .region-label,
+  .box-empty,
+  .scalars .watch
+),
+:is(.lod-1, .lod-2, .lod-3, .lod-4) .arrow-legend {
+  display: none;
+}
+
+/* 2 blocks: no text at all; a cell is a block in its value's kind's color. */
+:is(.lod-2, .lod-3, .lod-4) :is(.memory-svg, .loop-svg, .sql-svg) text {
+  display: none;
+}
+:is(.lod-2, .lod-3, .lod-4) .cell.has-v-num:not(.heat, .is-changed, .is-empty) rect {
+  fill: color-mix(in srgb, var(--ballpoint) 28%, var(--cell));
+}
+:is(.lod-2, .lod-3, .lod-4) .cell.has-v-str:not(.heat, .is-changed, .is-empty) rect {
+  fill: color-mix(in srgb, var(--v-str) 30%, var(--cell));
+}
+:is(.lod-2, .lod-3, .lod-4) .cell:is(.has-v-bool, .has-v-none):not(.heat, .is-changed, .is-empty) rect {
+  fill: color-mix(in srgb, var(--v-const) 30%, var(--cell));
+}
+:is(.lod-2, .lod-3, .lod-4) .cell.has-ref:not(.heat, .is-changed, .is-empty) rect {
+  fill: color-mix(in srgb, var(--arrow-ref) 18%, var(--cell));
+}
+
+/* Cells as blocks need no borders (at this size they're a smear of lines). */
+:is(.lod-2, .lod-3, .lod-4) .cell:not(.is-changed) rect {
+  stroke: none;
+}
+
+/* 3 outline: blocks still, so a heatmap or a grid keeps its picture; arrows
+   thin lines without heads. */
+:is(.lod-3, .lod-4) .arrow-tops {
+  display: none;
+}
+.lod-3 :is(.ref-arrow, .link-arrow) {
+  stroke-width: 12px;
+}
+
+/* 4 overview: each box one rectangle in its kind's color, and arrows faint. */
+.lod-4 .node > :not(.node-outline, .node-hit) {
+  display: none;
+}
+.lod-4 .node-outline {
+  display: inline;
+  stroke: var(--ink);
+  stroke-width: 40px;
+  fill: color-mix(in srgb, var(--ink) 12%, var(--cell));
+}
+.lod-4 .node-outline.outline-frame {
+  fill: var(--header);
+}
+.lod-4 .node-outline.outline-frame.is-active {
+  fill: color-mix(in srgb, var(--ballpoint) 40%, var(--header));
+}
+.lod-4 .node-outline.outline-seq {
+  fill: color-mix(in srgb, var(--ballpoint) 30%, var(--cell));
+}
+.lod-4 .node-outline.outline-dict {
+  fill: color-mix(in srgb, var(--v-str) 30%, var(--cell));
+}
+.lod-4 .node-outline.outline-object {
+  fill: color-mix(in srgb, var(--v-const) 30%, var(--cell));
+}
+.lod-4 .node-outline.outline-graph {
+  fill: color-mix(in srgb, var(--path) 30%, var(--cell));
+}
+.lod-4 .node-outline.outline-code {
+  fill: var(--header-code);
+}
+.lod-4 .node-outline.outline-output {
+  fill: var(--output);
+}
+.lod-4 .node-outline.is-changed {
+  fill: var(--highlight);
+}
+.lod-4 :is(.ref-arrow, .link-arrow) {
+  stroke-width: 40px;
+  opacity: 0.35;
+}
+
+/* Landmarks: names kept readable over a drawing too small to read (viewport.ts). */
+.viewport-landmarks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.viewport-landmarks .landmark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: 2px 0 0 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font: 600 11.5px / 1.35 var(--font-ui);
+  white-space: nowrap;
+  color: var(--paper-ink);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink-faint) 45%, transparent);
+}
+.viewport-landmarks .landmark.is-frame {
+  color: var(--ballpoint);
+}
+/* What a box too small to read is, under the pointer. */
+.viewport-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font: 12px / 1.4 var(--font-ui);
+  white-space: nowrap;
+  color: var(--chrome-text);
+  background: var(--chrome);
+  pointer-events: none;
+}

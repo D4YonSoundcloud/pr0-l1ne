@@ -117,6 +117,7 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/arrangement.ts` | Where the windows go, as a tree of three: the arrangements, moving a window (beside another, along an edge, or swapping), the grid tracks for one, and where a drop goes. Pure, with its own tests |
 | `src/app/docking.ts` | Moving windows by dragging their headers: the preview box that glides to where a window would go, the drop, the windows gliding to their places, and arrow keys on a window's grip |
 | `src/app/routing.ts` | Each language's address (/python, /sql...): the address follows the language, Back and Forward switch it, and pr0l1ne.com shows the address of the language it opened |
+| `src/app/resizeRedraw.ts` | Redrawing when the windows change size: once resizing pauses, and only if their shape (taller than wide or not) changed |
 | `src/app/sectionTools.ts` | A window header's tools: one row that never wraps, with the tools that don't fit moved (not copied) into the header's ⋯ menu, from the end, and back as the window widens |
 | `src/app/loadingCard.ts` | The card over the canvas, with a spinner, while Python or PostgreSQL downloads |
 | `src/site/pages.ts` | The site's pages for search engines: each language's title, description, canonical address, structured data and introduction, and the sitemap. The build (`sitePages` in vite.shared.ts) writes python.html and the others from index.html with them |
@@ -385,8 +386,10 @@ pr0-l1ne/
     │   ├── graphEdges.ts       Edge shapes (auto, curved, straight, angled) and weight label placement
     │   ├── animate.ts          What a step animates (plan), played as FLIP tweening for SVG
     │   ├── animate.test.ts     Animation tests (jsdom)
-    │   ├── viewport.ts         Pan, zoom and node dragging for both sections (an SVG, or a surface)
+    │   ├── viewport.ts         Pan, zoom (1% to 400%) and node dragging for both sections (an SVG, or a surface); the level of detail, landmarks, hover tips
     │   ├── viewport.test.ts    The viewport with a surface (the canvas renderer)
+    │   ├── lod.ts              Levels of detail: each zoom's level, and a drawing with what a level hides left out (how-it-works.md, section 23)
+    │   ├── lod.test.ts         Levels for zooms, and what each leaves out
     │   ├── sqlView.ts          SQL: a stage's tables, and a statement's stages, as drawings
     │   └── sqlView.test.ts     Every SQL example, every step: rows keyed, patched as drawn fresh
     ├── sql/                    SQL, stepped through clause by clause (how-it-works.md, section 22)

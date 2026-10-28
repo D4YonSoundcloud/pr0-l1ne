@@ -9,6 +9,7 @@ import { prefersReducedMotion } from "./appearance";
 import { perf } from "./perf";
 import { SVG_RENDERERS } from "./render/svgRenderers";
 import "./styles.css";
+import { isTall } from "./app/autoFit";
 import { Banner, type BannerTone } from "./app/banner";
 import { ComplexityController } from "./app/complexityController";
 import { CsvImportController } from "./app/csvImport";
@@ -25,6 +26,7 @@ import { MobileViewsController } from "./app/mobileViews";
 import { PlaybackController } from "./app/playbackController";
 import { ProgramsController } from "./app/programsController";
 import { RendererSwitch } from "./app/rendererSwitch";
+import { resizeRedraw } from "./app/resizeRedraw";
 import { LanguageRoutes, languageFromPath } from "./app/routing";
 import { RunController } from "./app/runController";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
@@ -41,7 +43,10 @@ import { ProgramStore } from "./programs";
 import { createSettings, type RendererKind } from "./settings";
 
 // ?perf: time each stage of drawing a step, for the browser benchmark (src/perf.ts, bench/README.md).
-if (new URLSearchParams(window.location.search).has("perf")) {
+const query = new URLSearchParams(window.location.search);
+// ?nolod: everything drawn in full at every zoom, to measure what levels of detail save.
+perf.noLod = query.has("nolod");
+if (query.has("perf")) {
   perf.on = true;
   (window as unknown as { __pr0l1nePerf: typeof perf }).__pr0l1nePerf = perf;
 }
@@ -355,9 +360,17 @@ installShortcuts({
 });
 // Where the windows go (stacked, side by side, or wherever they were dragged), the dividers, and windows folded to bars.
 // Redrawn when the windows change shape: a very wide graph is drawn left to right in a tall window.
-const layout = new LayoutController(els, settings, () => {
-  if (app.get().trace) view.render(false);
-});
+// Only once resizing pauses, and only for a new shape (see app/resizeRedraw.ts).
+const layout = new LayoutController(
+  els,
+  settings,
+  resizeRedraw({
+    shape: () => `${isTall(els.memory)}|${isTall(els.loop)}`,
+    redraw: () => {
+      if (app.get().trace) view.render(false);
+    },
+  }),
+);
 // Windows moved by dragging their headers anywhere on the page (a wide screen only).
 new WindowDocking({
   layout,

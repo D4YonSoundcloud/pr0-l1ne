@@ -104,6 +104,9 @@ export interface PaintGroup {
   noFade?: boolean;
   /** Its <title>: shown as a tooltip when the pointer is over it. */
   title?: string;
+  /** A box's size and what it is (data-w, data-h, data-title): for the viewport's zoomed-out tooltip and zoom to box. */
+  size?: { w: number; h: number };
+  label?: string;
   /** Its classes (for the few animations that depend on them: the output card). */
   classes: string;
   /** Around everything drawn in it, in diagram units; null when it draws nothing. */
@@ -473,6 +476,9 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
     if (nodeKey) out.nodeKey = nodeKey;
     if (flip) out.flip = flip;
     if (nodeKey || flip) out.at = { x: num(el, "data-x"), y: num(el, "data-y") };
+    if (nodeKey && el.hasAttribute("data-w")) out.size = { w: num(el, "data-w"), h: num(el, "data-h") };
+    const label = nodeKey ? el.getAttribute("data-title") : null;
+    if (label) out.label = label;
     if (cell)
       out.cell = {
         key: cell,

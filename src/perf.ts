@@ -22,6 +22,8 @@
  */
 export const perf = {
   on: false,
+  /** Draw everything in full at every zoom (?nolod): to measure what levels of detail save. */
+  noLod: false,
   /** The last trace the page showed, in numbers (the browser benchmark reads it). */
   lastTrace: null as TraceStats | null,
   /** Every time recorded, by stage, in milliseconds. */

@@ -28,6 +28,7 @@
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { timed } from "../../perf";
+import { atLevel, type Lod, landmarksIn } from "../lod";
 // PixiJS builds some of its code with new Function(), which the app's
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
 // versions that don't.
@@ -64,6 +65,8 @@ export interface CanvasOptions {
   styles?(host: Element): StyleProbe;
 }
 
+/** How often a window being resized resizes its canvas, at most (see resizeSoon). */
+const RESIZE_EVERY = 120;
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
 
 /** Room around a box or row before it counts as off screen (text can stick out of a box's shapes). */
@@ -100,7 +103,19 @@ abstract class CanvasWindow {
   private built: BuiltScene | null = null;
   /** What's kept of the scene from one build to the next (pixiScene.ts), and of the paint (paint.ts). */
   private readonly kept = new SceneCache();
-  private readonly keptPaint = new PaintCache();
+  /** Paint kept between steps, one for each level of detail (they paint differently). */
+  private readonly paintCaches = new Map<Lod, PaintCache>();
+  private get keptPaint(): PaintCache {
+    let cache = this.paintCaches.get(this.level);
+    if (!cache) {
+      cache = new PaintCache();
+      this.paintCaches.set(this.level, cache);
+    }
+    return cache;
+  }
+  private clearPaint(): void {
+    this.paintCaches.clear();
+  }
   /** Boxes and rows that can be skipped when they're out of view. */
   private cullable: { layer: Container; bounds: Rect }[] = [];
   private at: View = { x: 0, y: 0, z: 1 };
@@ -127,6 +142,7 @@ abstract class CanvasWindow {
       onNodeMove,
       onAutoFitChange: (state) => events.onAutoFitChange?.(state),
       controls: events.controls,
+      onLod: (lod) => this.setLevel(lod),
       surface: {
         onView: (view) => {
           this.at = view;
@@ -135,7 +151,14 @@ abstract class CanvasWindow {
         },
         nodeAt: (x, y) => {
           const node = this.nodeAt(x, y);
-          return node?.at && node.nodeKey ? { key: node.nodeKey, x: node.at.x, y: node.at.y } : null;
+          if (!node?.at || !node.nodeKey) return null;
+          return {
+            key: node.nodeKey,
+            x: node.at.x,
+            y: node.at.y,
+            ...(node.size ?? {}),
+            ...(node.label ? { title: node.label } : {}),
+          };
         },
       },
     });
@@ -150,7 +173,7 @@ abstract class CanvasWindow {
     const signal = this.listening.signal;
     el.addEventListener("pointermove", (e) => this.showTooltip(e.clientX, e.clientY), { signal });
     if (typeof ResizeObserver === "function") {
-      this.resizes = new ResizeObserver(() => this.resize());
+      this.resizes = new ResizeObserver(() => this.resizeSoon());
       this.resizes.observe(el);
     }
     // A web font arriving changes how wide text is: measure and draw it again.
@@ -186,6 +209,29 @@ abstract class CanvasWindow {
     this.pixi = pixi;
     this.resize();
   }
+
+  /**
+   * The window is being resized: resize the canvas at most every
+   * RESIZE_EVERY ms, and once more when it stops. A canvas resize makes a
+   * new backing store (megabytes at a large window), and a divider dragged
+   * resizes the window on every frame.
+   */
+  private resizeSoon(): void {
+    const now = performance.now();
+    if (this.resizeTimer !== null) clearTimeout(this.resizeTimer);
+    const since = now - this.lastResize;
+    if (since >= RESIZE_EVERY) {
+      this.lastResize = now;
+      this.resize();
+    }
+    this.resizeTimer = window.setTimeout(() => {
+      this.resizeTimer = null;
+      this.lastResize = performance.now();
+      this.resize();
+    }, RESIZE_EVERY);
+  }
+  private resizeTimer: number | null = null;
+  private lastResize = Number.NEGATIVE_INFINITY;
 
   private resize(): void {
     if (!this.pixi) return;
@@ -238,7 +284,8 @@ abstract class CanvasWindow {
     const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
     this.drawing = drawing;
-    this.paint = timed("canvas.paint", () => paintDrawing(drawing, this.styles, this.keptPaint));
+    this.view.setLandmarks(landmarksIn(drawing));
+    this.paint = timed("canvas.paint", () => paintDrawing(atLevel(drawing, this.level), this.styles, this.keptPaint));
     const effects = motion !== null && !prefersReducedMotion() && !this.el.classList.contains("is-dragging-node");
     timed("canvas.build", () => this.build(effects));
     this.view.setDrawn({ width: this.paint.width, height: this.paint.height });
@@ -247,11 +294,24 @@ abstract class CanvasWindow {
     timed("canvas.draw", () => this.drawNow());
   }
 
+  /**
+   * Draw at a level of detail (lod.ts): the style probe takes the level's
+   * class, so the CSS says what it shows, and the drawing is painted again.
+   * Each level's look is read once and kept, so zooming back is quick.
+   */
+  private setLevel(lod: Lod): void {
+    if (lod === this.level) return;
+    this.level = lod;
+    this.styles.setLevel?.(lod);
+    this.repaint();
+  }
+  private level: Lod = 0;
+
   /** Paint the drawing on screen again (styles or fonts changed, or a hover), without animating. */
   protected repaint(): void {
     if (!this.drawing) return;
     this.checkLooks();
-    this.paint = paintDrawing(this.drawing, this.styles, this.keptPaint);
+    this.paint = paintDrawing(atLevel(this.drawing, this.level), this.styles, this.keptPaint);
     this.build(false);
     this.drawNow();
   }
@@ -284,7 +344,7 @@ abstract class CanvasWindow {
     if (looks === this.looks) return false;
     this.looks = looks;
     this.styles.clear();
-    this.keptPaint.clear();
+    this.clearPaint();
     return true;
   }
 
@@ -397,7 +457,7 @@ abstract class CanvasWindow {
     this.built?.root.destroy({ children: true });
     this.built = null;
     this.kept.clear();
-    this.keptPaint.clear();
+    this.clearPaint();
     this.cullable = [];
     this.view.setDrawn(null, text);
     this.drawNow();
@@ -434,7 +494,13 @@ abstract class CanvasWindow {
 
   toSVG(): string | null {
     if (!this.drawing) return null;
-    return standaloneSvg(toSvg(this.drawing) as SVGSVGElement, this.styles, getComputedStyle(this.el).backgroundColor);
+    // Saved in full, whatever the zoom: styles read at full detail.
+    const full = this.level === 0 ? this.styles : new ProbeStyles(this.view.contentLayer);
+    try {
+      return standaloneSvg(toSvg(this.drawing) as SVGSVGElement, full, getComputedStyle(this.el).backgroundColor);
+    } finally {
+      if (full !== this.styles) full.dispose();
+    }
   }
 
   dispose(): void {
@@ -442,6 +508,7 @@ abstract class CanvasWindow {
     this.tweens.clear();
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     window.clearTimeout(this.textTimer);
+    if (this.resizeTimer !== null) window.clearTimeout(this.resizeTimer);
     this.listening.abort();
     this.resizes?.disconnect();
     this.styles.dispose();

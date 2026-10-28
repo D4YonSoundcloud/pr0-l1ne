@@ -90,7 +90,9 @@ export interface CellOptions {
  */
 export function valueCell(value: Value, opts: CellOptions): { el: Mark; dot?: { x: number; y: number } } {
   const h = opts.h ?? CELL_H;
-  const classes = ["cell", opts.variant, opts.changed && "is-changed"].filter(Boolean).join(" ");
+  // What kind of value it holds (has-v-num, has-ref...): zoomed out, a cell is a block in that kind's color (lod.ts).
+  const holds = value.kind === "ref" ? "has-ref" : `has-${primClass(value)}`;
+  const classes = ["cell", holds, opts.variant, opts.changed && "is-changed"].filter(Boolean).join(" ");
   const g = s("g", { class: classes });
   g.append(s("rect", { x: opts.x, y: opts.y, width: opts.w, height: h, rx: 3 }));
   const cx = opts.x + opts.w / 2;

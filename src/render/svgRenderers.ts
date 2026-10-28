@@ -10,6 +10,7 @@
  * box by its <g data-node-key>, highlighting a hovered box's arrows,
  * keeping the running row in view by its data-top / data-bottom.
  */
+
 import { timed } from "../perf";
 import type {
   Hit,
@@ -26,7 +27,9 @@ import type {
   ViewportChange,
 } from "../scene/renderer";
 import { ProbeStyles } from "./canvas/styles";
+import type { Mark } from "./drawing";
 import { standaloneSvg } from "./export";
+import { atLevel, landmarksIn, setLodClass } from "./lod";
 import { loopDrawing } from "./loopView";
 import { applyFocus, memoryDrawing } from "./memory";
 import { SvgPatcher } from "./patch";
@@ -53,10 +56,33 @@ abstract class SvgWindow {
       onNodeMove,
       onAutoFitChange: (state) => events.onAutoFitChange?.(state),
       controls: events.controls,
+      // The level of detail is a class on the layer the SVG is in: CSS hides and simplifies (lod.ts),
+      // and what it hides is left out of the page altogether.
+      onLod: (lod) => {
+        setLodClass(this.view.contentLayer, lod);
+        if (this.full) this.view.updateContent(() => this.patcher.show(atLevel(this.full!, lod)), 0);
+      },
     });
+    setLodClass(this.view.contentLayer, this.view.lod);
+  }
+
+  /** The drawing on screen, in full: drawn again at another level of detail without laying it out again. */
+  protected full: Mark | null = null;
+
+  /** Show a drawing (animating from the last), at the level of detail the zoom calls for. */
+  protected showDrawing(drawing: Mark, duration: number, easing: string, enter: StepStyle["enter"]): void {
+    this.full = drawing;
+    this.view.updateContent(
+      () => timed("svg.patch", () => this.patcher.show(atLevel(drawing, this.view.lod))),
+      duration,
+      easing,
+      enter,
+    );
+    this.view.setLandmarks(landmarksIn(drawing));
   }
 
   showMessage(text: string): void {
+    this.full = null;
     this.patcher.reset();
     this.view.setContent(null, text);
   }
@@ -167,12 +193,13 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
         : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
     // The focus is part of the drawing, so the patch carries it over.
     applyFocus(drawing, this.dragging ?? this.hovered);
-    this.view.updateContent(() => timed("svg.patch", () => this.patcher.show(drawing)), duration, easing, enter);
+    this.showDrawing(drawing, duration, easing, enter);
   }
 
   /** Hovering changed: another box in focus, on screen and in the drawing (so they stay the same). */
   private refreshFocus(): void {
     const key = this.dragging ?? this.hovered;
+    if (this.full) applyFocus(this.full, key);
     applyFocus(this.patcher.current, key);
     applyFocus(this.patcher.element, key);
   }
@@ -199,12 +226,7 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     const sql = "kind" in scene;
     const drawing = sql ? sqlPipelineDrawing(scene) : loopDrawing(scene, { vertical: this.vertical });
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
-    this.view.updateContent(
-      () => timed("svg.patch", () => this.patcher.show(drawing)),
-      !sql && scene.live ? duration : 0,
-      easing,
-      enter,
-    );
+    this.showDrawing(drawing, !sql && scene.live ? duration : 0, easing, enter);
     // As you step, keep the iteration that's running in view.
     const current = this.el.querySelector(".loop-row.is-current");
     if (current)

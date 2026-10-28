@@ -60,6 +60,8 @@ export interface StyleSource {
 export interface StyleProbe extends StyleSource {
   /** Forget everything read: the look changed. */
   clear(): void;
+  /** Read styles at a level of detail (lod.ts) from now on. */
+  setLevel?(lod: number): void;
   /** Take the probe out of the page. */
   dispose(): void;
 }
@@ -154,20 +156,60 @@ const SKIP = new Set(["title", "desc", "metadata", "style", "script"]);
 
 /** Styles from the browser's CSS, through a hidden probe in the window. */
 export class ProbeStyles implements StyleProbe {
-  private readonly container: SVGSVGElement;
+  private container: SVGSVGElement;
   private rootProbe: Element | null = null;
 
-  constructor(host: Element) {
-    this.container = document.createElementNS(NS, "svg");
-    this.container.setAttribute("class", "canvas-probe");
-    this.container.setAttribute("aria-hidden", "true");
-    this.container.setAttribute("width", "0");
-    this.container.setAttribute("height", "0");
+  constructor(private readonly host: Element) {
+    this.container = this.makeContainer(0);
     host.append(this.container);
+  }
+
+  /**
+   * Read styles at a level of detail (lod.ts): the probe takes its class, so
+   * the CSS for that level applies. Each level's probe is kept, so going back
+   * to a level reads nothing again.
+   */
+  setLevel(lod: number): void {
+    if (lod === this.level) return;
+    this.levels.set(this.level, {
+      container: this.container,
+      chains: this.chains,
+      probes: this.probes,
+      computed: this.computed,
+    });
+    this.level = lod;
+    const kept = this.levels.get(lod);
+    this.container.remove();
+    if (kept) {
+      ({ container: this.container, chains: this.chains, probes: this.probes, computed: this.computed } = kept);
+    } else {
+      this.container = this.makeContainer(lod);
+      this.chains = new Map();
+      this.probes = [];
+      this.computed = [];
+    }
+    this.host.append(this.container);
+    this.rootProbe = null;
+  }
+  private level = 0;
+  private readonly levels = new Map<
+    number,
+    { container: SVGSVGElement; chains: Map<string, number>; probes: Element[]; computed: ComputedPaint[] }
+  >();
+
+  private makeContainer(lod: number): SVGSVGElement {
+    const container = document.createElementNS(NS, "svg");
+    container.setAttribute("class", `canvas-probe lod-${lod}`);
+    container.setAttribute("aria-hidden", "true");
+    container.setAttribute("width", "0");
+    container.setAttribute("height", "0");
+    return container;
   }
 
   /** The look changed (Style panel): read everything afresh. */
   clear(): void {
+    for (const kept of this.levels.values()) kept.container.remove();
+    this.levels.clear();
     this.chains = new Map();
     this.probes = [];
     this.computed = [];

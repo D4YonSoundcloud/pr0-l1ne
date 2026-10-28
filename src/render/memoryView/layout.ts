@@ -12,6 +12,7 @@ import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
 import { arrowStyle } from "../arrowStyle";
 import { arrowMarkers, FONT, SMALL, s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
+import type { Landmark } from "../lod";
 import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind } from "../route";
 import { onSpacingChange, spacing } from "../spacing";
 import { GRAPH_BODY_Y, graphBoxes, graphShape, graphSize } from "./graphs";
@@ -221,9 +222,30 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
   const nodes = new Map<string, Mark>();
   const movedNodes: Mark[] = [];
   const drawNode = (key: string, shape: Shape, x: number, y: number) => {
-    const g = s("g", { class: "node", "data-node-key": key, "data-flip": key, "data-x": x, "data-y": y });
+    const about = describeNode(scene, key);
+    const g = s("g", {
+      class: "node",
+      "data-node-key": key,
+      "data-flip": key,
+      "data-x": x,
+      "data-y": y,
+      "data-w": Math.round(shape.w),
+      "data-h": Math.round(shape.h),
+      "data-title": about.title,
+    });
     const isMoved = layout.positions.has(key);
     if (isMoved) g.classList.add("is-moved");
+    // Zoomed far out (lod.ts), the box is this one rectangle in its kind's color.
+    g.append(
+      s("rect", {
+        class: ["node-outline", `outline-${about.kind}`, about.changed && "is-changed"].filter(Boolean).join(" "),
+        x,
+        y,
+        width: shape.w,
+        height: shape.h,
+        rx: 4,
+      }),
+    );
     // An invisible backing, so a press anywhere on the box (even between its
     // index numbers and cells) grabs the box instead of panning the canvas.
     g.append(
@@ -505,6 +527,9 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
 
   const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - gapBefore(columnW.length) + MARGIN);
   const height = maxY + MARGIN;
+  // Names kept readable when the drawing is too small to read (lod.ts): the
+  // call stack's frames, and the biggest boxes.
+  svg.setAttribute("data-landmarks", JSON.stringify(landmarksOf(scene, rects)));
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -617,4 +642,67 @@ function legendShape(title: string, entries: LegendEntry[]): Shape {
       layer.append(g);
     },
   };
+}
+
+/** What a box is, in a few words, and what kind of box: for its tooltip, its outline and landmarks. */
+function describeNode(scene: MemoryScene, key: string): { title: string; kind: string; changed: boolean } {
+  const frame = scene.frames.find((f) => f.key === key);
+  if (frame) {
+    const name = frame.frame.func === "Global" ? "Global" : `${frame.frame.func}()`;
+    return { title: name, kind: frame.active ? "frame is-active" : "frame", changed: frame.isNew };
+  }
+  if (key === nodeKey.output) return { title: "printed output", kind: "output", changed: true };
+  if (key === "legend") return { title: "what the arrows' colors mean", kind: "legend", changed: false };
+  const id = key.startsWith("obj:") ? key.slice(4) : "";
+  const obj = scene.step.heap[id];
+  const changed = scene.changes.newObjects.has(id) || (scene.changes.changedSlots.get(id)?.size ?? 0) > 0;
+  const graph = scene.graphs.get(id);
+  if (graph)
+    return { title: `graph ${graph.graph.name}, ${count(graph.graph.nodes.size, "node")}`, kind: "graph", changed };
+  if (!obj) return { title: key, kind: "object", changed };
+  switch (obj.kind) {
+    case "list":
+    case "tuple":
+    case "set":
+      return { title: `${obj.typeName}, ${count(obj.length, "item")}`, kind: "seq", changed };
+    case "dict":
+      return {
+        title: `${obj.typeName}, ${count(obj.length ?? obj.entries.length, "entry", "entries")}`,
+        kind: "dict",
+        changed,
+      };
+    case "object":
+      return { title: scene.title(obj), kind: "object", changed };
+    case "function":
+      return { title: `function ${obj.name}`, kind: "code", changed };
+    case "class":
+      return { title: `class ${obj.name}`, kind: "code", changed };
+    default:
+      return { title: obj.typeName, kind: "object", changed };
+  }
+}
+
+const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+
+/** At most this many landmarks: enough to find your way, never a crowd. */
+const MAX_LANDMARKS = 30;
+/** A box this big (in diagram units squared) or more is a landmark: a structure you'd look for. */
+const BIG_BOX = 40_000;
+
+/** The landmarks: every frame of the call stack (its first and last few, if it's deep), then the biggest boxes. */
+function landmarksOf(scene: MemoryScene, rects: Map<string, Rect>): Landmark[] {
+  const out: Landmark[] = [];
+  const frames = scene.frames.filter((f) => rects.has(f.key));
+  const shownFrames = frames.length > 12 ? [...frames.slice(0, 6), ...frames.slice(-6)] : frames;
+  for (const f of shownFrames) {
+    const r = rects.get(f.key)!;
+    out.push({ x: r.x, y: r.y, text: describeNode(scene, f.key).title, kind: "frame" });
+  }
+  const big = scene.objects
+    .map((o) => ({ key: o.key, rect: rects.get(o.key) }))
+    .filter((o): o is { key: string; rect: Rect } => !!o.rect && o.rect.w * o.rect.h >= BIG_BOX)
+    .sort((a, b) => b.rect.w * b.rect.h - a.rect.w * a.rect.h);
+  for (const o of big.slice(0, MAX_LANDMARKS - out.length))
+    out.push({ x: o.rect.x, y: o.rect.y, text: describeNode(scene, o.key).title, kind: "object" });
+  return out;
 }

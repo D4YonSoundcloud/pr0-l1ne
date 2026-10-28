@@ -7,15 +7,23 @@
  *   drag a [data-node-key]   move that box (reported through onNodeMove)
  *   + / - / 0 (focused)      zoom in / out / reset
  *   Auto-fit                 refit the diagram on every step (see setContent)
+ *   double-click a box       zoom in on it (when it's too small to read)
+ *
+ * Zoomed out, the drawing is drawn in less detail (lod.ts): the viewport
+ * works out the level from the zoom and tells the renderer (onLod). Below
+ * a readable size, a few names (landmarks) are shown over the drawing at
+ * their own size, and hovering a box says what it is.
  *
  * The diagram itself is drawn at its natural size; the viewport only applies
  * a CSS transform to it. The graph-paper background moves and scales with
  * the content, so the paper and the drawing feel like one sheet.
  */
 
+import { perf } from "../perf";
 import type { AutoFit } from "../scene/renderer";
 import { type Enter, snapshot, transition as transition_ } from "./animate";
 import { easing as easeOf } from "./canvas/motion";
+import { type Landmark, type Lod, lodFor } from "./lod";
 
 export interface Point {
   x: number;
@@ -38,6 +46,8 @@ export interface ViewportOptions {
   onNodeMove?(key: string, position: Point, done: boolean): void;
   /** Called when Auto-fit is turned on or off, or its mode changes. */
   onAutoFitChange?(state: AutoFit): void;
+  /** The level of detail changed with the zoom (lod.ts): the renderer draws the drawing at it. */
+  onLod?(lod: Lod): void;
   /** Whether the floating controls are folded away, remembered (see ControlsSetting). */
   controls?: ControlsSetting;
   /**
@@ -60,19 +70,44 @@ export interface ViewSurface {
   /** The view moved (on every frame of a glide too): draw it there. */
   onView(view: View): void;
   /** The draggable box under a point (client coordinates), with its top-left corner in diagram units. */
-  nodeAt(clientX: number, clientY: number): { key: string; x: number; y: number } | null;
+  nodeAt(clientX: number, clientY: number): NodeHit | null;
+}
+
+/** A box under the pointer: its key and top-left corner, and (when known) its size and what it is, in diagram units. */
+export interface NodeHit {
+  key: string;
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  title?: string;
 }
 
 export type { AutoFit } from "../scene/renderer";
 export type AutoFitMode = AutoFit["mode"];
 
-const MIN_ZOOM = 0.25;
+/** Down to 1%: a drawing too big to read is drawn more simply as it gets smaller (lod.ts). */
+export const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 3;
 const GRID = 24; // default graph-paper square size at 100%
 const DRAG_THRESHOLD = 3; // px before a press becomes a drag
 const KEEP_VISIBLE = 60; // px of content always left on screen when panning
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** The graph paper's square on screen: its size at this zoom, made 5 times coarser until it's at least 8 px, like a map's grid. */
+export function gridStep(size: number, zoom: number): number {
+  let step = size * zoom;
+  while (step > 0 && step < 8) step *= 5;
+  return step;
+}
+
+/** The zoom as the controls show it: "100%", "35%", and under 10% one decimal ("2.5%", "1%"). */
+export function zoomText(zoom: number): string {
+  const percent = zoom * 100;
+  if (percent >= 9.95) return `${Math.round(percent)}%`;
+  return `${Number(percent.toFixed(1))}%`;
+}
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 type Gesture =
@@ -102,6 +137,14 @@ export class Viewport {
   /** Size of a grid square at 100% zoom (see setGridSize). */
   private gridSize = GRID;
 
+  /** The level of detail the drawing is drawn at (lod.ts). */
+  private level: Lod = 0;
+  /** Names kept readable over a drawing too small to read (setLandmarks), and their labels. */
+  private landmarks: Landmark[] = [];
+  private readonly landmarkLayer: HTMLDivElement;
+  /** What the box under the pointer is, when it's too small to read. */
+  private readonly tip: HTMLDivElement;
+
   private autoFit: AutoFit = { on: false, mode: "out" };
   private readonly autoFitButton: HTMLButtonElement;
   private readonly autoFitMenu: HTMLDivElement;
@@ -122,6 +165,13 @@ export class Viewport {
     this.empty = document.createElement("p");
     this.empty.className = "viewport-empty";
     this.empty.hidden = true;
+    this.landmarkLayer = document.createElement("div");
+    this.landmarkLayer.className = "viewport-landmarks";
+    this.landmarkLayer.setAttribute("aria-hidden", "true");
+    this.tip = document.createElement("div");
+    this.tip.className = "viewport-tip";
+    this.tip.setAttribute("role", "tooltip");
+    this.tip.hidden = true;
 
     this.controls = document.createElement("div");
     this.controls.className = "viewport-controls";
@@ -179,7 +229,7 @@ export class Viewport {
       this.collapseButton,
     );
     this.setControlsCollapsed(options.controls?.get() ?? false, false);
-    el.append(this.layer, this.empty, this.controls);
+    el.append(this.layer, this.landmarkLayer, this.empty, this.tip, this.controls);
     const signal = this.listening.signal;
     el.addEventListener(
       "pointerdown",
@@ -194,6 +244,9 @@ export class Viewport {
     el.addEventListener("pointerup", (e) => this.onPointerUp(e), { signal });
     el.addEventListener("pointercancel", (e) => this.onPointerUp(e), { signal });
     el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false, signal });
+    el.addEventListener("dblclick", (e) => this.onDoubleClick(e), { signal });
+    el.addEventListener("pointermove", (e) => this.showTip(e), { signal });
+    el.addEventListener("pointerleave", () => this.hideTip(), { signal });
     el.addEventListener("keydown", (e) => this.onKey(e), { signal });
     if (typeof ResizeObserver === "function") {
       this.resizes = new ResizeObserver(([entry]) => {
@@ -386,6 +439,98 @@ export class Viewport {
     return clamp(Math.min(this.viewW / w, (this.viewH - 8) / h, 1), MIN_ZOOM, 1);
   }
 
+  /** The level of detail now (lod.ts). */
+  get lod(): Lod {
+    return this.level;
+  }
+
+  /**
+   * Names to keep readable over the drawing when it's too small to read
+   * (outline and overview): each pinned to a box's corner, drawn at its own
+   * size above the drawing.
+   */
+  setLandmarks(landmarks: Landmark[]): void {
+    this.landmarks = landmarks;
+    const labels = this.landmarkLayer.children;
+    while (labels.length > landmarks.length) labels[labels.length - 1].remove();
+    landmarks.forEach((mark, i) => {
+      let label = labels[i] as HTMLElement | undefined;
+      if (!label) {
+        label = document.createElement("span");
+        this.landmarkLayer.append(label);
+      }
+      label.className = `landmark is-${mark.kind}`;
+      label.textContent = mark.text;
+    });
+    this.placeLandmarks({ x: this.x, y: this.y, z: this.z });
+  }
+
+  private placeLandmarks(view: View): void {
+    const shown = this.level >= 3 && this.landmarks.length > 0;
+    this.landmarkLayer.hidden = !shown;
+    if (!shown) return;
+    const labels = this.landmarkLayer.children;
+    this.landmarks.forEach((mark, i) => {
+      const label = labels[i] as HTMLElement | undefined;
+      if (label)
+        label.style.transform = `translate(${Math.round(view.x + mark.x * view.z)}px, ${Math.round(view.y + mark.y * view.z)}px)`;
+    });
+  }
+
+  /** Too small to read (blocks and below): hovering a box says what it is. */
+  private showTip(e: PointerEvent): void {
+    if (this.level < 2 || this.gesture || (e.target as Element).closest(".viewport-controls")) {
+      this.hideTip();
+      return;
+    }
+    const node = this.nodeAt(e.target as Element, e.clientX, e.clientY);
+    if (!node?.title) {
+      this.hideTip();
+      return;
+    }
+    const view = this.el.getBoundingClientRect();
+    this.tip.textContent = `${node.title} · double-click to zoom in`;
+    this.tip.style.transform = `translate(${Math.round(e.clientX - view.left + 12)}px, ${Math.round(e.clientY - view.top + 14)}px)`;
+    this.tip.hidden = false;
+  }
+
+  private hideTip(): void {
+    this.tip.hidden = true;
+  }
+
+  /** Double-clicking a box too small to read zooms in on it. */
+  private onDoubleClick(e: MouseEvent): void {
+    if (this.level < 2) return;
+    // A double-click after a pointerdown is aimed at the window (it captures
+    // the pointer to pan or drag), not the box under it: so find the box from
+    // where the pointer is on the drawing.
+    const node = this.nodeAt(e.target as Element, e.clientX, e.clientY, true);
+    if (!node?.w || !node.h) return;
+    e.preventDefault();
+    this.manual(() => this.zoomToBox({ x: node.x, y: node.y, w: node.w!, h: node.h! }));
+  }
+
+  /** Glide to a box, as big as fits (up to 100%), in the middle of the window. */
+  zoomToBox(box: { x: number; y: number; w: number; h: number }): void {
+    if (!this.viewW || !this.viewH) {
+      const view = this.el.getBoundingClientRect();
+      this.viewW = view.width;
+      this.viewH = view.height;
+    }
+    if (!this.viewW || !this.viewH) return;
+    const pad = 40;
+    const z = clamp(Math.min((this.viewW - pad) / box.w, (this.viewH - pad) / box.h, 1), MIN_ZOOM, MAX_ZOOM);
+    const from = { x: this.x, y: this.y, z: this.z };
+    this.z = z;
+    this.x = this.viewW / 2 - (box.x + box.w / 2) * z;
+    this.y = this.viewH / 2 - (box.y + box.h / 2) * z;
+    this.apply();
+    const { duration, easing } = this.zoomAnimation;
+    for (const a of this.glides) a.cancel();
+    this.glides = [];
+    if (duration > 0 && !reducedMotion()) this.glide(from, Math.max(duration, 320), easing);
+  }
+
   private glides: Animation[] = [];
 
   /** Animate the view (and its graph paper) from where it was to where it is now. */
@@ -394,7 +539,7 @@ export class Viewport {
       this.glideFrames(from, duration, easing);
       return;
     }
-    const grid = (z: number) => `${this.gridSize * z}px ${this.gridSize * z}px`;
+    const grid = (z: number) => `${gridStep(this.gridSize, z)}px ${gridStep(this.gridSize, z)}px`;
     if (typeof this.layer.animate !== "function") return;
     this.glides = [
       this.layer.animate(
@@ -530,18 +675,27 @@ export class Viewport {
       this.x = clamp(this.x, KEEP_VISIBLE - this.contentW * this.z, this.viewW - KEEP_VISIBLE);
       this.y = clamp(this.y, KEEP_VISIBLE - this.contentH * this.z, this.viewH - KEEP_VISIBLE);
     }
-    this.zoomLabel.textContent = `${Math.round(this.z * 100)}%`;
+    this.zoomLabel.textContent = zoomText(this.z);
     if (this.options.surface) this.stopGlide(); // the view is wherever it was just put
     this.show({ x: this.x, y: this.y, z: this.z });
   }
 
   /** Draw the view here: the SVG layer (or the surface) and the graph paper. */
   private show(view: View): void {
-    const grid = this.gridSize * view.z;
+    const grid = gridStep(this.gridSize, view.z);
     this.el.style.backgroundSize = `${grid}px ${grid}px`;
     this.el.style.backgroundPosition = `${view.x}px ${view.y}px`;
+    // The level of detail follows the zoom (on every frame of a glide too).
+    const level = perf.noLod ? 0 : lodFor(view.z, this.level);
+    if (level !== this.level) {
+      this.level = level;
+      this.el.dataset.lod = String(level);
+      if (level < 2) this.hideTip();
+      this.options.onLod?.(level);
+    }
     if (this.options.surface) this.options.surface.onView(view);
     else this.layer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+    this.placeLandmarks(view);
   }
 
   private onPointerDown(e: PointerEvent): void {
@@ -577,11 +731,35 @@ export class Viewport {
 
   private pressMoved = false;
 
-  /** The draggable box under the pointer: an SVG <g data-node-key>, or what the surface says. */
-  private nodeAt(target: Element, clientX: number, clientY: number): { key: string; x: number; y: number } | null {
+  /** The draggable box under the pointer: an SVG <g data-node-key>, or what the surface says. `under`: if the target isn't in one, the box at that point on the drawing. */
+  private nodeAt(target: Element, clientX: number, clientY: number, under = false): NodeHit | null {
     if (this.options.surface) return this.options.surface.nodeAt(clientX, clientY);
-    const node = target.closest<SVGGElement>("[data-node-key]");
-    return node ? { key: node.dataset.nodeKey!, x: Number(node.dataset.x), y: Number(node.dataset.y) } : null;
+    const node = target.closest<SVGGElement>("[data-node-key]") ?? (under ? this.boxUnder(clientX, clientY) : null);
+    if (!node) return null;
+    const { nodeKey, x, y, w, h, title } = node.dataset;
+    return {
+      key: nodeKey!,
+      x: Number(x),
+      y: Number(y),
+      ...(w && h ? { w: Number(w), h: Number(h) } : {}),
+      ...(title ? { title } : {}),
+    };
+  }
+
+  /** The smallest box with a size (data-x/y/w/h) under a point on screen, in the SVG on screen. */
+  private boxUnder(clientX: number, clientY: number): SVGGElement | null {
+    const view = this.el.getBoundingClientRect();
+    const x = (clientX - view.left - this.x) / this.z;
+    const y = (clientY - view.top - this.y) / this.z;
+    let best: SVGGElement | null = null;
+    let bestArea = Number.POSITIVE_INFINITY;
+    for (const node of this.layer.querySelectorAll<SVGGElement>("[data-node-key][data-w]")) {
+      const { x: nx, y: ny, w, h } = node.dataset;
+      const [left, top, width, height] = [Number(nx), Number(ny), Number(w), Number(h)];
+      if (x < left || y < top || x > left + width || y > top + height) continue;
+      if (width * height < bestArea) [best, bestArea] = [node, width * height];
+    }
+    return best;
   }
 
   private startPinch(): void {

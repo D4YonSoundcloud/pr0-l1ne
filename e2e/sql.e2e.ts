@@ -5,6 +5,15 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 
+/**
+ * Show a window at 100%: zoomed out (Auto-fit fits a long statement's
+ * stages small), text is left out of the drawing (render/lod.ts).
+ */
+async function fullSize(page: Page, window: string) {
+  await page.locator(window).focus();
+  await page.keyboard.press("0");
+}
+
 async function open(page: Page, code: string) {
   await page.addInitScript((code) => {
     localStorage.clear();
@@ -105,6 +114,7 @@ test("subqueries and UNION are stepped through as parts of the statement", async
     "-- viz: database shop\nSELECT name FROM products\nWHERE price > (SELECT avg(price) FROM products)\nUNION\nSELECT name FROM customers;\n",
   );
   await expect(page.locator("#step-label")).toContainText("of ", { timeout: 90_000 });
+  await fullSize(page, "#loop");
   await expect(page.locator("#loop .sql-part-label")).toHaveText([
     "UNION: the first query › Subquery 1",
     "UNION: the first query",
@@ -120,6 +130,7 @@ test("window functions and WITH RECURSIVE have steps of their own", async ({ pag
     "WITH RECURSIVE n (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3)\nSELECT i, sum(i) OVER (ORDER BY i) AS total FROM n;\n",
   );
   await expect(page.locator("#step-label")).toContainText("of ", { timeout: 90_000 });
+  await fullSize(page, "#loop");
   await expect(page.locator("#loop .sql-stage-keyword")).toHaveText([
     "SELECT",
     "PASS 1",

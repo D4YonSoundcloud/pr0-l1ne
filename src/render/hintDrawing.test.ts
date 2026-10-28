@@ -194,3 +194,25 @@ const b = new Node(3);`),
     expect(plain.querySelector(".arrow-label")).toBeNull();
   });
 });
+
+describe("what a zoomed-out view needs from a drawing", () => {
+  it("gives each box its title, size and an outline of its kind, and the drawing its landmarks", async () => {
+    const t = applyHints(
+      await traceJavaScript(`const nums = [1, 2, 3];
+const big = Array.from({ length: 40 }, (_, i) => i * i);
+function f(x) { return x + 1; }
+f(1);`),
+    );
+    const i = t.steps.length - 1;
+    const svg = memoryAt(t, i, "arrows");
+    const box = svg.querySelector('.node[data-title="Array, 3 items"]')!;
+    expect(box).not.toBeNull();
+    expect(Number(box.getAttribute("data-w"))).toBeGreaterThan(50);
+    expect(box.querySelector(".node-outline.outline-seq")).not.toBeNull();
+    expect(svg.querySelector(".node .node-outline.outline-frame")).not.toBeNull();
+    const landmarks = JSON.parse(svg.getAttribute("data-landmarks")!);
+    expect(landmarks[0]).toMatchObject({ text: "Global", kind: "frame" });
+    expect(landmarks.some((l: { text: string }) => l.text === "Array, 40 items")).toBe(true);
+    expect(svg.querySelector(".cell.has-v-num")).not.toBeNull();
+  });
+});

@@ -11,6 +11,9 @@
  *   node scripts/bench-browser.mjs --compare baseline  beside a saved run
  *   node scripts/bench-browser.mjs --only grid         programs whose name has "grid"
  *   PW_CHROMIUM=/path/to/chrome ...                    a Chromium of your own
+ *   node scripts/bench-browser.mjs --zooms             levels of detail: each JavaScript
+ *                                                      program at 100% to 1%, with them and
+ *                                                      without (?nolod), steps and panning
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -33,8 +36,8 @@ const median = (list) => {
   return s.length ? s[Math.floor(s.length / 2)] : 0;
 };
 
-async function open(page, language, code, renderer) {
-  await page.goto(`${URL_BASE}/${language}?perf`);
+async function open(page, language, code, renderer, extra = "") {
+  await page.goto(`${URL_BASE}/${language}?perf${extra}`);
   await page.evaluate(
     ([lang, c, r]) => {
       localStorage.setItem(`pr0l1ne:code:${lang}`, c);
@@ -90,12 +93,110 @@ async function stepThrough(page) {
   };
 }
 
+/** Zooms for --zooms, as presses of "−" from 100% (each zooms out by 1.25). */
+const ZOOMS = [
+  ["100%", 0],
+  ["41%", 4],
+  ["21%", 7],
+  ["5.5%", 13],
+  ["1%", 21],
+];
+
+/** Pan the window with the wheel, a frame each: the median frame, in ms. */
+async function panFrames(page) {
+  return page.evaluate(async () => {
+    const el = document.getElementById("memory");
+    const box = el.getBoundingClientRect();
+    const frames = [];
+    for (let i = 0; i < 24; i++) {
+      const start = performance.now();
+      el.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaX: i % 2 ? 40 : -40,
+          deltaY: i % 4 < 2 ? 30 : -30,
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      frames.push(performance.now() - start);
+    }
+    frames.sort((a, b) => a - b);
+    return frames[Math.floor(frames.length / 2)];
+  });
+}
+
+/** --zooms: each JavaScript program, each renderer, with levels of detail and without, at each zoom. */
+async function zoomSuite(browser, files) {
+  const out = [];
+  for (const file of files.filter((f) => f.endsWith(".js"))) {
+    const code = readFileSync(join(PROGRAMS, file), "utf8");
+    for (const renderer of ["svg", "canvas"]) {
+      for (const lod of [true, false]) {
+        process.stderr.write(`${file} (${renderer}, ${lod ? "levels" : "no levels"})…\n`);
+        const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+        try {
+          await open(page, "javascript", code, renderer, lod ? "" : "&nolod");
+          await page.locator("#mode-arrows").click();
+          const row = { program: file, renderer, lod, zooms: {} };
+          let pressed = 0;
+          await page.locator("#memory").focus();
+          await page.keyboard.press("0"); // 100%, Auto-fit off
+          await stepThrough(page); // warm up: the first steps drawn are slower
+          for (const [label, presses] of ZOOMS) {
+            await page.locator("#memory").focus();
+            for (; pressed < presses; pressed++) await page.keyboard.press("-");
+            await page.waitForTimeout(300);
+            const steps = await stepThrough(page);
+            row.zooms[label] = {
+              step: steps.frame,
+              render: steps.render,
+              draw: renderer === "svg" ? steps.patch : steps.paint,
+              pan: await panFrames(page),
+            };
+          }
+          out.push(row);
+        } catch (e) {
+          process.stderr.write(`  ${String(e).split("\n")[0]}\n`);
+        }
+        await page.close();
+      }
+    }
+  }
+  return out;
+}
+
 const executablePath = process.env.PW_CHROMIUM;
 const browser = await chromium.launch(executablePath ? { executablePath } : {});
 const only = arg("only");
 const files = readdirSync(PROGRAMS)
   .filter((name) => /\.(js|py)$/.test(name) && (!only || name.includes(only)))
   .sort();
+if (process.argv.includes("--zooms")) {
+  const rows = await zoomSuite(browser, files);
+  await browser.close();
+  const f = (n) => (n === undefined || n === null ? "–" : n.toFixed(0));
+  const lines = [
+    `| Program | Renderer | ${ZOOMS.map(([z]) => `${z}: step / drawing`).join(" | ")} |`,
+    `| --- | --- | ${ZOOMS.map(() => "---").join(" | ")} |`,
+  ];
+  for (const r of rows.filter((x) => x.lod)) {
+    const off = rows.find((x) => !x.lod && x.program === r.program && x.renderer === r.renderer);
+    const cell = ([z]) => {
+      const on = r.zooms[z];
+      const was = off?.zooms[z];
+      return `${f(on?.step)} / ${f(on?.draw)} ms (without: ${f(was?.step)} / ${f(was?.draw)})`;
+    };
+    lines.push(`| ${r.program} | ${r.renderer} | ${ZOOMS.map(cell).join(" | ")} |`);
+  }
+  console.log(lines.join("\n"));
+  const save = arg("save");
+  if (save) writeFileSync(join(RESULTS, `zooms-${save}.json`), `${JSON.stringify(rows, null, 2)}\n`);
+  process.exit(0);
+}
+
 const results = [];
 for (const file of files) {
   const language = file.endsWith(".py") ? "python" : "javascript";
