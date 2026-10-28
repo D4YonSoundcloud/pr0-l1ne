@@ -805,6 +805,8 @@ export async function selectStages(
               : partSql.length + callSql.length + (usesFrame ? 1 : 0) + i;
       const groups: NonNullable<SqlTable["groups"]> = [];
       let lastKey = "";
+      /** Each row's frame, by row id: for the brackets beside the table. */
+      const frameIds: string[][] = [];
       const rows: SqlRow[] = res.rows.map((row, i) => {
         const flow = byId.get(idOf(row));
         const key = JSON.stringify(row.slice(0, partSql.length));
@@ -816,13 +818,13 @@ export async function selectStages(
           lastKey = key;
         }
         groups[groups.length - 1].count++;
-        const frame = usesFrame
+        const ids = usesFrame
           ? String(row[col("frame")] ?? "")
               .split("\n")
               .filter(Boolean)
-              .map(labelOf)
-              .join(", ")
-          : null;
+          : [];
+        frameIds.push(ids);
+        const frame = usesFrame ? ids.map(labelOf).join(", ") : null;
         return {
           id: idOf(row),
           label: flow?.label ?? labelOf(idOf(row)),
@@ -837,6 +839,14 @@ export async function selectStages(
         };
       });
       if (rows.length !== rowsIn.length) return null;
+      // Each row's frame as the rows it spans, first to last, in the order drawn.
+      if (usesFrame) {
+        const at = new Map(rows.map((r, i) => [r.id, i]));
+        rows.forEach((r, i) => {
+          const places = frameIds[i].map((id) => at.get(id)).filter((n): n is number => n !== undefined);
+          if (places.length) r.frame = [Math.min(...places), Math.max(...places)];
+        });
+      }
       const columns: SqlColumn[] = [
         ...currentColumns,
         ...partSql.map(

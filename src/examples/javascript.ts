@@ -1203,4 +1203,52 @@ const head = new Node(1, new Node(2, new Node(3)));
 console.log(word, mask.toString(2), share, head.val);
 `,
   },
+  {
+    group: HINTS,
+    name: "16 · heatmap: paths through a grid",
+    code: `// Each cell counts the ways to reach it from the top-left corner,
+// moving only right or down. heatmap colors each cell by its number,
+// from the smallest the grid ever holds to the largest. The cell being
+// filled is outlined, with an arrow from each cell it adds up.
+const rows = 4;
+const cols = 5;
+// viz: heatmap dp
+const dp = [];
+for (let r = 0; r < rows; r++) dp.push(new Array(cols).fill(0));
+for (let i = 0; i < rows; i++) {
+  for (let j = 0; j < cols; j++) {
+    if (i === 0 || j === 0) dp[i][j] = 1;
+    else dp[i][j] = dp[i - 1][j] + dp[i][j - 1];
+  }
+}
+console.log(dp[rows - 1][cols - 1]);
+`,
+  },
+  {
+    group: HINTS,
+    name: "17 · table, intervals: records and meetings",
+    code: `// table draws a list of objects as one table: a row each, a column
+// per key. Sorting it slides the rows. intervals draws pairs as bars
+// along a number line, so you can see which meetings overlap, and
+// how merging them leaves only the gaps.
+// viz: table people
+const people = [
+  { name: "Ada", age: 36, team: "core" },
+  { name: "Linus", age: 28, team: "web" },
+  { name: "Grace", age: 45, team: "core" },
+];
+people.sort((a, b) => a.age - b.age);
+
+// viz: intervals meetings, merged
+const meetings = [[9, 10], [13, 15], [9.5, 11], [14, 16], [17, 18]];
+meetings.sort((a, b) => a[0] - b[0]);
+const merged = [];
+for (const [start, end] of meetings) {
+  const n = merged.length;
+  if (n && start <= merged[n - 1][1]) merged[n - 1][1] = Math.max(merged[n - 1][1], end);
+  else merged.push([start, end]);
+}
+console.log(merged);
+`,
+  },
 ];

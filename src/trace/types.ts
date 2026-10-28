@@ -332,6 +332,21 @@ export interface CompareHint {
   line: number;
 }
 
+/**
+ * `viz: heatmap dp` and `viz: intervals meetings`: a list drawn as colors
+ * or as bars. `min` and `max` are the smallest and largest number it holds
+ * anywhere in the run (applyHints works them out), so a color or a bar's
+ * place means the same on every step. Absent: it never held a number.
+ */
+export interface RangeHint {
+  name: string;
+  line: number;
+  min?: number;
+  max?: number;
+  /** intervals: the two fields of an object or dict that are its start and end, when the hint names them. */
+  fields?: [string, string];
+}
+
 /** One end of a sliding window: names and whole numbers added up, like `i + k - 1`. */
 export interface WindowBound {
   terms: { sign: 1 | -1; name?: string; value?: number }[];
@@ -384,6 +399,12 @@ export interface VizHints {
   watches?: ExprHint[];
   checks?: ExprHint[];
   compares?: CompareHint[];
+  /** Lists of numbers (or grids of them) drawn with each cell colored by its value. */
+  heatmaps?: RangeHint[];
+  /** Lists (or dicts) of dicts or objects drawn as one table: a row each, a column per key. */
+  tables?: string[];
+  /** Lists of pairs (or of objects with a start and an end) drawn as bars along a number line. */
+  intervals?: RangeHint[];
   /** `viz: size n = 40000, k`: input sizes, for Measure's growth runs. */
   sizes: { name: string; value?: number; line: number }[];
   /** Hints that couldn't be understood, to show to the person. */
@@ -600,6 +621,8 @@ export interface SqlRow {
   tie?: boolean;
   /** GROUP BY: which group it's in (an index into SqlTable.groups). */
   group?: number;
+  /** A window function's step: the rows of its frame, first to last (indexes into SqlTable.rows). */
+  frame?: [number, number];
 }
 
 /** A table drawn at a SQL step. */

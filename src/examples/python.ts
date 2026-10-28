@@ -1048,4 +1048,50 @@ head = Node(1, Node(2, Node(3)))
 print(word, bin(mask), share, head.val)
 `,
   },
+  {
+    group: HINTS,
+    name: "16 · heatmap: paths through a grid",
+    code: `# Each cell counts the ways to reach it from the top-left corner,
+# moving only right or down. heatmap colors each cell by its number,
+# from the smallest the grid ever holds to the largest. The cell being
+# filled is outlined, with an arrow from each cell it adds up.
+rows, cols = 4, 5
+# viz: heatmap dp
+dp = [[0] * cols for _ in range(rows)]
+for i in range(rows):
+    for j in range(cols):
+        if i == 0 or j == 0:
+            dp[i][j] = 1
+        else:
+            dp[i][j] = dp[i - 1][j] + dp[i][j - 1]
+print(dp[rows - 1][cols - 1])
+`,
+  },
+  {
+    group: HINTS,
+    name: "17 · table, intervals: records and meetings",
+    code: `# table draws a list of dicts as one table: a row each, a column per
+# key. Sorting it slides the rows. intervals draws pairs as bars along
+# a number line, so you can see which meetings overlap, and how
+# merging them leaves only the gaps.
+# viz: table people
+people = [
+    {"name": "Ada", "age": 36, "team": "core"},
+    {"name": "Linus", "age": 28, "team": "web"},
+    {"name": "Grace", "age": 45, "team": "core"},
+]
+people.sort(key=lambda p: p["age"])
+
+# viz: intervals meetings, merged
+meetings = [[9, 10], [13, 15], [9.5, 11], [14, 16], [17, 18]]
+meetings.sort()
+merged = []
+for start, end in meetings:
+    if merged and start <= merged[-1][1]:
+        merged[-1][1] = max(merged[-1][1], end)
+    else:
+        merged.append([start, end])
+print(merged)
+`,
+  },
 ];

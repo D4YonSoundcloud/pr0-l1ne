@@ -95,20 +95,61 @@ test("region, compare, watch and check are drawn", async ({ page }) => {
   await expect(page.locator("#loop .check-failed").first()).toHaveText("✗ total == 1");
 });
 
+/** Go to the last step. */
+const toEnd = async (page: import("@playwright/test").Page) => {
+  const scrubber = page.locator("#scrubber");
+  await scrubber.fill(await scrubber.evaluate((el) => (el as HTMLInputElement).max));
+};
+
 test("the Style panel's arrow colors: a set to start from, and one color for all", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");
+  const linked = `class Node { constructor(v, next = null) { this.v = v; this.next = next; } }
+const head = new Node(1, new Node(2));
+const other = new Node(3);`;
+  await page.evaluate((c) => {
+    localStorage.setItem("pr0l1ne:code:javascript", c);
+    localStorage.setItem("pr0l1ne:memory-mode", "arrows");
+  }, linked);
+  await page.reload();
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  await toEnd(page);
   const cssVar = (name: string) =>
     page.evaluate((n) => document.getElementById("canvas")!.style.getPropertyValue(n), name);
   await page.locator("#style").click();
   await page.locator("#style-panel summary", { hasText: "Arrows" }).click();
   await page
-    .locator("#style-panel select", { has: page.locator("option", { hasText: "Neon" }) })
+    .locator("#style-panel select", { has: page.locator("option", { hasText: "Classic" }) })
     .selectOption({ label: "Neon (dark canvases)" });
   await expect.poll(() => cssVar("--arrow-cycle")).toBe("#ffb703");
   await expect.poll(() => cssVar("--arrow-next")).toBe("#f72585");
-  await page.locator("#style-panel .segment", { hasText: "One color" }).click();
+  const modes = page.locator("#style-panel select", { has: page.locator("option", { hasText: "One color" }) });
+  await modes.selectOption({ label: "One color" });
   await expect.poll(() => cssVar("--arrow-next")).toBe("#4cc9f0");
   await expect.poll(() => cssVar("--arrow-cycle")).toBe("#4cc9f0");
+  // Colors that follow the program redraw the step, with a legend.
+  await modes.selectOption({ label: "By variable" });
+  await expect(page.locator("#memory .arrow-legend")).toBeAttached();
+  await expect(page.locator("#memory .ref-arrow.group-0").first()).toBeAttached();
+  await page
+    .locator("#style-panel select", { has: page.locator("option", { hasText: "Bright" }) })
+    .selectOption({ label: "Colorblind safe" });
+  await expect.poll(() => cssVar("--palette-0")).toBe("#0072b2");
+});
+
+test("a heatmap colors its grid, and a table draws records", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  const code = `// viz: heatmap dp
+const dp = [[0, 0, 0], [0, 0, 0]];
+for (let i = 0; i < 2; i++)
+  for (let j = 0; j < 3; j++) dp[i][j] = i === 0 || j === 0 ? 1 : dp[i - 1][j] + dp[i][j - 1];
+// viz: table people
+const people = [{ name: "Ada", age: 36 }, { name: "Linus", age: 28 }];`;
+  await page.evaluate((c) => localStorage.setItem("pr0l1ne:code:javascript", c), code);
+  await page.reload();
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  await toEnd(page);
+  await expect(page.locator("#memory .cell.heat").first()).toBeAttached();
+  await expect(page.locator("#memory .records-head")).toHaveText(["name", "age"]);
 });

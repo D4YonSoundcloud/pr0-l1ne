@@ -11,6 +11,7 @@ import {
   CELL_H,
   changeArrow,
   compareMarks,
+  heatCell,
   INDEX_H,
   POINTER_H,
   pointerMarkers,
@@ -175,6 +176,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
       continue;
     }
     const cells = cellsOf(obj);
+    const heat = scene.heat(column.name);
     const prevObj = prevDrawn ? containerIn(prevDrawn.row, column.name) : undefined;
     const replaced = !!prevObj && prevObj.id !== obj.id;
     const prevCells = prevObj && !replaced ? cellsOf(prevObj) : [];
@@ -239,6 +241,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
         );
       const { el } = valueCell(cell.value, { x: cx, y: cellsY, w: column.cellW, changed: changedKeys.has(cell.key) });
       markCell(el, column.name, cell.key, cell.value, cx);
+      if (obj.kind !== "dict") heatCell(el, cell.value, heat);
       containerG.append(el);
     });
     if (obj.kind !== "dict" && obj.kind !== "set") {

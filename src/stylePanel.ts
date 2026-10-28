@@ -6,6 +6,7 @@
 import {
   type Appearance,
   ARROW_KEYS,
+  ARROW_MODES,
   ARROW_THEMES,
   type ArrowMode,
   COLOR_FIELDS,
@@ -14,10 +15,34 @@ import {
   FONTS,
   type GridStyle,
   isEasing,
+  PALETTE_KEYS,
+  PALETTES,
   type PaneStyle,
   PRESETS,
 } from "./appearance";
 import type { RendererKind } from "./settings";
+
+/** The arrow coloring modes, as the Arrows section names them. */
+export const ARROW_MODE_LABELS: Record<ArrowMode, string> = {
+  kind: "By kind of link",
+  one: "One color",
+  variable: "By variable",
+  change: "What changed",
+  distance: "By distance from the variables",
+  alias: "Same object, several variables",
+};
+
+const ARROW_MODE_HELP: Record<ArrowMode, string> = {
+  kind: "Each kind of link in its own color: references, tree links, next, back links, loops.",
+  one: "Every arrow in the References color.",
+  variable:
+    "Each variable keeps one color for the whole run, and so do the arrows of everything reached from it: follow a variable's whole chain by its color.",
+  change: "The arrows this step changed stand out; the rest fade back.",
+  distance:
+    "Arrows from variables in the References color, and further from the variables, closer to the far color: how deep in memory each link is.",
+  alias:
+    "When two or more variables point to the same object, their arrows share a color you'll notice; the rest fade back.",
+};
 
 /** The Rendering section's choice (see app/rendererSwitch.ts). */
 export interface RenderingChoice {
@@ -547,7 +572,7 @@ export class StylePanel {
     const box = h("div", { class: "style-group" });
     let group = "";
     for (const field of COLOR_FIELDS) {
-      if (field.group === "Arrows") continue; // their own section
+      if (field.group === "Arrows" || field.group === "Palette") continue; // the Arrows section's
       if (field.group !== group) {
         group = field.group;
         box.append(h("h3", { class: "style-subhead" }, group));
@@ -566,23 +591,53 @@ export class StylePanel {
     return box;
   }
 
-  /** Arrows: colored by kind or all one color, a set of colors to start from, dashes, and each kind's color. */
+  /**
+   * Arrows: how they're colored (by kind, one color, or following the
+   * program), sets of colors to start from, dashes, the legend, field names,
+   * and the colors themselves.
+   */
   private arrowControls(): HTMLElement {
     const box = h("div", { class: "style-group" });
+    const modeId = nextId("arrow-mode");
+    const modes = h("select", { id: modeId, class: "style-select" });
+    for (const mode of ARROW_MODES) modes.append(new Option(ARROW_MODE_LABELS[mode], mode));
+    modes.addEventListener("change", () => {
+      const value = modes.value as ArrowMode;
+      this.update((a) => {
+        a.arrowMode = value;
+      });
+      this.sync();
+    });
+    const modeHelp = h("p", { class: "style-help" });
+    this.syncs.push(() => {
+      const mode = this.options.get().arrowMode;
+      modes.value = mode;
+      modeHelp.textContent = ARROW_MODE_HELP[mode];
+    });
+    box.append(h("div", { class: "style-row" }, h("label", { for: modeId }, "Colors"), modes), modeHelp);
     box.append(
-      this.choice<ArrowMode>(
-        "Colors",
-        [
-          { label: "By kind", value: "kind" },
-          { label: "One color", value: "one" },
-        ],
-        () => this.options.get().arrowMode,
+      this.checkbox(
+        "Legend",
+        () => this.options.get().arrowLegend,
         (v) =>
           this.update((a) => {
-            a.arrowMode = v;
+            a.arrowLegend = v;
           }),
+        "A small card under the call stack saying what each color means (by variable, what changed, distance, same object)",
+      ),
+      this.checkbox(
+        "Field names on arrows",
+        () => this.options.get().arrowLabels,
+        (v) =>
+          this.update((a) => {
+            a.arrowLabels = v;
+          }),
+        "Each arrow from an object's field says which field: next, left, parent",
       ),
     );
+
+    // The colors of each kind of link.
+    box.append(h("h3", { class: "style-subhead" }, "Kinds of link"));
     const id = nextId("arrow-theme");
     const themes = h("select", { id, class: "style-select" });
     themes.append(new Option("Choose a set…", ""));
@@ -627,7 +682,44 @@ export class StylePanel {
       h(
         "p",
         { class: "style-help" },
-        "References are variables, lists and dicts pointing at things. Tree links go from a parent to its child; links (next) from an object to another of its class; back links are the way back of a two-way link, dashed; a link that closes a loop points back into the links it came along. In One color, every arrow uses the References color.",
+        "References are variables, lists and dicts pointing at things. Tree links go from a parent to its child; links (next) from an object to another of its class; back links are the way back of a two-way link, dashed; a link that closes a loop points back into the links it came along. In One color, every arrow uses the References color. By distance runs from the References color to the far one.",
+      ),
+    );
+
+    // The palette: variables, objects pointed at by several variables, and SQL's tables take these in turn.
+    box.append(h("h3", { class: "style-subhead" }, "Palette"));
+    const paletteId = nextId("palette");
+    const palettes = h("select", { id: paletteId, class: "style-select" });
+    palettes.append(new Option("Choose a set…", ""));
+    for (const palette of PALETTES) palettes.append(new Option(palette.name, palette.name));
+    palettes.addEventListener("change", () => {
+      const palette = PALETTES.find((p) => p.name === palettes.value);
+      palettes.value = "";
+      if (!palette) return;
+      this.update((a) => {
+        PALETTE_KEYS.forEach((key, i) => {
+          a.colors[key] = palette.colors[i];
+        });
+      });
+      this.sync();
+    });
+    box.append(h("div", { class: "style-row" }, h("label", { for: paletteId }, "Start from"), palettes));
+    for (const field of COLOR_FIELDS.filter((f) => f.group === "Palette"))
+      box.append(
+        this.color(
+          field.label,
+          () => this.options.get().colors[field.key],
+          (v) =>
+            this.update((a) => {
+              a.colors[field.key] = v;
+            }),
+        ),
+      );
+    box.append(
+      h(
+        "p",
+        { class: "style-help" },
+        "By variable gives each variable the next color, and keeps it for the whole run. Same object does the same for each object several variables point to. In SQL, each table takes one.",
       ),
     );
     return box;

@@ -2,7 +2,7 @@
 import { gridIn, type LoopScene } from "../../scene/loopScene";
 import { valueKey } from "../../trace/diff";
 import type { LoopRow } from "../../trace/loopHistory";
-import { CELL_H, pointerMarkers, rowPointerMarkers, s, valueCell } from "../draw";
+import { CELL_H, heatCell, pointerMarkers, rowPointerMarkers, s, valueCell } from "../draw";
 import type { Mark } from "../drawing";
 import { type ContainerColumn, markCell } from "./shared";
 
@@ -20,6 +20,7 @@ export function drawGrid(
   const grid = gridIn(row, column.name);
   const before = prevRow ? gridIn(prevRow, column.name) : null;
   const { cellW } = column;
+  const heat = scene.heat(column.name);
   const containerG = s("g", { class: "loop-container grid" });
   const cols = Math.max(1, ...(grid ?? []).map((r) => r.items.length));
   for (let c = 0; c < cols; c++) {
@@ -50,6 +51,7 @@ export function drawGrid(
       const changed = !!before && (!old || valueKey(old) !== valueKey(item));
       const { el } = valueCell(item, { x: column.x + ci * cellW, y: ry, w: cellW, changed });
       markCell(el, `${column.name}#${ri}`, String(ci), item, ci * cellW);
+      heatCell(el, item, heat);
       containerG.append(el);
     });
   });

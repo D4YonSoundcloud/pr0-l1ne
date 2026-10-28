@@ -5,6 +5,7 @@
  * Shapes measure with arithmetic (see draw.ts), so the layout can place
  * everything before anything is drawn.
  */
+import type { DrawAs, MemoryScene } from "../../scene/memoryScene";
 import type { Pointer } from "../../scene/pointers";
 import type { CompareSpan, WindowSpan } from "../../scene/windows";
 import { type StepDiff, valueKey } from "../../trace/diff";
@@ -22,6 +23,8 @@ export interface OutRef {
   printed?: boolean;
   /** The object whose cell the arrow starts in (none: a variable in a frame). */
   owner?: string;
+  /** The variable or field it starts in, by name (none: a list cell, a dict value). */
+  field?: string;
   /** Key of the top-level box the arrow starts in (set by drawNode). */
   source?: string;
   /** From a list cell: leave downward, then turn at exitDownY (set by drawNode). */
@@ -71,6 +74,12 @@ export interface Ctx {
   titleOf(obj: HeapObject): string;
   /** The grid cell this step reads or writes (trace/gridFocus.ts); null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
+  /** A heatmap grid's cell worked on and the cells it reads (`viz: heatmap`). */
+  gridCells: MemoryScene["gridCells"];
+  /** `viz: heatmap`: the run's range of numbers, for a list's cell colors; null without the hint. */
+  heatFor(id: string): { min: number; max: number } | null;
+  /** `viz: table` or `viz: intervals`. */
+  drawAs(id: string): DrawAs | null;
   /** Memory sizes, when they're shown. */
   sizes: StepSizes | null;
   /** What goes in a value slot: a cell, or in nested mode the object's whole shape (objects.ts). */

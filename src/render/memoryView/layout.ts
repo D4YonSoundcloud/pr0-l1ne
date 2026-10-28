@@ -5,9 +5,11 @@
  * put), then route the arrows through the gaps (route.ts).
  */
 
+import { type ArrowPaint, arrowColoring, type LegendEntry } from "../../scene/arrowColors";
 import { type LinkKind, linkKinds } from "../../scene/arrowKinds";
 import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
-import { arrowMarkers, FONT, SMALL, s } from "../draw";
+import { arrowStyle } from "../arrowStyle";
+import { arrowMarkers, FONT, SMALL, s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
 import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind } from "../route";
 import { onSpacingChange, spacing } from "../spacing";
@@ -123,6 +125,9 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     regionLabelsFor: (id) => scene.regionLabels(id),
     titleOf: (obj) => scene.title(obj),
     gridFocus: (id, size) => scene.gridFocus(id, size),
+    gridCells: (id, size) => scene.gridCells(id, size),
+    heatFor: (id) => scene.heat(id),
+    drawAs: (id) => scene.drawAs(id),
     view: (value, cellH) => viewOf(value, ctx, cellH),
   };
 
@@ -203,6 +208,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     if (moved) obstacles.push({ ...moved, w: shapes.get(id)!.w, h: shapes.get(id)!.h });
   }
 
+  const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
   // Each box goes in its own group, so the viewport can find and drag it.
   const rects = new Map<string, Rect & { inY: number }>();
   let raised: Mark | null = null;
@@ -349,6 +355,46 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
   if (scene.dim.entering) svg.classList.add("output-in");
   if (scene.dim.leaving) svg.classList.add("output-out");
 
+  // Each arrow's kind (scene/arrowKinds.ts), and with colors that follow the
+  // program, its color (scene/arrowColors.ts), before the arrows are routed:
+  // the legend that explains the colors is a box they go around.
+  const kindOf = linkKinds(step);
+  const objectDepth = new Map(scene.objects.map((o) => [o.key, o.depth + 1]));
+  const coloring = arrowColoring(scene.trace, scene.stepIndex, arrowStyle.mode);
+  const paintOf = new Map<OutRef, { kind: LinkKind | null; paint: ArrowPaint }>();
+  const treeRef = (ref: OutRef) => {
+    const block = blockOf.get(ref.target);
+    const sourceId = idOf(ref.source);
+    const parent = block?.nodes.get(sourceId);
+    return !!parent && blockOf.get(sourceId) === block && parent.children.includes(ref.target);
+  };
+  for (const ref of refs) {
+    if (ref.printed) {
+      paintOf.set(ref, { kind: null, paint: {} });
+      continue;
+    }
+    const kind: LinkKind = treeRef(ref) ? "tree" : ref.owner ? kindOf(ref.owner, ref.target) : "ref";
+    const frame = scene.frames.find((f) => f.key === ref.source);
+    const paint = coloring.paint({
+      variable: frame && !ref.owner && ref.field ? { func: frame.frame.func, name: ref.field } : null,
+      owner: ref.owner ?? null,
+      depth: frame ? 0 : (objectDepth.get(ref.source ?? "") ?? 1),
+      target: graphAlias.get(ref.target) ?? ref.target,
+      changed: ref.changed,
+      kind,
+    });
+    paintOf.set(ref, { kind, paint });
+  }
+  const legend = arrowStyle.legend ? coloring.legend() : [];
+  if (legend.length) {
+    const shape = legendShape(coloring.title, legend);
+    const key = "legend";
+    const moved = layout.positions.get(key);
+    if (moved) drawNode(key, shape, moved.x, moved.y);
+    else drawNode(key, shape, MARGIN, findFreeY(MARGIN, shape.w, shape.h, frameY, obstacles, STACK_GAP));
+    nodes.get(key)?.setAttribute("data-no-fade", "");
+  }
+
   // Boxes the person placed sit on top of automatically placed ones, and the
   // box being dragged right now is on top of everything.
   for (const g of movedNodes) boxLayer.append(g);
@@ -365,7 +411,6 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       (e): e is { ref: OutRef; source: Rect & { inY: number }; target: Rect & { inY: number } } =>
         !!e.source && !!e.target,
     );
-  const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
   const inputs = edges.map(({ ref, source, target }) => {
     const block = blockOf.get(ref.target);
     const sourceId = idOf(ref.source);
@@ -390,13 +435,6 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     return base;
   });
   const routes = routeEdges(inputs, [...rects.values()]);
-  // Each arrow's kind (scene/arrowKinds.ts), for Style → Arrow colors.
-  const kindOf = linkKinds(scene.step);
-  const arrowKind = (i: number): LinkKind => {
-    const { ref } = edges[i];
-    if ("tree" in inputs[i] && inputs[i].tree) return "tree";
-    return ref.owner ? kindOf(ref.owner, ref.target) : "ref";
-  };
   let maxX = 0;
   let maxY = 0;
   for (const rect of rects.values()) {
@@ -409,8 +447,12 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
     }
-    const linkKind = ref.printed ? null : arrowKind(i);
-    const kind = [ref.printed ? "print-arrow" : ref.changed ? "is-changed" : "", linkKind && `kind-${linkKind}`]
+    const { kind: linkKind, paint } = paintOf.get(ref) ?? { kind: null, paint: {} };
+    const kind = [
+      ref.printed ? "print-arrow" : ref.changed ? "is-changed" : "",
+      linkKind && `kind-${linkKind}`,
+      ...paintClasses(paint),
+    ]
       .filter(Boolean)
       .join(" ");
     const ends = { "data-from": ref.source, "data-to": nodeKey.object(graphAlias.get(ref.target) ?? ref.target) };
@@ -431,9 +473,29 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     if (head)
       topLayer.append(
         part("arrow-head", `M${head[0].x},${head[0].y} L${head[1].x},${head[1].y}`, {
-          "marker-end": linkKind && linkKind !== "ref" ? `url(#arrow-kind-${linkKind})` : "url(#arrow-ref)",
+          "marker-end": headMarker(linkKind, paint),
         }),
       );
+    // The field it comes from (Style → Arrows → Field names), where it leaves its box.
+    const owner = ref.owner ? step.heap[ref.owner] : undefined;
+    if (arrowStyle.labels && ref.field && owner?.kind === "object") {
+      const { at: from, next } = exitPoint(points, edges[i].source);
+      const right = next.x >= from.x;
+      const level = Math.abs(next.y - from.y) < 1;
+      topLayer.append(
+        s(
+          "text",
+          {
+            class: ["arrow-label", ...paintClasses(paint).filter((c) => c === "is-faded")].join(" "),
+            x: from.x + (level ? (right ? 5 : -5) : 5),
+            y: from.y + (level ? -5 : next.y > from.y ? 12 : -5),
+            "text-anchor": level && !right ? "end" : "start",
+            ...ends,
+          },
+          ref.field,
+        ),
+      );
+    }
   });
 
   const width = Math.max(maxX + MARGIN, MARGIN * 2 + framesW, cursorX - gapBefore(columnW.length) + MARGIN);
@@ -444,4 +506,110 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
   svg.style.setProperty("--font-size", `${FONT}px`);
   svg.style.setProperty("--small-size", `${SMALL}px`);
   return svg;
+}
+
+/** Where a route first leaves a box (its routes run level or upright), and the point after. */
+export function exitPoint(
+  points: { x: number; y: number }[],
+  box: Rect,
+): { at: { x: number; y: number }; next: { x: number; y: number } } {
+  const inside = (p: { x: number; y: number }) =>
+    p.x > box.x && p.x < box.x + box.w && p.y > box.y && p.y < box.y + box.h;
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1], points[i]];
+    if (!inside(a)) return { at: a, next: b };
+    if (inside(b)) continue;
+    const x = b.x > a.x ? box.x + box.w : b.x < a.x ? box.x : a.x;
+    const y = b.y > a.y ? box.y + box.h : b.y < a.y ? box.y : a.y;
+    return { at: a.x === b.x ? { x: a.x, y } : { x, y: a.y }, next: b };
+  }
+  return { at: points[0], next: points[1] ?? points[0] };
+}
+
+/** The classes that color an arrow (styles.css). */
+function paintClasses(paint: ArrowPaint): string[] {
+  return [
+    paint.group !== undefined && `group-${paint.group}`,
+    paint.dist !== undefined && `dist-${paint.dist}`,
+    paint.plain && "is-plain",
+    paint.faded && "is-faded",
+    paint.bright && "is-bright",
+  ].filter((c): c is string => !!c);
+}
+
+/** The arrowhead that matches an arrow's color. */
+function headMarker(kind: LinkKind | null, paint: ArrowPaint): string {
+  if (paint.group !== undefined) return `url(#arrow-group-${paint.group})`;
+  if (paint.dist !== undefined) return `url(#arrow-dist-${paint.dist})`;
+  if (paint.plain) return "url(#arrow-plain)";
+  return kind && kind !== "ref" ? `url(#arrow-kind-${kind})` : "url(#arrow-ref)";
+}
+
+const LEGEND_PAD = 10;
+const LEGEND_TITLE_H = 20;
+const LEGEND_ROW_H = 17;
+/** A legend lists at most this many colors, then how many more. */
+const LEGEND_MAX = 10;
+
+/** The legend: what the arrows' colors mean, a short arrow of each beside its words. */
+function legendShape(title: string, entries: LegendEntry[]): Shape {
+  const shown = entries.slice(0, LEGEND_MAX);
+  const more = entries.length - shown.length;
+  const lines = [...shown.map((e) => e.label), ...(more ? [`and ${more} more`] : [])];
+  const w = Math.max(
+    uiTextWidth(title, 11) * 1.1 + 2 * LEGEND_PAD,
+    ...lines.map((l) => 30 + uiTextWidth(l, 11) + 2 * LEGEND_PAD),
+  );
+  const h = LEGEND_TITLE_H + lines.length * LEGEND_ROW_H + LEGEND_PAD - 2;
+  return {
+    w,
+    h,
+    inY: LEGEND_TITLE_H / 2,
+    draw(x, y, layer) {
+      const g = s("g", { class: "arrow-legend" });
+      g.append(
+        s("rect", { class: "legend-card", x, y, width: w, height: h, rx: 6 }),
+        s("text", { class: "legend-title", x: x + LEGEND_PAD, y: y + 14 }, title),
+      );
+      shown.forEach((entry, i) => {
+        const ry = y + LEGEND_TITLE_H + i * LEGEND_ROW_H + LEGEND_ROW_H / 2;
+        const { swatch } = entry;
+        const classes = [
+          "legend-swatch",
+          swatch.kind &&
+            swatch.group === undefined &&
+            swatch.dist === undefined &&
+            !swatch.plain &&
+            `kind-${swatch.kind}`,
+          ...paintClasses(swatch),
+        ].filter(Boolean);
+        g.append(
+          s("path", {
+            class: classes.join(" "),
+            d: `M${x + LEGEND_PAD},${ry} H${x + LEGEND_PAD + 20}`,
+            "marker-end": headMarker(swatch.kind ?? "ref", swatch),
+          }),
+          s(
+            "text",
+            { class: "legend-text", x: x + LEGEND_PAD + 28, y: ry, "dominant-baseline": "central" },
+            entry.label,
+          ),
+        );
+      });
+      if (more)
+        g.append(
+          s(
+            "text",
+            {
+              class: "legend-text",
+              x: x + LEGEND_PAD + 28,
+              y: y + LEGEND_TITLE_H + shown.length * LEGEND_ROW_H + LEGEND_ROW_H / 2,
+              "dominant-baseline": "central",
+            },
+            `and ${more} more`,
+          ),
+        );
+      layer.append(g);
+    },
+  };
 }

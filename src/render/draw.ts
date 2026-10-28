@@ -7,6 +7,7 @@
  * all text inside cells uses a monospace font (each character is 0.6em wide).
  * That keeps layout fast, deterministic, and testable outside a browser.
  */
+import { numberOf } from "../trace/hints";
 import type { PrimValue, Value } from "../trace/types";
 import { type Mark, mark } from "./drawing";
 
@@ -146,6 +147,12 @@ export function arrowMarkers(): Mark {
     marker("arrow-kind-next", "arrowhead-kind-next"),
     marker("arrow-kind-back", "arrowhead-kind-back"),
     marker("arrow-kind-cycle", "arrowhead-kind-cycle"),
+    // Colors that follow the program (scene/arrowColors.ts).
+    ...Array.from({ length: 8 }, (_, i) => marker(`arrow-group-${i}`, `arrowhead-group-${i}`)),
+    ...Array.from({ length: 6 }, (_, i) => marker(`arrow-dist-${i}`, `arrowhead-dist-${i}`)),
+    marker("arrow-plain", "arrowhead-plain"),
+    // A heatmap's cells read, toward the cell worked on.
+    marker("arrow-read", "arrowhead-read"),
     fixed("arrow-graph", "arrowhead-graph"),
     fixed("arrow-tree", "arrowhead-tree"),
     fixed("arrow-path", "arrowhead-path"),
@@ -442,4 +449,30 @@ export function stripBar(info: StripInfo, x: number, y: number, room: number, ke
     );
   }
   return g;
+}
+
+// ---------------------------------------------------------------------------
+// Heatmaps (viz: heatmap)
+// ---------------------------------------------------------------------------
+
+/** Heatmap colors come in this many steps (styles.css, .heat-0 to .heat-8). */
+export const HEAT_LEVELS = 9;
+
+/** A number's step on a heatmap's scale, from the run's smallest to its largest; null if it isn't a number. */
+export function heatLevel(value: Value, range: { min: number; max: number }): number | null {
+  const n = numberOf(value);
+  if (n === null || Number.isNaN(n)) return null;
+  if (range.max <= range.min) return Math.floor(HEAT_LEVELS / 2);
+  const share = (Math.min(range.max, Math.max(range.min, n)) - range.min) / (range.max - range.min);
+  return Math.round(share * (HEAT_LEVELS - 1));
+}
+
+/** Color a cell by its value (`viz: heatmap`). */
+// biome-ignore lint/suspicious/noConfusingVoidType: draw()s return a cell or nothing
+export function heatCell(el: Mark | void, value: Value, range: { min: number; max: number } | null): void {
+  if (!el || !range) return;
+  const level = heatLevel(value, range);
+  if (level === null) return;
+  el.classList.add("heat");
+  el.classList.add(`heat-${level}`);
 }

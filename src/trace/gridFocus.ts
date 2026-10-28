@@ -58,6 +58,50 @@ export function gridFocus(
 }
 
 /**
+ * The cell a step works on, and the other cells of the grid the same line
+ * reads: `dp[i][j] = dp[i - 1][j] + dp[i][j - 1]` works on dp[i][j] from
+ * dp[i - 1][j] and dp[i][j - 1]. The first access on the line is the cell
+ * worked on (where gridFocus outlines), the rest are what it reads. Null
+ * when the code never indexes the grid by this name.
+ */
+export function gridCells(
+  accesses: GridAccess[] | undefined,
+  name: string,
+  lines: number[],
+  locals: Map<string, Value>,
+  size: { rows: number; cols: (row: number) => number },
+  negativeWraps: boolean,
+): { focus: { row: number; col: number }; reads: { row: number; col: number }[] } | "none" | null {
+  const mine = accesses?.filter((a) => a.name === name);
+  if (!mine?.length) return null;
+  const cellOf = (access: GridAccess) => {
+    let row = evalIndex(access.row, locals);
+    if (row === null) return null;
+    if (row < 0 && negativeWraps) row += size.rows;
+    if (row < 0 || row >= size.rows) return null;
+    let col = evalIndex(access.col, locals);
+    if (col === null) return null;
+    if (col < 0 && negativeWraps) col += size.cols(row);
+    if (col < 0 || col >= size.cols(row)) return null;
+    return { row, col };
+  };
+  for (const line of lines) {
+    const cells = mine
+      .filter((a) => a.line === line)
+      .map(cellOf)
+      .filter((c): c is { row: number; col: number } => c !== null);
+    if (!cells.length) continue;
+    const [focus, ...rest] = cells;
+    const reads = rest.filter(
+      (c, i) =>
+        (c.row !== focus.row || c.col !== focus.col) && rest.findIndex((d) => d.row === c.row && d.col === c.col) === i,
+    );
+    return { focus, reads };
+  }
+  return "none";
+}
+
+/**
  * Evaluate a simple index expression: whole numbers, variables holding
  * whole numbers, + - * // % (and / when it divides exactly), unary minus
  * and parentheses. Null for anything else (a call, an attribute...).

@@ -353,6 +353,8 @@ export interface LoopScene {
   compares(row: LoopRow, name: string, changedNames?: Set<string>): CompareSpan[];
   /** Does a container have labeled regions (room for their labels above it)? */
   regionLabels(name: string): boolean;
+  /** `viz: heatmap`: the run's range of numbers for a container's cell colors; null without the hint. */
+  heat(name: string): { min: number; max: number } | null;
   /** `viz: watch` expressions, worked out in a row: their text, and value ("?" where it can't be worked out). */
   watches(row: LoopRow): { text: string; value: string }[];
   /** `viz: check` invariants that are false in a row. */
@@ -598,6 +600,10 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     compares: (row, name, changedNames) =>
       comparesFor(name, trace.viz?.compares, new Map(row.frame.locals), changedNames),
     regionLabels: (name) => hasRegionLabels(name, trace.viz?.windows),
+    heat: (name) => {
+      const hint = trace.viz?.heatmaps?.find((h) => h.name === name);
+      return hint ? { min: hint.min ?? 0, max: hint.max ?? 0 } : null;
+    },
     watches: (row) =>
       (trace.viz?.watches ?? []).map((w) => {
         const value = evaluateText(w.text, new Map(row.frame.locals), row.heap, language);

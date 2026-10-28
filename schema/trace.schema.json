@@ -1218,6 +1218,27 @@
             "$ref": "#/definitions/CompareHint"
           }
         },
+        "heatmaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RangeHint"
+          },
+          "description": "Lists of numbers (or grids of them) drawn with each cell colored by its value."
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Lists (or dicts) of dicts or objects drawn as one table: a row each, a column per key."
+        },
+        "intervals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RangeHint"
+          },
+          "description": "Lists of pairs (or of objects with a start and an end) drawn as bars along a number line."
+        },
         "sizes": {
           "type": "array",
           "items": {
@@ -1644,6 +1665,38 @@
       "additionalProperties": false,
       "description": "`viz: compare nums: j, j + 1`: two cells of a list marked as the ones being compared."
     },
+    "RangeHint": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "line": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "intervals: the two fields of an object or dict that are its start and end, when the hint names them."
+        }
+      },
+      "required": [
+        "name",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: heatmap dp` and `viz: intervals meetings`: a list drawn as colors or as bars. `min` and `max` are the smallest and largest number it holds anywhere in the run (applyHints works them out), so a color or a bar's place means the same on every step. Absent: it never held a number."
+    },
     "SqlTrace": {
       "type": "object",
       "properties": {
@@ -1997,6 +2050,15 @@
         "group": {
           "type": "number",
           "description": "GROUP BY: which group it's in (an index into SqlTable.groups)."
+        },
+        "frame": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "A window function's step: the rows of its frame, first to last (indexes into SqlTable.rows)."
         }
       },
       "required": [

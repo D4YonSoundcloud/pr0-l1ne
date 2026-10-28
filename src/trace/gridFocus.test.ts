@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { pointersFor } from "../scene/pointers";
 import { expandHeaps } from "./delta";
-import { evalIndex, focusLines, gridFocus } from "./gridFocus";
+import { evalIndex, focusLines, gridCells, gridFocus } from "./gridFocus";
 import type { Trace, Value } from "./types";
 
 const int = (n: number): Value => ({ kind: "prim", type: "int", repr: String(n) });
@@ -161,5 +161,29 @@ const matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
 console.log(spiralOrder(matrix));`;
     const t = await traceJavaScript(js);
     checkSpiral(t);
+  });
+});
+
+describe("the cells a line reads", () => {
+  it("finds the cell worked on, and the others the line reads, each once", () => {
+    const accesses = [
+      { name: "dp", line: 5, row: "i", col: "j" },
+      { name: "dp", line: 5, row: "i - 1", col: "j" },
+      { name: "dp", line: 5, row: "i", col: "j - 1" },
+      { name: "dp", line: 5, row: "i - 1", col: "j" },
+      { name: "dp", line: 9, row: "0", col: "0" },
+    ];
+    const locals = new Map<string, Value>([
+      ["i", { kind: "prim", type: "int", repr: "2" }],
+      ["j", { kind: "prim", type: "int", repr: "0" }],
+    ]);
+    const size = { rows: 3, cols: () => 3 };
+    // dp[i][j - 1] is off the grid (j is 0): left out.
+    expect(gridCells(accesses, "dp", [5], locals, size, false)).toEqual({
+      focus: { row: 2, col: 0 },
+      reads: [{ row: 1, col: 0 }],
+    });
+    expect(gridCells(accesses, "dp", [7], locals, size, false)).toBe("none");
+    expect(gridCells(accesses, "other", [5], locals, size, false)).toBeNull();
   });
 });

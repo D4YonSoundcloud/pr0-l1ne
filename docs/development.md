@@ -323,6 +323,8 @@ pr0-l1ne/
     │   ├── pointers.ts         Index pointers: which variables point into which lists
     │   ├── arrowKinds.ts       What kind of link each arrow is (ref, tree, next, back, cycle)
     │   ├── arrowKinds.test.ts  Arrow kind tests
+    │   ├── arrowColors.ts      Arrow colors that follow the program: by variable, change, distance, same object
+    │   ├── arrowColors.test.ts Arrow color tests
     │   └── renderer.ts         The renderer contract: what the app asks of whatever draws a window
     ├── render/
     │   ├── svgRenderers.ts     The SVG renderers behind the contract (SVG_RENDERERS)
@@ -348,17 +350,19 @@ pr0-l1ne/
     │   │   ├── shapes.ts       Shape, View, OutRef and the context they share
     │   │   ├── tables.ts       Frames, dicts, objects, functions, classes (title + rows)
     │   │   ├── sequences.ts    Lists, tuples, sets; grids of nested lists
+    │   │   ├── records.ts      viz: table and viz: intervals: records as one table, pairs as bars
     │   │   ├── objects.ts      Any heap object as a shape; what goes in a value slot
     │   │   ├── graphs.ts       A graph's box, with its picture
     │   │   ├── trees.ts        Binary trees as one block
     │   │   ├── output.ts       The printed-output card
-    │   │   ├── layout.ts       Columns, placement, routing: the whole drawing
+    │   │   ├── layout.ts       Columns, placement, routing, arrow colors and the legend: the whole drawing
     │   │   └── focus.ts        Hover focus
     │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement
     │   ├── route.test.ts       Routing tests
     │   ├── spacing.ts          The layout's spacing, which the Layout panel changes
     │   ├── hintDrawing.test.ts The hints that change what's drawn, drawn
+    │   ├── arrowStyle.ts       How the memory view colors arrows (set by the Style panel)
     │   ├── spacing.test.ts     Spacing settings, and the layout across their whole ranges
     │   ├── layout.test.ts      Every example, every step: the scene's boxes and links, no overlaps or crossings
     │   ├── loopView.ts         The loop view: loopDrawing(), renderLoopHistory() (SVG)

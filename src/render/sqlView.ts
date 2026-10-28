@@ -10,8 +10,16 @@
  * Every row is its own group, keyed by its id (data-flip), and rows keep
  * their ids from step to step: when ORDER BY moves a row, or WHERE drops
  * the rows around it, the animation slides it from where it was.
+ *
+ * Colors (Style → Arrows → Palette): each of the database's tables has one,
+ * on its title and on the columns it gives a join; rows made from tables
+ * have a dot for each table they came from (hollow: an outer join found
+ * nothing there). A join's lines take a color for each key value, dashed
+ * for an outer join; a group's color runs from its rows, along the lines
+ * folding them, to the row it becomes; a window's partitions have colors,
+ * and each row's frame is a bracket beside the table.
  */
-import type { SqlPipelineScene, SqlTableScene } from "../scene/sqlScene";
+import type { RowSource, SqlPipelineScene, SqlTableScene } from "../scene/sqlScene";
 import type { SqlColumn, SqlRow, SqlTable } from "../trace/types";
 import { s, textWidth, uiTextWidth } from "./draw";
 import type { Mark } from "./drawing";
@@ -72,9 +80,23 @@ interface Measured {
   w: number;
   notesW: number;
   h: number;
+  /** The row labels' column (wider with the dots for where rows came from), and where the dots start. */
+  labelW: number;
+  labelTextW: number;
+  /** Each row's tables, as dots (null: none drawn). */
+  dots: RowSource[][] | null;
+  /** Room beside the table for the window frames' brackets. */
+  bracketsW: number;
 }
 
-function measure(table: SqlTable): Measured {
+/** A window's frame brackets: at most this many side by side (a partition's first rows). */
+const BRACKET_LANES = 10;
+const BRACKET_LANE = 7;
+
+/** How a table is colored: its scene, or nothing (the pipeline's tables have no colors). */
+type Paint = Pick<SqlTableScene, "tableColor" | "sources" | "isBase"> | null;
+
+function measure(table: SqlTable, paint: Paint = null): Measured {
   const sortKeys = table.columns.filter((c) => c.sort).length;
   const widths = table.columns.map((column, i) => {
     const values = table.rows.map((r) => textWidth(cellText(r.values[i] ?? null, column).text, VALUE_SIZE));
@@ -83,7 +105,21 @@ function measure(table: SqlTable): Measured {
   });
   const titleW =
     uiTextWidth(`${table.name}${table.alias ? ` AS ${table.alias}` : ""}`, 13) + uiTextWidth("000 rows", 11.5) + 48;
-  const w = Math.max(LABEL_W + widths.reduce((a, b) => a + b, 0), titleW);
+  // Rows made from tables: a dot for each table a row came from.
+  let dots: RowSource[][] | null = null;
+  if (paint && !paint.isBase(table)) {
+    const found = table.rows.map((r) => paint.sources(r).filter((s) => paint.tableColor(s.name) !== null));
+    if (found.some((d) => d.length)) dots = found;
+  }
+  // The dots go after the row's label (a joined row's "#12·#3" is wide).
+  const labelTextW = dots
+    ? Math.max(LABEL_W, ...table.rows.map((r) => uiTextWidth(`${r.tie ? "= " : ""}${r.label}`, 11) + 16))
+    : LABEL_W;
+  const labelW = labelTextW + (dots ? Math.max(...dots.map((d) => d.length)) * 8 + 2 : 0);
+  const w = Math.max(labelW + widths.reduce((a, b) => a + b, 0), titleW);
+  // A window's frames: a bracket each, in lanes by place in the partition.
+  const framed = table.rows.some((r) => r.frame);
+  const bracketsW = framed ? Math.min(BRACKET_LANES, longestPartition(table)) * BRACKET_LANE + 10 : 0;
   const notes = table.rows.map((r) => (r.note && !table.cuts?.length ? uiTextWidth(r.note, NOTE_SIZE) : 0));
   // (A join's two tables draw no notes: see joinTables.)
   const cutNotes = [
@@ -92,7 +128,28 @@ function measure(table: SqlTable): Measured {
   ];
   const notesW = Math.max(0, ...notes, ...cutNotes);
   const h = TITLE_H + HEAD_H + table.rows.length * ROW_H + (table.more ? ROW_H : 0) + 6;
-  return { table, widths, w, notesW: notesW ? notesW + NOTE_GAP : 0, h };
+  return {
+    table,
+    widths,
+    w,
+    notesW: (notesW ? notesW + NOTE_GAP : 0) + bracketsW,
+    h,
+    labelW,
+    labelTextW,
+    dots,
+    bracketsW,
+  };
+}
+
+/** The most rows in one group or partition (or the table, without them). */
+function longestPartition(table: SqlTable): number {
+  return table.groups?.length ? Math.max(...table.groups.map((g) => g.count)) : table.rows.length;
+}
+
+/** Where row `r` sits in its partition (0 for its first row). */
+function placeInPartition(table: SqlTable, r: number): number {
+  const group = table.groups?.find((g) => r >= g.start && r < g.start + g.count);
+  return group ? r - group.start : r;
 }
 
 const rowsText = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
@@ -109,8 +166,17 @@ const GROUP_COLORS = 6;
  * The table itself isn't animated, its rows are: moving both, a row would
  * move twice.
  */
-function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Mark; rowMid: Map<string, number> } {
-  const { table, widths, w } = m;
+function drawTable(
+  m: Measured,
+  x: number,
+  y: number,
+  withNotes = true,
+  paint: Paint = null,
+  groupLabels = true,
+  flipPrefix = "sqlrow",
+): { g: Mark; rowMid: Map<string, number> } {
+  const { table, widths, w, labelW } = m;
+  const notesX = x + w + m.bracketsW + NOTE_GAP;
   const sortKeys = table.columns.filter((c) => c.sort).length;
   const g = s("g", { class: "sql-table" });
   const rowMid = new Map<string, number>();
@@ -127,6 +193,12 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
       `${table.name}${table.alias ? ` AS ${table.alias}` : ""}`,
     ),
   );
+  // One of the database's tables: its color, down the title's left edge.
+  const own = paint?.isBase(table) ? paint.tableColor(table.name) : null;
+  if (own !== null && own !== undefined)
+    g.append(
+      s("rect", { class: `sql-table-mark palette-${own % 8}`, x: x + 1, y: y + 1, width: 5, height: TITLE_H - 1 }),
+    );
   const shown = table.rows.filter((r) => r.status !== "removed").length;
   const total = table.rows.length + (table.more ?? 0);
   g.append(
@@ -139,7 +211,7 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
 
   // Column headings, and where each column starts.
   const lefts: number[] = [];
-  let cx = x + LABEL_W;
+  let cx = x + labelW;
   const headY = y + TITLE_H;
   g.append(s("rect", { class: "sql-head-bg", x: x + 1, y: headY, width: w - 2, height: HEAD_H }));
   table.columns.forEach((column, i) => {
@@ -164,6 +236,19 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
     );
     head.append(s("title", {}, `${column.expr ?? column.name} (${column.type})`));
     g.append(head);
+    // A joined table's column: the color of the table it came from, under its heading.
+    const from = paint && column.role === undefined && column.name.includes(".") ? column.name.split(".")[0] : null;
+    const color = from ? paint!.tableColor(from) : null;
+    if (color !== null)
+      g.append(
+        s("line", {
+          class: `sql-col-source palette-${color % 8}`,
+          x1: cx + 4,
+          y1: headY + HEAD_H - 2,
+          x2: cx + widths[i] - 4,
+          y2: headY + HEAD_H - 2,
+        }),
+      );
     // A line before the condition's columns: they aren't the table's.
     if ((column.role === "check" || column.role === "result") && table.columns[i - 1]?.role === undefined) {
       g.append(s("line", { class: "sql-divider", x1: cx, y1: headY + 4, x2: cx, y2: y + bodyH - 6 }));
@@ -177,9 +262,34 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
   // With cut lines, they say why rows go (and notes beside the rows would crowd their labels).
   const notes = withNotes && !table.cuts?.length;
   table.rows.forEach((row, r) => {
-    g.append(drawRow(row, table.columns, widths, lefts, x, rowsY + r * ROW_H, w, r, notes));
+    const dots = m.dots ? { at: x + m.labelTextW, list: m.dots[r] } : null;
+    g.append(
+      drawRow(row, table.columns, widths, lefts, x, rowsY + r * ROW_H, w, r, notes, notesX, dots, paint, flipPrefix),
+    );
     rowMid.set(row.id, rowsY + r * ROW_H + ROW_H / 2);
   });
+  // A window's frames: a bracket beside the table from each row's frame's
+  // first row to its last, with a dot at the row it's for, in its partition's color.
+  if (m.bracketsW) {
+    const brackets = s("g", { class: "sql-frames" });
+    table.rows.forEach((row, r) => {
+      if (!row.frame) return;
+      const lane = placeInPartition(table, r);
+      if (lane >= BRACKET_LANES) return;
+      const bx = x + w + 8 + lane * BRACKET_LANE;
+      const top = rowsY + row.frame[0] * ROW_H + 5;
+      const bottom = rowsY + (row.frame[1] + 1) * ROW_H - 5;
+      const cls = `sql-frame${row.group !== undefined ? ` in-group-${row.group % GROUP_COLORS}` : ""}`;
+      const bracket = s("g", { class: cls });
+      bracket.append(
+        s("path", { d: `M${bx - 3},${top} H${bx} V${bottom} H${bx - 3}` }),
+        s("circle", { cx: bx, cy: rowsY + r * ROW_H + ROW_H / 2, r: 2.5 }),
+      );
+      bracket.append(s("title", {}, `${row.label}'s frame`));
+      brackets.append(bracket);
+    });
+    g.append(brackets);
+  }
   if (table.more) {
     g.append(
       s(
@@ -198,13 +308,13 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
   for (const [i, group] of (table.groups ?? []).entries()) {
     const gy = rowsY + group.start * ROW_H;
     if (i > 0) g.append(s("line", { class: "sql-group-line", x1: x, y1: gy, x2: x + w, y2: gy }));
-    if (!group.count) continue;
+    if (!group.count || !groupLabels) continue;
     g.append(
       s(
         "text",
         {
           class: `sql-group-label in-group-${i % GROUP_COLORS}`,
-          x: x + w + NOTE_GAP,
+          x: notesX,
           y: gy + ROW_H / 2,
           "dominant-baseline": "central",
         },
@@ -220,7 +330,7 @@ function drawTable(m: Measured, x: number, y: number, withNotes = true): { g: Ma
         "g",
         { class: "sql-cut", "data-flip": `sqlcut:${table.name}:${cut.label}`, "data-x": x, "data-y": cy },
         s("line", { x1: x - 6, y1: cy, x2: x + w + 6, y2: cy }),
-        s("text", { x: x + w + NOTE_GAP, y: cy, "dominant-baseline": "central" }, cut.label),
+        s("text", { x: notesX, y: cy, "dominant-baseline": "central" }, cut.label),
       ),
     );
   }
@@ -237,6 +347,10 @@ function drawRow(
   w: number,
   index: number,
   withNote: boolean,
+  notesX: number,
+  dots: { at: number; list: RowSource[] } | null,
+  paint: Paint,
+  flipPrefix = "sqlrow",
 ): Mark {
   const cls = [
     "sql-row",
@@ -247,7 +361,7 @@ function drawRow(
   ]
     .filter(Boolean)
     .join(" ");
-  const g = s("g", { class: cls, "data-flip": `sqlrow:${row.id}`, "data-x": x, "data-y": y });
+  const g = s("g", { class: cls, "data-flip": `${flipPrefix}:${row.id}`, "data-x": x, "data-y": y });
   g.append(s("rect", { class: "sql-row-bg", x: x + 1, y, width: w - 2, height: ROW_H }));
   // A group's color, down the left edge of its rows.
   if (row.group !== undefined)
@@ -260,6 +374,18 @@ function drawRow(
       `${row.tie ? "= " : ""}${row.label}`,
     ),
   );
+  // The tables it came from: a dot each, hollow where an outer join found nothing.
+  dots?.list.forEach((src, k) => {
+    const color = paint?.tableColor(src.name) ?? 0;
+    const dot = s("circle", {
+      class: `sql-source palette-${color % 8}${src.missing ? " is-missing" : ""}`,
+      cx: dots.at + 3 + k * 8,
+      cy: mid,
+      r: 3,
+    });
+    dot.append(s("title", {}, src.missing ? `no row of ${src.name}: NULLs` : `from ${src.name}`));
+    g.append(dot);
+  });
   columns.forEach((column, i) => {
     const { text, cls: valueCls } = cellText(row.values[i] ?? null, column);
     g.append(
@@ -280,9 +406,7 @@ function drawRow(
     g.append(s("line", { class: "sql-strike", x1: x + 6, y1: mid, x2: x + w - 6, y2: mid }));
   }
   if (row.note && withNote) {
-    g.append(
-      s("text", { class: "sql-row-note", x: x + w + NOTE_GAP, y: mid, "dominant-baseline": "central" }, row.note),
-    );
+    g.append(s("text", { class: "sql-row-note", x: notesX, y: mid, "dominant-baseline": "central" }, row.note));
   }
   return g;
 }
@@ -316,13 +440,17 @@ export function sqlTableDrawing(scene: SqlTableScene): Mark {
   let bottom = top;
   const tables = s("g", { class: "sql-tables" });
   if ((stage.kind === "join" || stage.kind === "combine") && stage.tables.length === 3) {
-    const placed = joinTables(stage, top, tables);
+    const placed = joinTables(stage, top, tables, scene);
+    x = placed.right + TABLE_GAP;
+    bottom = placed.bottom;
+  } else if (scene.fold && stage.tables.length === 1) {
+    const placed = foldTables(scene.fold, stage.tables[0], top, tables, scene);
     x = placed.right + TABLE_GAP;
     bottom = placed.bottom;
   } else {
     for (const table of stage.tables) {
-      const m = measure(table);
-      tables.append(drawTable(m, x, top).g);
+      const m = measure(table, scene);
+      tables.append(drawTable(m, x, top, true, scene).g);
       x += m.w + m.notesW + TABLE_GAP;
       bottom = Math.max(bottom, top + m.h);
     }
@@ -354,22 +482,64 @@ const JOIN_RESULT_GAP = 64;
  * A join: the rows so far and the table joined side by side, a line from
  * each row to each row it pairs with, then the rows the join makes.
  */
-function joinTables(stage: SqlTableScene["stage"], top: number, layer: Mark): { right: number; bottom: number } {
-  const [soFar, joined, made] = stage.tables.map(measure);
-  const left = drawTable(soFar, MARGIN, top, false);
+function joinTables(
+  stage: SqlTableScene["stage"],
+  top: number,
+  layer: Mark,
+  paint: Paint,
+): { right: number; bottom: number } {
+  const [soFar, joined, made] = stage.tables.map((table) => measure(table, paint));
+  const left = drawTable(soFar, MARGIN, top, false, paint);
   const rightX = MARGIN + soFar.w + JOIN_GAP;
-  const right = drawTable(joined, rightX, top, false);
+  const right = drawTable(joined, rightX, top, false, paint);
   const lines = s("g", { class: "sql-links" });
+  const x1 = MARGIN + soFar.w;
+  const x2 = rightX;
+  const bend = JOIN_GAP * 0.45;
+  // An outer join (LEFT, RIGHT, FULL) keeps rows that match nothing: its lines are dashed.
+  const outer = stage.kind === "join" && /^(?:NATURAL )?(?:LEFT|RIGHT|FULL)\b/.test(stage.clause);
+  // Each key value gets a color: rows that pair up with each other share one.
+  const color = linkColors(stage.links ?? []);
   for (const link of stage.links ?? []) {
     const y1 = left.rowMid.get(link.from);
     const y2 = right.rowMid.get(link.to);
     if (y1 === undefined || y2 === undefined) continue;
-    const x1 = MARGIN + soFar.w;
-    const x2 = rightX;
-    const bend = JOIN_GAP * 0.45;
     lines.append(
-      s("path", { class: "sql-link", d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}` }),
+      s("path", {
+        class: `sql-link in-group-${color.get(link.from)! % GROUP_COLORS}${outer ? " is-outer" : ""}`,
+        d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
+      }),
     );
+  }
+  // Rows an outer join keeps with nothing to pair with: a gray dashed line to nothing.
+  if (stage.kind === "join") {
+    const stub = (y: number, from: number, to: number) => {
+      lines.append(
+        s(
+          "g",
+          { class: "sql-unmatched" },
+          s("path", { d: `M${from},${y} H${to}` }),
+          s(
+            "text",
+            {
+              x: to + (to > from ? 4 : -4),
+              y,
+              "text-anchor": to > from ? "start" : "end",
+              "dominant-baseline": "central",
+            },
+            "NULL",
+          ),
+        ),
+      );
+    };
+    for (const row of soFar.table.rows) {
+      const y = left.rowMid.get(row.id);
+      if (row.status === "unmatched" && y !== undefined) stub(y, x1, x1 + JOIN_GAP * 0.3);
+    }
+    for (const row of joined.table.rows) {
+      const y = right.rowMid.get(row.id);
+      if (row.status === "unmatched" && y !== undefined) stub(y, x2, x2 - JOIN_GAP * 0.3);
+    }
   }
   layer.append(left.g, right.g, lines);
   // The rows it makes: to the right, or below, whichever fits a window
@@ -388,7 +558,7 @@ function joinTables(stage: SqlTableScene["stage"], top: number, layer: Mark): { 
         d: `M${rightX + joined.w + 12},${mid} H${resultX - 12} m-6,-5 l6,5 l-6,5`,
       }),
     );
-    layer.append(drawTable(made, resultX, top).g);
+    layer.append(drawTable(made, resultX, top, true, paint).g);
     return { right: MARGIN + across.w, bottom: top + across.h };
   }
   const resultTop = top + pairH + 44;
@@ -399,8 +569,76 @@ function joinTables(stage: SqlTableScene["stage"], top: number, layer: Mark): { 
       "The rows it makes:",
     ),
   );
-  layer.append(drawTable(made, MARGIN, resultTop).g);
+  layer.append(drawTable(made, MARGIN, resultTop, true, paint).g);
   return { right: MARGIN + down.w, bottom: top + down.h };
+}
+
+/**
+ * A join's pairs, colored by key value: rows that pair with each other (or
+ * with the same rows) are one key, and get one color, by the left row.
+ */
+function linkColors(links: { from: string; to: string }[]): Map<string, number> {
+  const parent = new Map<string, string>();
+  const find = (a: string): string => {
+    let p = parent.get(a) ?? a;
+    while (p !== (parent.get(p) ?? p)) p = parent.get(p)!;
+    parent.set(a, p);
+    return p;
+  };
+  for (const { from, to } of links) {
+    const [a, b] = [find(`l:${from}`), find(`r:${to}`)];
+    if (a !== b) parent.set(b, a);
+  }
+  const index = new Map<string, number>();
+  const out = new Map<string, number>();
+  for (const { from } of links) {
+    const root = find(`l:${from}`);
+    if (!index.has(root)) index.set(root, index.size);
+    out.set(from, index.get(root)!);
+  }
+  return out;
+}
+
+/** Room between a group's rows and the row each group becomes. */
+const FOLD_GAP = 90;
+
+/**
+ * An aggregate: the groups (GROUP BY's step) beside the rows they become,
+ * a line from each row of a group to its group's row, in the group's color.
+ */
+function foldTables(
+  groups: SqlTable,
+  made: SqlTable,
+  top: number,
+  layer: Mark,
+  paint: Paint,
+): { right: number; bottom: number } {
+  const left = measure(groups, paint);
+  const right = measure(made, paint);
+  // The groups' rows have keys of their own: a group's row has its first row's id, and
+  // slides out of it (from the GROUP BY step) to its place on the right.
+  const a = drawTable(left, MARGIN, top, false, paint, false, "sqlfold");
+  const rightX = MARGIN + left.w + FOLD_GAP;
+  const b = drawTable(right, rightX, top, true, paint);
+  const lines = s("g", { class: "sql-links sql-folds" });
+  const groupRow = new Map(made.rows.flatMap((r) => (r.group !== undefined ? [[r.group, r.id] as const] : [])));
+  const bend = FOLD_GAP * 0.45;
+  for (const row of groups.rows) {
+    if (row.group === undefined) continue;
+    const y1 = a.rowMid.get(row.id);
+    const target = groupRow.get(row.group);
+    const y2 = target ? b.rowMid.get(target) : undefined;
+    if (y1 === undefined || y2 === undefined) continue;
+    const x1 = MARGIN + left.w;
+    lines.append(
+      s("path", {
+        class: `sql-fold in-group-${row.group % GROUP_COLORS}`,
+        d: `M${x1},${y1} C${x1 + bend},${y1} ${rightX - bend},${y2} ${rightX},${y2}`,
+      }),
+    );
+  }
+  layer.append(a.g, b.g, lines);
+  return { right: rightX + right.w + right.notesW, bottom: top + Math.max(left.h, right.h) };
 }
 
 // ---------------------------------------------------------------- the pipeline window

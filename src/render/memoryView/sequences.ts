@@ -10,6 +10,7 @@ import {
   CELL_H,
   CELL_MIN_W,
   compareMarks,
+  heatCell,
   INDEX_H,
   LABEL_H,
   POINTER_H,
@@ -24,6 +25,7 @@ import {
   uiTextWidth,
   windowBands,
 } from "../draw";
+import { intervalsShape, recordsShape } from "./records";
 import {
   type Ctx,
   labelWithSize,
@@ -60,6 +62,7 @@ function gridShape(
   opts: { changed: Set<string>; isNew: boolean; pointers: Pointers; nested: boolean },
 ): Shape {
   const views = rows.map((row) => row.items.map((item) => ctx.view(item, CELL_H)));
+  const heat = ctx.heatFor(obj.id);
   const pad = views.flat().some((v) => v.nested) ? NEST_PAD : 0;
   const cols = Math.max(1, ...rows.map((row) => row.items.length));
   const cellW = Math.max(CELL_MIN_W, ...views.flat().map((v) => v.w + 2 * pad));
@@ -130,7 +133,9 @@ function gridShape(
             );
             view.draw(cx + pad, ry + pad, view.w, view.h, g, refs, changed);
           } else {
-            markCell(view.draw(cx, ry, cellW, CELL_H, g, refs, changed), row.id, String(c), row.items[c], c * cellW, 0);
+            const el = view.draw(cx, ry, cellW, CELL_H, g, refs, changed);
+            markCell(el, row.id, String(c), row.items[c], c * cellW, 0);
+            heatCell(el, row.items[c], heat);
           }
         });
       });
@@ -144,11 +149,48 @@ function gridShape(
       // The cell this step works on: from the code's own grid[a][b] on the
       // line that ran (or runs next). Only if the code never indexes the
       // grid by name, a guess: the first row and column pointers.
-      let focus = ctx.gridFocus(obj.id, { rows: rows.length, cols: (r) => rows[r]?.items.length ?? 0 });
+      const shape = { rows: rows.length, cols: (r: number) => rows[r]?.items.length ?? 0 };
+      // A heatmap also shows the cells the line reads, each with an arrow to the cell worked on.
+      const cells = heat ? ctx.gridCells(obj.id, shape) : null;
+      let focus = cells && cells !== "none" ? cells.focus : ctx.gridFocus(obj.id, shape);
       if (focus === null) {
         const r = opts.pointers.find((p) => p.index >= 0 && p.index < rows.length);
         const c = columnPointers.find((p) => p.index >= 0 && p.index < (rows[r?.index ?? 0]?.items.length ?? 0));
         focus = r && c ? { row: r.index, col: c.index } : "none";
+      }
+      if (focus !== "none" && cells && cells !== "none" && cells.reads.length) {
+        const f = focus;
+        const center = (c: { row: number; col: number }) => ({
+          x: x0 + c.col * cellW + cellW / 2,
+          y: top + rowTops[c.row] + CELL_H / 2,
+        });
+        const reads = s("g", { class: "grid-reads" });
+        for (const read of cells.reads) {
+          reads.append(
+            s("rect", {
+              class: "grid-read",
+              x: x0 + read.col * cellW + 2,
+              y: top + rowTops[read.row] + 2,
+              width: cellW - 4,
+              height: CELL_H - 4,
+              rx: 3,
+            }),
+          );
+          const [a, b] = [center(read), center(f)];
+          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          const [ux, uy] = [(b.x - a.x) / len, (b.y - a.y) / len];
+          // From inside the cell read to the edge of the one worked on.
+          const startAt = Math.min(8, len / 3);
+          const stopAt = Math.min(len / 2, Math.abs(ux) * (cellW / 2) + Math.abs(uy) * (CELL_H / 2) - 2);
+          reads.append(
+            s("path", {
+              class: "grid-read-arrow",
+              d: `M${a.x + ux * startAt},${a.y + uy * startAt} L${b.x - ux * stopAt},${b.y - uy * stopAt}`,
+              "marker-end": "url(#arrow-read)",
+            }),
+          );
+        }
+        g.append(reads);
       }
       if (focus !== "none") {
         g.append(
@@ -172,8 +214,18 @@ export function sequenceShape(
   ctx: Ctx,
   opts: { changed: Set<string>; isNew: boolean; pointers: Pointers; nested: boolean },
 ): Shape {
+  const drawAs = ctx.drawAs(obj.id);
+  if (drawAs?.kind === "table" && obj.kind !== "set") {
+    const table = recordsShape(obj, ctx, opts);
+    if (table) return table;
+  }
+  if (drawAs?.kind === "intervals" && obj.kind !== "set") {
+    const bars = intervalsShape(obj, ctx, drawAs, opts);
+    if (bars) return bars;
+  }
   const rows = gridRows(obj, ctx);
   if (rows) return gridShape(obj, rows, ctx, opts);
+  const heat = ctx.heatFor(obj.id);
   const hasIndices = obj.kind !== "set";
   // A long list shows a window of its items (following its index
   // variables), with a strip of the whole list above when it holds numbers.
@@ -338,7 +390,9 @@ export function sequenceShape(
           );
           view.draw(cx + pad, y + cellsY + pad, view.w, view.h, g, refs, changed);
         } else {
-          markCell(view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed), obj.id, slot, obj.items[i], cx - x, 0);
+          const el = view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed);
+          markCell(el, obj.id, slot, obj.items[i], cx - x, 0);
+          heatCell(el, obj.items[i], heat);
           // A list cell's arrow leaves downward, not through its neighbors.
           for (let k = before; k < refs.length; k++) refs[k].down = true;
         }

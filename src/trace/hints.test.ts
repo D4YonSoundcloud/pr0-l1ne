@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
-import { applyHints, charsOf, focusedLoop, formatNumber, parseHints } from "./hints";
+import { applyHints, charsOf, focusedLoop, formatNumber, intervalOf, numberOf, parseHints } from "./hints";
 import { findLinkedTrack, linkedRow } from "./linked";
 import { buildLoopHistory } from "./loopHistory";
 import type { Trace } from "./types";
@@ -357,3 +357,77 @@ mask = 2;`;
     expect(focusedLoop({ loops, viz: parseHints([]) })).toBeNull();
   });
 });
+
+describe("heatmap, table and intervals hints", () => {
+  it("reads them, and explains ones it can't", () => {
+    const h = parseHints([
+      hint("heatmap dp, cost", 1),
+      hint("table people", 2),
+      hint("intervals meetings", 3),
+      hint("intervals slots: begin, finish", 4),
+      hint("heatmap", 5),
+      hint("intervals a: b", 6),
+    ]);
+    expect(h.heatmaps).toEqual([
+      { name: "dp", line: 1 },
+      { name: "cost", line: 1 },
+    ]);
+    expect(h.tables).toEqual(["people"]);
+    expect(h.intervals).toEqual([
+      { name: "meetings", line: 3 },
+      { name: "slots", line: 4, fields: ["begin", "finish"] },
+    ]);
+    expect(h.warnings.map((w) => w.line)).toEqual([5, 6]);
+  });
+
+  it("works out the numbers a heatmap or intervals holds over the whole run, and never draws them as graphs", async () => {
+    const code = `// viz: heatmap dp
+// viz: intervals spans
+const dp = [[0, 0], [0, 0]];
+dp[1][1] = 7;
+dp[0][0] = -2;
+const spans = [[3, 5], { start: 1, end: 9 }];`;
+    const t = applyHints(await traceJavaScript(code));
+    expect(t.viz?.heatmaps).toEqual([{ name: "dp", line: 1, min: -2, max: 7 }]);
+    expect(t.viz?.intervals).toEqual([{ name: "spans", line: 2, min: 1, max: 9 }]);
+    expect(t.viz?.plain).toEqual(expect.arrayContaining(["dp", "spans"]));
+  });
+
+  it("reads an interval from a pair, an object's start and end, or the fields named", () => {
+    const heap = {
+      a: { kind: "list", id: "a", typeName: "list", items: [num("2"), num("4")], length: 2 },
+      b: {
+        kind: "object",
+        id: "b",
+        typeName: "Meeting",
+        fields: [
+          ["room", num("7")],
+          ["lo", num("1")],
+          ["hi", num("3")],
+        ],
+      },
+      c: {
+        kind: "dict",
+        id: "c",
+        typeName: "dict",
+        entries: [
+          [{ kind: "prim", type: "str", repr: "'from'" }, num("5")],
+          [{ kind: "prim", type: "str", repr: "'to'" }, num("6")],
+        ],
+      },
+      d: { kind: "list", id: "d", typeName: "list", items: [num("1")], length: 1 },
+    } as unknown as Record<string, import("./types").HeapObject>;
+    const ref = (id: string) => ({ kind: "ref" as const, id });
+    expect(intervalOf(ref("a"), heap)).toEqual([2, 4]);
+    expect(intervalOf(ref("b"), heap)).toEqual([1, 3]);
+    expect(intervalOf(ref("b"), heap, ["room", "hi"])).toEqual([7, 3]);
+    expect(intervalOf(ref("c"), heap)).toEqual([5, 6]);
+    expect(intervalOf(ref("d"), heap)).toBeNull();
+    expect(numberOf(num("inf"))).toBe(Infinity);
+    expect(numberOf({ kind: "prim", type: "bool", repr: "True" })).toBe(1);
+  });
+});
+
+function num(repr: string) {
+  return { kind: "prim" as const, type: "int", repr };
+}

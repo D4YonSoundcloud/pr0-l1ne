@@ -189,6 +189,7 @@ const style: StyleController = new StyleController({
   views: { memory: memory.renderer, loop: loop.renderer },
   animation: () => playback.animation,
   replay: () => playback.replay(),
+  redraw: () => view.render(false),
   onOpen: () => closePanelsBut("style"),
   rendering: { get: () => settings.renderer.get(), set: useRenderer },
 });

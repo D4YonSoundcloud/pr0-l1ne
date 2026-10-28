@@ -6,6 +6,7 @@
 import { valueKey } from "../../trace/diff";
 import type { HeapObject, Value } from "../../trace/types";
 import { cellWidth, valueCell } from "../draw";
+import { recordsShape } from "./records";
 import { sequenceShape } from "./sequences";
 import { type Ctx, type Shape, sizeLabel, type View } from "./shapes";
 import { tableShape } from "./tables";
@@ -57,13 +58,19 @@ function shapeOf(obj: HeapObject, ctx: Ctx, nested: boolean): Shape {
     case "tuple":
     case "set":
       return sequenceShape(obj, ctx, { changed, isNew, pointers: ctx.pointersFor(obj.id), nested });
-    case "dict":
+    case "dict": {
+      // `viz: table` on a dict of dicts or objects: a row per key.
+      if (ctx.drawAs(obj.id)?.kind === "table") {
+        const table = recordsShape(obj, ctx, { changed, isNew, pointers: [], nested });
+        if (table) return table;
+      }
       return tableShape(
         obj.typeName,
         obj.entries.map(([key, value]) => ({ label: key, value, changed: changed.has(valueKey(key)) })),
         ctx,
         { variant: "dict", isNew, emptyText: "empty", nested, sizeText: sizeLabel(ctx, obj.id) },
       );
+    }
     case "object":
       return tableShape(
         ctx.titleOf(obj),

@@ -114,8 +114,12 @@ export function tableShape(
           if (dot) refs.push({ from: dot, target: row.label.id, changed: false });
         }
         const cellX = x + w - 8 - rightW;
+        const first = refs.length;
         if (view.nested) view.draw(cellX, rowY + NEST_PAD, view.w, view.h, rowG, refs, row.changed);
         else view.draw(cellX, rowY + 4, cellsW, ROW_H - 8, rowG, refs, row.changed);
+        // The row's name (a variable, a field) goes with its arrow: for colors by variable, and field names on arrows.
+        if (typeof row.label === "string" && row.label)
+          for (let k = first; k < refs.length; k++) refs[k].field ??= row.label;
         g.append(rowG);
         rowY += rowH;
       });

@@ -23,6 +23,18 @@ function nestableChildren(obj: HeapObject): string[] {
   return ids;
 }
 
+/** How many references to each object there are in a snapshot: from variables, fields, items, keys and the return value. */
+export function incomingCounts(step: Step): Map<string, number> {
+  const incoming = new Map<string, number>();
+  const count = (value: Value | undefined) => {
+    if (value?.kind === "ref") incoming.set(value.id, (incoming.get(value.id) ?? 0) + 1);
+  };
+  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) count(value);
+  count(step.returnValue);
+  for (const obj of Object.values(step.heap)) for (const value of valuesOf(obj)) count(value);
+  return incoming;
+}
+
 /**
  * Which objects to draw inside the thing that refers to them. An object is
  * nested when exactly one reference to it exists in this snapshot (from a
@@ -32,13 +44,7 @@ function nestableChildren(obj: HeapObject): string[] {
  * object".
  */
 export function chooseNested(step: Step): Set<string> {
-  const incoming = new Map<string, number>();
-  const count = (value: Value | undefined) => {
-    if (value?.kind === "ref") incoming.set(value.id, (incoming.get(value.id) ?? 0) + 1);
-  };
-  for (const frame of liveFrames(step)) for (const [, value] of frame.locals) count(value);
-  count(step.returnValue);
-  for (const obj of Object.values(step.heap)) for (const value of valuesOf(obj)) count(value);
+  const incoming = incomingCounts(step);
 
   const nested = new Set<string>();
   const visited = new Set<string>();

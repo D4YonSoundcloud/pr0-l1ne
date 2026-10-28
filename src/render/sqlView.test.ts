@@ -35,7 +35,9 @@ describe("SQL drawings of the examples", () => {
       const drawing = sqlTableDrawing(sqlTableScene(trace, i)!);
       // Each row once, keyed by its id, one below another.
       const rows = all(drawing, ".sql-row");
-      const expected = stage.tables.reduce((n, t) => n + t.rows.length, 0);
+      // (An aggregate's step draws the groups' rows too, beside the rows they become.)
+      const fold = sqlTableScene(trace, i)!.fold;
+      const expected = stage.tables.reduce((n, t) => n + t.rows.length, 0) + (fold?.rows.length ?? 0);
       expect(rows).toHaveLength(expected);
       const keys = rows.map((r) => r.getAttribute("data-flip"));
       expect(new Set(keys).size).toBe(keys.length);
@@ -194,5 +196,66 @@ describe("the pipeline drawing", () => {
       (g) => /is-(done|current|next)/.exec(g.getAttribute("class") ?? "")?.[1],
     );
     expect(states).toEqual(["done", "current", "next", "next"]);
+  });
+});
+
+describe("colors", () => {
+  const example = (name: string) => SQL_EXAMPLES.find((e) => e.name === name)!.code;
+  const stepOf = (trace: Trace, kind: string) => trace.sql!.stages.findIndex((s) => s.kind === kind);
+  const classes = (els: Element[]) => els.map((e) => e.getAttribute("class") ?? "");
+
+  it("gives a join's lines a color for each key, dashes an outer join's, and draws rows that match nothing to NULL", async () => {
+    const trace = await traceOf(example("LEFT JOIN keeps every row"));
+    const scene = sqlTableScene(trace, stepOf(trace, "join"))!;
+    const drawing = sqlTableDrawing(scene);
+    const links = classes(all(drawing, ".sql-link"));
+    expect(links.length).toBeGreaterThan(5);
+    expect(links.every((c) => c.includes("is-outer"))).toBe(true);
+    // Each customer's orders are one key: as many colors as customers with orders (up to six).
+    expect(new Set(links.map((c) => /in-group-\d/.exec(c)?.[0])).size).toBeGreaterThan(3);
+    expect(all(drawing, ".sql-unmatched")).toHaveLength(1);
+    // The database's tables have colors; the joined rows have a dot for each, hollow where there was no match.
+    expect(all(drawing, ".sql-table-mark")).toHaveLength(2);
+    expect(all(drawing, ".sql-col-source").length).toBeGreaterThan(4);
+    expect(all(drawing, ".sql-source.is-missing")).toHaveLength(1);
+
+    const inner = await traceOf(example("JOIN … ON"));
+    const plain = classes(all(sqlTableDrawing(sqlTableScene(inner, stepOf(inner, "join"))!), ".sql-link"));
+    expect(plain.some((c) => c.includes("is-outer"))).toBe(false);
+  });
+
+  it("folds a group's rows into its row, in its color, and the color stays with the row after", async () => {
+    const trace = await traceOf(example("GROUP BY"));
+    const fold = sqlTableDrawing(sqlTableScene(trace, stepOf(trace, "aggregate"))!);
+    const lines = classes(all(fold, ".sql-fold"));
+    const rows = trace.sql!.stages[stepOf(trace, "group")].tables[0].rows;
+    expect(lines).toHaveLength(rows.length);
+    for (const [i, row] of rows.entries()) expect(lines[i]).toContain(`in-group-${row.group! % 6}`);
+    const last = sqlTableDrawing(sqlTableScene(trace, trace.steps.length - 1)!);
+    expect(all(last, ".sql-row").every((r) => /in-group-\d/.test(r.getAttribute("class") ?? ""))).toBe(true);
+  });
+
+  it("traces rows back through WITH to the database's tables", async () => {
+    const trace = await traceOf(example("WITH"));
+    const scene = sqlTableScene(trace, trace.steps.length - 1)!;
+    const row = scene.stage.tables[0].rows[0];
+    expect(
+      scene
+        .sources(row)
+        .map((s) => s.name)
+        .sort(),
+    ).toEqual(["customers", "orders", "products"]);
+    expect(all(sqlTableDrawing(scene), ".sql-row")[0].querySelectorAll(".sql-source")).toHaveLength(3);
+  });
+
+  it("brackets each row's frame in a window step, in its partition's color", async () => {
+    const trace = await traceOf(example("A running total"));
+    const i = stepOf(trace, "window");
+    const rows = trace.sql!.stages[i].tables[0].rows;
+    // A running total: each row's frame runs from the first row to it (or the last it ties with).
+    expect(rows[0].frame?.[0]).toBe(0);
+    expect(rows.at(-1)!.frame).toEqual([0, rows.length - 1]);
+    const brackets = all(sqlTableDrawing(sqlTableScene(trace, i)!), ".sql-frame");
+    expect(brackets).toHaveLength(Math.min(rows.length, 10));
   });
 });

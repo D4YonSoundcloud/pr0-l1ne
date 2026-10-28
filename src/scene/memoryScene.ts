@@ -21,12 +21,12 @@ import {
   legendOverlaysFor,
   stepScopes,
 } from "../trace/graph";
-import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
+import { focusLines, type GridFocus, gridCells, gridFocus } from "../trace/gridFocus";
 import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
 import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
 import { type Printed, printedAt } from "../trace/output";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
-import { chooseNested, valuesOf } from "./nesting";
+import { chooseNested, incomingCounts, valuesOf } from "./nesting";
 import { type Pointer, pointersFor } from "./pointers";
 import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
@@ -114,6 +114,8 @@ export interface SceneOutput {
 export interface MemoryScene {
   /** The window is taller than wide (MemorySceneOptions.tall). */
   tall?: boolean;
+  /** The run it's a step of (for what stays the same through it, like arrows' colors). */
+  trace: Trace;
   step: Step;
   stepIndex: number;
   language: Trace["language"];
@@ -149,6 +151,12 @@ export interface MemoryScene {
   title(obj: HeapObject): string;
   /** The grid cell this step reads or writes (trace/gridFocus.ts), given the grid's shape; null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
+  /** The cell a heatmap grid's step works on and the cells it reads (trace/gridFocus.ts gridCells). */
+  gridCells(id: string, size: { rows: number; cols: (row: number) => number }): ReturnType<typeof gridCells>;
+  /** `viz: heatmap`: the range of numbers a list holds over the run, for coloring its cells; null without the hint. */
+  heat(id: string): { min: number; max: number } | null;
+  /** `viz: table` or `viz: intervals`: a list (or dict) drawn as a table, or as bars along a number line. */
+  drawAs(id: string): DrawAs | null;
   /** What this step printed, or null (or output turned off). */
   output: SceneOutput | null;
   /** The run's longest printed line, in characters, when output is shown and the run prints; else null. */
@@ -156,6 +164,9 @@ export interface MemoryScene {
   /** Everything but the output (and what it printed) is dimmed; `entering` or `leaving` on the step where that starts or stops. */
   dim: { on: boolean; entering: boolean; leaving: boolean };
 }
+
+/** How a hint draws a list: as a table of its items' keys, or as intervals on a number line. */
+export type DrawAs = { kind: "table" } | { kind: "intervals"; min: number; max: number; fields?: [string, string] };
 
 /** The longest printed line of a run, worked out once per trace. */
 const longestLines = new WeakMap<Trace, number>();
@@ -250,6 +261,32 @@ export function memoryScene(
   }
   const outgoing = (id: string): Value[] => (graphs.has(id) ? [] : valuesOf(step.heap[id]));
 
+  // A table, a heatmap's grid and intervals draw their items inside them:
+  // each item nobody else points to is nested, whatever the mode.
+  const viz = trace.viz;
+  const ownWay = new Set([
+    ...(viz?.tables ?? []),
+    ...(viz?.heatmaps ?? []).map((h) => h.name),
+    ...(viz?.intervals ?? []).map((h) => h.name),
+  ]);
+  if (ownWay.size) {
+    const incoming = incomingCounts(step);
+    for (const frame of liveFrames(step))
+      for (const [name, value] of frame.locals) {
+        if (!ownWay.has(name) || value.kind !== "ref") continue;
+        const holder = step.heap[value.id];
+        if (!holder) continue;
+        const items =
+          holder.kind === "list" || holder.kind === "tuple"
+            ? holder.items
+            : holder.kind === "dict"
+              ? holder.entries.map(([, v]) => v)
+              : [];
+        for (const item of items)
+          if (item.kind === "ref" && step.heap[item.id] && incoming.get(item.id) === 1) nested.add(item.id);
+      }
+  }
+
   // Index pointers (i, j, lo, hi...) belong to the variable that holds a list.
   const pointerOwner = new Map<string, { name: string; frame: Frame }>();
   for (const frame of liveFrames(step)) {
@@ -340,6 +377,7 @@ export function memoryScene(
 
   return {
     tall: options.tall,
+    trace,
     step,
     stepIndex,
     language: trace.language,
@@ -400,6 +438,36 @@ export function memoryScene(
         size,
         trace.language === "python",
       );
+    },
+    gridCells(id, size) {
+      const owner = pointerOwner.get(id);
+      if (!owner) return null;
+      return gridCells(
+        trace.gridAccesses,
+        owner.name,
+        focusLines(trace, stepIndex),
+        new Map(owner.frame.locals),
+        size,
+        trace.language === "python",
+      );
+    },
+    heat(id) {
+      const owner = pointerOwner.get(id);
+      const hint = owner && viz?.heatmaps?.find((h) => h.name === owner.name);
+      return hint ? { min: hint.min ?? 0, max: hint.max ?? 0 } : null;
+    },
+    drawAs(id) {
+      const owner = pointerOwner.get(id);
+      if (!owner) return null;
+      if (viz?.tables?.includes(owner.name)) return { kind: "table" };
+      const hint = viz?.intervals?.find((h) => h.name === owner.name);
+      if (!hint) return null;
+      return {
+        kind: "intervals",
+        min: hint.min ?? 0,
+        max: hint.max ?? 1,
+        ...(hint.fields ? { fields: hint.fields } : {}),
+      };
     },
     output,
     longestOutputLine: show && trace.stdout ? longestLine(trace) : null,

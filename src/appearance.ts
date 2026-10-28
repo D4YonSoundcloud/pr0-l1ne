@@ -58,9 +58,51 @@ export interface Appearance {
   arrowMode: ArrowMode;
   /** Kinds of arrow told apart by dashes too, not only color: for printing, or color blindness. */
   arrowDashes: boolean;
+  /** A small legend in the memory view saying what the arrows' colors mean (in the modes that follow the program). */
+  arrowLegend: boolean;
+  /** Each arrow from an object's field says the field's name (next, left). */
+  arrowLabels: boolean;
 }
 
-export type ArrowMode = "kind" | "one";
+/**
+ * How arrows are colored (Style → Arrows):
+ *   kind      by what kind of link each is (scene/arrowKinds.ts)
+ *   one       all in the References color
+ *   variable  each variable's arrows, and the arrows of everything reached
+ *             from it, in that variable's color (scene/arrowColors.ts)
+ *   change    the arrows this step changed bright, the rest faded
+ *   distance  by how far from the variables an arrow starts
+ *   alias     two variables pointing at the same object in a color of their own
+ */
+export type ArrowMode = "kind" | "one" | "variable" | "change" | "distance" | "alias";
+export const ARROW_MODES: readonly ArrowMode[] = ["kind", "one", "variable", "change", "distance", "alias"];
+
+/** The palette's color fields: variables, aliases and SQL's tables take these in turn. */
+export const PALETTE_KEYS = [
+  "palette0",
+  "palette1",
+  "palette2",
+  "palette3",
+  "palette4",
+  "palette5",
+  "palette6",
+  "palette7",
+] as const;
+
+/** Palettes to start from (Style → Arrows). */
+export const PALETTES: { name: string; colors: string[] }[] = [
+  { name: "Bright", colors: ["#2f6fb0", "#d9822b", "#2e7a57", "#c2362f", "#7a4fb5", "#0f8c9c", "#b5568a", "#8a6d12"] },
+  // Okabe and Ito's eight, told apart with every kind of color blindness.
+  {
+    name: "Colorblind safe",
+    colors: ["#0072b2", "#e69f00", "#009e73", "#d55e00", "#cc79a7", "#56b4e9", "#000000", "#f0e442"],
+  },
+  { name: "Soft", colors: ["#6c8ebf", "#e0a96d", "#7fb49a", "#d98a8a", "#a48ccf", "#7ab8c4", "#c79bb5", "#b9a46a"] },
+  {
+    name: "Neon (dark canvases)",
+    colors: ["#4cc9f0", "#ffb703", "#72f2a0", "#f72585", "#b388ff", "#00f5d4", "#ff8fab", "#fee440"],
+  },
+];
 
 /** The arrow kinds' color fields, in order (see scene/arrowKinds.ts). */
 export const ARROW_KEYS = ["arrowRef", "arrowTree", "arrowNext", "arrowBack", "arrowCycle"] as const;
@@ -93,7 +135,7 @@ export interface ColorField {
   /** The CSS custom property it sets. */
   cssVar: string;
   label: string;
-  group: "Boxes and cells" | "Values" | "Marks" | "Arrows" | "Graphs" | "Text on the background";
+  group: "Boxes and cells" | "Values" | "Marks" | "Arrows" | "Palette" | "Graphs" | "Text on the background";
 }
 
 export const COLOR_FIELDS: ColorField[] = [
@@ -123,6 +165,13 @@ export const COLOR_FIELDS: ColorField[] = [
   { key: "arrowNext", cssVar: "--arrow-next", label: "Links (next)", group: "Arrows" },
   { key: "arrowBack", cssVar: "--arrow-back", label: "Back links (parent, prev)", group: "Arrows" },
   { key: "arrowCycle", cssVar: "--arrow-cycle", label: "Links that close a loop", group: "Arrows" },
+  { key: "arrowFar", cssVar: "--arrow-far", label: "Far from the variables (by distance)", group: "Arrows" },
+  ...PALETTE_KEYS.map(
+    (key, i): ColorField => ({ key, cssVar: `--palette-${i}`, label: `Color ${i + 1}`, group: "Palette" }),
+  ),
+  { key: "heatLow", cssVar: "--heat-low", label: "Heatmaps: lowest", group: "Marks" },
+  { key: "heatHigh", cssVar: "--heat-high", label: "Heatmaps: highest", group: "Marks" },
+  { key: "interval", cssVar: "--interval", label: "Intervals", group: "Marks" },
   { key: "output", cssVar: "--output", label: "Printed output (card)", group: "Marks" },
   { key: "outputInk", cssVar: "--output-ink", label: "Printed output (text)", group: "Marks" },
   { key: "visited", cssVar: "--visited", label: "Visited nodes", group: "Graphs" },
@@ -195,6 +244,18 @@ const GRAPH_PAPER: Appearance = {
     arrowNext: "#0f7f8c",
     arrowBack: "#7a879b",
     arrowCycle: "#d9822b",
+    arrowFar: "#c2362f",
+    palette0: "#2f6fb0",
+    palette1: "#d9822b",
+    palette2: "#2e7a57",
+    palette3: "#c2362f",
+    palette4: "#7a4fb5",
+    palette5: "#0f8c9c",
+    palette6: "#b5568a",
+    palette7: "#8a6d12",
+    heatLow: "#fbf6e6",
+    heatHigh: "#e0662b",
+    interval: "#2a8fbd",
     output: "#232a3d",
     outputInk: "#f2f5fb",
     visited: "#cde7d8",
@@ -214,6 +275,8 @@ const GRAPH_PAPER: Appearance = {
   output: { ...DEFAULT_OUTPUT_MOTION },
   arrowMode: "kind",
   arrowDashes: false,
+  arrowLegend: true,
+  arrowLabels: false,
 };
 
 /** Starting points. Everything can be changed afterwards. */
@@ -273,6 +336,18 @@ export const PRESETS: Appearance[] = [
       arrowNext: "#8ff0f7",
       arrowBack: "#9fbde3",
       arrowCycle: "#ffb347",
+      arrowFar: "#ffb177",
+      palette0: "#ffffff",
+      palette1: "#ffd54f",
+      palette2: "#9ff0c4",
+      palette3: "#ff9ec4",
+      palette4: "#d7b5ff",
+      palette5: "#8ff0f7",
+      palette6: "#ffb177",
+      palette7: "#c9e27a",
+      heatLow: "#24599c",
+      heatHigh: "#ffb347",
+      interval: "#8fd3ff",
       output: "#062a4d",
       outputInk: "#ffffff",
       visited: "#2f7a5a",
@@ -317,6 +392,18 @@ export const PRESETS: Appearance[] = [
       arrowNext: "#5fd7df",
       arrowBack: "#8a95ad",
       arrowCycle: "#f0a050",
+      arrowFar: "#ff7a70",
+      palette0: "#7fb0ff",
+      palette1: "#f0a050",
+      palette2: "#6fd39e",
+      palette3: "#ff7a70",
+      palette4: "#b48cf0",
+      palette5: "#5fd7df",
+      palette6: "#f07ab0",
+      palette7: "#e3c341",
+      heatLow: "#232b40",
+      heatHigh: "#f0954a",
+      interval: "#5cb8e6",
       output: "#05070c",
       outputInk: "#e8edf7",
       visited: "#24543d",
@@ -360,6 +447,18 @@ export const PRESETS: Appearance[] = [
       arrowNext: "#005f69",
       arrowBack: "#555555",
       arrowCycle: "#c45a00",
+      arrowFar: "#d00000",
+      palette0: "#0038d6",
+      palette1: "#c45a00",
+      palette2: "#00703a",
+      palette3: "#d00000",
+      palette4: "#5b1fa8",
+      palette5: "#005f69",
+      palette6: "#b0004f",
+      palette7: "#6b5400",
+      heatLow: "#ffffff",
+      heatHigh: "#c24c00",
+      interval: "#005f9e",
       output: "#000000",
       outputInk: "#ffffff",
       visited: "#a8e6bf",
@@ -438,8 +537,10 @@ export function parseAppearance(json: string | null): Appearance {
     flash: typeof raw.flash === "boolean" ? raw.flash : base.flash,
     xray: typeof raw.xray === "boolean" ? raw.xray : base.xray,
     output: readOutputMotion(raw.output, base.output),
-    arrowMode: raw.arrowMode === "one" || raw.arrowMode === "kind" ? raw.arrowMode : base.arrowMode,
+    arrowMode: ARROW_MODES.includes(raw.arrowMode as ArrowMode) ? (raw.arrowMode as ArrowMode) : base.arrowMode,
     arrowDashes: typeof raw.arrowDashes === "boolean" ? raw.arrowDashes : base.arrowDashes,
+    arrowLegend: typeof raw.arrowLegend === "boolean" ? raw.arrowLegend : base.arrowLegend,
+    arrowLabels: typeof raw.arrowLabels === "boolean" ? raw.arrowLabels : base.arrowLabels,
   };
 }
 
@@ -492,7 +593,7 @@ export function applyAppearance(
       canvas.style.setProperty(COLOR_FIELDS.find((f) => f.key === key)!.cssVar, a.colors.arrowRef);
   const dashes = { tree: "none", next: "none", back: "none", cycle: "none" };
   if (a.arrowDashes) Object.assign(dashes, { next: "8 3", back: "5 3", cycle: "2 3" });
-  else if (a.arrowMode === "kind") dashes.back = "5 3";
+  else if (a.arrowMode !== "one") dashes.back = "5 3";
   for (const [kind, dash] of Object.entries(dashes)) canvas.style.setProperty(`--dash-${kind}`, dash);
   // The output card's entrance: what it starts from, and for how long.
   const o = a.output;

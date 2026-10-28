@@ -4,7 +4,7 @@
 
 PR0L1NE chooses what to draw automatically, but sometimes its guesses aren't what you want: a helper variable clutters the loop history, `cur` isn't recognized as a position in a list, a tree with parent pointers comes out as a list, or a list of lists is really a graph. A **hint** is a comment that tells it what you meant.
 
-The quickest way to learn them is the **Hints, step by step** group in the Open… menu: [fifteen examples](#learning-hints-with-the-examples), from one hint to all of them together.
+The quickest way to learn them is the **Hints, step by step** group in the Open… menu: [seventeen examples](#learning-hints-with-the-examples), from one hint to all of them together.
 
 ```python
 # viz: hide temp
@@ -41,6 +41,9 @@ A hint is a comment whose text starts with `viz:`:
 | `viz: window nums: [left, right]` | Draws the part of a list from `left` to `right` as a band over its cells: a **sliding window**. Both ends are in the window. Write `)` to leave the end out, `[i, i + k)`, or `(` to leave the start out. An end can add and take away names and whole numbers (`[r - k + 1, r]`). A **string** with a window is drawn as a row of its characters, so `viz: window s: [left, right]` works for substrings. Ends that are just a name are drawn as pointers too; a name only added to an end (`k` in `[i, i + k)`) is a length, so it isn't. |
 | `viz: region nums: [0, i) "sorted"` | Marks part of a list with a band in its own color, and the label (optional) above it. A list can have several regions, like insertion sort's sorted and unsorted parts or quicksort's partitions, each in the next of four colors. The ends work as in `window`. A label too long for its region is shortened, with all of it in the tooltip. |
 | `viz: compare nums: j - 1, j` | Outlines the two cells being compared, on every step, and flashes them when they move. Each can add and take away names and numbers, like a window's ends. |
+| `viz: heatmap dp` | Colors each cell of a list of numbers, or a grid of them, by its number: from the smallest it holds anywhere in the run to the largest, so a color means the same on every step. On a grid, the cell the line works on is outlined, and each other cell that line reads is outlined in orange with an arrow to it, so `dp[i][j] = dp[i - 1][j] + dp[i][j - 1]` shows where dp[i][j] comes from. A heatmap's grid is always drawn as a grid, in either mode, and the loop history colors it too. |
+| `viz: table people` | Draws a list of dicts or objects (or a dict of them) as one table: a row for each item, a column for each key, in the order they're first seen (at most twelve). A key an item doesn't have is an empty cell. Each row keeps its item from step to step, so sorting the list slides its rows. |
+| `viz: intervals meetings` | Draws a list of pairs (`[9, 11]`) as bars along a number line, a row each, so you can see which overlap and where the gaps are. The axis runs from the smallest start to the largest end the list ever holds, so a bar's place means the same on every step. Objects and dicts work too: their `start` and `end`, `lo` and `hi`, `begin` and `end`, `left` and `right` or `from` and `to`, or else their first two numbers. `viz: intervals slots: begin, finish` names the two fields. |
 | `viz: chars word` | Draws a string as a row of its characters, with index numbers and pointers, like a list. (A string with a `window`, `region` or `compare` is drawn this way already.) |
 | `viz: bits mask 8` | Draws a whole number as its binary digits, bit 0 on the right, so you can see which bits are set. The number is how many digits; without it, as many as the number ever needs during the run, so the row doesn't change width. Negative numbers stay numbers. |
 | `viz: format price .2f` | Shows numbers in a format: `hex`, `bin`, `oct`, `,` (thousands: 1,234,567), `.2f` (2 decimals), `.3e` (exponent), `.1%` (percent), or `,` with decimals (`,.2f`). It applies to the variable, and to the numbers in a list or dict it holds. `viz: hex flags, mask` is the same as `format ... hex`. |
@@ -101,13 +104,13 @@ The editor helps with hints as you type them:
 
 ## When a hint is wrong
 
-A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, window, region, compare, chars, bits, format, hex, label, rows, focus, watch, check, tree, list, graph, plain, size.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
+A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, window, region, compare, heatmap, table, intervals, chars, bits, format, hex, label, rows, focus, watch, check, tree, list, graph, plain, size.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
 
 A hint that's well-formed but names something that doesn't exist (`hide nmus`) does nothing, since it may refer to a variable that only exists in some runs.
 
 ## Learning hints with the examples
 
-The **Hints, step by step** group has the same fifteen examples in every language. Each has its hints and a comment explaining what they change. Deleting a hint line and watching the canvas change is a good way to see what it does.
+The **Hints, step by step** group has the same seventeen examples in every language. Each has its hints and a comment explaining what they change. Deleting a hint line and watching the canvas change is a good way to see what it does.
 
 | Example | Hints | What it shows |
 | --- | --- | --- |
@@ -126,5 +129,7 @@ The **Hints, step by step** group has the same fifteen examples in every languag
 | 13 · region, compare, rows | `region nums: [0, i) "sorted"`, `region nums: [i, 6) "to do"`, `compare nums: j - 1, j`, `rows by i` | Insertion sort: the sorted part growing, the two cells being compared, and rows labeled by `i` |
 | 14 · watch, check, focus | `focus`, `watch total - seen`, `check total == sum(nums[0:i])` | Running totals, with an invariant to break and watch fail |
 | 15 · chars, bits, format, label | `chars word`, `bits mask 5`, `format share .1%`, `label Node by val` | A palindrome check with its letters, a bitmask, a percentage and named nodes |
+| 16 · heatmap | `heatmap dp` | Counting paths through a grid: each cell colored by its count, with arrows from the two cells it adds up |
+| 17 · table, intervals | `table people`, `intervals meetings, merged` | A list of records sorted by age, and meetings merged where they overlap |
 
 ![Kruskal's algorithm: the union-find forest's links dashed in green, the spanning tree's edges in purple](graph-kruskal.png)

@@ -80,6 +80,8 @@ A line runs from each row of the first table to each row it pairs with in the se
 | `FULL JOIN` | Both tables' are kept with NULLs. |
 | `CROSS JOIN` | There are none: every row pairs with every row (8 × 14 = 112 rows), so no lines are drawn. |
 
+The lines take a color for each key: rows that pair with each other share one, so a customer's orders all join in the customer's color. An outer join's lines (LEFT, RIGHT, FULL) are dashed, and a row it keeps with nothing to pair with gets a gray dashed line to `NULL`.
+
 A comma between tables in FROM (`FROM customers c, orders o`) is a CROSS JOIN, usually followed by a WHERE that keeps the pairs that belong together. `ON`, `USING (...)` and `NATURAL` are all stepped through. With three or more tables, the joins happen one at a time, left to right, as Postgres reads them.
 
 In a self join (a table joined to itself, like employees and their managers), the two copies have different names (`e` and `m`), and their rows are kept apart by those names.
@@ -89,12 +91,16 @@ In a self join (a table joined to itself, like employees and their managers), th
 A query with GROUP BY, or with an aggregate like `count(*)` or `sum(price)`, takes three steps after WHERE:
 
 1. **GROUP BY.** The rows slide together into their groups. Each group has its own color down the left edge, a line above it, and a label beside it saying what its rows share: "G2 · category = Coffee · 3 rows". What GROUP BY groups on is worked out for each row in a column of its own. Rows with NULL there make one group together.
-2. **The aggregates.** Each group becomes one row (`G1`, `G2`...). Each aggregate gets a column, and beside it a column with the values it was given, so `sum(stock)` shows `40, 0, 18, 22` next to its 80. `count(*)` lists the group's rows (`#1, #2, #7`). `count(gpa)` and `avg(gpa)` show the NULLs they leave out.
+2. **The aggregates.** Each group becomes one row (`G1`, `G2`...). The groups' rows are drawn beside the rows they become, with a line from each row to its group's row in the group's color: the fold. The color stays with the group's row through HAVING, SELECT, ORDER BY and LIMIT. Each aggregate gets a column, and beside it a column with the values it was given, so `sum(stock)` shows `40, 0, 18, 22` next to its 80. `count(*)` lists the group's rows (`#1, #2, #7`). `count(gpa)` and `avg(gpa)` show the NULLs they leave out.
 3. **HAVING**, if there is one. It's WHERE for groups: the condition is worked out for each group, and the groups where it isn't true are struck through. It runs after the aggregates, so it can use them, which WHERE can't.
 
 An aggregate with no GROUP BY (`SELECT count(*) FROM products`) makes every row one group, and the group one row. SELECT, ORDER BY and LIMIT then work on the groups' rows. Each group's row starts from the group's first row, so it slides there from the GROUP BY step.
 
 GROUP BY can name a column, an expression, or a name or number from SELECT (`GROUP BY 1`, `GROUP BY shelf`), as in Postgres.
+
+### Where rows come from
+
+Each of the database's tables has a color, the same for the whole run (the palette, in Style → Arrows): a stripe on its title, and a line under each column it gives a join. A row made from tables (a join's, a group's, UNION's, the result's) has a dot beside its label for each table it came from, hollow when an outer join found no row there. The dots follow rows back through joins, groups, UNION, WITH and subqueries in FROM to the tables they started in: a row of a WITH query's table has the dots of the tables that query read.
 
 ### Subqueries, WITH and UNION
 
@@ -117,6 +123,7 @@ A window function (`sum(salary) OVER (...)`, `rank() OVER (...)`, `lag(x) OVER (
 - **Partitions.** The rows are shown in their partitions (`PARTITION BY department_id`), each with a color and a label beside it: "P1 · department_id = 1 · 4 rows". Within a partition, rows are in the window's ORDER BY.
 - **The value.** Each window function gets a column, worked out for each row.
 - **The frame.** An aggregate (`sum`, `avg`, `count`...) and `first_value`, `last_value` and `nth_value` work from a row's *frame*: some of its partition's rows. A **frame** column lists them for every row (`#1, #2, #3`), and a column beside it lists the values the function was given. With ORDER BY in the window, a row's frame is its partition's rows up to it, so `sum` makes a running total. Without ORDER BY, the frame is the whole partition. `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` sets a frame by hand. A note under the clause says which applies.
+- **Frames as brackets.** Beside the table, each row's frame is a bracket in its partition's color, from the frame's first row to its last, with a dot at the row it's for. A running total's brackets make a staircase; a whole partition's are all the same height.
 - `row_number`, `rank` and `dense_rank` count along the partition, and `lag` and `lead` read the row before or after: they don't use a frame.
 
 ### WITH RECURSIVE

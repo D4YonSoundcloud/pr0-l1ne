@@ -52,6 +52,9 @@ export const KEYWORDS = [
   "window",
   "region",
   "compare",
+  "heatmap",
+  "table",
+  "intervals",
   "chars",
   "bits",
   "format",
@@ -162,6 +165,40 @@ export function parseHints(raw: RawHint[]): VizHints {
       hints.compares = [
         ...(hints.compares ?? []),
         { container: m[1], a, b, text: `${m[2].trim()}, ${m[3].trim()}`, line },
+      ];
+      continue;
+    }
+
+    if (keyword === "heatmap" || keyword === "table") {
+      const list = names(rest);
+      if (!list.length || list.some((n) => !NAME.test(n))) {
+        warn(
+          line,
+          keyword === "heatmap"
+            ? `"heatmap" needs list or grid variables, like: viz: heatmap dp`
+            : `"table" needs variables holding lists of dicts or objects, like: viz: table people`,
+        );
+        continue;
+      }
+      if (keyword === "table") hints.tables = [...new Set([...(hints.tables ?? []), ...list])];
+      else hints.heatmaps = [...(hints.heatmaps ?? []), ...list.map((name) => ({ name, line }))];
+      continue;
+    }
+
+    if (keyword === "intervals") {
+      // intervals meetings  or  intervals meetings: start, end
+      const m =
+        /^([A-Za-z_$][\w$]*(?:\s*,\s*[A-Za-z_$][\w$]*)*)\s*(?::\s*([A-Za-z_$][\w$]*)\s*,\s*([A-Za-z_$][\w$]*))?$/.exec(
+          rest,
+        );
+      if (!m) {
+        warn(line, `"intervals" looks like: viz: intervals meetings  or  viz: intervals meetings: start, end`);
+        continue;
+      }
+      const fields: [string, string] | undefined = m[2] ? [m[2], m[3]] : undefined;
+      hints.intervals = [
+        ...(hints.intervals ?? []),
+        ...names(m[1]).map((name) => ({ name, line, ...(fields ? { fields } : {}) })),
       ];
       continue;
     }
@@ -632,6 +669,107 @@ function widestBits(steps: Step[], names: Set<string>): Map<string, number> {
   return widths;
 }
 
+/** A number's value from its repr; null for anything else (and for NaN). */
+export function numberOf(value: Value | undefined): number | null {
+  if (value?.kind !== "prim") return null;
+  if (value.type === "bool" || value.type === "boolean") return value.repr === "True" || value.repr === "true" ? 1 : 0;
+  if (!NUMERIC.has(value.type)) return null;
+  const repr = value.repr.replace(/n$/, "");
+  if (/^-?inf(inity)?$/i.test(repr)) return repr.startsWith("-") ? -Infinity : Infinity;
+  const n = Number(repr);
+  return Number.isNaN(n) ? null : n;
+}
+
+/** The numbers a heatmap's list holds: its items, or a grid's rows' items. */
+function heatNumbers(value: Value, heap: Record<string, HeapObject>): number[] {
+  if (value.kind !== "ref") return [];
+  const obj = heap[value.id];
+  if (!obj || (obj.kind !== "list" && obj.kind !== "tuple")) return [];
+  const out: number[] = [];
+  for (const item of obj.items) {
+    const n = numberOf(item);
+    if (n !== null) out.push(n);
+    else if (item.kind === "ref") {
+      const row = heap[item.id];
+      if (row && (row.kind === "list" || row.kind === "tuple"))
+        for (const cell of row.items) {
+          const m = numberOf(cell);
+          if (m !== null) out.push(m);
+        }
+    }
+  }
+  return out.filter(Number.isFinite);
+}
+
+/** Names of an interval's ends, tried in order when the hint doesn't name them. */
+const INTERVAL_FIELDS: [string, string][] = [
+  ["start", "end"],
+  ["lo", "hi"],
+  ["low", "high"],
+  ["begin", "end"],
+  ["left", "right"],
+  ["from", "to"],
+  ["s", "e"],
+  ["a", "b"],
+];
+
+/**
+ * An interval's start and end: a list or tuple of two numbers, or an
+ * object or dict with a start and an end (named by the hint, or start/end,
+ * lo/hi..., or else its first two numbers). Null if it isn't one.
+ */
+export function intervalOf(
+  value: Value,
+  heap: Record<string, HeapObject>,
+  fields?: [string, string],
+): [number, number] | null {
+  if (value.kind !== "ref") return null;
+  const obj = heap[value.id];
+  if (!obj) return null;
+  let pairs: [string, Value][];
+  if (obj.kind === "list" || obj.kind === "tuple") pairs = obj.items.map((v, i) => [String(i), v]);
+  else if (obj.kind === "object") pairs = obj.fields;
+  else if (obj.kind === "dict")
+    pairs = obj.entries.map(([k, v]) => [k.kind === "prim" ? k.repr.replace(/^["'`](.*)["'`]$/, "$1") : "", v]);
+  else return null;
+  const get = (name: string) => numberOf(pairs.find(([k]) => k === name)?.[1]);
+  for (const [a, b] of fields ? [fields] : INTERVAL_FIELDS) {
+    const [start, end] = [get(a), get(b)];
+    if (start !== null && end !== null) return [start, end];
+  }
+  if (fields) return null;
+  const nums = pairs.map(([, v]) => numberOf(v)).filter((n): n is number => n !== null);
+  return nums.length >= 2 ? [nums[0], nums[1]] : null;
+}
+
+function intervalNumbers(value: Value, heap: Record<string, HeapObject>, fields?: [string, string]): number[] {
+  if (value.kind !== "ref") return [];
+  const obj = heap[value.id];
+  if (!obj || (obj.kind !== "list" && obj.kind !== "tuple" && obj.kind !== "dict")) return [];
+  const items = obj.kind === "dict" ? obj.entries.map(([, v]) => v) : obj.items;
+  return items.flatMap((item) => intervalOf(item, heap, fields) ?? []).filter(Number.isFinite);
+}
+
+/** The smallest and largest number a variable holds anywhere in the run (none if it never holds one). */
+function numberRange(
+  steps: Step[],
+  name: string,
+  numbers: (value: Value, heap: Record<string, HeapObject>) => number[],
+): { min?: number; max?: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const step of steps)
+    for (const frame of [...step.stack, ...(step.suspended ?? [])])
+      for (const [n, value] of frame.locals) {
+        if (n !== name) continue;
+        for (const x of numbers(value, step.heap)) {
+          if (x < min) min = x;
+          if (x > max) max = x;
+        }
+      }
+  return min <= max ? { min, max } : {};
+}
+
 /** One character as Python writes it: 'a', '\\'', '\\n'. */
 function pyRepr(c: string): string {
   if (c === "'") return `"'"`;
@@ -680,6 +818,21 @@ export function applyHints(trace: Trace): Trace {
   for (const hint of viz.bits ?? []) for (const name of hint.names) bits.set(name, hint.width ?? widest.get(name) ?? 1);
   const formats = new Map<string, string>();
   for (const hint of viz.formats ?? []) for (const name of hint.names) formats.set(name, hint.spec);
+  // Heatmaps and intervals: the numbers they hold over the whole run, before any format changes them.
+  if (viz.heatmaps?.length)
+    viz.heatmaps = viz.heatmaps.map((h) => ({ ...h, ...numberRange(filtered, h.name, heatNumbers) }));
+  if (viz.intervals?.length)
+    viz.intervals = viz.intervals.map((h) => ({
+      ...h,
+      ...numberRange(filtered, h.name, (value, heap) => intervalNumbers(value, heap, h.fields)),
+    }));
+  // A table, heatmap or intervals is drawn its own way, never as a graph.
+  const drawnOwnWay = [
+    ...(viz.tables ?? []),
+    ...(viz.heatmaps ?? []).map((h) => h.name),
+    ...(viz.intervals ?? []).map((h) => h.name),
+  ];
+  if (drawnOwnWay.length) viz.plain = [...new Set([...viz.plain, ...drawnOwnWay])];
   const steps = transformValues(filtered, { chars, bits, formats });
 
   const indexNames = { ...trace.indexNames };

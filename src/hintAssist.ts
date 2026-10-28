@@ -132,6 +132,24 @@ export const HINT_DOCS: Record<(typeof KEYWORDS)[number], HintDoc> = {
       "Outlines the two cells of a list being compared, and flashes them when they change. Each index can add and take away names and whole numbers.",
     example: "viz: compare nums: j, j + 1",
   },
+  heatmap: {
+    syntax: "viz: heatmap dp",
+    summary:
+      "Colors each cell of a list or grid by its number, from the smallest it holds in the whole run to the largest, so the colors mean the same on every step. On a grid, the cell the line works on is outlined, and each cell it reads gets an arrow to it: `dp[i][j] = dp[i - 1][j] + dp[i][j - 1]` shows where dp[i][j] comes from.",
+    example: "viz: heatmap dp",
+  },
+  table: {
+    syntax: "viz: table people",
+    summary:
+      "Draws a list of dicts or objects (or a dict of them) as one table: a row for each item, a column for each key. Sorting the list slides its rows.",
+    example: "viz: table rows",
+  },
+  intervals: {
+    syntax: "viz: intervals meetings",
+    summary:
+      "Draws a list of pairs, like `[start, end]`, as bars along a number line, one row each, so overlaps and gaps show. Objects and dicts work too: their start and end (or lo and hi...), or the two fields you name after a colon.",
+    example: "viz: intervals meetings: start, end",
+  },
   chars: {
     syntax: "viz: chars s",
     summary: "Draws a string as a row of its characters, with index numbers and pointers, like a list.",
@@ -332,6 +350,17 @@ export function completionsAt(
       return done(vars(["int"], whole));
     case "chars":
       return done(vars(["str"], describe));
+    case "heatmap":
+      return done(vars(["grid", "list"], describe));
+    case "table":
+      return done(vars(["list", "dict"], describe));
+    case "intervals": {
+      const colon = rest.indexOf(":");
+      if (colon < 0) return done(vars(["list", "grid"], describe));
+      // After the colon: the fields of the program's classes.
+      const fields = [...new Set([...ctx.classes.values()].flatMap((c) => c.fields))];
+      return done(fields.map((f) => ({ label: f, insert: f, kind: "field" as const })));
+    }
     case "watch":
     case "check":
       return done(vars(["int", "number", "str", "list", "grid", "dict", "set", "other"], describe));
@@ -673,6 +702,7 @@ export function nameProblems(line: string, language: HintLanguage, ctx: HintCont
   if (keyword === "rows") names = names.replace(/^by\b/, blank);
   if (keyword === "format") names = names.replace(/\s+\S+$/, blank);
   if (keyword === "bits") names = names.replace(/\b\d+\s*$/, blank);
+  if (keyword === "intervals") names = names.replace(/:.*$/, blank); // after the colon: fields
   const notNames = new Set([
     "len",
     "sum",

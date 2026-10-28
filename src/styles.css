@@ -44,6 +44,19 @@
   --dash-next: none;
   --dash-back: 5 3;
   --dash-cycle: none;
+  /* Arrows that follow the program (scene/arrowColors.ts), and SQL's tables: a palette taken in turn. */
+  --arrow-far: #c2362f;
+  --palette-0: #2f6fb0;
+  --palette-1: #d9822b;
+  --palette-2: #2e7a57;
+  --palette-3: #c2362f;
+  --palette-4: #7a4fb5;
+  --palette-5: #0f8c9c;
+  --palette-6: #b5568a;
+  --palette-7: #8a6d12;
+  --heat-low: #fbf6e6;
+  --heat-high: #e0662b;
+  --interval: #2a8fbd;
   --output: #232a3d;
   --output-ink: #f2f5fb;
   --tree: #2e7a57;
@@ -1410,6 +1423,309 @@ select {
 .ref-arrow.is-changed,
 .ref-arrow-part.is-changed {
   stroke-width: calc(2.25px * var(--arrow-width));
+}
+/* Colors that follow the program (Style → Arrows; scene/arrowColors.ts):
+   by variable and aliases take the palette, by distance runs from the
+   References color to the far one, and faded arrows step back. */
+.ref-arrow.group-0,
+.ref-arrow-part.group-0 {
+  stroke: var(--palette-0);
+}
+.arrowhead-group-0,
+.legend-swatch.group-0 {
+  fill: var(--palette-0);
+  stroke: var(--palette-0);
+}
+.ref-arrow.group-1,
+.ref-arrow-part.group-1 {
+  stroke: var(--palette-1);
+}
+.arrowhead-group-1,
+.legend-swatch.group-1 {
+  fill: var(--palette-1);
+  stroke: var(--palette-1);
+}
+.ref-arrow.group-2,
+.ref-arrow-part.group-2 {
+  stroke: var(--palette-2);
+}
+.arrowhead-group-2,
+.legend-swatch.group-2 {
+  fill: var(--palette-2);
+  stroke: var(--palette-2);
+}
+.ref-arrow.group-3,
+.ref-arrow-part.group-3 {
+  stroke: var(--palette-3);
+}
+.arrowhead-group-3,
+.legend-swatch.group-3 {
+  fill: var(--palette-3);
+  stroke: var(--palette-3);
+}
+.ref-arrow.group-4,
+.ref-arrow-part.group-4 {
+  stroke: var(--palette-4);
+}
+.arrowhead-group-4,
+.legend-swatch.group-4 {
+  fill: var(--palette-4);
+  stroke: var(--palette-4);
+}
+.ref-arrow.group-5,
+.ref-arrow-part.group-5 {
+  stroke: var(--palette-5);
+}
+.arrowhead-group-5,
+.legend-swatch.group-5 {
+  fill: var(--palette-5);
+  stroke: var(--palette-5);
+}
+.ref-arrow.group-6,
+.ref-arrow-part.group-6 {
+  stroke: var(--palette-6);
+}
+.arrowhead-group-6,
+.legend-swatch.group-6 {
+  fill: var(--palette-6);
+  stroke: var(--palette-6);
+}
+.ref-arrow.group-7,
+.ref-arrow-part.group-7 {
+  stroke: var(--palette-7);
+}
+.arrowhead-group-7,
+.legend-swatch.group-7 {
+  fill: var(--palette-7);
+  stroke: var(--palette-7);
+}
+.ref-arrow.dist-0,
+.ref-arrow-part.dist-0 {
+  stroke: color-mix(in srgb, var(--arrow-far) 0%, var(--arrow-ref));
+}
+.arrowhead-dist-0,
+.legend-swatch.dist-0 {
+  fill: color-mix(in srgb, var(--arrow-far) 0%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 0%, var(--arrow-ref));
+}
+.ref-arrow.dist-1,
+.ref-arrow-part.dist-1 {
+  stroke: color-mix(in srgb, var(--arrow-far) 20%, var(--arrow-ref));
+}
+.arrowhead-dist-1,
+.legend-swatch.dist-1 {
+  fill: color-mix(in srgb, var(--arrow-far) 20%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 20%, var(--arrow-ref));
+}
+.ref-arrow.dist-2,
+.ref-arrow-part.dist-2 {
+  stroke: color-mix(in srgb, var(--arrow-far) 40%, var(--arrow-ref));
+}
+.arrowhead-dist-2,
+.legend-swatch.dist-2 {
+  fill: color-mix(in srgb, var(--arrow-far) 40%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 40%, var(--arrow-ref));
+}
+.ref-arrow.dist-3,
+.ref-arrow-part.dist-3 {
+  stroke: color-mix(in srgb, var(--arrow-far) 60%, var(--arrow-ref));
+}
+.arrowhead-dist-3,
+.legend-swatch.dist-3 {
+  fill: color-mix(in srgb, var(--arrow-far) 60%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 60%, var(--arrow-ref));
+}
+.ref-arrow.dist-4,
+.ref-arrow-part.dist-4 {
+  stroke: color-mix(in srgb, var(--arrow-far) 80%, var(--arrow-ref));
+}
+.arrowhead-dist-4,
+.legend-swatch.dist-4 {
+  fill: color-mix(in srgb, var(--arrow-far) 80%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 80%, var(--arrow-ref));
+}
+.ref-arrow.dist-5,
+.ref-arrow-part.dist-5 {
+  stroke: color-mix(in srgb, var(--arrow-far) 100%, var(--arrow-ref));
+}
+.arrowhead-dist-5,
+.legend-swatch.dist-5 {
+  fill: color-mix(in srgb, var(--arrow-far) 100%, var(--arrow-ref));
+  stroke: color-mix(in srgb, var(--arrow-far) 100%, var(--arrow-ref));
+}
+.ref-arrow.is-faded,
+.ref-arrow-part.is-faded {
+  opacity: 0.22;
+}
+.ref-arrow-part.arrow-xray.is-faded {
+  opacity: 0;
+}
+.ref-arrow.is-bright,
+.ref-arrow-part.is-bright {
+  stroke-width: calc(2.5px * var(--arrow-width));
+}
+.ref-arrow.is-plain,
+.ref-arrow-part.is-plain {
+  stroke: var(--ink-faint);
+}
+.arrowhead-plain,
+.legend-swatch.is-plain {
+  fill: var(--ink-faint);
+  stroke: var(--ink-faint);
+}
+/* An arrow's field name, where it leaves its box (Style → Arrows → Field names). */
+.arrow-label {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-style: italic;
+  fill: var(--paper-ink-soft);
+  stroke: var(--paper);
+  stroke-width: 3px;
+  paint-order: stroke;
+  pointer-events: none;
+}
+/* What the colors mean: a small card under the call stack. */
+.arrow-legend .legend-card {
+  fill: var(--cell);
+  stroke: var(--ink-faint);
+  stroke-width: 1px;
+}
+.arrow-legend .legend-title {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--ink-soft);
+}
+.arrow-legend .legend-text {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  fill: var(--ink);
+}
+.arrow-legend .legend-swatch {
+  stroke-width: 1.5px;
+  fill: none;
+}
+.arrow-legend .legend-swatch.is-bright {
+  stroke-width: 2.5px;
+}
+.arrow-legend .legend-swatch.is-faded {
+  opacity: 0.3;
+}
+.arrow-legend .legend-head {
+  stroke: none;
+}
+.arrow-legend .legend-swatch.kind-ref {
+  stroke: var(--arrow-ref);
+}
+.arrow-legend .legend-swatch.kind-tree {
+  stroke: var(--arrow-tree);
+}
+.arrow-legend .legend-swatch.kind-next {
+  stroke: var(--arrow-next);
+}
+.arrow-legend .legend-swatch.kind-back {
+  stroke: var(--arrow-back);
+  stroke-dasharray: var(--dash-back);
+}
+.arrow-legend .legend-swatch.kind-cycle {
+  stroke: var(--arrow-cycle);
+}
+
+/* viz: heatmap: cells colored from the run's smallest number to its largest. */
+.cell.heat-0 rect {
+  fill: color-mix(in srgb, var(--heat-high) 0%, var(--heat-low));
+}
+.cell.heat-1 rect {
+  fill: color-mix(in srgb, var(--heat-high) 12%, var(--heat-low));
+}
+.cell.heat-2 rect {
+  fill: color-mix(in srgb, var(--heat-high) 25%, var(--heat-low));
+}
+.cell.heat-3 rect {
+  fill: color-mix(in srgb, var(--heat-high) 38%, var(--heat-low));
+}
+.cell.heat-4 rect {
+  fill: color-mix(in srgb, var(--heat-high) 50%, var(--heat-low));
+}
+.cell.heat-5 rect {
+  fill: color-mix(in srgb, var(--heat-high) 62%, var(--heat-low));
+}
+.cell.heat-6 rect {
+  fill: color-mix(in srgb, var(--heat-high) 75%, var(--heat-low));
+}
+.cell.heat-7 rect {
+  fill: color-mix(in srgb, var(--heat-high) 88%, var(--heat-low));
+}
+.cell.heat-8 rect {
+  fill: color-mix(in srgb, var(--heat-high) 100%, var(--heat-low));
+}
+.cell.heat.is-changed rect {
+  stroke-width: calc(var(--border-width) * 2.4);
+}
+.grid-read {
+  fill: none;
+  stroke: var(--compare);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+}
+.grid-read-arrow {
+  fill: none;
+  stroke: var(--compare);
+  stroke-width: 1.5;
+}
+.arrowhead-read {
+  fill: var(--compare);
+}
+
+/* viz: table: one table for a list of records. */
+.records-head-bg {
+  fill: var(--header);
+  stroke: none;
+}
+.records-head {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 700;
+  fill: var(--ink-soft);
+}
+.records-row.is-new .cell rect {
+  stroke-width: calc(var(--border-width) * 2);
+}
+
+/* viz: intervals: bars along a number line. */
+.interval-axis line {
+  stroke: var(--paper-ink-faint);
+  stroke-width: 1;
+}
+.interval-axis .interval-grid {
+  stroke: var(--paper-ink-faint);
+  stroke-opacity: 0.35;
+  stroke-dasharray: 2 3;
+}
+.interval-bar {
+  fill: color-mix(in srgb, var(--interval) 55%, var(--cell));
+  stroke: var(--interval);
+  stroke-width: var(--border-width);
+}
+.interval-bar.is-reversed {
+  stroke-dasharray: 3 2;
+}
+.interval-row.is-changed .interval-bar {
+  fill: var(--highlight);
+  stroke: var(--ink);
+  animation: var(--flash);
+}
+.interval-row.is-pointed .interval-bar {
+  stroke-width: calc(var(--border-width) * 2.2);
+}
+.interval-text {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  fill: var(--paper-ink-soft);
+}
+.box .interval-text,
+.box .interval-axis text {
+  fill: var(--ink-soft);
 }
 /* Arrows run behind boxes (memoryView/layout.ts). X-ray (Style panel): a
    faint dashed copy over the boxes shows where one passes behind a box. */
@@ -3577,9 +3893,84 @@ select {
 }
 .sql-link {
   fill: none;
-  stroke: var(--ballpoint);
+  stroke: var(--group-color, var(--ballpoint));
+  stroke-width: 1.5;
+  opacity: 0.8;
+}
+/* An outer join's lines are dashed; a row it keeps with nothing to pair with gets a gray dashed line to NULL. */
+.sql-link.is-outer {
+  stroke-dasharray: 6 3;
+}
+.sql-unmatched path {
+  fill: none;
+  stroke: var(--paper-ink-faint);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.sql-unmatched text {
+  font-family: var(--diagram-font);
+  font-size: 10.5px;
+  fill: var(--paper-ink-faint);
+}
+/* An aggregate: a line from each row of a group to the row the group becomes. */
+.sql-fold {
+  fill: none;
+  stroke: var(--group-color, var(--ballpoint));
+  stroke-width: 1.5;
+  opacity: 0.75;
+}
+/* A window's frames: a bracket for each row, in its partition's color. */
+.sql-frame path {
+  fill: none;
+  stroke: var(--group-color, var(--ink-soft));
+  stroke-width: 1.5;
+}
+.sql-frame circle {
+  fill: var(--group-color, var(--ink-soft));
+}
+/* Each of the database's tables has a color (the palette, Style → Arrows):
+   on its title, under the columns it gives a join, and as a dot on each row
+   made from it. */
+.sql-svg .palette-0 {
+  --source: var(--palette-0);
+}
+.sql-svg .palette-1 {
+  --source: var(--palette-1);
+}
+.sql-svg .palette-2 {
+  --source: var(--palette-2);
+}
+.sql-svg .palette-3 {
+  --source: var(--palette-3);
+}
+.sql-svg .palette-4 {
+  --source: var(--palette-4);
+}
+.sql-svg .palette-5 {
+  --source: var(--palette-5);
+}
+.sql-svg .palette-6 {
+  --source: var(--palette-6);
+}
+.sql-svg .palette-7 {
+  --source: var(--palette-7);
+}
+.sql-table-mark {
+  fill: var(--source);
+}
+.sql-col-source {
+  stroke: var(--source);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.sql-source {
+  fill: var(--source);
+  stroke: var(--source);
   stroke-width: 1.25;
-  opacity: 0.7;
+}
+.sql-source.is-missing {
+  fill: none;
+  stroke-dasharray: 2 1.5;
 }
 
 /* GROUP BY: each group's color, down its rows' left edge and on its label (render/sqlView.ts). */

@@ -4,6 +4,7 @@
  * how each window animates a step, which comes from the same settings.
  */
 import { type Appearance, applyAppearance, parseAppearance } from "../appearance";
+import { setArrowStyle } from "../render/arrowStyle";
 import type { Renderer, StepStyle } from "../scene/renderer";
 import type { Settings } from "../settings";
 import { type RenderingChoice, StylePanel } from "../stylePanel";
@@ -34,6 +35,8 @@ export interface StyleOptions {
   animation(): StepAnimation;
   /** Replay the step on screen, to preview a change. */
   replay(): void;
+  /** Draw the step again (no animation): for changes CSS alone can't make, like how arrows are colored. */
+  redraw?(): void;
   /** The panel opened: close the other panels. */
   onOpen(): void;
   /** The panel's Rendering choice (SVG or Canvas 2D). */
@@ -72,7 +75,11 @@ export class StyleController {
   /** Apply an appearance now, and save it once changes pause (dragging a slider sends many). */
   set(next: Appearance): void {
     const { els, views, settings } = this.options;
+    const options = this.options;
     this.appearance = next;
+    // How arrows are colored changes the drawing itself, not only its CSS.
+    const redraw = setArrowStyle({ mode: next.arrowMode, legend: next.arrowLegend, labels: next.arrowLabels });
+    if (redraw && this.panel) options.redraw?.();
     applyAppearance(next, { canvas: els.canvas, memory: els.memorySection, loop: els.loopSection }, (pane, size) =>
       views[pane].setAppearance({ gridSize: size }),
     );
