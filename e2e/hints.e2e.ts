@@ -21,6 +21,18 @@ const code = `function longest(s) {
 console.log(longest("abcabcbb"));
 `;
 
+/**
+ * The editor's shortcuts as Monaco reads them: it goes by the browser's user
+ * agent, and Playwright's WebKit says it's a Mac (Desktop Safari) even on
+ * Linux, so there it wants Cmd, and Cmd+Up and Down for the top and bottom.
+ */
+async function editorKeys(page: import("@playwright/test").Page) {
+  const mac = await page.evaluate(() => navigator.userAgent.includes("Macintosh"));
+  return mac
+    ? { top: "Meta+ArrowUp", bottom: "Meta+ArrowDown", quickFix: "Meta+." }
+    : { top: "Control+Home", bottom: "Control+End", quickFix: "Control+." };
+}
+
 test("the lightbulb adds a sliding window hint above its loop, and the window is drawn", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");
@@ -29,10 +41,11 @@ test("the lightbulb adds a sliding window hint above its loop, and the window is
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
 
   // The loop's first line, then the lightbulb's actions.
+  const keys = await editorKeys(page);
   await page.locator("#editor .view-lines").click();
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(keys.top);
   for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Control+.");
+  await page.keyboard.press(keys.quickFix);
   const action = page.locator(".action-widget").getByText("Show left to right as a sliding window over s");
   await expect(action).toBeVisible();
   await action.click();
@@ -54,8 +67,9 @@ test("typing viz: in a comment lists the hints", async ({ page }) => {
   await page.evaluate((c) => localStorage.setItem("pr0l1ne:code:javascript", c), code);
   await page.reload();
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  const keys = await editorKeys(page);
   await page.locator("#editor .view-lines").click();
-  await page.keyboard.press("Control+End");
+  await page.keyboard.press(keys.bottom);
   await page.keyboard.type("// viz:");
   const suggest = page.locator(".suggest-widget");
   await expect(suggest).toBeVisible();

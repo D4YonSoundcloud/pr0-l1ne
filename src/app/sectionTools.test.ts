@@ -19,6 +19,13 @@ function header(width: number) {
   Object.defineProperty(row, "scrollWidth", {
     get: () => [...row.children].filter((c) => !(c as HTMLElement).hidden).length * 100,
   });
+  // Each tool on the row is 100 pixels, one after another.
+  for (const tool of [...row.children] as HTMLElement[])
+    tool.getBoundingClientRect = () => {
+      const at = [...row.children].indexOf(tool);
+      const left = at < 0 ? 0 : at * 100;
+      return { left, right: at < 0 ? 0 : left + 100, width: at < 0 ? 0 : 100 } as DOMRect;
+    };
   const menu = toolsMenu(row, "More tools");
   return {
     row,
@@ -50,6 +57,22 @@ describe("toolsMenu", () => {
     h.resize(1000);
     expect(h.inMenu()).toEqual([]);
     expect(h.menu.button.hidden).toBe(true);
+  });
+
+  it("never moves a tool already in its place, so a click in progress isn't lost", () => {
+    // While playing, the row's text changes every step, and it's fitted again each time.
+    for (const width of [600, 320]) {
+      const h = header(width);
+      const moves: MutationRecord[] = [];
+      const watch = new MutationObserver((records) => moves.push(...records));
+      watch.observe(h.row, { childList: true });
+      watch.observe(h.menu.menu, { childList: true });
+      h.menu.arrange();
+      h.menu.arrange();
+      moves.push(...watch.takeRecords());
+      watch.disconnect();
+      expect(moves).toEqual([]);
+    }
   });
 
   it("moves the tools themselves, so they keep their listeners", () => {

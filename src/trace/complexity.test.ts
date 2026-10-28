@@ -113,7 +113,8 @@ describe("complexity of the examples", () => {
         expect(estimate!.time, example.name).toMatch(/^O\(.+\)$/);
       }
     }
-  });
+    // Every example in every language, traced one after another: well past the 5 second default.
+  }, 120_000);
 });
 
 describe("explanations", () => {
