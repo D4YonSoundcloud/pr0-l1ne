@@ -27,6 +27,7 @@
   --frontier: #d9822b;
   --path: #7a4fb5;
   --mem: #0a7d86;
+  --window: #14a37f;
   --output: #232a3d;
   --output-ink: #f2f5fb;
   --tree: #2e7a57;
@@ -678,6 +679,20 @@ body {
   .memory-svg.output-out .arrows > :not(.arrow-xray) {
     animation: none;
   }
+}
+
+/* Sliding windows (viz: window): a band behind the cells it covers. */
+.window-band rect {
+  fill: color-mix(in srgb, var(--window) 16%, transparent);
+  stroke: var(--window);
+  stroke-width: 1.5;
+}
+.window-band.is-changed rect {
+  stroke-width: 2.25;
+}
+.window-band.is-empty rect {
+  fill: var(--window);
+  stroke: none;
 }
 
 /* Grids (lists of lists): the cell that grid[i][j] points at. */

@@ -28,6 +28,7 @@ import { type Printed, printedAt } from "../trace/output";
 import { type Frame, liveFrames, type Step, type Trace, type Value } from "../trace/types";
 import { chooseNested, valuesOf } from "./nesting";
 import { type Pointer, pointersFor } from "./pointers";
+import { type WindowSpan, windowsFor } from "./windows";
 
 /** Arrows: every object is its own box. Nested: an object only one thing refers to is drawn inside it. */
 export type MemoryMode = "arrows" | "nested";
@@ -138,6 +139,8 @@ export interface MemoryScene {
   sizes: StepSizes | null;
   /** Index pointers into a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
   pointers(id: string, level?: 0 | 1): Pointer[];
+  /** Sliding windows over a list (`viz: window`). */
+  windows(id: string): WindowSpan[];
   /** The grid cell this step reads or writes (trace/gridFocus.ts), given the grid's shape; null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** What this step printed, or null (or output turned off). */
@@ -353,6 +356,14 @@ export function memoryScene(
       );
       const name = level === 1 ? `${owner.name}[]` : owner.name;
       return pointersFor(name, trace.indexNames, new Map(owner.frame.locals), changedNames);
+    },
+    windows(id) {
+      const owner = pointerOwner.get(id);
+      if (!owner || !trace.viz?.windows?.length) return [];
+      const changedNames = new Set(
+        owner.frame.locals.map(([n]) => n).filter((n) => changes.changedLocals.has(localKey(owner.frame.id, n))),
+      );
+      return windowsFor(owner.name, trace.viz.windows, new Map(owner.frame.locals), changedNames);
     },
     gridFocus(id, size) {
       const owner = pointerOwner.get(id);

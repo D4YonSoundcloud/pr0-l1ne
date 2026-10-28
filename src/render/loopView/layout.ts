@@ -43,7 +43,9 @@ export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Ma
       continue;
     }
     const { row, index } = item;
-    rowLayer.append(drawRow(row, index, y, { plan, scene, arrowLayer, prevDrawn, afterGap }));
+    const drawn = drawRow(row, index, y, { plan, scene, arrowLayer, prevDrawn, afterGap });
+    if (live) scopeToLoop(drawn, row.loop ?? scene.history.info.id);
+    rowLayer.append(drawn);
     prevDrawn = { row, y, index };
     afterGap = false;
     y += plan.rowH + ROW_GAP;
@@ -55,4 +57,18 @@ export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Ma
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   return svg;
+}
+
+/**
+ * Animated, every loop of a nest has its own live row, and those rows show
+ * the same containers. What animates is matched between steps by key
+ * (render/animate.ts: `ptr:s`, `s|3`...), so each row's keys get its loop's
+ * name in front: otherwise the outer loop's list would be matched with the
+ * inner loop's, and slide in from the inner row on every step it runs.
+ */
+export function scopeToLoop(row: Mark, loop: string): void {
+  for (const el of row.querySelectorAll("[data-flip]"))
+    el.setAttribute("data-flip", `${loop}/${el.getAttribute("data-flip")}`);
+  for (const el of row.querySelectorAll("[data-cell]"))
+    el.setAttribute("data-cell", `${loop}/${el.getAttribute("data-cell")}`);
 }

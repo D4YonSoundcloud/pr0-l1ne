@@ -6,6 +6,7 @@
  * everything before anything is drawn.
  */
 import type { Pointer } from "../../scene/pointers";
+import type { WindowSpan } from "../../scene/windows";
 import { type StepDiff, valueKey } from "../../trace/diff";
 import type { GridFocus } from "../../trace/gridFocus";
 import { formatBytes, type StepSizes } from "../../trace/memory";
@@ -58,6 +59,8 @@ export interface Ctx {
   functionKeyword: string;
   /** Index pointers for a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
   pointersFor(id: string, level?: 0 | 1): Pointers;
+  /** Sliding windows over a list (`viz: window`). */
+  windowsFor(id: string): WindowSpan[];
   /** The grid cell this step reads or writes (trace/gridFocus.ts); null if the code never indexes it by name. */
   gridFocus(id: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** Memory sizes, when they're shown. */

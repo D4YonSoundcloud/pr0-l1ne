@@ -206,6 +206,44 @@ export function pointerMarkers(
 }
 
 /**
+ * Sliding windows (`viz: window`): a band behind the cells from a window's
+ * first item to its last, drawn before the cells so they sit on top of it.
+ * An empty window is a bar between two cells, where it starts. Parts out of
+ * view (a long list shows some of its items) are cut off at the edge.
+ */
+export function windowBands(
+  windows: { label: string; start: number; end: number; changed: boolean }[],
+  cellX: (index: number) => number,
+  cellW: number,
+  top: number,
+  height: number,
+  length: number,
+  flip?: FlipInfo,
+): Mark {
+  const g = s("g", { class: "windows" });
+  for (const w of windows) {
+    const start = Math.max(0, Math.min(length, w.start));
+    const end = Math.max(start, Math.min(length, w.end));
+    const count = w.end - w.start;
+    const cls = ["window-band", end === start && "is-empty", w.changed && "is-changed"].filter(Boolean).join(" ");
+    const x = cellX(start);
+    const band =
+      end > start
+        ? s("rect", { x: x - 3, y: top - 3, width: (end - start) * cellW + 6, height: height + 6, rx: 6 })
+        : s("rect", { x: x - 1.5, y: top - 3, width: 3, height: height + 6, rx: 1.5 });
+    g.append(
+      s(
+        "g",
+        { class: cls, ...flipAttrs(flip, `win:${w.label}`, x, top) },
+        s("title", {}, `${w.label}: ${count === 1 ? "1 item" : `${Math.max(0, count)} items`}`),
+        band,
+      ),
+    );
+  }
+  return g;
+}
+
+/**
  * Row pointers for a grid: a small left-pointing marker and the names, just
  * right of the row they point at (grid[i][j] puts i here, j under a column).
  */

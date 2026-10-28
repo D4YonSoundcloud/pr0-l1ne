@@ -1074,4 +1074,49 @@ const trip = plan("A", "E");
 console.log(trip);
 `,
   },
+  {
+    group: HINTS,
+    name: "11 · window: longest substring without repeats",
+    code: `// The longest stretch of s with no letter twice. The window grows on
+// the right one letter at a time, and shrinks from the left while the
+// new letter is already in it. The hint, just above the loop it's about,
+// draws s as a row of letters with the window over it, from left to
+// right (both in), so you can watch it slide.
+const s = "abcabcbb";
+const seen = new Set();
+let left = 0;
+let best = 0;
+// viz: window s: [left, right]
+for (let right = 0; right < s.length; right++) {
+  while (seen.has(s[right])) {
+    seen.delete(s[left]);
+    left++;
+  }
+  seen.add(s[right]);
+  best = Math.max(best, right - left + 1);
+}
+
+console.log(best);
+`,
+  },
+  {
+    group: HINTS,
+    name: "12 · window: best sum of k in a row",
+    code: `// The largest sum of k numbers in a row. A window of exactly k slides
+// along nums: each step adds the number coming in and takes away the one
+// going out. "[i, i + k)" is the window from i, up to but not
+// including i + k: the ")" leaves that end out.
+const nums = [2, 1, 5, 1, 3, 2, 6, 1];
+const k = 3;
+let total = nums[0] + nums[1] + nums[2];
+let best = total;
+// viz: window nums: [i, i + k)
+for (let i = 1; i + k <= nums.length; i++) {
+  total += nums[i + k - 1] - nums[i - 1];
+  best = Math.max(best, total);
+}
+
+console.log(best);
+`,
+  },
 ];

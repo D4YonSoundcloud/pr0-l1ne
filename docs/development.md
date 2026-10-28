@@ -274,6 +274,8 @@ pr0-l1ne/
     ├── appearance.ts           Canvas style settings, presets, applying them
     ├── appearance.test.ts      Style settings tests
     ├── stylePanel.ts           The Style panel in the toolbar
+    ├── hintAssist.ts           Help writing viz: hints: completions, hovers, name checks, suggestions
+    ├── hintEditor.ts           That help, wired into Monaco
     ├── spacingPanel.ts         The Layout panel: spacing sliders and saved layouts
     ├── complexityPanel.ts      The complexity chip, its panel and the editor labels
     ├── measurePanel.ts         Measure's results panel and the editor heat map

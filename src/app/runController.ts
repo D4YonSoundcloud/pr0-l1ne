@@ -9,6 +9,7 @@
  * before starting (`whenIdle`), and hands back queued edits when it's done
  * (`resumeQueued`).
  */
+import { type HintContext, hintContext } from "../hintAssist";
 import { LANGUAGES, type LanguageId } from "../languages";
 import { applyHints } from "../trace/hints";
 import { POLICY } from "../trace/policy";
@@ -52,6 +53,8 @@ export interface RunEditor {
     error: { line: number | null; message: string } | null;
   }): void;
   setHintWarnings(warnings: { line: number; message: string }[]): void;
+  /** What the program has, for help writing hints (hintAssist.ts). Optional: tests leave it out. */
+  setHintContext?(ctx: HintContext): void;
 }
 
 export interface RunOptions {
@@ -266,6 +269,8 @@ export class RunController {
     const trace = applyHints(next);
     const warnings = trace.viz?.warnings ?? [];
     editor.setHintWarnings(warnings);
+    // Before hints are applied, so hidden variables still count as the program's.
+    if (!next.sql) editor.setHintContext?.(hintContext(next));
     const last = trace.steps.length - 1;
     const first = trace.sql ? 0 : firstStepFor(trace.steps.length);
     app.showTrace(trace, code, wasAtEnd ? last : Math.max(first, Math.min(stepIndex, last)));

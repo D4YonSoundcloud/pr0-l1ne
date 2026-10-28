@@ -4,7 +4,7 @@
 
 PR0L1NE chooses what to draw automatically, but sometimes its guesses aren't what you want: a helper variable clutters the loop history, `cur` isn't recognized as a position in a list, a tree with parent pointers comes out as a list, or a list of lists is really a graph. A **hint** is a comment that tells it what you meant.
 
-The quickest way to learn them is the **Hints, step by step** group in the Open… menu: [ten examples](#learning-hints-with-the-examples), from one hint to all of them together.
+The quickest way to learn them is the **Hints, step by step** group in the Open… menu: [twelve examples](#learning-hints-with-the-examples), from one hint to all of them together.
 
 ```python
 # viz: hide temp
@@ -26,7 +26,7 @@ A hint is a comment whose text starts with `viz:`:
 | Python | `# viz: ...` |
 | JavaScript and TypeScript | `// viz: ...` or `/* viz: ... */` |
 
-- **It can go anywhere**: on a line of its own, at the end of a line of code, at the top of the file. Hints apply to the **whole program**, not just the code near them, so a common style is to put them at the top. A hint in a string (`"# viz: hide x"`) isn't a comment, so it's ignored.
+- **It can go anywhere**: on a line of its own, at the end of a line of code, at the top of the file. Hints apply to the **whole program**, not just the code near them. Putting each one just above the code it's about (a window hint above its loop) keeps the reason for it in view, and it's where the editor puts the hints it suggests. A hint in a string (`"# viz: hide x"`) isn't a comment, so it's ignored.
 - **One hint per comment.** Write several comments for several hints.
 - **Keywords aren't case sensitive**, and spacing is flexible: `# VIZ:  Hide a ,b` works.
 
@@ -38,6 +38,7 @@ A hint is a comment whose text starts with `viz:`:
 | `viz: show total, seen` | Always includes these variables in the loop history, even when PR0L1NE would leave them out because they don't change during the loop. |
 | `viz: pointers nums: lo, hi` | Draws `lo` and `hi` as [pointer markers](how-it-works.md#pointer-detection) under `nums` whenever they hold a whole number, for names the code never writes as `nums[lo]`. |
 | `viz: pointers grid[]: col` | The same, for a **grid**'s columns: `col` is marked under a column of `grid`. (Use `pointers grid: row` for its rows.) |
+| `viz: window nums: [left, right]` | Draws the part of a list from `left` to `right` as a band over its cells: a **sliding window**. Both ends are in the window. Write `)` to leave the end out, `[i, i + k)`, or `(` to leave the start out. An end can add and take away names and whole numbers (`[r - k + 1, r]`). A **string** with a window is drawn as a row of its characters, so `viz: window s: [left, right]` works for substrings. Ends that are just a name are drawn as pointers too; a name only added to an end (`k` in `[i, i + k)`) is a length, so it isn't. |
 | `viz: tree Node(left, right)` | Draws objects of class `Node` as a binary tree, using `left` and `right` as the children, in both the memory view and the loop history. Other fields, like `parent`, are drawn as plain fields. |
 | `viz: list Node(next)` | Draws objects of class `Node` as a linked list in the loop history, using `next` as the link. Other fields, like `prev` or `random`, aren't drawn as links. |
 | `viz: graph adj` | Draws `adj` as a [graph](user-guide.md#graphs): a dict, a list of neighbor lists, an adjacency matrix or an edge list. `self.adj` or `this.adj` work too, or just the field name. |
@@ -67,15 +68,25 @@ Words between a graph hint's target and its colon change how the graph is read o
 # viz: graph roads angled
 ```
 
+## Writing hints in the editor
+
+The editor helps with hints as you type them:
+
+- **Completions.** Type `viz:` in a comment and the list of hints opens. Pick one and the list goes on to what comes next, with your program's own names from its last run: lists and strings for a window, whole numbers for its ends (and whole windows, like `[left, right]`, when your program has a pair of names like that), classes for `tree` and `list` with their links filled in, the options a graph hasn't used yet.
+- **Hovers.** Hover a hint's name to see what it does, with an example. Hover a graph option for what that one does.
+- **Names that aren't in the program.** A name a hint uses that never appeared in the last run gets a dotted underline. Click the lightbulb (or press `Ctrl` + `.`) to change it to the likely one: `nmus` to `nums`. A misspelled hint (`windw`) gets the same fix.
+- **Hints worth adding.** On the first line of a loop that reads a list or a string from two ends (`s[left]` and `s[right]`) or slices it (`nums[i:i + k]`, `s.slice(left, right + 1)`), the lightbulb offers a window hint for it, put on its own line just above the loop.
+- **Add a hint above this line**, in the lightbulb, the right-click menu and the command palette (`F1`), starts a `viz:` comment above the line, indented like it, with the list of hints open.
+
 ## When a hint is wrong
 
-A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, tree, list, graph, plain.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
+A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, window, tree, list, graph, plain, size.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
 
 A hint that's well-formed but names something that doesn't exist (`hide nmus`) does nothing, since it may refer to a variable that only exists in some runs.
 
 ## Learning hints with the examples
 
-The **Hints, step by step** group has the same ten examples in every language. Each starts with its hints and a comment explaining what they change. Deleting a hint line and watching the canvas change is a good way to see what it does.
+The **Hints, step by step** group has the same twelve examples in every language. Each has its hints and a comment explaining what they change. Deleting a hint line and watching the canvas change is a good way to see what it does.
 
 | Example | Hints | What it shows |
 | --- | --- | --- |
@@ -89,5 +100,7 @@ The **Hints, step by step** group has the same ten examples in every language. E
 | 8 · graph options | `graph flights matrix directed circle: reach, frontier, city, nxt` | An adjacency matrix, read as a directed graph and drawn in a ring |
 | 9 · edge list | `graph edges edgelist undirected: parent, mst, a, b` | Kruskal's algorithm: the union-find forest in green and the chosen edges in purple |
 | 10 · all together | `graph`, `plain`, `hide` and `show` | Dijkstra on a road map with a closed road: costs, the frontier, the tree of best routes and the final route all on the graph |
+| 11 · window | `window s: [left, right]` | The longest substring without a repeated letter: a string drawn as letters, with the window growing on the right and shrinking from the left |
+| 12 · window | `window nums: [i, i + k)` | The best sum of k numbers in a row: a window of exactly k sliding along a list |
 
 ![Kruskal's algorithm: the union-find forest's links dashed in green, the spanning tree's edges in purple](graph-kruskal.png)

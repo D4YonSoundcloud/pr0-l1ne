@@ -7,7 +7,18 @@ import { type Cell, cellsOf, containerIn, type LoopScene, scalarIn } from "../..
 import { valueKey } from "../../trace/diff";
 import type { LoopRow } from "../../trace/loopHistory";
 import { formatBytes } from "../../trace/memory";
-import { CELL_H, changeArrow, INDEX_H, POINTER_H, pointerMarkers, STRIP_H, s, stripBar, valueCell } from "../draw";
+import {
+  CELL_H,
+  changeArrow,
+  INDEX_H,
+  POINTER_H,
+  pointerMarkers,
+  STRIP_H,
+  s,
+  stripBar,
+  valueCell,
+  windowBands,
+} from "../draw";
 import type { Mark } from "../drawing";
 import { graphPicture } from "../graphView";
 import { drawGrid } from "./grid";
@@ -165,6 +176,21 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
           ),
         ),
       );
+    }
+    // Sliding windows, behind the cells.
+    if (obj.kind !== "dict" && obj.kind !== "set") {
+      const windows = scene.windows(row, column.name, changedNames);
+      if (windows.length) {
+        const offset = obj.offset ?? 0;
+        const shown = windows.map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
+        containerG.append(
+          windowBands(shown, (i) => column.x + i * column.cellW, column.cellW, cellsY, CELL_H, cells.length, {
+            key: `win:${column.name}`,
+            originX: 0,
+            originY: 0,
+          }),
+        );
+      }
     }
     cells.forEach((cell, i) => {
       const cx = column.x + i * column.cellW;

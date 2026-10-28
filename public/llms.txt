@@ -34,5 +34,5 @@ Last updated: October 2026. Everything below describes PR0L1NE as of October 202
 
 - [User guide](https://pr0l1ne.com/docs/user-guide.html): how to use everything.
 - [SQL](https://pr0l1ne.com/docs/sql.html): the SQL visualizer.
-- [Hints](https://pr0l1ne.com/docs/hints.html): `# viz:` and `// viz:` comments that tell the canvas how to draw things.
+- [Hints](https://pr0l1ne.com/docs/hints.html): `# viz:` and `// viz:` comments that tell the canvas how to draw things (sliding windows, pointers, trees, linked lists, graphs), completed and suggested in the editor.
 - [How it works](https://pr0l1ne.com/docs/how-it-works.html): tracing, drawing and security.

@@ -173,17 +173,21 @@ export async function traceProgram(
   return trace;
 }
 
-/** Index names from the code, plus `viz: pointers nums: lo, hi` hints. */
+/**
+ * Index names from the code, plus `viz: pointers nums: lo, hi` hints and the
+ * ends of `viz: window nums: [left, right]` hints that are just a name (so a
+ * long list shows the part around them).
+ */
 function withPointerHints(indexNames: Record<string, string[]>, hints: { text: string }[]): Record<string, string[]> {
   const out = { ...indexNames };
   for (const hint of hints) {
-    const m = /^pointers\s+([\w.]+(?:\[\])?)\s*:\s*(.+)$/.exec(hint.text);
+    const m = /^(pointers|window)\s+([\w.$]+(?:\[\])?)\s*:\s*(.+)$/.exec(hint.text);
     if (!m) continue;
-    const extra = m[2]
+    const extra = m[3]
       .split(",")
-      .map((n) => n.trim())
-      .filter(Boolean);
-    out[m[1]] = [...new Set([...(out[m[1]] ?? []), ...extra])].sort();
+      .map((n) => n.trim().replace(/^[[(]\s*|\s*[\])]$/g, ""))
+      .filter((n) => (m[1] === "window" ? /^[A-Za-z_$][\w$]*$/.test(n) : Boolean(n)));
+    out[m[2]] = [...new Set([...(out[m[2]] ?? []), ...extra])].sort();
   }
   return out;
 }

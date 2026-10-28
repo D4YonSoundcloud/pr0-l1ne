@@ -116,6 +116,7 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
     nested: scene.nested,
     functionKeyword: scene.functionKeyword,
     pointersFor: (id, level) => scene.pointers(id, level),
+    windowsFor: (id) => scene.windows(id),
     gridFocus: (id, size) => scene.gridFocus(id, size),
     view: (value, cellH) => viewOf(value, ctx, cellH),
   };

@@ -6,6 +6,8 @@
  * Each language gets its own Monaco model (like a separate open file in VS
  * Code), so switching languages keeps each one's text and undo history.
  */
+import type { HintContext } from "./hintAssist";
+import { installHintAssist } from "./hintEditor";
 import { monaco } from "./monaco";
 
 export interface LineMarks {
@@ -38,6 +40,8 @@ export interface EditorHandle {
   setCode(code: string): void;
   /** Warn about `viz:` hints that couldn't be understood (squiggles). */
   setHintWarnings(warnings: { line: number; message: string }[]): void;
+  /** What the last run's program has, for hint completions and notes (hintEditor.ts). */
+  setHintContext(ctx: HintContext): void;
   /** Switch to the model for a language, creating it with `code` the first time. */
   setLanguage(monacoId: string, code: string): void;
   setMarks(marks: LineMarks): void;
@@ -172,6 +176,8 @@ export function createEditor(
   }
 
   editor.onDidChangeModelContent(() => callbacks.onChange(editor.getValue()));
+  // Help writing `viz:` hints: completions, hovers, quick fixes and suggestions.
+  const hints = installHintAssist(monaco, editor);
 
   const decorations = editor.createDecorationsCollection();
   const costDecorations = editor.createDecorationsCollection();
@@ -229,6 +235,9 @@ export function createEditor(
             endColumn: model.getLineMaxColumn(w.line),
           })),
       );
+    },
+    setHintContext(ctx) {
+      hints.setContext(ctx);
     },
     setCostLabels(labels) {
       const model = editor.getModel();

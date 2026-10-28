@@ -929,4 +929,46 @@ trip = plan("A", "E")
 print(trip)
 `,
   },
+  {
+    group: HINTS,
+    name: "11 · window: longest substring without repeats",
+    code: `# The longest stretch of s with no letter twice. The window grows on
+# the right one letter at a time, and shrinks from the left while the new
+# letter is already in it. The hint, just above the loop it's about,
+# draws s as a row of letters with the window over it, from left to
+# right (both in), so you can watch it slide.
+s = "abcabcbb"
+seen = set()
+left = 0
+best = 0
+# viz: window s: [left, right]
+for right in range(len(s)):
+    while s[right] in seen:
+        seen.remove(s[left])
+        left += 1
+    seen.add(s[right])
+    best = max(best, right - left + 1)
+
+print(best)
+`,
+  },
+  {
+    group: HINTS,
+    name: "12 · window: best sum of k in a row",
+    code: `# The largest sum of k numbers in a row. A window of exactly k slides
+# along nums: each step adds the number coming in and takes away the one
+# going out. "[i, i + k)" is the window from i, up to but not
+# including i + k: the ")" leaves that end out.
+nums = [2, 1, 5, 1, 3, 2, 6, 1]
+k = 3
+total = sum(nums[:k])
+best = total
+# viz: window nums: [i, i + k)
+for i in range(1, len(nums) - k + 1):
+    total += nums[i + k - 1] - nums[i - 1]
+    best = max(best, total)
+
+print(best)
+`,
+  },
 ];

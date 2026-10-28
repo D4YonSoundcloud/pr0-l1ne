@@ -36,6 +36,7 @@ import {
   type Value,
 } from "../trace/types";
 import { type Pointer, pointersFor } from "./pointers";
+import { type WindowSpan, windowsFor } from "./windows";
 
 // ---------------------------------------------------------------------------
 // Reading a row
@@ -340,6 +341,8 @@ export interface LoopScene {
   sizes(row: LoopRow): StepSizes | null;
   /** Index pointers into a container in a row (`name[]`: a grid's columns). */
   pointers(row: LoopRow, name: string, changedNames?: Set<string>): Pointer[];
+  /** Sliding windows over a list in a row (`viz: window`). */
+  windows(row: LoopRow, name: string, changedNames?: Set<string>): WindowSpan[];
   /** The grid cell a row's step reads or writes. */
   gridFocus(row: LoopRow, name: string, size: { rows: number; cols: (row: number) => number }): GridFocus | null;
   /** The loop's info, by id (the history's own when not given). */
@@ -553,6 +556,7 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     sizes: (row) =>
       options.sizes && trace.steps[row.stepIndex] ? stepSizes(trace.steps[row.stepIndex], options.sizes) : null,
     pointers: (row, name, changedNames) => pointersFor(name, trace.indexNames, new Map(row.frame.locals), changedNames),
+    windows: (row, name, changedNames) => windowsFor(name, trace.viz?.windows, new Map(row.frame.locals), changedNames),
     gridFocus: (row, name, size) =>
       gridFocus(
         trace.gridAccesses,

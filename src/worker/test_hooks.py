@@ -154,6 +154,10 @@ class HookTests(unittest.TestCase):
         hints = [{"line": 1, "text": "pointers nums: lo, hi"}, {"line": 2, "text": "hide x"}]
         self.assertEqual(T.with_pointer_hints({"nums": ["i"]}, hints), {"nums": ["hi", "i", "lo"]})
 
+    def test_window_hints_add_the_ends_that_are_names(self):
+        hints = [{"line": 1, "text": "window nums: [left, right]"}, {"line": 2, "text": "window s: [i, i + k)"}]
+        self.assertEqual(T.with_pointer_hints({}, hints), {"nums": ["left", "right"], "s": ["i"]})
+
     def test_prepare_reads_the_program_or_reports_why_it_cant(self):
         tracer = tracer_for("for i in range(3):\n    pass  # viz: hide i\n", 100)
         result = {"indexNames": {}, "loops": []}

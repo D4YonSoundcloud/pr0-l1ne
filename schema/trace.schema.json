@@ -1158,6 +1158,13 @@
           },
           "description": "Variables or classes never to draw as a graph."
         },
+        "windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WindowHint"
+          },
+          "description": "Sliding windows over lists or strings. Optional: traces from before it existed have none."
+        },
         "sizes": {
           "type": "array",
           "items": {
@@ -1302,6 +1309,81 @@
         "sideways"
       ],
       "description": "Options a `viz: graph` hint can carry."
+    },
+    "WindowHint": {
+      "type": "object",
+      "properties": {
+        "container": {
+          "type": "string",
+          "description": "The list or string, by variable name."
+        },
+        "start": {
+          "$ref": "#/definitions/WindowBound"
+        },
+        "end": {
+          "$ref": "#/definitions/WindowBound"
+        },
+        "startOpen": {
+          "type": "boolean",
+          "description": "`(start` leaves the start out; `end)` leaves the end out."
+        },
+        "endOpen": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string",
+          "description": "As written, for its label: `[left, right]`."
+        },
+        "line": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "container",
+        "start",
+        "end",
+        "startOpen",
+        "endOpen",
+        "text",
+        "line"
+      ],
+      "additionalProperties": false,
+      "description": "`viz: window nums: [left, right]`: the part of a list (or string) from one index to another, drawn as a band over its cells. Ends are inclusive, unless written with `(` or `)`: `[i, i + k)`."
+    },
+    "WindowBound": {
+      "type": "object",
+      "properties": {
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sign": {
+                "type": "number",
+                "enum": [
+                  1,
+                  -1
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "sign"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "terms"
+      ],
+      "additionalProperties": false,
+      "description": "One end of a sliding window: names and whole numbers added up, like `i + k - 1`."
     },
     "SqlTrace": {
       "type": "object",

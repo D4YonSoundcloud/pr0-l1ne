@@ -403,13 +403,21 @@ class Tracer:
 
 
 def with_pointer_hints(index_names: dict[str, list[str]], hints: list[dict[str, Any]]) -> dict[str, list[str]]:
-    """The names that index each list, with those a `viz: pointers nums: lo, hi` hint adds."""
+    """The names that index each list, with those a `viz: pointers nums: lo, hi` hint adds.
+
+    The ends of a `viz: window nums: [left, right]` hint that are just a name
+    count too, so a long list shows the part around them.
+    """
     out = dict(index_names)
     for hint in hints:
-        m = re.match(r"pointers\s+([\w.]+(?:\[\])?)\s*:\s*(.+)$", hint["text"])
+        m = re.match(r"(pointers|window)\s+([\w.]+(?:\[\])?)\s*:\s*(.+)$", hint["text"])
         if m:
-            extra = [n.strip() for n in m.group(2).split(",") if n.strip()]
-            out[m.group(1)] = sorted(set(out.get(m.group(1), [])) | set(extra))
+            ends = [re.sub(r"^[\[(]\s*|\s*[\])]$", "", n.strip()) for n in m.group(3).split(",")]
+            if m.group(1) == "window":
+                extra = [n for n in ends if re.fullmatch(r"[A-Za-z_]\w*", n)]
+            else:
+                extra = [n for n in ends if n]
+            out[m.group(2)] = sorted(set(out.get(m.group(2), [])) | set(extra))
     return out
 
 

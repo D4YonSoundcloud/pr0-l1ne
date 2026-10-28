@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { traceTypeScript } from "../js/typescript";
-import { applyHints, parseHints } from "./hints";
+import { applyHints, charsOf, parseHints } from "./hints";
 import { findLinkedTrack, linkedRow } from "./linked";
 import { buildLoopHistory } from "./loopHistory";
 import type { Trace } from "./types";
@@ -137,5 +137,116 @@ while (node) {
     const applied = applyHints(t);
     expect(applied.steps).toBe(t.steps);
     expect(applied.viz?.warnings).toEqual([]);
+  });
+});
+
+describe("window hints", () => {
+  it("reads both ends, inclusive unless written with ( or )", () => {
+    const h = parseHints([hint("window s: [left, right]"), hint("window nums: [i, i + k)", 2)]);
+    expect(h.warnings).toEqual([]);
+    expect(h.windows).toEqual([
+      {
+        container: "s",
+        start: { terms: [{ sign: 1, name: "left" }] },
+        end: { terms: [{ sign: 1, name: "right" }] },
+        startOpen: false,
+        endOpen: false,
+        text: "[left, right]",
+        line: 1,
+      },
+      {
+        container: "nums",
+        start: { terms: [{ sign: 1, name: "i" }] },
+        end: {
+          terms: [
+            { sign: 1, name: "i" },
+            { sign: 1, name: "k" },
+          ],
+        },
+        startOpen: false,
+        endOpen: true,
+        text: "[i, i + k)",
+        line: 2,
+      },
+    ]);
+    // Without brackets, both ends are in; ( leaves the start out.
+    expect(parseHints([hint("window nums: lo, hi")]).windows?.[0]).toMatchObject({ startOpen: false, endOpen: false });
+    expect(parseHints([hint("window nums: (lo, hi]")]).windows?.[0]).toMatchObject({ startOpen: true, endOpen: false });
+    expect(parseHints([hint("window nums: [r - k + 1, r]")]).windows?.[0].start.terms).toEqual([
+      { sign: 1, name: "r" },
+      { sign: -1, name: "k" },
+      { sign: 1, value: 1 },
+    ]);
+  });
+
+  it("explains a window it can't read", () => {
+    for (const text of [
+      "window nums",
+      "window nums: [lo]",
+      "window nums: [lo, hi",
+      "window nums: [lo * 2, hi]",
+      "window: [a, b]",
+    ]) {
+      const h = parseHints([hint(text, 7)]);
+      expect(h.windows, text).toEqual([]);
+      expect(h.warnings[0].message, text).toMatch(/"window" looks like/);
+    }
+  });
+
+  it("ignores a hint that's still being typed", () => {
+    expect(parseHints([hint("")]).warnings).toEqual([]);
+  });
+
+  it("reads a string's characters back from its repr", () => {
+    expect(charsOf({ kind: "prim", type: "str", repr: "'abc'" })).toEqual(["a", "b", "c"]);
+    expect(charsOf({ kind: "prim", type: "str", repr: `"it's"` })).toEqual(["i", "t", "'", "s"]);
+    expect(charsOf({ kind: "prim", type: "str", repr: String.raw`'a\nb\\'` })).toEqual(["a", "\n", "b", "\\"]);
+    expect(charsOf({ kind: "prim", type: "string", repr: '"\\u00e9\\ud83d\\ude00x"' })).toEqual([
+      "é",
+      "\u{1F600}",
+      "x",
+    ]);
+    // Shortened, or not a string: can't.
+    expect(charsOf({ kind: "prim", type: "string", repr: '"abc…"', length: 500 })).toBeNull();
+    expect(charsOf({ kind: "prim", type: "int", repr: "3" })).toBeNull();
+  });
+
+  it("draws a string with a window over it as a list of its characters, the same object on every step", async () => {
+    const code = `// viz: window s: [left, right]
+const s = "abca";
+let left = 0;
+for (let right = 0; right < s.length; right++) { if (right === 3) left = 1; }`;
+    const t = applyHints(await traceJavaScript(code));
+    const ids = new Set<string>();
+    for (const step of t.steps) {
+      const value = step.stack[0].locals.find(([n]) => n === "s")?.[1];
+      if (!value) continue;
+      expect(value.kind).toBe("ref");
+      if (value.kind !== "ref") continue;
+      ids.add(value.id);
+      const obj = step.heap[value.id];
+      expect(obj).toMatchObject({ kind: "list", typeName: "string", length: 4 });
+      expect(obj.kind === "list" && obj.items.map((v) => (v.kind === "prim" ? v.repr : ""))).toEqual([
+        '"a"',
+        '"b"',
+        '"c"',
+        '"a"',
+      ]);
+    }
+    expect(ids.size).toBe(1);
+    // Its ends are pointers too, when each is a name.
+    expect(t.indexNames.s).toEqual(["left", "right"]);
+  });
+
+  it("doesn't draw a name only added to an end as a pointer: it's a length", async () => {
+    const code = `// viz: window nums: [i, i + k)
+const nums = [1, 2, 3, 4], k = 2;
+let total = 0;
+for (let i = 0; i + k <= nums.length; i++) total = nums[i] + nums[i + k - 1];`;
+    const raw = await traceJavaScript(code);
+    expect(raw.indexNames.nums).toContain("k"); // nums[i + k - 1]
+    expect(applyHints(raw).indexNames.nums).toEqual(["i"]);
+    // ...unless a pointers hint asks for it.
+    expect(applyHints(await traceJavaScript(`// viz: pointers nums: k\n${code}`)).indexNames.nums).toEqual(["i", "k"]);
   });
 });

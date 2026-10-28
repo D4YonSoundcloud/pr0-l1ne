@@ -282,6 +282,29 @@ export interface GraphHint {
   line: number;
 }
 
+/** One end of a sliding window: names and whole numbers added up, like `i + k - 1`. */
+export interface WindowBound {
+  terms: { sign: 1 | -1; name?: string; value?: number }[];
+}
+
+/**
+ * `viz: window nums: [left, right]`: the part of a list (or string) from
+ * one index to another, drawn as a band over its cells. Ends are inclusive,
+ * unless written with `(` or `)`: `[i, i + k)`.
+ */
+export interface WindowHint {
+  /** The list or string, by variable name. */
+  container: string;
+  start: WindowBound;
+  end: WindowBound;
+  /** `(start` leaves the start out; `end)` leaves the end out. */
+  startOpen: boolean;
+  endOpen: boolean;
+  /** As written, for its label: `[left, right]`. */
+  text: string;
+  line: number;
+}
+
 /** Parsed hints (trace/hints.ts), kept on the trace for the renderers. */
 export interface VizHints {
   hide: string[];
@@ -292,6 +315,8 @@ export interface VizHints {
   graphs: GraphHint[];
   /** Variables or classes never to draw as a graph. */
   plain: string[];
+  /** Sliding windows over lists or strings. Optional: traces from before it existed have none. */
+  windows?: WindowHint[];
   /** `viz: size n = 40000, k`: input sizes, for Measure's growth runs. */
   sizes: { name: string; value?: number; line: number }[];
   /** Hints that couldn't be understood, to show to the person. */

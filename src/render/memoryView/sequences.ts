@@ -20,6 +20,7 @@ import {
   stripBar,
   textWidth,
   uiTextWidth,
+  windowBands,
 } from "../draw";
 import {
   type Ctx,
@@ -272,6 +273,18 @@ export function sequenceShape(
               "∅",
             ),
           ),
+        );
+      }
+      // Sliding windows, behind the cells.
+      const windows = ctx.windowsFor(obj.id);
+      if (windows.length) {
+        const shown = windows.map((w) => ({ ...w, start: w.start - offset, end: w.end - offset }));
+        g.append(
+          windowBands(shown, (i) => x + firstX + i * cellW, cellW, y + cellsY, cellH, obj.items.length, {
+            key: `win:${obj.id}`,
+            originX: x,
+            originY: y,
+          }),
         );
       }
       obj.items.forEach((_item, i) => {
