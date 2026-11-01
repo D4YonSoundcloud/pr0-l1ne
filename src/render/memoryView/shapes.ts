@@ -14,6 +14,7 @@ import { formatBytes, type StepSizes } from "../../trace/memory";
 import type { HeapObject, Step, Value } from "../../trace/types";
 import { s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
+import type { BoxCache } from "./boxCache";
 
 export interface OutRef {
   from: Point;
@@ -51,6 +52,10 @@ export interface MemoryLayout {
   positions: ReadonlyMap<string, Point>;
   /** The node being dragged right now, drawn on top of the others. */
   raise?: string | null;
+  /** Boxes kept from the last step's layout, drawn again only when they've changed (boxCache.ts). */
+  boxes?: BoxCache;
+  /** Too small to read (zoomed out to outline): arrows straight or with one bend, not routed (route.ts simpleRoutes). */
+  simpleArrows?: boolean;
 }
 
 /** Room around a box nested in a cell or row. */

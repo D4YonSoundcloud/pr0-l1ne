@@ -48,6 +48,8 @@ export interface ViewportOptions {
   onAutoFitChange?(state: AutoFit): void;
   /** The level of detail changed with the zoom (lod.ts): the renderer draws the drawing at it. */
   onLod?(lod: Lod): void;
+  /** The view moved (panned or zoomed, a frame of a glide too). */
+  onMove?(): void;
   /** Whether the floating controls are folded away, remembered (see ControlsSetting). */
   controls?: ControlsSetting;
   /**
@@ -618,6 +620,23 @@ export class Viewport {
   }
 
   /** Where the diagram is: its offset in the window, in pixels, and its zoom. */
+  /**
+   * The part of the drawing in view, top to bottom, in diagram units, with
+   * `margin` window-heights more above and below. Null before the window
+   * has a size (then everything counts as in view).
+   */
+  visibleSpan(margin = 0): { top: number; bottom: number } | null {
+    if (!this.viewH) {
+      const box = this.el.getBoundingClientRect();
+      this.viewW = box.width;
+      this.viewH = box.height;
+    }
+    if (!this.viewH) return null;
+    const h = this.viewH / this.z;
+    const top = -this.y / this.z;
+    return { top: top - margin * h, bottom: top + h + margin * h };
+  }
+
   get view(): { pan: Point; zoom: number } {
     return { pan: { x: this.x, y: this.y }, zoom: this.z };
   }
@@ -696,6 +715,7 @@ export class Viewport {
     if (this.options.surface) this.options.surface.onView(view);
     else this.layer.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
     this.placeLandmarks(view);
+    this.options.onMove?.();
   }
 
   private onPointerDown(e: PointerEvent): void {

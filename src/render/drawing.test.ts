@@ -145,3 +145,37 @@ describe("toSvg", () => {
     expect(el.outerHTML).toBe('<svg class="s" xmlns="http://www.w3.org/2000/svg"><text x="1">a &lt; b</text></svg>');
   });
 });
+
+describe("a mark's signature", () => {
+  it("is the same string object until the mark or one in it changes", () => {
+    const cell = mark("rect", { class: "cell", x: 1 });
+    const label = mark("text", {}, "7");
+    const box = mark("g", { "data-node-key": "a" }, cell, label);
+    const root = mark("svg", {}, box);
+    const first = root.signature();
+    expect(root.signature()).toBe(first);
+    const boxSig = box.signature();
+
+    cell.classList.add("is-focus");
+    expect(root.signature()).not.toBe(first);
+    expect(box.signature()).not.toBe(boxSig);
+    cell.classList.remove("is-focus");
+    expect(root.signature()).toBe(first); // equal again (a new string, the same text)
+
+    (label.childNodes[0] as { textContent: string }).textContent = "8";
+    expect(box.signature()).toContain('"1:8');
+    label.remove();
+    expect(box.signature()).not.toContain("text");
+    box.append(mark("circle", { r: 2 }));
+    expect(root.signature()).toContain("circle");
+    box.style.setProperty("--x", "1");
+    expect(box.signature()).toContain("--x");
+  });
+
+  it("doesn't change when an attribute is set to the value it has", () => {
+    const m = mark("g", { class: "a" });
+    const sig = m.signature();
+    m.setAttribute("class", "a");
+    expect(m.signature()).toBe(sig);
+  });
+});

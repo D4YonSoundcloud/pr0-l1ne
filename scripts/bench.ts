@@ -17,7 +17,9 @@ import { traceJavaScript } from "../src/js/trace";
 import { perf, traceStats } from "../src/perf";
 import { descendants } from "../src/render/drawing";
 import { loopDrawing } from "../src/render/loopView";
+import { RowCache } from "../src/render/loopView/rowCache";
 import { memoryDrawing } from "../src/render/memory";
+import { BoxCache } from "../src/render/memoryView/boxCache";
 import { loopScene } from "../src/scene/loopScene";
 import { memoryScene } from "../src/scene/memoryScene";
 import { expandHeaps } from "../src/trace/delta";
@@ -123,6 +125,15 @@ async function bench(file: string): Promise<Result> {
       const layoutMs = perf.samples.get("memory.layout")![before];
       perf.record(`memory.layout.${mode}`, layoutMs);
       marks[mode] = Math.max(marks[mode], descendants(drawing).length);
+      // Stepping: the step after, drawn with the boxes kept from this one (memoryView/boxCache.ts).
+      if (i + 1 < n) {
+        const boxes = new BoxCache();
+        memoryDrawing(scene, { positions: new Map(), boxes });
+        const nextScene = memoryScene(trace, i + 1, diffSteps(trace.steps[i], trace.steps[i + 1]), { mode });
+        const start = performance.now();
+        memoryDrawing(nextScene, { positions: new Map(), boxes });
+        perf.record(`memory.next.${mode}`, performance.now() - start);
+      }
     }
     const historyStart = performance.now();
     const history = buildNestedHistory(trace, i) ?? buildLoopHistory(trace, i, null);
@@ -131,7 +142,25 @@ async function bench(file: string): Promise<Result> {
       const sceneStart = performance.now();
       const scene = loopScene(trace, history, { hideQuiet: true });
       perf.record("loop.scene", performance.now() - sceneStart);
+      const fullStart = performance.now();
       loopDrawing(scene);
+      perf.record("loop.full", performance.now() - fullStart);
+      // Stepping: the step after, with the rows kept from this one (loopView/rowCache.ts); and
+      // zoomed in at 100% in a window 900 pixels tall: only the rows in view (and a window more each way).
+      const nextHistory = i + 1 < n ? (buildNestedHistory(trace, i + 1) ?? buildLoopHistory(trace, i + 1, null)) : null;
+      if (nextHistory) {
+        const rows = new RowCache();
+        loopDrawing(scene, { rows });
+        const nextScene = loopScene(trace, nextHistory, { hideQuiet: true });
+        let start = performance.now();
+        loopDrawing(nextScene, { rows });
+        perf.record("loop.next", performance.now() - start);
+        const height = Number(loopDrawing(nextScene, { rows }).getAttribute("height"));
+        const top = Math.max(0, height - 1800);
+        start = performance.now();
+        loopDrawing(nextScene, { visible: { top: top - 900, bottom: top + 1800 } });
+        perf.record("loop.inView", performance.now() - start);
+      }
     }
   }
   perf.on = false;
@@ -148,8 +177,8 @@ function table(results: Result[], against?: Result[]): string {
   const vs = (now: number, before: number | undefined, digits = 0) =>
     before === undefined ? f(now, digits) : `${f(now, digits)} (was ${f(before, digits)})`;
   const lines = [
-    "| Program | Trace | Read it | Steps (ran) | Objects: most / mean | Trace size | Scene arrows / nested | Layout arrows / nested | Routing | Loop history + layout | Marks arrows / nested |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| Program | Trace | Read it | Steps (ran) | Objects: most / mean | Trace size | Scene arrows / nested | Layout arrows / nested | Next step arrows / nested | Routing | Loop history + layout | Loop: next step / in view | Marks arrows / nested |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const r of results) {
     const o = old.get(r.program);
@@ -157,7 +186,7 @@ function table(results: Result[], against?: Result[]): string {
     const s = r.stages;
     const os = o?.stages ?? {};
     lines.push(
-      `| ${r.program} | ${vs(t.ms, o?.trace.ms)} ms${t.truncated ? ` (stopped: ${t.stoppedBy})` : ""} | ${t.parseMs ? `${vs(t.parseMs, o?.trace.parseMs)} ms` : "–"} | ${t.steps} (${t.ran}) | ${t.maxHeap} / ${t.meanHeap}${o ? ` (was ${o.trace.maxHeap} / ${o.trace.meanHeap})` : ""} | ${mb(t.size)}${o ? ` (was ${mb(o.trace.size)})` : ""} | ${f(s["memory.scene.arrows"], 1)} / ${f(s["memory.scene.nested"], 1)} ms | ${vs(s["memory.layout.arrows"], os["memory.layout.arrows"])} / ${vs(s["memory.layout.nested"], os["memory.layout.nested"])} ms | ${vs(s["memory.route"], os["memory.route"])} ms | ${f((s["loop.history"] ?? 0) + (s["loop.scene"] ?? 0), 1)} + ${f(s["loop.layout"], 1)} ms | ${r.marks.arrows} / ${r.marks.nested} |`,
+      `| ${r.program} | ${vs(t.ms, o?.trace.ms)} ms${t.truncated ? ` (stopped: ${t.stoppedBy})` : ""} | ${t.parseMs ? `${vs(t.parseMs, o?.trace.parseMs)} ms` : "–"} | ${t.steps} (${t.ran}) | ${t.maxHeap} / ${t.meanHeap}${o ? ` (was ${o.trace.maxHeap} / ${o.trace.meanHeap})` : ""} | ${mb(t.size)}${o ? ` (was ${mb(o.trace.size)})` : ""} | ${f(s["memory.scene.arrows"], 1)} / ${f(s["memory.scene.nested"], 1)} ms | ${vs(s["memory.layout.arrows"], os["memory.layout.arrows"])} / ${vs(s["memory.layout.nested"], os["memory.layout.nested"])} ms | ${f(s["memory.next.arrows"], 1)} / ${f(s["memory.next.nested"], 1)} ms | ${vs(s["memory.route"], os["memory.route"])} ms | ${f((s["loop.history"] ?? 0) + (s["loop.scene"] ?? 0), 1)} + ${f(s["loop.full"], 1)} ms | ${f(s["loop.next"], 1)} / ${f(s["loop.inView"], 1)} ms | ${r.marks.arrows} / ${r.marks.nested} |`,
     );
   }
   return lines.join("\n");

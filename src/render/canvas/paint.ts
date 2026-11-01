@@ -295,10 +295,39 @@ function hasClass(classes: string, name: string): boolean {
  * element's style (ProbeStyles). Clear it when the styles are cleared.
  */
 export class PaintCache {
-  groups = new Map<string, PaintGroup>();
+  /** By the chain of styles reaching the group, then by its marks' signature (Mark.signature). */
+  groups = new GroupMap();
 
   clear(): void {
-    this.groups.clear();
+    this.groups = new GroupMap();
+  }
+}
+
+/**
+ * Groups by their style chain's number and their signature. Two levels,
+ * not one "<number><signature>" string: a mark's signature is the same
+ * string object every time it's asked (Mark.signature), whose hash the
+ * engine works out once, where a new string made from it would be hashed
+ * all through again, every paint.
+ */
+class GroupMap {
+  private readonly byContext = new Map<number, Map<string, PaintGroup>>();
+
+  get(context: number, sig: string): PaintGroup | undefined {
+    return this.byContext.get(context)?.get(sig);
+  }
+
+  has(context: number, sig: string): boolean {
+    return this.byContext.get(context)?.has(sig) ?? false;
+  }
+
+  set(context: number, sig: string, group: PaintGroup): void {
+    let inner = this.byContext.get(context);
+    if (!inner) {
+      inner = new Map();
+      this.byContext.set(context, inner);
+    }
+    inner.set(sig, group);
   }
 }
 
@@ -309,42 +338,25 @@ const isLayer = (el: DrawingNode) =>
   el.hasAttribute("data-node-key") ||
   el.hasAttribute("data-top");
 
-/** Everything a mark and the marks in it say, as one string (`memo`: the ones worked out already). */
-function markSig(m: Mark, memo: Map<Mark, string>): string {
-  const known = memo.get(m);
-  if (known !== undefined) return known;
-  let out = `<${m.localName}`;
-  for (const [name, value] of m.attributeEntries()) out += ` ${name}=${value.length}:${value}`;
-  out += ">";
-  for (const child of m.childNodes) {
-    out += child instanceof Mark ? markSig(child, memo) : `"${child.textContent.length}:${child.textContent}`;
-  }
-  out += "/";
-  // Only groups are asked again (the layers inside a layer that wasn't kept).
-  if (m.localName === "g") memo.set(m, out);
-  return out;
-}
-
 /** Turn a drawing (drawing.ts: marks, or SVG elements) into a paint list, reusing what `cache` kept. */
 export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: PaintCache): Paint {
   // Groups whose paint is kept: found while reading styles, so what's
   // inside them isn't read.
   const kept = new Map<DrawingNode, PaintGroup>();
-  const keys = new Map<DrawingNode, string>();
-  const next = new Map<string, PaintGroup>();
-  const sigs = new Map<Mark, string>();
+  const keys = new Map<DrawingNode, { context: number; sig: string }>();
+  const next = new GroupMap();
   const skip = cache
     ? (el: DrawingNode, context: number) => {
         if (el === svg || el.localName !== "g" || !(el instanceof Mark) || !isLayer(el)) return false;
-        const key = `${context}${markSig(el, sigs)}`;
-        const group = cache.groups.get(key);
+        const sig = el.signature();
+        const group = cache.groups.get(context, sig);
         // Two identical groups in one drawing: the second paints its own.
-        if (group && !next.has(key)) {
+        if (group && !next.has(context, sig)) {
           kept.set(el, group);
-          next.set(key, group);
+          next.set(context, sig, group);
           return true;
         }
-        keys.set(el, key);
+        keys.set(el, { context, sig });
         return false;
       }
     : undefined;
@@ -503,7 +515,7 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
           ? { ...known, alpha: passDown * s.opacity, parentClasses: classes }
           : group(child, passDown, classes, layered);
         const key = keys.get(child);
-        if (key !== undefined) next.set(key, g);
+        if (key !== undefined) next.set(key.context, key.sig, g);
         if (g.children.length) {
           out.children.push(g);
           out.bounds = union(out.bounds, g.bounds);

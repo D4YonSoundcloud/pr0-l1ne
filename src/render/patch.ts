@@ -136,6 +136,11 @@ export class SvgPatcher {
 
   /** Change `el` (which shows `old`) to show `next`. Returns the element that now does: `el`, or a new one. */
   private patch(old: Mark, next: Mark, el: Element): Element {
+    // The very same marks as last time (kept, memoryView/boxCache.ts): the element already shows them.
+    if (old === next && !playsOnArrival(next)) {
+      this.stats.kept++;
+      return el;
+    }
     if (old.localName !== next.localName || playsOnArrival(next)) return this.build(next);
     this.nodes.set(next, el);
     if (!sameAttributes(old, next)) {
@@ -174,11 +179,24 @@ export class SvgPatcher {
     const before = old.childNodes;
     const after = next.childNodes;
     if (!before.length && !after.length) return;
+    // Marks in both drawings (kept and shared, memoryView/boxCache.ts,
+    // loopView/rowCache.ts) keep their own elements, wherever they are now.
+    // They must never be matched with another mark by place: patching that
+    // mark's element to show one would leave the shared mark's own element
+    // showing something else.
+    let shared: Set<Drawn> | null = null;
+    if (before.length && after.some((node) => node instanceof Mark && node.isShared)) {
+      const was = new Set(before);
+      shared = new Set(after.filter((node) => was.has(node)));
+    }
     const oldKeys = keysOf(before);
     const newKeys = keysOf(after);
-    // Nearly always: the same children in the same order.
+    // Nearly always: the same children in the same order (and any shared one in its own place).
     let same = before.length === after.length;
-    for (let i = 0; same && i < oldKeys.length; i++) same = oldKeys[i] === newKeys[i];
+    for (let i = 0; same && i < oldKeys.length; i++)
+      same =
+        oldKeys[i] === newKeys[i] &&
+        (!shared || before[i] === after[i] || !(shared.has(before[i]) || shared.has(after[i])));
     if (same) {
       for (let i = 0; i < after.length; i++) {
         const node = this.nodes.get(before[i])!;
@@ -189,9 +207,13 @@ export class SvgPatcher {
     }
     const byKey = new Map<string, Drawn>();
     before.forEach((node, i) => {
-      byKey.set(oldKeys[i], node);
+      if (!shared?.has(node)) byKey.set(oldKeys[i], node);
     });
     const targets: Node[] = after.map((node, i) => {
+      if (shared?.has(node)) {
+        this.stats.kept++;
+        return this.nodes.get(node)!;
+      }
       const was = byKey.get(newKeys[i]);
       if (was === undefined) return this.buildNode(node);
       byKey.delete(newKeys[i]);

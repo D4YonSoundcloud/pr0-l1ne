@@ -2,6 +2,7 @@
  * What the loop view's parts share: spacing, the column and track layouts
  * every row is drawn in, and small pieces every lane uses.
  */
+
 import { scalarIn } from "../../scene/loopScene";
 import { valueKey } from "../../trace/diff";
 import type { LinkedTrack } from "../../trace/linked";
@@ -10,6 +11,7 @@ import type { Value } from "../../trace/types";
 import { CELL_H, s } from "../draw";
 import type { Mark } from "../drawing";
 import { onSpacingChange, spacing } from "../spacing";
+import type { RowCache } from "./rowCache";
 
 // Spacing. The Layout panel can change most of these (see render/spacing.ts):
 // they're `let`, refreshed below, and every module importing them sees the
@@ -52,6 +54,14 @@ export interface LoopViewOptions {
    * variables sit at the middle of the stack.
    */
   vertical?: boolean;
+  /**
+   * The part of the drawing in view, top to bottom in diagram units: rows
+   * wholly outside it aren't drawn (the drawing keeps its full height, so
+   * the view and Auto-fit don't change). Undefined draws every row.
+   */
+  visible?: { top: number; bottom: number };
+  /** Rows kept from the last drawing, drawn again only when they've changed (rowCache.ts). */
+  rows?: RowCache;
 }
 
 export interface ContainerColumn {

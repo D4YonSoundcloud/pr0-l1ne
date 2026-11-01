@@ -21,7 +21,9 @@
  * gap run side by side instead of on top of each other. Lanes are ordered to
  * reduce crossings.
  */
+
 import { onSpacingChange, spacing } from "./spacing";
+import { RectGrid } from "./spatial";
 
 export interface Point {
   x: number;
@@ -103,13 +105,26 @@ export function crosses(a: Point, b: Point, box: Rect, inset = 2): boolean {
  * touching any obstacle. Moves down past whatever is in the way, so a new
  * box is never hidden under an existing one.
  */
-export function findFreeY(x: number, w: number, h: number, y: number, obstacles: Rect[], gap: number): number {
+export function findFreeY(
+  x: number,
+  w: number,
+  h: number,
+  y: number,
+  obstacles: Rect[] | RectGrid,
+  gap: number,
+): number {
   let candidate = y;
+  const pad = gap / 2;
   for (let guard = 0; guard < 500; guard++) {
     const box = { x, y: candidate, w, h };
-    const hit = obstacles.filter((o) => overlaps(box, o, gap / 2));
-    if (!hit.length) return candidate;
-    candidate = Math.max(...hit.map(bottom)) + gap;
+    // Only the obstacles near the box (spatial.ts), when there's a grid of them.
+    const near = Array.isArray(obstacles)
+      ? obstacles
+      : obstacles.near(x - pad, candidate - pad, x + w + pad, candidate + h + pad);
+    let lowest = Number.NEGATIVE_INFINITY;
+    for (const o of near) if (overlaps(box, o, pad)) lowest = Math.max(lowest, bottom(o));
+    if (lowest === Number.NEGATIVE_INFINITY) return candidate;
+    candidate = lowest + gap;
   }
   return candidate;
 }
@@ -135,9 +150,9 @@ interface Plan {
 }
 
 /** The length of an arrow over or under the boxes between its ends (as assignLanes will route it, roughly). */
-function corridorCost(p: Plan, boxes: Rect[]): number {
+function corridorCost(p: Plan, boxes: Boxes): number {
   const [x1, x2] = corridorRange(p, boxes);
-  const between = boxes.filter((b) => b.x < x2 && right(b) > x1);
+  const between = boxes.between(x1, x2);
   const ends = [p.edge.from.y, p.entryY];
   const top = (between.length ? Math.min(...between.map((b) => b.y)) : Math.min(...ends)) - CORRIDOR_PAD;
   const under = (between.length ? Math.max(...between.map(bottom)) : Math.max(...ends)) + CORRIDOR_PAD;
@@ -156,24 +171,33 @@ function corridorCost(p: Plan, boxes: Rect[]): number {
  * Its cost is its length plus BEHIND_COST for each box it passes behind.
  * Null when every height would cut through its own box or the target.
  */
-function cheapestTunnel(p: Plan, boxes: Rect[]): { cost: number; y: number } | null {
+function cheapestTunnel(p: Plan, boxes: Boxes): { cost: number; y: number } | null {
   const { from, source, target } = p.edge;
-  const out = columnRight(source, boxes) + GAP_PAD;
-  const inX = columnRight(target, boxes) + GAP_PAD;
+  const out = boxes.columnRight(source) + GAP_PAD;
+  const inX = boxes.columnRight(target) + GAP_PAD;
   let best: { cost: number; y: number } | null = null;
   for (const y of [p.entryY, source.y - CORRIDOR_PAD, bottom(source) + CORRIDOR_PAD]) {
     const a = { x: inX, y };
     const b = { x: out, y };
     if (y < 6 || crosses(a, b, source) || crosses(a, b, target)) continue;
     if (crosses({ x: inX, y }, { x: inX, y: p.entryY }, target)) continue;
-    const passed = boxes.filter(
-      (box) =>
-        box !== source &&
-        box !== target &&
-        (crosses(a, b, box) ||
-          crosses({ x: out, y: from.y }, { x: out, y }, box) ||
-          crosses({ x: inX, y }, { x: inX, y: p.entryY }, box)),
-    ).length;
+    // Each box it passes behind, once (on any of its three segments).
+    const segments: [Point, Point][] = [
+      [a, b],
+      [
+        { x: out, y: from.y },
+        { x: out, y },
+      ],
+      [
+        { x: inX, y },
+        { x: inX, y: p.entryY },
+      ],
+    ];
+    const behind = new Set<Rect>();
+    for (const [s, e] of segments)
+      for (const box of boxes.grid.near(s.x, s.y, e.x, e.y))
+        if (box !== source && box !== target && crosses(s, e, box)) behind.add(box);
+    const passed = behind.size;
     const length = out - from.x + Math.abs(from.y - y) + (out - inX) + Math.abs(y - p.entryY) + (inX - right(target));
     // Clear of every box, it's just a corridor at another height: corridors
     // already pick theirs (over or under everything, for fewer crossings).
@@ -184,15 +208,68 @@ function cheapestTunnel(p: Plan, boxes: Rect[]): { cost: number; y: number } | n
   return best;
 }
 
-/** Right edge of the column a box is in: boxes that share its x. */
-function columnRight(box: Rect, boxes: Rect[]): number {
-  let r = right(box);
-  for (const b of boxes) if (Math.abs(b.x - box.x) < 1) r = Math.max(r, right(b));
-  return r;
+/**
+ * The boxes arrows are routed around, with what routing asks of them
+ * answered without going through every box (the grid of spatial.ts, and
+ * the boxes sorted by x): with thousands of boxes and arrows, asking each
+ * arrow about each box was most of the work.
+ */
+class Boxes {
+  readonly grid: RectGrid;
+  /** By left edge, for the column a box is in. */
+  private readonly byX: Rect[];
+  private readonly columnRights = new Map<Rect, number>();
+  /** Everything's extent, top to bottom (a strip across it is "everything between two x's"). */
+  private readonly top: number;
+  private readonly bottom: number;
+
+  constructor(readonly list: Rect[]) {
+    this.grid = new RectGrid(list);
+    this.byX = list.slice().sort((a, b) => a.x - b.x);
+    let top = 0;
+    let low = 0;
+    for (const b of list) {
+      top = Math.min(top, b.y);
+      low = Math.max(low, bottom(b));
+    }
+    this.top = top;
+    this.bottom = low;
+  }
+
+  /** Right edge of the column a box is in: boxes that share its x (within a pixel). */
+  columnRight(box: Rect): number {
+    const known = this.columnRights.get(box);
+    if (known !== undefined) return known;
+    let r = right(box);
+    // The first box at x > box.x - 1, then every one up to box.x + 1.
+    let lo = 0;
+    let hi = this.byX.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.byX[mid].x <= box.x - 1) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < this.byX.length && this.byX[i].x < box.x + 1; i++) r = Math.max(r, right(this.byX[i]));
+    this.columnRights.set(box, r);
+    return r;
+  }
+
+  /** The boxes some part of which is between x1 and x2 (at any height). */
+  between(x1: number, x2: number): Rect[] {
+    return this.grid.near(x1, this.top, x2, this.bottom).filter((b) => b.x < x2 && right(b) > x1);
+  }
+
+  /** How many boxes (other than those in `except`) the segment from a to b passes through. */
+  crossed(a: Point, b: Point, except: Rect[]): number {
+    let n = 0;
+    for (const box of this.grid.near(a.x, a.y, b.x, b.y)) if (!except.includes(box) && crosses(a, b, box)) n++;
+    return n;
+  }
 }
 
 /** Every route as a list of points; segments alternate horizontal/vertical. */
-export function routeEdges(input: EdgeInput[], boxes: Rect[]): Point[][] {
+export function routeEdges(input: EdgeInput[], boxList: Rect[]): Point[][] {
+  const boxes = new Boxes(boxList);
   // An arrow that leaves downward is routed from the point where it turns;
   // the drop out of the cell is added back at the end.
   const edges = input.map((e) => (e.exitDownY === undefined ? e : { ...e, from: { x: e.from.x, y: e.exitDownY } }));
@@ -209,7 +286,7 @@ export function routeEdges(input: EdgeInput[], boxes: Rect[]): Point[][] {
     }
     if (right(T) >= S.x - 1) {
       // Same column (or overlapping it): turn around in the gap on the right.
-      const outRight = columnRight(S, boxes);
+      const outRight = boxes.columnRight(S);
       if (right(T) + 10 > outRight + GAP_PAD) {
         return { index, edge, kind: "around", side: "left", entryY: edge.entryY };
       }
@@ -245,6 +322,30 @@ export function routeEdges(input: EdgeInput[], boxes: Rect[]): Point[][] {
   });
 }
 
+/**
+ * Arrows for a drawing too small to read (zoomed out to outline, lod.ts):
+ * each straight, or with one bend, from where it starts to its target,
+ * without finding lanes or going around boxes. At that size an arrow is a
+ * line a pixel wide showing what points where; routing every one through
+ * the gaps costs time and shows nothing more.
+ *
+ *   level with the target, to its right:  straight in
+ *   to the right, above or below it:      across, then down (or up) into its top (or bottom)
+ *   anywhere else:                        a straight line to its nearer side
+ */
+export function simpleRoutes(input: EdgeInput[]): Point[][] {
+  return input.map(({ from, target: T, source: S, entryY }) => {
+    const level = from.y >= T.y && from.y <= bottom(T);
+    if (T.x >= right(S) && level) return [from, { x: T.x, y: from.y }];
+    if (T.x >= right(S)) {
+      const x = T.x + Math.min(16, T.w / 2);
+      return [from, { x, y: from.y }, { x, y: from.y < T.y ? T.y : bottom(T) }];
+    }
+    const side = from.x < T.x + T.w / 2 ? T.x : right(T);
+    return [from, { x: side, y: Math.min(bottom(T), Math.max(T.y, entryY)) }];
+  });
+}
+
 /** Does a route from routeEdges run behind the boxes between its ends (instead of around them)? */
 export const runsBehind = (route: Point[]): boolean => (route as Point[] & { behind?: boolean }).behind === true;
 
@@ -259,7 +360,9 @@ function spreadEntries(plans: Plan[]): void {
     if (p.kind === "tree" || p.kind === "top") continue;
     const t = p.edge.target;
     const key = `${t.x},${t.y},${p.side}`;
-    groups.set(key, [...(groups.get(key) ?? []), p]);
+    const group = groups.get(key);
+    if (group) group.push(p);
+    else groups.set(key, [p]);
   }
   for (const group of groups.values()) {
     if (group.length < 2) continue;
@@ -323,16 +426,12 @@ export function fewestCrossings<T>(items: readonly T[], cost: (a: T, b: T) => nu
 }
 
 /** How many boxes a group of forward arrows would run through, with their lanes placed. */
-function laneHits(group: Plan[], boxes: Rect[]): number {
+function laneHits(group: Plan[], boxes: Boxes): number {
   let hits = 0;
   for (const p of group) {
     const points = buildPoints(p);
-    for (let k = 1; k < points.length; k++) {
-      for (const box of boxes) {
-        if (box === p.edge.source || box === p.edge.target) continue;
-        if (crosses(points[k - 1], points[k], box)) hits++;
-      }
-    }
+    const ends = [p.edge.source, p.edge.target];
+    for (let k = 1; k < points.length; k++) hits += boxes.crossed(points[k - 1], points[k], ends);
   }
   return hits;
 }
@@ -346,7 +445,7 @@ function laneSpan(p: Plan): [number, number] {
 
 const inside = (y: number, [lo, hi]: [number, number]) => y > lo + 0.5 && y < hi - 0.5;
 
-function assignLanes(plans: Plan[], boxes: Rect[]): void {
+function assignLanes(plans: Plan[], boxes: Boxes): void {
   // Forward arrows: lanes in the gap left of the target, counted leftwards.
   const forward = new Map<string, Plan[]>();
   for (const p of plans) {
@@ -354,7 +453,9 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
     // Arrows into a tree share the gap left of the whole tree.
     const key = `R:${Math.round(p.kind === "top" ? p.edge.enterTopFrom! : p.edge.target.x)}`;
     p.inLane = { key };
-    forward.set(key, [...(forward.get(key) ?? []), p]);
+    const group = forward.get(key);
+    if (group) group.push(p);
+    else forward.set(key, [p]);
   }
   for (const group of forward.values()) {
     // Two forward lanes A (left) and B (right) cross when A's exit to the
@@ -387,11 +488,13 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
   // the column, so the loops nest instead of crossing.
   const leftChannels = new Map<string, { plan: Plan; lane: "in" | "out"; span: number }[]>();
   const addLeft = (key: string, plan: Plan, lane: "in" | "out", span: number) => {
-    leftChannels.set(key, [...(leftChannels.get(key) ?? []), { plan, lane, span }]);
+    const group = leftChannels.get(key);
+    if (group) group.push({ plan, lane, span });
+    else leftChannels.set(key, [{ plan, lane, span }]);
   };
   for (const p of plans) {
     if (p.kind === "uturn" || p.kind === "corridor" || p.kind === "around") {
-      const key = `L:${Math.round(columnRight(p.edge.source, boxes))}`;
+      const key = `L:${Math.round(boxes.columnRight(p.edge.source))}`;
       p.outLane = { key };
       addLeft(key, p, "out", Math.abs(p.edge.from.y - p.entryY));
     }
@@ -403,13 +506,13 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
   for (const p of corridorPlans) {
     if (p.tunnel) {
       // Straight across behind the boxes, at the height already chosen.
-      const key = `L:${Math.round(columnRight(p.edge.target, boxes))}`;
+      const key = `L:${Math.round(boxes.columnRight(p.edge.target))}`;
       p.inLane = { key };
       addLeft(key, p, "in", Math.abs(p.corridor!.y! - p.entryY));
       continue;
     }
     const [x1, x2] = corridorRange(p, boxes);
-    const between = boxes.filter((b) => b.x < x2 && right(b) > x1);
+    const between = boxes.between(x1, x2);
     // With nothing in between (possible once boxes are dragged), run the
     // corridor just past the arrow's own ends instead of at infinity.
     const ends = [p.edge.from.y, p.entryY];
@@ -426,7 +529,7 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
       tops.bottom++;
     }
     if (p.kind === "corridor") {
-      const key = `L:${Math.round(columnRight(p.edge.target, boxes))}`;
+      const key = `L:${Math.round(boxes.columnRight(p.edge.target))}`;
       p.inLane = { key };
       addLeft(key, p, "in", Math.abs(p.corridor.y! - p.entryY));
     }
@@ -443,13 +546,13 @@ function assignLanes(plans: Plan[], boxes: Rect[]): void {
   }
 }
 
-function corridorRange(p: Plan, boxes: Rect[]): [number, number] {
-  const out = columnRight(p.edge.source, boxes) + GAP_PAD;
-  const inX = p.kind === "around" ? p.edge.target.x - GAP_PAD : columnRight(p.edge.target, boxes) + GAP_PAD;
+function corridorRange(p: Plan, boxes: Boxes): [number, number] {
+  const out = boxes.columnRight(p.edge.source) + GAP_PAD;
+  const inX = p.kind === "around" ? p.edge.target.x - GAP_PAD : boxes.columnRight(p.edge.target) + GAP_PAD;
   return out < inX ? [out, inX] : [inX, out];
 }
 
-function horizontalSpan(p: Plan, boxes: Rect[]): number {
+function horizontalSpan(p: Plan, boxes: Boxes): number {
   const [a, b] = corridorRange(p, boxes);
   return b - a;
 }

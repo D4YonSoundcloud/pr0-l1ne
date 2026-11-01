@@ -2,6 +2,12 @@
  * Hover focus: a box's arrows and the boxes at their other ends stand out,
  * everything else steps back (styles.css, "Focus"). Works on the SVG on
  * screen and on a drawing alike.
+ *
+ * Only what changes looks gets a class: the arrow layers (has-focus, so the
+ * other arrows dim), the arrows, and the boxes at their ends. Nothing above
+ * the boxes changes, so the canvas renderer, which keeps each box's paint
+ * while the styles reaching it stay the same (canvas/paint.ts), paints again
+ * only the few boxes and the arrows a hover touches.
  */
 
 /** A drawing focus can be shown on: the SVG on screen, or a drawing (a Mark). */
@@ -24,7 +30,7 @@ export function applyFocus(svg: Focusable | null, key: string | null): void {
   if (!svg) return;
   for (const el of svg.querySelectorAll(".is-focus, .is-related")) el.classList.remove("is-focus", "is-related");
   const node = key ? svg.querySelector(`.node[data-node-key="${CSS.escape(key)}"]`) : null;
-  svg.classList.toggle("has-focus", !!node);
+  for (const layer of svg.querySelectorAll(".arrows")) layer.classList.toggle("has-focus", !!node);
   if (!node || !key) return;
   node.classList.add("is-focus");
   // Each arrow's parts: behind the boxes, and over them (memoryView/layout.ts).

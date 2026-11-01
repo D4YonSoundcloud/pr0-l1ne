@@ -234,7 +234,7 @@ Both windows zoom out as far as 1%, so even a drawing of thousands of boxes fits
 | 60% and up | Everything |
 | 35% to 60% | No small text: index numbers, sizes, field names on arrows, the legend |
 | 12% to 35% | No text: each cell is a block colored by what it holds (numbers, strings, booleans, references), or a heatmap's colors |
-| 3% to 12% | Blocks, thin arrows without heads, and the names of the call stack's functions and the biggest structures written over the drawing, at a size you can read |
+| 3% to 12% | Blocks, thin arrows without heads (straight, or with one bend, instead of routed around the boxes), and the names of the call stack's functions and the biggest structures written over the drawing, at a size you can read |
 | 1% to 3% | Each box one rectangle in its kind's color, arrows faint; the names stay |
 
 Zooming a little either side of one of these doesn't flicker between them: the drawing changes only once you're clearly past it. From 35% down, hovering a box says what it is, and double-clicking it zooms in on it. **Auto-fit** zooms as far out as it needs to, down to 1%.
@@ -473,6 +473,8 @@ When the current step is inside a loop, the bottom section stacks the state at t
 - **Red arrows** connect each changed cell to its previous row. When a value moved from one index to another (a swap), the arrow starts at the index it came from, so swaps show as crossing arrows.
 - **Variables to the right** (`i = 2`, `left = 3`) are the scalars that change during the loop. The ones that changed in that iteration are red.
 - **The current iteration** is highlighted while the loop is still running.
+
+A long loop shows its last 100 to 120 iterations (the earliest are left out 20 at a time, with a note at the top saying how many). Stepping draws only the rows that changed, and zoomed in, only the rows in view, so even a history of big grids steps quickly.
 
 **Each run's header, with its values.** Above a loop's rows, its header is shown as written and as it ran: `for j in range(n - 1 - i)  →  for j in range(0, 3)`, or in JavaScript `for (let j = 0; j < n - 1 - i; j++)  →  for (j = 0; j < 3; j++)`. That's for loops that count (a Python `range`, or a JavaScript `for` with a start, a bound and a step), so you can see which range this run covers without working it out. Loops over a list, and `while` loops, show only their rows.
 

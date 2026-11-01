@@ -28,7 +28,7 @@
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { timed } from "../../perf";
-import { atLevel, type Lod, landmarksIn } from "../lod";
+import { atLevel, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
 // PixiJS builds some of its code with new Function(), which the app's
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
 // versions that don't.
@@ -52,9 +52,12 @@ import { type Animatable, DEFAULT_EASING, ENTER_SLIDE, plan, type Snapshot, snap
 import { type Mark, toSvg } from "../drawing";
 import { standaloneSvg } from "../export";
 import { loopDrawing } from "../loopView";
+import { RowCache, RowsInView } from "../loopView/rowCache";
 import { applyFocus, memoryDrawing } from "../memory";
+import { BoxCache } from "../memoryView/boxCache";
 import { sqlPipelineDrawing, sqlTableDrawing } from "../sqlView";
 import { type View, Viewport } from "../viewport";
+import { HitIndex } from "./hitIndex";
 import { easing, Tweens } from "./motion";
 import { groups, type Paint, PaintCache, type PaintGroup, paintDrawing, type Rect } from "./paint";
 import { type BuiltScene, buildScene, forgetFonts, SceneCache } from "./pixiScene";
@@ -67,6 +70,8 @@ export interface CanvasOptions {
 
 /** How often a window being resized resizes its canvas, at most (see resizeSoon). */
 const RESIZE_EVERY = 120;
+/** How long the zoom must rest before the memory window lays its step out again for a new level (see levelChanged). */
+const RELAYOUT_AFTER = 160;
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
 
 /** Room around a box or row before it counts as off screen (text can stick out of a box's shapes). */
@@ -74,7 +79,6 @@ const CULL_MARGIN = 60;
 /** Text is drawn sharper when zoomed in, in steps (1×, 2×, 3×), once the zoom settles. */
 const TEXT_SETTLE_MS = 160;
 
-const contains = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 const overlaps = (a: Rect, b: Rect) => a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
 
 /** "mark 450ms ease-out" (the --flash variable): how long, and how. */
@@ -98,6 +102,8 @@ abstract class CanvasWindow {
   /** The drawing on screen (drawing.ts: the layout, as marks), and what it was painted into. */
   protected drawing: Mark | null = null;
   protected paint: Paint | null = null;
+  /** What's under the pointer, for `paint` (made the first time it's asked). */
+  private hits: { paint: Paint; index: HitIndex } | null = null;
   private pixi: PixiRenderer | null = null;
   private readonly stage: Container = new PixiContainer();
   private built: BuiltScene | null = null;
@@ -148,6 +154,7 @@ abstract class CanvasWindow {
           this.at = view;
           this.requestDraw();
           this.settleText();
+          this.viewMoved();
         },
         nodeAt: (x, y) => {
           const node = this.nodeAt(x, y);
@@ -304,7 +311,14 @@ abstract class CanvasWindow {
     this.level = lod;
     this.styles.setLevel?.(lod);
     this.repaint();
+    this.levelChanged(lod);
   }
+
+  /** The zoom crossed into another level of detail (lod.ts). */
+  protected levelChanged(_lod: Lod): void {}
+
+  /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
+  protected viewMoved(): void {}
   private level: Lod = 0;
 
   /** Paint the drawing on screen again (styles or fonts changed, or a hover), without animating. */
@@ -410,24 +424,27 @@ abstract class CanvasWindow {
     return { x: (clientX - rect.left - this.at.x) / this.at.z, y: (clientY - rect.top - this.at.y) / this.at.z };
   }
 
+  /** The index of what's under the pointer, for the paint on screen. */
+  private hitIndex(): HitIndex | null {
+    if (!this.paint) return null;
+    if (this.hits?.paint !== this.paint)
+      this.hits = { paint: this.paint, index: new HitIndex(this.paint.root, (g) => !!(g.nodeKey || g.title)) };
+    return this.hits.index;
+  }
+
   /** The topmost draggable box under a point. */
   protected nodeAt(clientX: number, clientY: number): PaintGroup | null {
-    if (!this.paint) return null;
+    const index = this.hitIndex();
+    if (!index) return null;
     const { x, y } = this.toDiagram(clientX, clientY);
-    let found: PaintGroup | null = null;
-    for (const group of groups(this.paint.root)) {
-      if (group.nodeKey && group.bounds && contains(group.bounds, x, y)) found = group;
-    }
-    return found;
+    return index.at(x, y, (g) => !!g.nodeKey);
   }
 
   private showTooltip(clientX: number, clientY: number): void {
-    if (!this.paint) return;
+    const index = this.hitIndex();
+    if (!index) return;
     const { x, y } = this.toDiagram(clientX, clientY);
-    let title = "";
-    for (const group of groups(this.paint.root)) {
-      if (group.title && group.bounds && contains(group.bounds, x, y)) title = group.title;
-    }
+    const title = index.at(x, y, (g) => !!g.title)?.title ?? "";
     if (title === this.tooltip) return;
     this.tooltip = title;
     if (title) this.canvas.title = title;
@@ -526,9 +543,15 @@ const classSet = (classes: string) => new Set(classes.split(/\s+/).filter(Boolea
 
 export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer {
   private readonly positions = new Map<string, Point>();
+  /** Boxes kept from step to step, drawn again only when they change (memoryView/boxCache.ts). */
+  private readonly boxes = new BoxCache();
   private dragging: string | null = null;
   private hovered: string | null = null;
   private readonly hovering = new AbortController();
+
+  /** Were the arrows on screen laid out simply (zoomed out, lod.ts SIMPLE_ARROWS_FROM)? */
+  private simpleArrows = false;
+  private readonly onLayoutChange?: () => void;
 
   constructor(el: HTMLElement, events: MemoryRendererEvents, options: CanvasOptions = {}) {
     super(el, "Memory diagram", events, options, (key, position, done) => {
@@ -536,6 +559,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
       this.dragging = done ? null : key;
       events.onLayoutChange?.();
     });
+    this.onLayoutChange = events.onLayoutChange;
     // Hovering a box highlights its arrows and the boxes they connect to,
     // as in the SVG renderer (memory.ts applyFocus), then draws again.
     const signal = this.hovering.signal;
@@ -581,13 +605,32 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
   }
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
+    this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
     const drawing =
       "kind" in scene
         ? sqlTableDrawing(scene)
-        : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+        : memoryDrawing(scene, {
+            positions: this.positions,
+            raise: this.dragging,
+            boxes: this.boxes,
+            simpleArrows: this.simpleArrows,
+          });
     this.refreshFocus(false, drawing);
     this.show(drawing, this.step);
   }
+
+  /**
+   * Zoomed across where arrows go simple (or back): the step is laid out
+   * again, once the zoom settles (a zoom glides through the levels between,
+   * and laying out mid-glide would do it for each).
+   */
+  protected override levelChanged(_lod: Lod): void {
+    window.clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = window.setTimeout(() => {
+      if (this.drawing && this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows) this.onLayoutChange?.();
+    }, RELAYOUT_AFTER);
+  }
+  private relayoutTimer = 0;
 
   /** Highlight the hovered (or dragged) box's arrows; `redraw` to show it now. */
   private refreshFocus(redraw: boolean, drawing = this.drawing): void {
@@ -651,6 +694,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
   }
 
   override dispose(): void {
+    window.clearTimeout(this.relayoutTimer);
     this.hovering.abort();
     super.dispose();
   }
@@ -658,6 +702,11 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
 
 export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   private vertical = false;
+  /** Rows kept from step to step (loopView/rowCache.ts), and which are drawn: those in view. */
+  private readonly rows = new RowCache();
+  private readonly inView = new RowsInView();
+  private scene: LoopWindowScene | null = null;
+  private redraw = 0;
 
   constructor(el: HTMLElement, events: RendererEvents, options: CanvasOptions = {}) {
     super(el, "Loop history", events, options);
@@ -668,17 +717,46 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   }
 
   render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
+    this.scene = scene;
+    this.draw(scene, true);
+  }
+
+  private draw(scene: LoopWindowScene, step: boolean): void {
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
     if ("kind" in scene) {
       this.show(sqlPipelineDrawing(scene), { ...this.step, duration: 0 });
     } else {
-      const motion = scene.live ? this.step : { ...this.step, duration: 0 };
-      this.show(loopDrawing(scene, { vertical: this.vertical }), motion);
+      const motion = step && scene.live ? this.step : { ...this.step, duration: 0 };
+      const visible = this.inView.next({
+        autoFit: this.view.autoFitState.on,
+        span: (m) => this.view.visibleSpan(m),
+      });
+      this.show(loopDrawing(scene, { vertical: this.vertical, rows: this.rows, visible }), motion);
     }
+    if (!step) return;
     // As you step, keep the iteration that's running in view.
     const current = this.drawing?.querySelector(".loop-row.is-current");
     if (current)
       this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
+  }
+
+  /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
+  protected override viewMoved(): void {
+    if (
+      !this.scene ||
+      this.redraw ||
+      !this.inView.stale({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) })
+    )
+      return;
+    this.redraw = requestAnimationFrame(() => {
+      this.redraw = 0;
+      if (this.scene) this.draw(this.scene, false);
+    });
+  }
+
+  override dispose(): void {
+    cancelAnimationFrame(this.redraw);
+    super.dispose();
   }
 }
 

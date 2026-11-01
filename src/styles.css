@@ -643,15 +643,15 @@ body {
 }
 
 /* Focus: hovering a box highlights its arrows and the boxes they connect. */
-.memory-svg.has-focus :is(.ref-arrow, .ref-arrow-part:not(.arrow-xray)) {
+.memory-svg .arrows.has-focus > :is(.ref-arrow, .ref-arrow-part:not(.arrow-xray)) {
   opacity: 0.14;
 }
-.memory-svg.has-focus :is(.ref-arrow, .ref-arrow-part).is-focus {
+.memory-svg .arrows.has-focus > :is(.ref-arrow, .ref-arrow-part).is-focus {
   opacity: 1;
   stroke-width: calc(2.25px * var(--arrow-width));
 }
 /* A hovered box's arrows come out from behind other boxes: their copy over the boxes shows, solid. */
-.memory-svg.has-focus .ref-arrow-part.arrow-xray.is-focus {
+.memory-svg .arrows.has-focus > .ref-arrow-part.arrow-xray.is-focus {
   stroke-dasharray: none;
 }
 .memory-svg .node.is-focus > .node-hit {

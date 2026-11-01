@@ -29,13 +29,17 @@ import type {
 import { ProbeStyles } from "./canvas/styles";
 import type { Mark } from "./drawing";
 import { standaloneSvg } from "./export";
-import { atLevel, landmarksIn, setLodClass } from "./lod";
+import { atLevel, type Lod, landmarksIn, SIMPLE_ARROWS_FROM, setLodClass } from "./lod";
 import { loopDrawing } from "./loopView";
+import { RowCache, RowsInView } from "./loopView/rowCache";
 import { applyFocus, memoryDrawing } from "./memory";
+import { BoxCache } from "./memoryView/boxCache";
 import { SvgPatcher } from "./patch";
 import { sqlPipelineDrawing, sqlTableDrawing } from "./sqlView";
 import { Viewport } from "./viewport";
 
+/** How long the zoom must rest before the memory window lays its step out again for a new level (see levelChanged). */
+const RELAYOUT_AFTER = 160;
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
 
 /** What both SVG windows share: the viewport, and how they're styled and moved. */
@@ -58,13 +62,21 @@ abstract class SvgWindow {
       controls: events.controls,
       // The level of detail is a class on the layer the SVG is in: CSS hides and simplifies (lod.ts),
       // and what it hides is left out of the page altogether.
+      onMove: () => this.viewMoved(),
       onLod: (lod) => {
         setLodClass(this.view.contentLayer, lod);
         if (this.full) this.view.updateContent(() => this.patcher.show(atLevel(this.full!, lod)), 0);
+        this.levelChanged(lod);
       },
     });
     setLodClass(this.view.contentLayer, this.view.lod);
   }
+
+  /** The zoom crossed into another level of detail (lod.ts). */
+  protected levelChanged(_lod: Lod): void {}
+
+  /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
+  protected viewMoved(): void {}
 
   /** The drawing on screen, in full: drawn again at another level of detail without laying it out again. */
   protected full: Mark | null = null;
@@ -135,9 +147,15 @@ abstract class SvgWindow {
 export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   /** Where the person has dragged boxes, by scene key. */
   private readonly positions = new Map<string, Point>();
+  /** Boxes kept from step to step, drawn again only when they change (memoryView/boxCache.ts). */
+  private readonly boxes = new BoxCache();
   private dragging: string | null = null;
   private hovered: string | null = null;
   private readonly listening = new AbortController();
+
+  /** Were the arrows on screen laid out simply (zoomed out, lod.ts SIMPLE_ARROWS_FROM)? */
+  private simpleArrows = false;
+  private readonly onLayoutChange?: () => void;
 
   constructor(el: HTMLElement, events: MemoryRendererEvents) {
     super(el, "Memory diagram", events, (key, position, done) => {
@@ -145,6 +163,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
       this.dragging = done ? null : key;
       events.onLayoutChange?.();
     });
+    this.onLayoutChange = events.onLayoutChange;
     // Hovering a box (or dragging it) highlights its arrows and the boxes they
     // connect to. The focus is part of each step's drawing too (see render()).
     const signal = this.listening.signal;
@@ -186,15 +205,34 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   }
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
+    this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
     const { duration, easing, enter } = this.step;
     const drawing =
       "kind" in scene
         ? sqlTableDrawing(scene)
-        : memoryDrawing(scene, { positions: this.positions, raise: this.dragging });
+        : memoryDrawing(scene, {
+            positions: this.positions,
+            raise: this.dragging,
+            boxes: this.boxes,
+            simpleArrows: this.simpleArrows,
+          });
     // The focus is part of the drawing, so the patch carries it over.
     applyFocus(drawing, this.dragging ?? this.hovered);
     this.showDrawing(drawing, duration, easing, enter);
   }
+
+  /**
+   * Zoomed across where arrows go simple (or back): the step is laid out
+   * again, once the zoom settles (a zoom glides through the levels between,
+   * and laying out mid-glide would do it for each).
+   */
+  protected override levelChanged(_lod: Lod): void {
+    window.clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = window.setTimeout(() => {
+      if (this.full && this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows) this.onLayoutChange?.();
+    }, RELAYOUT_AFTER);
+  }
+  private relayoutTimer = 0;
 
   /** Hovering changed: another box in focus, on screen and in the drawing (so they stay the same). */
   private refreshFocus(): void {
@@ -205,6 +243,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   }
 
   override dispose(): void {
+    window.clearTimeout(this.relayoutTimer);
     this.listening.abort();
     super.dispose();
   }
@@ -212,6 +251,11 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
 
 export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
   private vertical = false;
+  /** Rows kept from step to step (loopView/rowCache.ts), and which are drawn: those in view. */
+  private readonly rows = new RowCache();
+  private readonly inView = new RowsInView();
+  private scene: LoopWindowScene | null = null;
+  private redraw = 0;
 
   constructor(el: HTMLElement, events: RendererEvents) {
     super(el, "Loop history", events);
@@ -222,15 +266,46 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
   }
 
   render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
+    this.scene = scene;
+    this.draw(scene, true);
+  }
+
+  private draw(scene: LoopWindowScene, step: boolean): void {
     const { duration, easing, enter } = this.step;
     const sql = "kind" in scene;
-    const drawing = sql ? sqlPipelineDrawing(scene) : loopDrawing(scene, { vertical: this.vertical });
+    const drawing = sql
+      ? sqlPipelineDrawing(scene)
+      : loopDrawing(scene, {
+          vertical: this.vertical,
+          rows: this.rows,
+          visible: this.inView.next({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) }),
+        });
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
-    this.showDrawing(drawing, !sql && scene.live ? duration : 0, easing, enter);
+    this.showDrawing(drawing, step && !sql && scene.live ? duration : 0, easing, enter);
+    if (!step) return;
     // As you step, keep the iteration that's running in view.
     const current = this.el.querySelector(".loop-row.is-current");
     if (current)
       this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
+  }
+
+  /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
+  protected override viewMoved(): void {
+    if (
+      !this.scene ||
+      this.redraw ||
+      !this.inView.stale({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) })
+    )
+      return;
+    this.redraw = requestAnimationFrame(() => {
+      this.redraw = 0;
+      if (this.scene) this.draw(this.scene, false);
+    });
+  }
+
+  override dispose(): void {
+    cancelAnimationFrame(this.redraw);
+    super.dispose();
   }
 }
 

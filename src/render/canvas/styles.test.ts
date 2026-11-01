@@ -110,3 +110,40 @@ describe("ProbeStyles", () => {
     expect(host.querySelector(".canvas-probe")).toBeNull();
   });
 });
+
+describe("ProbeStyles levels of detail", () => {
+  const probes = (host: Element) => [...host.querySelectorAll(":scope > .canvas-probe")];
+
+  it("keeps the probe it reads from in the page when the look changes after going back to a level", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const styles = new ProbeStyles(host);
+    styles.setLevel(2);
+    styles.setLevel(0); // back to a level it has a probe for
+    styles.setLevel(2);
+    styles.clear(); // the look changed (a window was resized, the Style panel...)
+    // Exactly one probe, the current level's, in the page: read styles come from it.
+    expect(probes(host).map((p) => p.getAttribute("class"))).toEqual(["canvas-probe lod-2"]);
+    styles.setLevel(0);
+    expect(probes(host).map((p) => p.getAttribute("class"))).toEqual(["canvas-probe lod-0"]);
+    styles.setLevel(2);
+    expect(probes(host)).toHaveLength(1);
+    styles.dispose();
+    expect(probes(host)).toHaveLength(0);
+    host.remove();
+  });
+
+  it("never has more than one probe in the page, however the levels change", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const styles = new ProbeStyles(host);
+    for (const lod of [1, 2, 3, 2, 1, 0, 4, 0, 3, 3, 1]) {
+      styles.setLevel(lod);
+      if (lod === 0) styles.clear();
+      expect(probes(host)).toHaveLength(1);
+      expect(probes(host)[0].getAttribute("class")).toBe(`canvas-probe lod-${lod}`);
+    }
+    styles.dispose();
+    host.remove();
+  });
+});

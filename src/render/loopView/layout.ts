@@ -4,8 +4,9 @@ import type { LoopScene } from "../../scene/loopScene";
 import { arrowMarkers, s } from "../draw";
 import type { Mark } from "../drawing";
 import { drawGap, drawHeader, drawQuietBand } from "./bands";
-import { planLoop } from "./plan";
+import { type LoopPlan, planLoop } from "./plan";
 import { type DrawnRow, drawRow } from "./row";
+import { rowKey, sceneKey } from "./rowCache";
 import { type LoopViewOptions, MARGIN, ROW_GAP } from "./shared";
 
 /** Lay out a loop scene as a drawing (drawing.ts). */
@@ -15,6 +16,18 @@ export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Ma
 
 function drawLoop(scene: LoopScene, options: LoopViewOptions): Mark {
   const plan = planLoop(scene, options);
+  const cache = options.rows;
+  cache?.begin(sceneKey(scene, plan, !!options.vertical));
+  try {
+    return drawRows(scene, options, plan);
+  } finally {
+    cache?.end();
+  }
+}
+
+function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): Mark {
+  const cache = options.rows;
+  const visible = options.visible;
   const { items, hiddenRows, live } = scene;
 
   const svg = s("svg", { class: "loop-svg", xmlns: "http://www.w3.org/2000/svg" });
@@ -48,9 +61,22 @@ function drawLoop(scene: LoopScene, options: LoopViewOptions): Mark {
       continue;
     }
     const { row, index } = item;
-    const drawn = drawRow(row, index, y, { plan, scene, arrowLayer, prevDrawn, afterGap });
-    if (live) scopeToLoop(drawn, row.loop ?? scene.history.info.id);
-    rowLayer.append(drawn);
+    // Only the rows in view (and the current one, which the window keeps in view) are drawn.
+    const inView = !visible || scene.isCurrent(index) || (y + plan.rowH + 4 >= visible.top && y - 6 <= visible.bottom);
+    if (inView) {
+      const key = cache?.on ? rowKey(scene, plan, row, index, y, prevDrawn, afterGap) : null;
+      const kept = key ? cache!.get(key) : undefined;
+      if (kept) {
+        rowLayer.appendShared(kept.row);
+        arrowLayer.appendShared(...kept.arrows);
+      } else {
+        const arrowsBefore = arrowLayer.childNodes.length;
+        const drawn = drawRow(row, index, y, { plan, scene, arrowLayer, prevDrawn, afterGap });
+        if (live) scopeToLoop(drawn, row.loop ?? scene.history.info.id);
+        rowLayer.append(drawn);
+        if (key) cache!.set(key, { row: drawn, arrows: arrowLayer.childNodes.slice(arrowsBefore) as Mark[] });
+      }
+    }
     prevDrawn = { row, y, index };
     afterGap = false;
     y += plan.rowH + ROW_GAP;

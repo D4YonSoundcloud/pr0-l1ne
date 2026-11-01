@@ -79,6 +79,65 @@ for (const renderer of ["svg", "canvas"] as const) {
   });
 }
 
+/** The most bends any arrow in the memory window has (a rounded corner is a Q in its path). */
+const mostBends = (page: Page) =>
+  page.evaluate(() =>
+    Math.max(
+      0,
+      ...[...document.querySelectorAll("#memory .viewport-layer .arrows > .ref-arrow")].map(
+        (p) => (p.getAttribute("d") ?? "").split("Q").length - 1,
+      ),
+    ),
+  );
+
+test("zoomed out to outline, arrows are laid out straight or with one bend; zoomed back, routed again", async ({
+  page,
+}) => {
+  await open(page, "svg");
+  const memory = page.locator("#memory");
+  await zoomOut(page, 0);
+  await expect.poll(() => mostBends(page)).toBeGreaterThan(1);
+  await zoomOut(page, 13); // 5.5%: outline
+  await expect(memory).toHaveAttribute("data-lod", "3");
+  await expect.poll(() => mostBends(page)).toBeLessThanOrEqual(1);
+  await zoomOut(page, 0);
+  await expect.poll(() => mostBends(page)).toBeGreaterThan(1);
+});
+
+/** How many pixels of a window's canvas are drawn on. */
+const inked = (page: Page, window: string) =>
+  page.evaluate((w) => {
+    const c = document.querySelector<HTMLCanvasElement>(`${w} canvas.viewport-canvas`)!;
+    const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n++;
+    return n;
+  }, window);
+
+test("canvas: back at a level after another, then a window resized, the level is still drawn", async ({ page }) => {
+  await open(page, "canvas");
+  const memory = page.locator("#memory");
+  await zoomOut(page, 7); // 21%: blocks
+  await expect(memory).toHaveAttribute("data-lod", "2");
+  await page.waitForTimeout(400);
+  const before = await inked(page, "#memory");
+  expect(before).toBeGreaterThan(1000);
+  await zoomOut(page, 0); // full
+  await expect(memory).toHaveAttribute("data-lod", "0");
+  await zoomOut(page, 7); // blocks again: the probe kept for it is used again
+  await expect(memory).toHaveAttribute("data-lod", "2");
+  // Resizing the windows changes the page's inline styles: the canvas reads its styles afresh.
+  const divider = (await page.locator("#divider").boundingBox())!;
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(divider.x - 40, divider.y + 200, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press("ArrowLeft"); // a step drawn with them
+  await page.waitForTimeout(600);
+  await expect(memory).toHaveAttribute("data-lod", "2");
+  expect(await inked(page, "#memory")).toBeGreaterThan(before / 3);
+});
+
 test("double-clicking a box too small to read zooms in on it", async ({ page }) => {
   await open(page, "svg");
   const memory = page.locator("#memory");
@@ -115,4 +174,38 @@ test("dragging the divider between the windows doesn't redraw the diagram on eve
   );
   // At most a redraw or two for the new shape, not one per move.
   expect(layouts).toBeLessThanOrEqual(2);
+});
+
+test("zoomed in on a long loop history, only the rows in view are drawn, and scrolling draws the others", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("set")) return;
+    sessionStorage.setItem("set", "1");
+    localStorage.clear();
+    localStorage.setItem("pr0l1ne:code:javascript", "const a = [];\nfor (let i = 0; i < 80; i++) a.push(i % 7);\n");
+    localStorage.setItem("pr0l1ne:renderer", "svg");
+  });
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/javascript");
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  await page.locator("#step-label").click();
+  await page.keyboard.press("End"); // the last step: every pass in the history
+  await page.locator("#loop-stacked").click(); // a row per pass
+  const loop = page.locator("#loop");
+  const rows = loop.locator(".viewport-layer .loop-row");
+  // Auto-fit on: the whole history is in view, so every row is drawn.
+  await expect.poll(() => rows.count()).toBeGreaterThan(50);
+  await loop.focus();
+  await page.keyboard.press("0"); // 100%, Auto-fit off: the top of the history
+  await expect.poll(() => rows.count()).toBeLessThan(30);
+  const first = await rows.first().getAttribute("data-top");
+  // Scroll down to the bottom: the rows there are drawn.
+  const box = (await loop.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let i = 0; i < 40; i++) await page.mouse.wheel(0, 400);
+  await expect
+    .poll(async () => Number(await rows.last().getAttribute("data-top")))
+    .toBeGreaterThan(Number(first) + 2000);
+  await expect.poll(() => rows.count()).toBeLessThan(30);
 });

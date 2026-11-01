@@ -13,8 +13,9 @@ import { arrowStyle } from "../arrowStyle";
 import { arrowMarkers, FONT, SMALL, s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
 import type { Landmark } from "../lod";
-import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind } from "../route";
+import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind, simpleRoutes } from "../route";
 import { onSpacingChange, spacing } from "../spacing";
+import { RectGrid } from "../spatial";
 import { GRAPH_BODY_Y, graphBoxes, graphShape, graphSize } from "./graphs";
 import { objectShape, viewOf } from "./objects";
 import { outputShape, outputWidth } from "./output";
@@ -107,7 +108,19 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
 }
 
 function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
+  layout.boxes?.begin();
+  try {
+    return layoutMemoryOnce(scene, layout);
+  } finally {
+    layout.boxes?.end();
+  }
+}
+
+function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
   const { step, graphAlias } = scene;
+  const boxes = layout.boxes;
+  /** Objects whose box is kept between steps (boxCache.ts): every one but graphs. */
+  const kept = new Set<string>();
   const svg = s("svg", { class: "memory-svg", xmlns: "http://www.w3.org/2000/svg" });
   svg.append(arrowMarkers());
   // Arrows run behind the boxes; what must stay visible goes over them:
@@ -151,12 +164,15 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
   const shapes = new Map<string, Shape>();
   for (const id of order) {
     const box = graphs.get(id);
-    shapes.set(
-      id,
-      box
-        ? graphShape(box, step.heap[id], scene.changes.newObjects.has(id), graphSize(box, ctx))
-        : objectShape(step.heap[id], ctx),
-    );
+    if (box) {
+      shapes.set(id, graphShape(box, step.heap[id], scene.changes.newObjects.has(id), graphSize(box, ctx)));
+    } else if (boxes) {
+      shapes.set(
+        id,
+        boxes.shape(step.heap[id], ctx, (c) => objectShape(step.heap[id], c)),
+      );
+      kept.add(id);
+    } else shapes.set(id, objectShape(step.heap[id], ctx));
   }
 
   // The call stack, then paused frames under it.
@@ -173,17 +189,19 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
   // A gap is wide only when more than four arrows turn in it (in lanes 7
   // pixels apart). A reference reaches at most the next column: depth is distance.
   const depthOfKey = (key: string) => (key.startsWith("obj:") ? (depth.get(key.slice(4)) ?? -1) : -1);
+  // How many lanes each gap holds, counted in one pass over the links (not
+  // one pass per column: a long list has a column per node).
+  const lanesBefore = new Map<number, number>();
+  const addLane = (d: number) => lanesBefore.set(d, (lanesBefore.get(d) ?? 0) + 1);
+  for (const link of scene.links) {
+    const from = depthOfKey(link.from);
+    const to = depthOfKey(nodeKey.object(graphAlias.get(link.to.slice(4)) ?? link.to.slice(4)));
+    // Into column `to` from the left; or back from column `from` (into the gap after it).
+    if (from < to) addLane(to);
+    else if (link.from.startsWith("obj:")) addLane(from + 1);
+  }
   const gapBefore = (d: number) => {
-    let lanes = 0;
-    for (const link of scene.links) {
-      const [from, to] = [
-        depthOfKey(link.from),
-        depthOfKey(nodeKey.object(graphAlias.get(link.to.slice(4)) ?? link.to.slice(4))),
-      ];
-      if (to === d && from < d)
-        lanes++; // into column d from the left
-      else if (from === d - 1 && to <= d - 1 && link.from.startsWith("obj:")) lanes++; // back from column d-1
-    }
+    const lanes = lanesBefore.get(d) ?? 0;
     // Never narrower than its lanes need (only matters with spacing the Layout panel made tight).
     const room = 2 * spacing.gapPad + Math.max(0, lanes - 1) * spacing.lane + 8;
     return Math.max(lanes <= BUSY_AFTER ? MIN_GAP : MAX_GAP, room);
@@ -204,14 +222,15 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
   // else is placed automatically, moving down past anything already there,
   // so a new box is never hidden under another one.
   const frameKeys = scene.frames.map((f) => f.key);
-  const obstacles: Rect[] = [];
+  // Kept in a grid (spatial.ts): each box placed asks which boxes are near it.
+  const obstacles = new RectGrid();
   frameShapes.forEach((shape, index) => {
     const moved = layout.positions.get(frameKeys[index]);
-    if (moved) obstacles.push({ ...moved, w: shape.w, h: shape.h });
+    if (moved) obstacles.add({ ...moved, w: shape.w, h: shape.h });
   });
   for (const id of order) {
     const moved = layout.positions.get(nodeKey.object(id));
-    if (moved) obstacles.push({ ...moved, w: shapes.get(id)!.w, h: shapes.get(id)!.h });
+    if (moved) obstacles.add({ ...moved, w: shapes.get(id)!.w, h: shapes.get(id)!.h });
   }
 
   const idOf = (key: string | undefined) => (key?.startsWith("obj:") ? key.slice(4) : "");
@@ -259,7 +278,9 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
       }),
     );
     const before = refs.length;
-    shape.draw(x, y, g, refs);
+    const id = idOf(key);
+    if (boxes && kept.has(id)) boxes.draw(id, x, y, g, refs);
+    else shape.draw(x, y, g, refs);
     for (let i = before; i < refs.length; i++) refs[i].source = key;
     // Arrows leaving list cells downward turn under the box like the teeth
     // of a comb: the leftmost cell turns highest, so they stay in order.
@@ -283,7 +304,7 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
     rects.set(key, rect);
     // Keep the turns under a list clear of the next box down.
     const below = down.length ? EXIT_DROP + (down.length - 1) * EXIT_LANE + 6 : 0;
-    if (!isMoved) obstacles.push({ ...rect, h: rect.h + below });
+    if (!isMoved) obstacles.add({ ...rect, h: rect.h + below });
     return below;
   };
 
@@ -461,7 +482,9 @@ function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
     if (source.x + source.w + 20 <= block.origin.x) return { ...base, enterTopFrom: block.origin.x };
     return base;
   });
-  const routes = timed("memory.route", () => routeEdges(inputs, [...rects.values()]));
+  const routes = timed("memory.route", () =>
+    layout.simpleArrows ? simpleRoutes(inputs) : routeEdges(inputs, [...rects.values()]),
+  );
   let maxX = 0;
   let maxY = 0;
   for (const rect of rects.values()) {

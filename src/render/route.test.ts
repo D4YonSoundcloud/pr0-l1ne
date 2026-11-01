@@ -9,6 +9,7 @@ import {
   roundedPath,
   routeEdges,
   runsBehind,
+  simpleRoutes,
 } from "./route";
 
 const box = (x: number, y: number, w = 100, h = 60): Rect => ({ x, y, w, h });
@@ -196,5 +197,50 @@ describe("arrows behind boxes", () => {
     const [route] = routeEdges([{ from: { x: 480, y: 520 }, source, target, entryY: 513 }], [target, small, source]);
     expect(runsBehind(route)).toBe(false);
     expect(crossesAny(route, small, 0)).toBe(false);
+  });
+});
+
+describe("simpleRoutes (zoomed out)", () => {
+  const box = (x: number, y: number, w = 100, h = 60) => ({ x, y, w, h });
+  const edge = (from: { x: number; y: number }, source: ReturnType<typeof box>, target: ReturnType<typeof box>) => ({
+    from,
+    source,
+    target,
+    entryY: target.y + 20,
+  });
+
+  it("goes straight in when level with the target, to its right", () => {
+    const [route] = simpleRoutes([edge({ x: 90, y: 30 }, box(0, 0), box(300, 10))]);
+    expect(route).toEqual([
+      { x: 90, y: 30 },
+      { x: 300, y: 30 },
+    ]);
+  });
+
+  it("bends once, into the target's top or bottom, when it's to the right above or below", () => {
+    const [down] = simpleRoutes([edge({ x: 90, y: 30 }, box(0, 0), box(300, 200))]);
+    expect(down).toHaveLength(3);
+    expect(down[1].y).toBe(30);
+    expect(down[2]).toEqual({ x: down[1].x, y: 200 });
+    const [up] = simpleRoutes([edge({ x: 90, y: 300 }, box(0, 250), box(300, 0))]);
+    expect(up[2]).toEqual({ x: up[1].x, y: 60 });
+  });
+
+  it("runs straight to the nearer side of a target to its left or in its column", () => {
+    const [back] = simpleRoutes([edge({ x: 390, y: 30 }, box(300, 0), box(0, 200))]);
+    expect(back).toEqual([
+      { x: 390, y: 30 },
+      { x: 100, y: 220 },
+    ]);
+  });
+
+  it("is quick for thousands of arrows", () => {
+    const edges = Array.from({ length: 20000 }, (_, i) =>
+      edge({ x: i * 10 + 90, y: 30 }, box(i * 10, 0), box(i * 10 + 200, (i % 7) * 80)),
+    );
+    const start = performance.now();
+    const routes = simpleRoutes(edges);
+    expect(routes).toHaveLength(20000);
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });

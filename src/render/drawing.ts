@@ -23,7 +23,17 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 export class TextMark {
   readonly nodeType = 3;
   parentElement: Mark | null = null;
-  constructor(public textContent: string) {}
+  constructor(private text: string) {}
+
+  get textContent(): string {
+    return this.text;
+  }
+
+  set textContent(value: string) {
+    if (value === this.text) return;
+    this.text = value;
+    this.parentElement?.changed();
+  }
 }
 
 type Child = Mark | string | null | undefined | false;
@@ -34,7 +44,11 @@ class MarkClasses {
 
   private get tokens(): string[] {
     const value = this.mark.getAttribute("class");
-    return value ? [...new Set(value.split(/[\t\n\f\r ]+/).filter(Boolean))] : [];
+    if (!value) return [];
+    // The layout's own classes are single-spaced and never repeat: no need for the regex then.
+    const simple = !/[\t\n\f\r]| {2}|^ | $/.test(value);
+    const tokens = simple ? value.split(" ") : value.split(/[\t\n\f\r ]+/).filter(Boolean);
+    return simple && tokens.length < 2 ? tokens : [...new Set(tokens)];
   }
 
   private set(tokens: string[]): void {
@@ -42,10 +56,18 @@ class MarkClasses {
   }
 
   contains(name: string): boolean {
+    const value = this.mark.getAttribute("class");
+    if (!value) return false;
+    if (value === name) return true;
     return this.tokens.includes(name);
   }
 
   add(...names: string[]): void {
+    // The usual case, one class onto a mark with none: no tokens to work out.
+    if (names.length === 1 && !this.mark.hasAttribute("class")) {
+      this.mark.setAttribute("class", names[0]);
+      return;
+    }
     const tokens = this.tokens;
     for (const name of names) if (!tokens.includes(name)) tokens.push(name);
     this.set(tokens);
@@ -74,8 +96,38 @@ export class Mark {
   /** Properties set with style.setProperty, in order (toSvg sets them the same way). */
   private styleProps: [string, string][] | null = null;
   private classes: MarkClasses | null = null;
+  /** Put in a drawing by appendShared (in two drawings at once): the SVG patcher keeps its own element. */
+  isShared = false;
+  /** signature(), kept until this mark or one in it changes. */
+  private sig: string | null = null;
 
   constructor(readonly localName: string) {}
+
+  /**
+   * Everything this mark and the marks in it say, as one string: two marks
+   * with the same signature draw the same. Kept on the mark, and forgotten
+   * when it or anything in it changes, so a drawing that's mostly the same
+   * as before (a hover, a repaint) works out only what changed. The same
+   * string object comes back each time, so a Map keyed by it hashes it once.
+   */
+  signature(): string {
+    if (this.sig !== null) return this.sig;
+    let out = `<${this.localName}`;
+    for (const [name, value] of this.attrs) out += ` ${name}=${value.length}:${value}`;
+    out += ">";
+    for (const child of this.childNodes) {
+      out += child instanceof Mark ? child.signature() : `"${child.textContent.length}:${child.textContent}`;
+    }
+    out += "/";
+    this.sig = out;
+    return out;
+  }
+
+  /** This mark changed: it, and every mark it's in, works out its signature again. (For TextMark too.) */
+  changed(): void {
+    // A mark without one has no ancestor with one either (an ancestor's is made from its children's).
+    for (let m: Mark | null = this; m && m.sig !== null; m = m.parentElement) m.sig = null;
+  }
 
   // -- attributes ---------------------------------------------------------------
 
@@ -89,11 +141,20 @@ export class Mark {
 
   /** Like the DOM: an attribute already set keeps its place; a new one goes last. */
   setAttribute(name: string, value: string | number): void {
-    this.attrs.set(name, String(value));
+    const text = String(value);
+    if (this.attrs.get(name) === text) return;
+    this.attrs.set(name, text);
+    this.changed();
+  }
+
+  /** setAttribute for a mark being made (mark()): nothing has asked for its signature yet. */
+  setOwnAttribute(name: string, value: string): void {
+    this.attrs.set(name, value);
   }
 
   removeAttribute(name: string): void {
-    this.attrs.delete(name);
+    if (!this.attrs.delete(name)) return;
+    this.changed();
     if (name === "style") this.styleProps = null;
   }
 
@@ -131,6 +192,7 @@ export class Mark {
         else this.styleProps.push([name, value]);
         // The style attribute appears where the DOM would put it: last, on the first property.
         this.attrs.set("style", this.styleProps.map(([n, v]) => `${n}: ${v};`).join(" "));
+        this.changed();
       },
     };
   }
@@ -165,6 +227,22 @@ export class Mark {
       if (child === null || child === undefined || child === false) continue;
       this.childNodes.push(this.adopt(child));
     }
+    this.changed();
+  }
+
+  /**
+   * Add marks that are also in another drawing, without taking them out of
+   * it: the drawing before this one, which the renderer compares this one
+   * with (memoryView/boxCache.ts). Marks put in two drawings this way must
+   * never change afterwards. Their parentElement is this mark from now on.
+   */
+  appendShared(...children: Mark[]): void {
+    for (const child of children) {
+      child.isShared = true;
+      child.parentElement = this;
+      this.childNodes.push(child);
+    }
+    this.changed();
   }
 
   prepend(...children: Child[]): void {
@@ -172,6 +250,7 @@ export class Mark {
       .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false)
       .map((c) => this.adopt(c));
     this.childNodes.unshift(...nodes);
+    this.changed();
   }
 
   /** Insert before this mark in its parent. */
@@ -182,6 +261,7 @@ export class Mark {
       .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false)
       .map((c) => parent.adopt(c));
     parent.childNodes.splice(parent.childNodes.indexOf(this), 0, ...nodes);
+    parent.changed();
   }
 
   remove(): void {
@@ -189,6 +269,7 @@ export class Mark {
     if (!parent) return;
     const at = parent.childNodes.indexOf(this);
     if (at >= 0) parent.childNodes.splice(at, 1);
+    parent.changed();
     this.parentElement = null;
   }
 
@@ -259,11 +340,13 @@ export function mark(
   ...children: Child[]
 ): Mark {
   const m = new Mark(tag);
-  for (const [name, value] of Object.entries(attrs)) {
+  // A new mark: its attributes go straight in (nothing to compare, no signature to forget).
+  for (const name in attrs) {
+    const value = attrs[name];
     if (value === null || value === undefined || value === false) continue;
-    m.setAttribute(name, value);
+    m.setOwnAttribute(name, typeof value === "string" ? value : String(value));
   }
-  m.append(...children);
+  if (children.length) m.append(...children);
   return m;
 }
 

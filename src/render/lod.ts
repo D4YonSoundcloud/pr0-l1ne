@@ -58,6 +58,13 @@ export function lodFor(zoom: number, current: Lod | null = null): Lod {
 
 export const lodClass = (lod: Lod) => `lod-${lod}`;
 
+/**
+ * From this level (outline) on, arrows are laid out straight or with one
+ * bend instead of routed through the gaps (route.ts simpleRoutes): the
+ * memory window lays its step out again when the zoom crosses it.
+ */
+export const SIMPLE_ARROWS_FROM: Lod = 3;
+
 /** Put an element at a level: the lod-N class, and no other. */
 export function setLodClass(el: Element, lod: Lod): void {
   for (let n = 0; n < 5; n++) el.classList.toggle(`lod-${n}`, n === lod);

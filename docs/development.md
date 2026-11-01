@@ -341,6 +341,7 @@ pr0-l1ne/
     │   │   ├── styles.ts       Styles from the page's CSS, through a hidden probe
     │   │   ├── paint.ts        Drawing -> paint list: shapes and text, colors resolved (PaintCache)
     │   │   ├── pixiScene.ts    Paint list -> PixiJS Graphics, Text and Containers, kept between steps (SceneCache)
+    │   │   ├── hitIndex.ts     What's under the pointer, from a grid of the paint list's boxes
     │   │   ├── keep.test.ts    Kept paint and objects draw exactly what a fresh build draws
     │   │   ├── path.ts         Path data: parse, flatten, dash, end direction
     │   │   ├── color.ts        Computed CSS colors as numbers
@@ -363,6 +364,7 @@ pr0-l1ne/
     │   │   ├── trees.ts        Binary trees as one block
     │   │   ├── output.ts       The printed-output card
     │   │   ├── layout.ts       Columns, placement, routing, arrow colors and the legend: the whole drawing
+    │   │   ├── boxCache.ts     Boxes kept from step to step, drawn again only when what they read changes
     │   │   └── focus.ts        Hover focus
     │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement
@@ -380,7 +382,8 @@ pr0-l1ne/
     │   │   ├── grid.ts         A list of lists, as a grid
     │   │   ├── linked.ts       A linked list or a binary tree
     │   │   ├── bands.ts        Loop headers, unrecorded passes, passes where nothing changed
-    │   │   └── layout.ts       The rows top to bottom: the whole drawing
+    │   │   ├── layout.ts       The rows top to bottom: the whole drawing (only those in view)
+    │   │   └── rowCache.ts     Rows kept from step to step, and which rows are in view
     │   ├── loopView.test.ts    The loop renderer drawing scenes, every JS and TS example
     │   ├── graphView.ts        Drawing a graph, for both views
     │   ├── graphEdges.ts       Edge shapes (auto, curved, straight, angled) and weight label placement
@@ -390,6 +393,7 @@ pr0-l1ne/
     │   ├── viewport.test.ts    The viewport with a surface (the canvas renderer)
     │   ├── lod.ts              Levels of detail: each zoom's level, and a drawing with what a level hides left out (how-it-works.md, section 23)
     │   ├── lod.test.ts         Levels for zooms, and what each leaves out
+    │   ├── spatial.ts          A uniform grid of boxes, for "which boxes are near here?" (placement and routing)
     │   ├── sqlView.ts          SQL: a stage's tables, and a statement's stages, as drawings
     │   └── sqlView.test.ts     Every SQL example, every step: rows keyed, patched as drawn fresh
     ├── sql/                    SQL, stepped through clause by clause (how-it-works.md, section 22)

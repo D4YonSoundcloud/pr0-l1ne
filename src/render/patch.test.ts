@@ -99,6 +99,28 @@ describe("SvgPatcher", () => {
     show(p, m("svg", {}, restyled));
   });
 
+  it("keeps marks that are in both drawings (shared) as their own elements, wherever they move", () => {
+    const p = new SvgPatcher();
+    const row = (y: number) => m("g", { class: "loop-row", "data-top": y }, m("rect", { y }), m("text", { y }, `${y}`));
+    const [a, b, c, d] = [row(0), row(100), row(200), row(300)];
+    const svg = show(p, m("svg", {}, m("g", { class: "rows" }, a, b, c)));
+    const [elB, elC] = [svg.children[0].children[1], svg.children[0].children[2]];
+    // Scrolled: a leaves, d arrives; b and c are the very same marks, now first and second.
+    const rows = m("g", { class: "rows" });
+    rows.appendShared(b, c);
+    rows.append(d);
+    show(p, m("svg", {}, rows));
+    expect(svg.children[0].children[0]).toBe(elB);
+    expect(svg.children[0].children[1]).toBe(elC);
+    // And again, the other way, with marks swapped in place.
+    const back = m("g", { class: "rows" });
+    back.append(row(-100));
+    back.appendShared(c, b);
+    show(p, m("svg", {}, back));
+    expect(svg.children[0].children[1]).toBe(elC);
+    expect(svg.children[0].children[2]).toBe(elB);
+  });
+
   it("matches keyed children wherever they move, and adds and drops the rest", () => {
     const p = new SvgPatcher();
     const box = (key: string, x: number) =>

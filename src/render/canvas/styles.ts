@@ -178,7 +178,10 @@ export class ProbeStyles implements StyleProbe {
       computed: this.computed,
     });
     this.level = lod;
+    // Taken out of the kept ones while it's the one in use: clear() takes
+    // every kept probe out of the page, and must never take this one.
     const kept = this.levels.get(lod);
+    this.levels.delete(lod);
     this.container.remove();
     if (kept) {
       ({ container: this.container, chains: this.chains, probes: this.probes, computed: this.computed } = kept);
@@ -206,10 +209,12 @@ export class ProbeStyles implements StyleProbe {
     return container;
   }
 
-  /** The look changed (Style panel): read everything afresh. */
+  /** The look changed (Style panel, a window resized): read everything afresh. */
   clear(): void {
-    for (const kept of this.levels.values()) kept.container.remove();
+    for (const kept of this.levels.values()) if (kept.container !== this.container) kept.container.remove();
     this.levels.clear();
+    // The probe read from is always in the page.
+    if (!this.container.isConnected) this.host.append(this.container);
     this.chains = new Map();
     this.probes = [];
     this.computed = [];

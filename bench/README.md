@@ -42,6 +42,14 @@ CPython is several times faster than Pyodide, so Python's numbers here are
 the tracer's own speed, not what the page sees: the browser benchmark has
 that.
 
+**Next step** is drawing the step after each of those, with the boxes kept
+from it (`src/render/memoryView/boxCache.ts`): what stepping through a
+program one step at a time costs, where only what changed is drawn again.
+**Loop: next step** is the same for the loop history (rows kept,
+`src/render/loopView/rowCache.ts`), and **in view** draws only the rows a
+window 900 pixels tall shows at 100%, at the bottom of the history, with a
+window's height more each way.
+
 ## In the browser
 
 ```sh
