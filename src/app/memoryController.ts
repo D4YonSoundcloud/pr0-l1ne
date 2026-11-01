@@ -60,6 +60,8 @@ export class MemoryController {
   /** ...and dim everything else while it's shown. */
   private dimForOutput: boolean;
   private readonly resetButton: HTMLButtonElement;
+  /** Summaries the person opened, by key (scene/summaries.ts): drawn in full, step after step. */
+  private readonly expanded = new Set<string>();
 
   constructor(private readonly options: MemoryOptions) {
     const { els, settings } = options;
@@ -73,15 +75,26 @@ export class MemoryController {
         this.render();
         this.updateResetButton();
       },
+      // A summary clicked: what it stands for, drawn in full from now on (until Reset layout).
+      onExpand: (key) => {
+        this.expanded.add(key);
+        this.render();
+        this.updateResetButton();
+      },
       onAutoFitChange: (state) => settings.autoFit("memory").set(JSON.stringify(state)),
       controls: settings.controlsCollapsed("memory"),
     });
     this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("memory")) });
-    this.resetButton = this.renderer.addControl("Reset layout", "Put every box back in its automatic position", () => {
-      this.renderer.resetLayout();
-      this.render();
-      this.updateResetButton();
-    });
+    this.resetButton = this.renderer.addControl(
+      "Reset layout",
+      "Put every box back in its automatic position, and summarize what you opened again",
+      () => {
+        this.renderer.resetLayout();
+        this.expanded.clear();
+        this.render();
+        this.updateResetButton();
+      },
+    );
     this.updateResetButton();
 
     els.modeArrows.addEventListener("click", () => this.setMode("arrows"));
@@ -174,12 +187,13 @@ export class MemoryController {
   /** A different program (or language): forget dragged boxes, and fit it afresh. */
   reset(): void {
     this.renderer.resetLayout();
+    this.expanded.clear();
     this.updateResetButton();
     this.renderer.setViewport({ refit: true });
   }
 
   private updateResetButton(): void {
-    this.resetButton.hidden = !this.renderer.hasMovedBoxes;
+    this.resetButton.hidden = !this.renderer.hasMovedBoxes && !this.expanded.size;
   }
 
   /** Nothing to show yet. */
@@ -211,6 +225,7 @@ export class MemoryController {
         output: this.outputOn,
         dimForOutput: this.dimForOutput,
         tall: isTall(this.options.els.memory),
+        detail: { budget: this.renderer.detailBudget(), expanded: this.expanded },
       }),
     );
     this.renderer.setAppearance({ step: this.options.animation() });

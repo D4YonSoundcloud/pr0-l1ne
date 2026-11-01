@@ -34,6 +34,9 @@ class Fake implements MemoryRenderer, LoopRenderer {
   render(scene: unknown, previous: unknown) {
     this.calls.push(["render", scene, previous]);
   }
+  detailBudget() {
+    return 64;
+  }
   showMessage(text: string) {
     this.calls.push(["showMessage", text]);
   }

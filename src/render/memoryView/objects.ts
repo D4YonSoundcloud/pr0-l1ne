@@ -3,12 +3,15 @@
  * as tables), and what goes in a value slot: a cell, or in nested mode the
  * whole shape of the object it refers to.
  */
+
+import { summaryOf } from "../../scene/summaries";
 import { valueKey } from "../../trace/diff";
 import type { HeapObject, Value } from "../../trace/types";
 import { cellWidth, valueCell } from "../draw";
 import { recordsShape } from "./records";
 import { sequenceShape } from "./sequences";
 import { type Ctx, type Shape, sizeLabel, type View } from "./shapes";
+import { summaryShape } from "./summaryShapes";
 import { tableShape } from "./tables";
 
 export function viewOf(value: Value, ctx: Ctx, cellH: number): View {
@@ -51,6 +54,9 @@ export function objectShape(obj: HeapObject, ctx: Ctx, nested = false): Shape {
 }
 
 function shapeOf(obj: HeapObject, ctx: Ctx, nested: boolean): Shape {
+  // A summary of a long chain or a big tree (scene/summaries.ts).
+  const summary = summaryOf(obj);
+  if (summary) return summaryShape(obj, summary, ctx);
   const changed = ctx.diff.changedSlots.get(obj.id) ?? new Set<string>();
   const isNew = ctx.diff.newObjects.has(obj.id);
   switch (obj.kind) {

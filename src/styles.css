@@ -4061,6 +4061,44 @@ select {
   fill: var(--cell);
 }
 
+/* ------------------------------------------------------------ summaries
+   A long chain, a big tree's lower levels, or deep recursion drawn as one
+   box (scene/summaries.ts): dashed, in the paper's ink, and clicking it
+   shows what it stands for. */
+.memory-svg .node.is-summary {
+  cursor: pointer;
+}
+.box.summary > .box-body,
+.box.frame.summary > .box-body {
+  stroke-dasharray: 5 3;
+  fill: color-mix(in srgb, var(--cell) 70%, transparent);
+}
+.box.summary > .box-header,
+.box.frame.summary > .box-header {
+  fill: color-mix(in srgb, var(--header) 55%, var(--cell));
+}
+.box.summary .box-empty,
+.box.frame.summary .box-empty {
+  font-style: italic;
+}
+.summary-triangle {
+  fill: color-mix(in srgb, var(--header) 45%, var(--cell));
+  stroke: var(--ink);
+  stroke-width: 1.25;
+  stroke-dasharray: 5 3;
+  stroke-linejoin: round;
+}
+.summary-count {
+  font-family: var(--font-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+.lod-4 .node-outline.outline-summary {
+  fill: color-mix(in srgb, var(--ink) 6%, var(--cell));
+  stroke-dasharray: 60 30;
+}
+
 /* ------------------------------------------------------------ levels of detail
    Zoomed out, a drawing is drawn in less detail (render/lod.ts). The level is
    a class on what holds the drawing: the SVG renderer's layer, or the canvas

@@ -109,6 +109,8 @@ export interface RendererEvents {
 export interface MemoryRendererEvents extends RendererEvents {
   /** A box was dragged, or the layout reset: the step needs drawing again. */
   onLayoutChange?(): void;
+  /** A summary was clicked (scene/summaries.ts): show what it stands for, by its key. */
+  onExpand?(key: string): void;
 }
 
 /** What the memory window draws: a step's memory, or a SQL step's tables. */
@@ -127,6 +129,8 @@ export interface MemoryRenderer extends Renderer<MemoryWindowScene> {
   readonly movedBoxes: ReadonlyMap<string, Point>;
   /** Put boxes where another renderer had them (the renderer setting changed). */
   moveBoxes(positions: ReadonlyMap<string, Point>): void;
+  /** How many nodes of one run to draw before summarizing the rest, at the zoom now (scene/summaries.ts detailBudget). */
+  detailBudget(): number;
 }
 
 /** The loop history window. */

@@ -28,6 +28,7 @@
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { timed } from "../../perf";
+import { detailBudget, summaryBoxes } from "../../scene/summaries";
 import { atLevel, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
 // PixiJS builds some of its code with new Function(), which the app's
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
@@ -146,7 +147,11 @@ abstract class CanvasWindow {
     this.view = new Viewport(el, {
       label,
       onNodeMove,
-      onAutoFitChange: (state) => events.onAutoFitChange?.(state),
+      onAutoFitChange: (state) => {
+        events.onAutoFitChange?.(state);
+        this.levelChanged(this.view.lod);
+      },
+      onNodeClick: (key) => this.nodeClicked(key),
       controls: events.controls,
       onLod: (lod) => this.setLevel(lod),
       surface: {
@@ -314,8 +319,11 @@ abstract class CanvasWindow {
     this.levelChanged(lod);
   }
 
-  /** The zoom crossed into another level of detail (lod.ts). */
+  /** The zoom crossed into another level of detail (lod.ts), or Auto-fit was turned on or off. */
   protected levelChanged(_lod: Lod): void {}
+
+  /** A box was clicked (pressed and let go without dragging). */
+  protected nodeClicked(_key: string): void {}
 
   /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
   protected viewMoved(): void {}
@@ -560,6 +568,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
       events.onLayoutChange?.();
     });
     this.onLayoutChange = events.onLayoutChange;
+    this.onExpand = events.onExpand;
     // Hovering a box highlights its arrows and the boxes they connect to,
     // as in the SVG renderer (memory.ts applyFocus), then draws again.
     const signal = this.hovering.signal;
@@ -606,6 +615,8 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
     this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
+    this.budgetDrawn = "kind" in scene ? undefined : scene.detailBudget;
+    this.summaryKeys = "kind" in scene ? new Map() : summaryBoxes(scene);
     const drawing =
       "kind" in scene
         ? sqlTableDrawing(scene)
@@ -627,10 +638,28 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
     this.relayoutTimer = window.setTimeout(() => {
-      if (this.drawing && this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows) this.onLayoutChange?.();
+      if (!this.drawing) return;
+      // Arrows go simple (or back), or the detail budget changes (summaries).
+      const arrows = this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows;
+      if (arrows || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
+
+  /** The detail budget at the zoom now (scene/summaries.ts): zoomed out, long runs are summarized sooner. */
+  detailBudget(): number {
+    return detailBudget(this.view.lod, this.view.autoFitState.on);
+  }
+  /** The budget the scene on screen was made with. */
+  private budgetDrawn: number | undefined;
+  /** Each summary's box (by key) and the structure it opens. */
+  private summaryKeys = new Map<string, string>();
+  private readonly onExpand?: (key: string) => void;
+
+  protected override nodeClicked(key: string): void {
+    const summary = this.summaryKeys.get(key);
+    if (summary) this.onExpand?.(summary);
+  }
 
   /** Highlight the hovered (or dragged) box's arrows; `redraw` to show it now. */
   private refreshFocus(redraw: boolean, drawing = this.drawing): void {

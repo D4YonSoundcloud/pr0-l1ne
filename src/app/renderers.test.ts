@@ -65,6 +65,7 @@ function fakeRenderers() {
       memoryEvents = events;
       const r: MemoryRenderer = {
         ...memory.renderer,
+        detailBudget: () => 64,
         resetLayout: () => {
           moved = false;
           memory.calls.push({ method: "resetLayout", args: [] });

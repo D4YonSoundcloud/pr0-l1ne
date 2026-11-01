@@ -393,6 +393,10 @@ A trace records the program step by step, which is what lets you scrub back and 
 
 **Steps share what didn't change.** Each step stores only the objects that changed since the step before; unchanged ones are the same object in memory. That makes traces 3 to 15 times smaller, which is what makes 20,000 steps practical.
 
+**Long chains, big trees and deep recursion are summarized.** In the memory view, more than 64 nodes in a row of a linked list are drawn as the first and last of them with one dashed box between, "86 more Nodes", linked like a node. A binary tree that big shows the levels that fit and draws each subtree below them as a triangle with its node count. More than 64 calls of one function in a row on the call stack show the outermost and innermost calls with one frame between, "fib() × 336 more". Whatever your code holds is never summarized: a node a variable points to stays, with the nodes around it, so walking a list shows its head, where you are, and its tail, and the path down a tree to a variable's node stays open.
+
+Click a summary to show everything it stands for. It stays open as you step, until **Reset layout** (next to the zoom controls) summarizes it again. With Auto-fit off, zooming out summarizes sooner (from 48 nodes in a row down to 8 at the smallest zooms) and zooming back in draws them again, once the zoom settles. Summaries are only in the memory view; the loop history and graphs are drawn as before.
+
 When a trace still stops early, the banner says why (the time or the step budget), how many steps ran in all, and offers **Measure**.
 
 ## Measuring at full size

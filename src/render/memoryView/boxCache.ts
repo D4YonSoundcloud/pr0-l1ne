@@ -25,6 +25,7 @@
 import type { HeapObject } from "../../trace/types";
 import type { Mark } from "../drawing";
 import { onSpacingChange } from "../spacing";
+import { CellCache } from "./cellCache";
 import { viewOf } from "./objects";
 import type { Ctx, OutRef, Shape } from "./shapes";
 
@@ -43,7 +44,7 @@ interface Entry {
   readsDrawn: number;
   shape: Shape;
   /** Its drawing at a place, once drawn there: the marks inside its box, and the arrows leaving them. */
-  drawn: { x: number; y: number; marks: Mark[]; refs: OutRef[] } | null;
+  drawn: { x: number; y: number; marks: Mark[]; refs: OutRef[]; cells: string[] } | null;
   /** It shows a change (a flash, a new box): drawn afresh, so the animation plays. */
   fresh: boolean;
 }
@@ -62,21 +63,26 @@ export class BoxCache {
   private epoch = epoch;
   /** How many boxes the last layout drew, and how many it kept (for tests and the benchmarks). */
   stats = { drawn: 0, kept: 0 };
+  /** Cells kept inside boxes drawn again (cellCache.ts). */
+  readonly cells = new CellCache();
 
   /** A layout begins: what isn't used in it is forgotten after it. */
   begin(): void {
     if (this.epoch !== epoch) {
       this.entries.clear();
+      this.cells.clear();
       this.epoch = epoch;
     }
     this.next = new Map();
     this.stats = { drawn: 0, kept: 0 };
+    this.cells.begin();
   }
 
   /** A layout ended. */
   end(): void {
     this.entries = this.next;
     this.next = new Map();
+    this.cells.end();
   }
 
   /**
@@ -114,6 +120,8 @@ export class BoxCache {
     if (drawn && drawn.x === x && drawn.y === y) {
       g.appendShared(...drawn.marks);
       for (const ref of drawn.refs) refs.push({ ...ref });
+      // Its cells too, so they're still kept when one of them next changes.
+      this.cells.touch(drawn.cells);
       this.stats.kept++;
       return;
     }
@@ -121,7 +129,7 @@ export class BoxCache {
     // the same as when its shape was made, so its shape draws it as this step would.
     const before = refs.length;
     const start = g.childNodes.length;
-    entry.shape.draw(x, y, g, refs);
+    const cells = this.cells.record(() => entry.shape.draw(x, y, g, refs));
     this.stats.drawn++;
     // Drawn before, it read all this then: the reads it just added say nothing new.
     if (entry.readsDrawn >= 0) entry.reads.length = entry.readsDrawn;
@@ -133,6 +141,7 @@ export class BoxCache {
       marks: g.childNodes.slice(start) as Mark[],
       // As drawn, before the layout adds where each starts from.
       refs: refs.slice(before).map((r) => ({ ...r })),
+      cells,
     };
   }
 }
@@ -229,6 +238,8 @@ function recording(ctx: Ctx, reads: Read[]): Ctx {
     sizes,
     // A nested object's box is drawn with this context too, so its reads are this box's.
     view: (value, cellH) => viewOf(value, rec, cellH),
+    // A cache of finished cells, keyed by everything they're drawn from: not a read.
+    cells: ctx.cells,
   };
   return rec;
 }

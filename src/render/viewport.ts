@@ -50,6 +50,8 @@ export interface ViewportOptions {
   onLod?(lod: Lod): void;
   /** The view moved (panned or zoomed, a frame of a glide too). */
   onMove?(): void;
+  /** A box was pressed and let go without being dragged: a click on it. */
+  onNodeClick?(key: string): void;
   /** Whether the floating controls are folded away, remembered (see ControlsSetting). */
   controls?: ControlsSetting;
   /**
@@ -840,7 +842,7 @@ export class Viewport {
     const g = this.gesture;
     if (g?.kind === "node" && g.moved) {
       this.options.onNodeMove!(g.key, this.nodePosition(g, e.clientX - g.startX, e.clientY - g.startY), true);
-    }
+    } else if (g?.kind === "node" && !g.moved && e.type === "pointerup") this.options.onNodeClick?.(g.key);
     this.el.classList.remove("is-panning", "is-dragging-node");
     // Lifting one finger of a pinch carries on as a pan with the other.
     const remaining = [...this.pointers.values()][0];

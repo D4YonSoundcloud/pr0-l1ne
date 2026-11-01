@@ -20,6 +20,7 @@ import { GRAPH_BODY_Y, graphBoxes, graphShape, graphSize } from "./graphs";
 import { objectShape, viewOf } from "./objects";
 import { outputShape, outputWidth } from "./output";
 import type { Ctx, MemoryLayout, OutRef, Shape } from "./shapes";
+import { frameSummaryShape } from "./summaryShapes";
 import { frameShape } from "./tables";
 import { measureBlock, type TreeBlock, treeGap } from "./trees";
 
@@ -148,6 +149,7 @@ function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
     heatFor: (id) => scene.heat(id),
     drawAs: (id) => scene.drawAs(id),
     view: (value, cellH) => viewOf(value, ctx, cellH),
+    cells: layout.boxes?.cells,
   };
 
   // Binary trees are laid out top-down as one block: each node in its
@@ -176,7 +178,11 @@ function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
   }
 
   // The call stack, then paused frames under it.
-  const frameShapes = scene.frames.map((f) => frameShape(f.frame, ctx, f.active));
+  const frameShapes = scene.frames.map((f) => {
+    // Recursion summarized (scene/summaries.ts): one frame for the calls it stands for.
+    const summary = scene.summaries.get(f.frame.id);
+    return summary ? frameSummaryShape(summary, ctx) : frameShape(f.frame, ctx, f.active);
+  });
   // A program that prints gets a stack column wide enough for its output
   // card (worked out from the whole run, so it doesn't change between steps).
   const framesW = Math.max(160, ...frameShapes.map((f) => f.w), outputWidth(scene.longestOutputLine));
@@ -254,6 +260,12 @@ function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
     });
     const isMoved = layout.positions.has(key);
     if (isMoved) g.classList.add("is-moved");
+    // A summary (scene/summaries.ts): clicking it shows what it stands for.
+    const summary = summaryAt(scene, key);
+    if (summary) {
+      g.classList.add("is-summary");
+      g.setAttribute("data-summary", summary.key);
+    }
     // Zoomed far out (lod.ts), the box is this one rectangle in its kind's color.
     g.append(
       s("rect", {
@@ -668,7 +680,23 @@ function legendShape(title: string, entries: LegendEntry[]): Shape {
 }
 
 /** What a box is, in a few words, and what kind of box: for its tooltip, its outline and landmarks. */
+/** The summary a box is, if it is one. */
+function summaryAt(scene: MemoryScene, key: string) {
+  if (!scene.summaries.size) return undefined;
+  const frame = scene.frames.find((f) => f.key === key);
+  return scene.summaries.get(frame ? frame.frame.id : key.startsWith("obj:") ? key.slice(4) : "");
+}
+
 function describeNode(scene: MemoryScene, key: string): { title: string; kind: string; changed: boolean } {
+  const summary = summaryAt(scene, key);
+  if (summary) {
+    const what = summary.kind === "frames" ? `${summary.name}() calls` : summary.name;
+    return {
+      title: `${summary.count.toLocaleString("en-US")} more ${what} · click to show`,
+      kind: "summary",
+      changed: false,
+    };
+  }
   const frame = scene.frames.find((f) => f.key === key);
   if (frame) {
     const name = frame.frame.func === "Global" ? "Global" : `${frame.frame.func}()`;

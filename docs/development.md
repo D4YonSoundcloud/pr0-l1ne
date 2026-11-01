@@ -324,6 +324,7 @@ pr0-l1ne/
     ├── scene/                  What a step shows, worked out from the trace (no positions, no DOM)
     │   ├── memoryScene.ts      The memory view's scene: boxes, nesting, graphs, trees, links, output
     │   ├── memoryScene.test.ts Scene tests (valid for any renderer)
+    │   ├── summaries.ts        Long chains, big trees and deep recursion summarized, by a detail budget; expanded by key
     │   ├── loopScene.ts        The loop history's scene: what to show, rows, bands, gaps, headers
     │   ├── loopScene.test.ts   Loop scene tests
     │   ├── nesting.ts          Nested mode: which objects are drawn inside others
@@ -366,6 +367,8 @@ pr0-l1ne/
     │   │   ├── output.ts       The printed-output card
     │   │   ├── layout.ts       Columns, placement, routing, arrow colors and the legend: the whole drawing
     │   │   ├── boxCache.ts     Boxes kept from step to step, drawn again only when what they read changes
+    │   │   ├── cellCache.ts    Cells kept inside a box drawn again: only the changed ones are drawn
+    │   │   ├── summaryShapes.ts  How summaries are drawn: a chain's box, a subtree's triangle, recursion's frame
     │   │   └── focus.ts        Hover focus
     │   ├── memory.test.ts      The SVG renderer drawing scenes
     │   ├── route.ts            Arrow routing and non-overlapping placement

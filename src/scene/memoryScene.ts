@@ -28,6 +28,7 @@ import { type Printed, printedAt } from "../trace/output";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
 import { chooseNested, incomingCounts, valuesOf } from "./nesting";
 import { type Pointer, pointersFor } from "./pointers";
+import { type DetailOptions, type Summary, summarize } from "./summaries";
 import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
 /** Arrows: every object is its own box. Nested: an object only one thing refers to is drawn inside it. */
@@ -43,6 +44,8 @@ export interface MemorySceneOptions {
   dimForOutput?: boolean;
   /** The window is taller than wide: very wide layered graphs run left to right (render/graphView.ts). */
   tall?: boolean;
+  /** How much of long chains, big trees and deep recursion to draw (summaries.ts); undefined draws everything. */
+  detail?: DetailOptions;
 }
 
 /**
@@ -137,6 +140,10 @@ export interface MemoryScene {
   links: SceneLink[];
   /** What changed since the step before. */
   changes: StepDiff;
+  /** Summaries drawn in place of what they stand for, by their object's or frame's id (summaries.ts). */
+  summaries: ReadonlyMap<string, Summary>;
+  /** The detail budget it was made with (undefined: everything drawn). */
+  detailBudget?: number;
   /** Memory sizes, when they're shown. */
   sizes: StepSizes | null;
   /** Index pointers into a list: level 0 is arr[i]; level 1 is grid[i][j]'s j. */
@@ -242,13 +249,16 @@ export function memoryScene(
   changes: StepDiff,
   options: MemorySceneOptions = {},
 ): MemoryScene {
-  const step = trace.steps[stepIndex];
+  const real = trace.steps[stepIndex];
   const mode = options.mode ?? "arrows";
-  const nested = mode === "nested" ? chooseNested(step) : new Set<string>();
 
   // Graphs are drawn as one box, in place of the dict or list that holds
   // them (or, for graphs of objects, in place of all the node objects).
   const graphs = findGraphs(trace, stepIndex);
+  // Long chains, big trees and deep recursion, summarized (never a graph's members).
+  const inGraphs = new Set([...graphs.values()].flatMap(({ graph }) => [graph.hostId, ...graph.members]));
+  const { step, summaries, stackIndex } = summarize(trace, real, options.detail, inGraphs);
+  const nested = mode === "nested" ? chooseNested(step) : new Set<string>();
   const graphAlias = new Map<string, string>();
   for (const { graph } of graphs.values()) {
     nested.delete(graph.hostId);
@@ -339,7 +349,13 @@ export function memoryScene(
 
   const sceneFrames: SceneFrame[] = frames.map((frame, index) => ({
     frame,
-    key: frame.state === "suspended" ? nodeKey.paused(frame.id) : nodeKey.frame(index, frame.func),
+    // By its place on the real call stack, so a box keeps its key when calls around it are summarized.
+    key:
+      frame.state === "suspended"
+        ? nodeKey.paused(frame.id)
+        : summaries.has(frame.id)
+          ? `frame:fold:${stackIndex.get(frame) ?? index}:${frame.func}`
+          : nodeKey.frame(stackIndex.get(frame) ?? index, frame.func),
     active: index === step.stack.length - 1,
     isNew: changes.newFrames.has(frame.id),
   }));
@@ -391,7 +407,10 @@ export function memoryScene(
     trees,
     links,
     changes,
-    sizes: options.sizes ? stepSizes(step, options.sizes) : null,
+    summaries,
+    detailBudget: options.detail?.budget,
+    // Sizes from the real step: a summary's nodes still count in what holds them.
+    sizes: options.sizes ? stepSizes(real, options.sizes) : null,
     pointers(id, level = 0) {
       const owner = pointerOwner.get(id);
       if (!owner) return [];

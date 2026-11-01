@@ -30,6 +30,8 @@ function visits(n: number): number[] {
 
 const html = (el: Element) => el.outerHTML;
 
+let keptCells = 0;
+
 function check(trace: Trace, label: string, model: SizeModel): number {
   let kept = 0;
   for (const mode of ["arrows", "nested"] as const) {
@@ -49,6 +51,7 @@ function check(trace: Trace, label: string, model: SizeModel): number {
         if (i % 3 === 0) applyFocus(drawing, scene.objects.at(-1)?.key ?? null);
         expect(html(patcher.show(drawing)), `${where}, patched`).toBe(html(toSvg(drawing) as Element));
         kept += boxes.stats.kept;
+        keptCells += boxes.cells.stats.kept;
       }
     }
   }
@@ -72,6 +75,10 @@ describe("kept boxes on the examples", () => {
   );
   it("keeps most boxes across steps", () => {
     expect(total).toBeGreaterThan(1000);
+  });
+
+  it("keeps cells inside boxes drawn again", () => {
+    expect(keptCells).toBeGreaterThan(1000);
   });
 });
 

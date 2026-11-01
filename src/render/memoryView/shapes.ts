@@ -15,6 +15,7 @@ import type { HeapObject, Step, Value } from "../../trace/types";
 import { s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
 import type { BoxCache } from "./boxCache";
+import type { CellCache } from "./cellCache";
 
 export interface OutRef {
   from: Point;
@@ -89,6 +90,8 @@ export interface Ctx {
   sizes: StepSizes | null;
   /** What goes in a value slot: a cell, or in nested mode the object's whole shape (objects.ts). */
   view(value: Value, cellH: number): View;
+  /** Cells kept from the last layout (cellCache.ts), when the window keeps them. */
+  cells?: CellCache;
 }
 
 /** Height of the row of sizes above a list's cells (when sizes are shown). */

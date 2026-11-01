@@ -26,6 +26,7 @@ import type {
   StepStyle,
   ViewportChange,
 } from "../scene/renderer";
+import { detailBudget, summaryBoxes } from "../scene/summaries";
 import { ProbeStyles } from "./canvas/styles";
 import type { Mark } from "./drawing";
 import { standaloneSvg } from "./export";
@@ -58,7 +59,11 @@ abstract class SvgWindow {
     this.view = new Viewport(el, {
       label,
       onNodeMove,
-      onAutoFitChange: (state) => events.onAutoFitChange?.(state),
+      onAutoFitChange: (state) => {
+        events.onAutoFitChange?.(state);
+        this.levelChanged(this.view.lod);
+      },
+      onNodeClick: (key) => this.nodeClicked(key),
       controls: events.controls,
       // The level of detail is a class on the layer the SVG is in: CSS hides and simplifies (lod.ts),
       // and what it hides is left out of the page altogether.
@@ -72,8 +77,11 @@ abstract class SvgWindow {
     setLodClass(this.view.contentLayer, this.view.lod);
   }
 
-  /** The zoom crossed into another level of detail (lod.ts). */
+  /** The zoom crossed into another level of detail (lod.ts), or Auto-fit was turned on or off. */
   protected levelChanged(_lod: Lod): void {}
+
+  /** A box was clicked (pressed and let go without dragging). */
+  protected nodeClicked(_key: string): void {}
 
   /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
   protected viewMoved(): void {}
@@ -164,6 +172,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
       events.onLayoutChange?.();
     });
     this.onLayoutChange = events.onLayoutChange;
+    this.onExpand = events.onExpand;
     // Hovering a box (or dragging it) highlights its arrows and the boxes they
     // connect to. The focus is part of each step's drawing too (see render()).
     const signal = this.listening.signal;
@@ -206,6 +215,8 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
     this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
+    this.budgetDrawn = "kind" in scene ? undefined : scene.detailBudget;
+    this.summaryKeys = "kind" in scene ? new Map() : summaryBoxes(scene);
     const { duration, easing, enter } = this.step;
     const drawing =
       "kind" in scene
@@ -229,10 +240,28 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
     this.relayoutTimer = window.setTimeout(() => {
-      if (this.full && this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows) this.onLayoutChange?.();
+      if (!this.full) return;
+      // Arrows go simple (or back), or the detail budget changes (summaries).
+      const arrows = this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows;
+      if (arrows || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
+
+  /** The detail budget at the zoom now (scene/summaries.ts): zoomed out, long runs are summarized sooner. */
+  detailBudget(): number {
+    return detailBudget(this.view.lod, this.view.autoFitState.on);
+  }
+  /** The budget the scene on screen was made with. */
+  private budgetDrawn: number | undefined;
+  /** Each summary's box (by key) and the structure it opens. */
+  private summaryKeys = new Map<string, string>();
+  private readonly onExpand?: (key: string) => void;
+
+  protected override nodeClicked(key: string): void {
+    const summary = this.summaryKeys.get(key);
+    if (summary) this.onExpand?.(summary);
+  }
 
   /** Hovering changed: another box in focus, on screen and in the drawing (so they stay the same). */
   private refreshFocus(): void {

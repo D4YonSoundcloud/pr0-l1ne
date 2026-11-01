@@ -155,6 +155,10 @@ class SwitchingMemory extends Switching<MemoryScene, MemoryRenderer, MemoryRende
     this.inner.moveBoxes(positions);
   }
 
+  detailBudget(): number {
+    return this.inner.detailBudget();
+  }
+
   protected carry(from: MemoryRenderer, to: MemoryRenderer): void {
     to.moveBoxes(from.movedBoxes);
   }

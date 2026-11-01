@@ -4,6 +4,7 @@
  * nested mode a list of lists drawn as a grid.
  */
 
+import { valueKey } from "../../trace/diff";
 import { formatBytes } from "../../trace/memory";
 import type { HeapObject, SequenceObject } from "../../trace/types";
 import {
@@ -25,6 +26,7 @@ import {
   uiTextWidth,
   windowBands,
 } from "../draw";
+import { heatKey } from "./cellCache";
 import { intervalsShape, recordsShape } from "./records";
 import {
   type Ctx,
@@ -133,9 +135,20 @@ function gridShape(
             );
             view.draw(cx + pad, ry + pad, view.w, view.h, g, refs, changed);
           } else {
-            const el = view.draw(cx, ry, cellW, CELL_H, g, refs, changed);
-            markCell(el, row.id, String(c), row.items[c], c * cellW, 0);
-            heatCell(el, row.items[c], heat);
+            const drawCell = () => {
+              const el = view.draw(cx, ry, cellW, CELL_H, g, refs, changed);
+              markCell(el, row.id, String(c), row.items[c], c * cellW, 0);
+              heatCell(el, row.items[c], heat);
+            };
+            // Kept from the last drawing when it's the same cell, drawn the same (cellCache.ts).
+            if (ctx.cells && !changed)
+              ctx.cells.cell(
+                `g|${row.id}|${c}|${valueKey(row.items[c])}|${cx}|${ry}|${cellW}|${heatKey(heat)}`,
+                g,
+                refs,
+                drawCell,
+              );
+            else drawCell();
           }
         });
       });
@@ -390,9 +403,20 @@ export function sequenceShape(
           );
           view.draw(cx + pad, y + cellsY + pad, view.w, view.h, g, refs, changed);
         } else {
-          const el = view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed);
-          markCell(el, obj.id, slot, obj.items[i], cx - x, 0);
-          heatCell(el, obj.items[i], heat);
+          const drawCell = () => {
+            const el = view.draw(cx, y + cellsY, cellW, cellH, g, refs, changed);
+            markCell(el, obj.id, slot, obj.items[i], cx - x, 0);
+            heatCell(el, obj.items[i], heat);
+          };
+          // Kept from the last drawing when it's the same cell, drawn the same (cellCache.ts).
+          if (ctx.cells && !changed)
+            ctx.cells.cell(
+              `s|${obj.id}|${slot}|${valueKey(obj.items[i])}|${cx}|${y + cellsY}|${cellW}|${cellH}|${cx - x}|${heatKey(heat)}`,
+              g,
+              refs,
+              drawCell,
+            );
+          else drawCell();
           // A list cell's arrow leaves downward, not through its neighbors.
           for (let k = before; k < refs.length; k++) refs[k].down = true;
         }
