@@ -24,6 +24,7 @@
     "src/render/memoryView/boxCache.python.test.ts",
     "src/scene/windows.test.ts",
     "src/trace/hints.test.ts",
+    "src/trace/loopHistory.incremental.test.ts",
     "src/trace/graph.test.ts",
     "src/trace/memory.test.ts",
     "src/trace/complexity.test.ts",

@@ -50,16 +50,105 @@ export interface LinkedRow {
 const LINK_NAMES = new Set(["next", "prev", "previous", "left", "right", "parent", "child", "head", "tail"]);
 const MAX_NODES = 40;
 
+/** A plain object's fields, worked out once per object (heap objects never change once traced). */
+const plainFields = new WeakMap<HeapObject, [string, Value][] | null>();
+
 /** Named fields of an instance or a JavaScript plain object. */
 export function fieldsOf(obj: HeapObject | undefined): [string, Value][] | null {
   if (!obj) return null;
   if (obj.kind === "object") return obj.fields;
-  // JavaScript plain objects ({ val: 1, next: null }) are drawn as dicts with
-  // unquoted "key" keys. Treat them as instances of a class named "Object".
-  if (obj.kind === "dict" && obj.entries.every(([key]) => key.kind === "prim" && key.type === "key")) {
-    return obj.entries.map(([key, value]) => [(key as { repr: string }).repr, value]);
+  if (obj.kind !== "dict") return null;
+  let fields = plainFields.get(obj);
+  if (fields === undefined) {
+    // JavaScript plain objects ({ val: 1, next: null }) are drawn as dicts with
+    // unquoted "key" keys. Treat them as instances of a class named "Object".
+    fields = obj.entries.every(([key]) => key.kind === "prim" && key.type === "key")
+      ? obj.entries.map(([key, value]) => [(key as { repr: string }).repr, value])
+      : null;
+    plainFields.set(obj, fields);
   }
-  return null;
+  return fields;
+}
+
+/*
+ * What's worked out about one row, kept with it. A loop's history is the
+ * same rows step after step, plus one; finding the linked class looks at
+ * every node of every row, so each row's part (its survey, its nodes of a
+ * class, the counts for a field) is worked out once and kept by the row's
+ * snapshot (the loop scene keeps one snapshot per row), and only merged
+ * each step. The merge gives exactly what looking at every row did.
+ */
+
+/** One row's survey: what its nodes reached from its variables show. */
+interface Survey {
+  /** Per class, the fields that point at the same class, in the order first seen. */
+  linkFields: Map<string, string[]>;
+  /** Per class, its fields in the order first seen. */
+  fieldOrder: Map<string, string[]>;
+  /** Per class, its nodes. */
+  nodeIds: Map<string, Set<string>>;
+}
+
+const surveys = new WeakMap<RowSnapshot, Survey>();
+function surveyOf(row: RowSnapshot): Survey {
+  let survey = surveys.get(row);
+  if (survey) return survey;
+  survey = { linkFields: new Map(), fieldOrder: new Map(), nodeIds: new Map() };
+  const { linkFields, fieldOrder, nodeIds } = survey;
+  const seen = new Set<string>();
+  const visit = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const obj = row.heap[id];
+    const fields = fieldsOf(obj);
+    if (!obj || !fields) return;
+    const type = obj.typeName;
+    const order = fieldOrder.get(type);
+    if (!order)
+      fieldOrder.set(
+        type,
+        fields.map(([n]) => n),
+      );
+    else for (const [n] of fields) if (!order.includes(n)) order.push(n);
+    let ids = nodeIds.get(type);
+    if (!ids) {
+      ids = new Set();
+      nodeIds.set(type, ids);
+    }
+    ids.add(id);
+    for (const [name, value] of fields) {
+      if (value.kind !== "ref") continue;
+      if (typeOf(row.heap[value.id]) === type) {
+        const links = linkFields.get(type);
+        if (!links) linkFields.set(type, [name]);
+        else if (!links.includes(name)) links.push(name);
+      }
+      visit(value.id);
+    }
+  };
+  for (const root of roots(row, null)) visit(root.id);
+  surveys.set(row, survey);
+  return survey;
+}
+
+/** Appends what `more` has that `into` hasn't, in order. */
+const union = (into: string[], more: Iterable<string>) => {
+  for (const x of more) if (!into.includes(x)) into.push(x);
+  return into;
+};
+
+/** A row's numbers kept by a key (class, field...). */
+const rowNumbers = new WeakMap<RowSnapshot, Map<string, unknown>>();
+function kept<T>(row: RowSnapshot, key: string, work: () => T): T {
+  let map = rowNumbers.get(row);
+  if (!map) {
+    map = new Map();
+    rowNumbers.set(row, map);
+  }
+  if (map.has(key)) return map.get(key) as T;
+  const value = work();
+  map.set(key, value);
+  return value;
 }
 
 const typeOf = (obj: HeapObject | undefined) => (obj && fieldsOf(obj) ? obj.typeName : null);
@@ -99,7 +188,7 @@ export function findLinkedTrack(
   // A `viz: tree` / `viz: list` hint for a class in these rows wins over
   // detection: it says exactly which fields are the links.
   for (const hint of hints) {
-    if (!rows.some((row) => Object.values(row.heap).some((obj) => typeOf(obj) === hint.typeName))) continue;
+    if (!rows.some((row) => nodesOfType(row, hint.typeName).length > 0)) continue;
     const fields = [
       ...new Set(rows.flatMap((row) => nodesOfType(row, hint.typeName).flatMap(([, f]) => f.map(([n]) => n)))),
     ];
@@ -111,31 +200,27 @@ export function findLinkedTrack(
     if (track.order.length) return track;
   }
 
-  // Count, per class, the fields that point at the same class.
+  // Count, per class, the fields that point at the same class: each row's survey, merged in order.
   const linkFields = new Map<string, string[]>();
   const fieldOrder = new Map<string, string[]>();
   const nodeCount = new Map<string, Set<string>>();
   for (const row of rows) {
-    const seen = new Set<string>();
-    const visit = (id: string) => {
-      if (seen.has(id)) return;
-      seen.add(id);
-      const obj = row.heap[id];
-      const fields = fieldsOf(obj);
-      if (!obj || !fields) return;
-      const type = obj.typeName;
-      fieldOrder.set(type, [...new Set([...(fieldOrder.get(type) ?? []), ...fields.map(([n]) => n)])]);
-      nodeCount.set(type, (nodeCount.get(type) ?? new Set()).add(id));
-      for (const [name, value] of fields) {
-        if (value.kind !== "ref") continue;
-        if (typeOf(row.heap[value.id]) === type) {
-          const links = linkFields.get(type) ?? [];
-          if (!links.includes(name)) linkFields.set(type, [...links, name]);
-        }
-        visit(value.id);
-      }
-    };
-    for (const root of roots(row, null)) visit(root.id);
+    const survey = surveyOf(row);
+    for (const [type, fields] of survey.fieldOrder) {
+      const order = fieldOrder.get(type);
+      if (order) union(order, fields);
+      else fieldOrder.set(type, [...fields]);
+    }
+    for (const [type, ids] of survey.nodeIds) {
+      const all = nodeCount.get(type);
+      if (all) for (const id of ids) all.add(id);
+      else nodeCount.set(type, new Set(ids));
+    }
+    for (const [type, links] of survey.linkFields) {
+      const all = linkFields.get(type);
+      if (all) union(all, links);
+      else linkFields.set(type, [...links]);
+    }
   }
 
   // The class with links and the most nodes wins.
@@ -166,6 +251,10 @@ export function findLinkedTrack(
 
 /** The most links pointing at any single node of this class in a row. */
 function maxIndegree(row: RowSnapshot, type: string, links: string[]): number {
+  return kept(row, `indegree|${type}|${links.join(",")}`, () => countIndegree(row, type, links));
+}
+
+function countIndegree(row: RowSnapshot, type: string, links: string[]): number {
   const counts = new Map<string, number>();
   for (const [, fields] of nodesOfType(row, type)) {
     for (const link of links) {
@@ -177,20 +266,24 @@ function maxIndegree(row: RowSnapshot, type: string, links: string[]): number {
 }
 
 function nodesOfType(row: RowSnapshot, type: string): [string, [string, Value][]][] {
-  return Object.values(row.heap)
-    .filter((obj) => typeOf(obj) === type)
-    .map((obj) => [obj.id, fieldsOf(obj)!]);
+  return kept(row, `nodes|${type}`, () =>
+    Object.values(row.heap)
+      .filter((obj) => typeOf(obj) === type)
+      .map((obj): [string, [string, Value][]] => [obj.id, fieldsOf(obj)!]),
+  );
 }
 
 function isAlwaysNullOrNode(rows: RowSnapshot[], type: string, field: string): boolean {
   return rows.every((row) =>
-    nodesOfType(row, type).every(([, fields]) => {
-      const value = fields.find(([n]) => n === field)?.[1];
-      return (
-        !value ||
-        (value.kind === "prim" ? /^(null|None|undefined)$/.test(value.repr) : typeOf(row.heap[value.id]) === type)
-      );
-    }),
+    kept(row, `nullOrNode|${type}|${field}`, () =>
+      nodesOfType(row, type).every(([, fields]) => {
+        const value = fields.find(([n]) => n === field)?.[1];
+        return (
+          !value ||
+          (value.kind === "prim" ? /^(null|None|undefined)$/.test(value.repr) : typeOf(row.heap[value.id]) === type)
+        );
+      }),
+    ),
   );
 }
 
@@ -198,12 +291,19 @@ function isMostlyPrimitive(rows: RowSnapshot[], type: string, field: string): bo
   let prims = 0;
   let total = 0;
   for (const row of rows) {
-    for (const [, fields] of nodesOfType(row, type)) {
-      const value = fields.find(([n]) => n === field)?.[1];
-      if (!value) continue;
-      total++;
-      if (value.kind === "prim") prims++;
-    }
+    const counts = kept(row, `prims|${type}|${field}`, () => {
+      let p = 0;
+      let n = 0;
+      for (const [, fields] of nodesOfType(row, type)) {
+        const value = fields.find(([f]) => f === field)?.[1];
+        if (!value) continue;
+        n++;
+        if (value.kind === "prim") p++;
+      }
+      return [p, n] as const;
+    });
+    prims += counts[0];
+    total += counts[1];
   }
   return total > 0 && prims * 2 >= total;
 }
@@ -243,8 +343,16 @@ function columnOrder(rows: RowSnapshot[], track: LinkedTrack): string[] {
   return order;
 }
 
-/** What one row shows: each node's value and links, and the named pointers. */
+/** A track as a key: rows drawn for the same key are the same (a new node in the order makes a new key). */
+const trackKey = (track: LinkedTrack) =>
+  `${track.typeName}|${track.links.join(",")}|${track.valueField ?? ""}|${track.shape}|${track.order.join(",")}`;
+
+/** What one row shows: each node's value and links, and the named pointers. Kept per row and track. */
 export function linkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
+  return kept(row, `row|${trackKey(track)}`, () => makeLinkedRow(track, row));
+}
+
+function makeLinkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
   const nodes = new Map<string, NodeState>();
   for (const id of track.order) {
     const fields = fieldsOf(row.heap[id]);
@@ -272,8 +380,19 @@ export function linkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
   return { nodes, pointers };
 }
 
+const signatures = new WeakMap<LinkedRow, string>();
+
 /** A string that changes whenever anything visible in the row changes. */
 export function linkedSignature(state: LinkedRow): string {
+  let sig = signatures.get(state);
+  if (sig === undefined) {
+    sig = makeSignature(state);
+    signatures.set(state, sig);
+  }
+  return sig;
+}
+
+function makeSignature(state: LinkedRow): string {
   return [...state.nodes]
     .map(([id, node]) => `${id}=${node.value ? valueKey(node.value) : ""}>${node.links.join(",")}`)
     .join("|");

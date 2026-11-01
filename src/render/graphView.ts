@@ -75,7 +75,7 @@ interface Legend {
   text: string;
 }
 
-function legendItems(overlays: GraphOverlay[]): Legend[] {
+export function legendItems(overlays: GraphOverlay[]): Legend[] {
   const union = <T>(pick: (o: GraphOverlay) => T[]) => [...new Set(overlays.flatMap(pick))];
   const visited = union((o) => o.visitedNames);
   const frontier = union((o) => (o.frontierName ? [o.frontierName] : []));

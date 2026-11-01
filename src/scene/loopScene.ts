@@ -25,7 +25,14 @@ import {
   type Scope,
 } from "../trace/graph";
 import { focusLines, type GridFocus, gridFocus } from "../trace/gridFocus";
-import { findLinkedTrack, type LinkedRow, type LinkedTrack, linkedRow, linkedSignature } from "../trace/linked";
+import {
+  findLinkedTrack,
+  type LinkedRow,
+  type LinkedTrack,
+  linkedRow,
+  linkedSignature,
+  type RowSnapshot,
+} from "../trace/linked";
 import { type LoopHistory, type LoopRow, runKey } from "../trace/loopHistory";
 import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
 import {
@@ -156,7 +163,7 @@ function pickVariables(
     (name) =>
       shown.has(name) ||
       (trace.indexNames[name] !== undefined && isSequence(name)) ||
-      changes((row) => signature(row, name)),
+      changes((row) => rowSignature(row, name)),
   );
   // With nothing else to show, fall back to every container. A linked track
   // counts as something to show.
@@ -215,6 +222,25 @@ export function evaluatedHeader(info: LoopInfo, call: string): string {
   return at >= 0 ? `${info.header.slice(0, at)} in ${call}` : call;
 }
 
+/** One snapshot per step (by its heap) and frame, so what's worked out about it (trace/linked.ts) is kept. */
+const stepSnapshots = new WeakMap<object, Map<string, RowSnapshot>>();
+function stepSnapshot(
+  step: { heap: RowSnapshot["heap"] },
+  frame: { id: string; locals: RowSnapshot["locals"] },
+): RowSnapshot {
+  let byFrame = stepSnapshots.get(step.heap);
+  if (!byFrame) {
+    byFrame = new Map();
+    stepSnapshots.set(step.heap, byFrame);
+  }
+  let snap = byFrame.get(frame.id);
+  if (!snap) {
+    snap = { locals: frame.locals, heap: step.heap };
+    byFrame.set(frame.id, snap);
+  }
+  return snap;
+}
+
 /** The linked structure at every step of this run of the loop after the last row (up to 3,000 steps). */
 function laterRows(trace: Trace, history: LoopHistory, track: LinkedTrack): LinkedRow[] {
   const ctx = history.context;
@@ -225,7 +251,7 @@ function laterRows(trace: Trace, history: LoopHistory, track: LinkedTrack): Link
     const step = trace.steps[i];
     if (!step.loops.some((c) => c.frame === ctx.frame && c.loop === ctx.loop && c.instance === ctx.instance)) break;
     const frame = liveFrames(step).find((f) => f.id === ctx.frame);
-    if (frame) out.push(linkedRow(track, { locals: frame.locals, heap: step.heap }));
+    if (frame) out.push(linkedRow(track, stepSnapshot(step, frame)));
   }
   return out;
 }
@@ -378,6 +404,62 @@ const LEAVE_OUT = 20;
 /** Graphs found in each loop row, by step and frame: the same for the whole run. */
 const graphCache = new WeakMap<Trace, Map<string, GraphData[]>>();
 
+/*
+ * What's worked out about a row, kept with it. A loop's history is the same
+ * rows step after step (trace/loopHistory.ts gives the same row object for
+ * the same pass at the same step), plus the one running, so each fact about
+ * a row is worked out once: its containers' signatures, its graph's overlay
+ * and signature, its linked nodes (trace/linked.ts keeps those by the row's
+ * snapshot). Every fact is a function of the row and the trace alone.
+ */
+interface RowFacts {
+  snapshot: RowSnapshot;
+  signatures: Map<string, string>;
+  overlays: Map<GraphData, GraphOverlay>;
+  /** Containers: present with cells, and a grid. */
+  shapes: Map<string, { cells: boolean; grid: boolean }>;
+  /** `viz: watch` values and false `viz: check`s, once worked out. */
+  watches?: { text: string; value: string }[];
+  failedChecks?: string[];
+}
+const rowFacts = new WeakMap<LoopRow, RowFacts>();
+function factsOf(row: LoopRow): RowFacts {
+  let facts = rowFacts.get(row);
+  if (!facts) {
+    facts = {
+      snapshot: stepSnapshot(row, row.frame),
+      signatures: new Map(),
+      overlays: new Map(),
+      shapes: new Map(),
+    };
+    rowFacts.set(row, facts);
+  }
+  return facts;
+}
+
+/** signature(), kept per row. */
+function rowSignature(row: LoopRow, name: string): string {
+  const { signatures } = factsOf(row);
+  let sig = signatures.get(name);
+  if (sig === undefined) {
+    sig = signature(row, name);
+    signatures.set(name, sig);
+  }
+  return sig;
+}
+
+/** A graph's signature with its overlay, kept per overlay (one per row and graph). */
+const graphSignatures = new WeakMap<GraphOverlay, string>();
+function rowGraphSignature(entry: { graph: GraphData; overlay: GraphOverlay } | null | undefined): string {
+  if (!entry) return graphSignature(undefined, undefined);
+  let sig = graphSignatures.get(entry.overlay);
+  if (sig === undefined) {
+    sig = graphSignature(entry.graph, entry.overlay);
+    graphSignatures.set(entry.overlay, sig);
+  }
+  return sig;
+}
+
 /** The scene for the loop history of one loop (or every loop together). */
 export function loopScene(trace: Trace, history: LoopHistory, options: LoopSceneOptions): LoopScene {
   const { rows } = history;
@@ -408,7 +490,14 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   const graphId = found.flat()[0]?.id;
   const graphRows = all.map((row, i) => {
     const graph = graphId ? found[i].find((g) => g.id === graphId) : undefined;
-    return graph ? { graph, overlay: graphOverlay(trace, graph, scopesOf(row), row.heap) } : null;
+    if (!graph) return null;
+    const { overlays } = factsOf(row);
+    let overlay = overlays.get(graph);
+    if (!overlay) {
+      overlay = graphOverlay(trace, graph, scopesOf(row), row.heap);
+      overlays.set(graph, overlay);
+    }
+    return { graph, overlay };
   });
   const firstGraph = graphRows.find(Boolean)?.graph;
   // The graph's own container isn't repeated as a row of cells.
@@ -422,20 +511,28 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   );
 
   let track = findLinkedTrack(
-    all.map((row) => ({ locals: row.frame.locals, heap: row.heap })),
+    all.map((row) => factsOf(row).snapshot),
     trace.viz?.linked,
     trace.viz?.labels,
   );
   if (track && firstGraph?.objectNodes && track.typeName === firstGraph.name) track = null;
-  const trackRows: (LinkedRow | null)[] = all.map((row) =>
-    track ? linkedRow(track, { locals: row.frame.locals, heap: row.heap }) : null,
-  );
+  const trackRows: (LinkedRow | null)[] = all.map((row) => (track ? linkedRow(track, factsOf(row).snapshot) : null));
   const { containers, scalars } = pickVariables(trace, rows, !!track || !!firstGraph, exclude);
   // A list of lists in every row where it has items: drawn as a grid.
   const grids = new Set(
     containers.filter((name) => {
-      const present = all.filter((row) => containerIn(row, name) && cellsOf(containerIn(row, name)!).length);
-      return present.length > 0 && present.every((row) => gridIn(row, name));
+      const shape = (row: LoopRow) => {
+        const { shapes } = factsOf(row);
+        let known = shapes.get(name);
+        if (!known) {
+          const obj = containerIn(row, name);
+          known = { cells: !!obj && cellsOf(obj).length > 0, grid: !!gridIn(row, name) };
+          shapes.set(name, known);
+        }
+        return known;
+      };
+      const present = all.filter((row) => shape(row).cells);
+      return present.length > 0 && present.every((row) => shape(row).grid);
     }),
   );
 
@@ -469,10 +566,9 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   const changed = rows.map(
     (row, i) =>
       i === 0 ||
-      containers.some((name) => signature(row, name) !== signature(rows[i - 1], name)) ||
+      containers.some((name) => rowSignature(row, name) !== rowSignature(rows[i - 1], name)) ||
       trackSignature(i) !== trackSignature(i - 1) ||
-      graphSignature(graphRows[i]?.graph, graphRows[i]?.overlay) !==
-        graphSignature(graphRows[i - 1]?.graph, graphRows[i - 1]?.overlay),
+      rowGraphSignature(graphRows[i]) !== rowGraphSignature(graphRows[i - 1]),
   );
 
   // Collapse runs of quiet iterations into a single band, but only for loops
@@ -611,17 +707,24 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       const hint = trace.viz?.heatmaps?.find((h) => h.name === name);
       return hint ? { min: hint.min ?? 0, max: hint.max ?? 0 } : null;
     },
-    watches: (row) =>
-      (trace.viz?.watches ?? []).map((w) => {
+    // Worked out once per row (they depend on the row and the run's hints only).
+    watches: (row) => {
+      const facts = factsOf(row);
+      facts.watches ??= (trace.viz?.watches ?? []).map((w) => {
         const value = evaluateText(w.text, new Map(row.frame.locals), row.heap, language);
         return { text: w.text, value: value === undefined ? "?" : showVal(value, language) };
-      }),
-    failedChecks: (row) =>
-      (trace.viz?.checks ?? []).flatMap((c) => {
+      });
+      return facts.watches;
+    },
+    failedChecks: (row) => {
+      const facts = factsOf(row);
+      facts.failedChecks ??= (trace.viz?.checks ?? []).flatMap((c) => {
         const value = evaluateText(c.text, new Map(row.frame.locals), row.heap, language);
         // Only a check that can be worked out here, and is false, fails.
         return value !== undefined && !truthy(value) ? [c.text] : [];
-      }),
+      });
+      return facts.failedChecks;
+    },
     gridFocus: (row, name, size) =>
       gridFocus(
         trace.gridAccesses,

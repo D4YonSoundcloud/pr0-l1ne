@@ -297,7 +297,8 @@ pr0-l1ne/
     │   ├── types.ts            The trace format (the tracer/renderer contract)
     │   ├── policy.ts           The step budget, time limits and sampling rules, for both tracers
     │   ├── diff.ts             What changed between two steps
-    │   ├── loopHistory.ts      Group steps into loop iterations
+    │   ├── loopHistory.ts      Group steps into loop iterations: each trace's loop runs found once, a step's history by binary search
+    │   ├── loopHistory.incremental.test.ts  The history held to the scanning one (testing/loopHistoryReference.ts) at every step
     │   ├── hints.ts            Parse and apply viz: comment hints
     │   ├── hints.test.ts       Hint tests (all three languages)
     │   ├── expr.ts             Expressions for watch and check: parse, evaluate (read only)

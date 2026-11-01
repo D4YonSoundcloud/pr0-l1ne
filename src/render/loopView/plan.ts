@@ -7,7 +7,7 @@
  */
 import { cellsOf, containerIn, gridIn, type LoopScene } from "../../scene/loopScene";
 import type { GraphOverlay } from "../../trace/graph";
-import { treeDepths } from "../../trace/linked";
+import { type LinkedRow, treeDepths } from "../../trace/linked";
 import type { LoopRow } from "../../trace/loopHistory";
 import {
   CELL_H,
@@ -74,6 +74,52 @@ export interface LoopPlan {
   cellsTop(column: ContainerColumn): number;
 }
 
+/*
+ * Each row's measurements, kept with the row: a column's width is the
+ * widest of every row's cells, and the history is the same rows step after
+ * step (trace/loopHistory.ts gives the same row object for the same pass at
+ * the same step), so each row is measured once and only the maxima are taken
+ * each step. A measurement is a function of the row and the trace alone.
+ */
+interface GridMeasure {
+  rows: number;
+  cols: number;
+  cellW: number;
+  pointersW: number;
+  columnPointers: boolean;
+}
+interface ListMeasure {
+  cells: number;
+  cellW: number;
+  pointers: boolean;
+  strip: boolean;
+}
+const measures = new WeakMap<LoopRow, Map<string, GridMeasure | ListMeasure | null>>();
+function measured<T extends GridMeasure | ListMeasure>(row: LoopRow, key: string, work: () => T | null): T | null {
+  let map = measures.get(row);
+  if (!map) {
+    map = new Map();
+    measures.set(row, map);
+  }
+  if (map.has(key)) return map.get(key) as T | null;
+  const value = work();
+  map.set(key, value);
+  return value;
+}
+
+/** A linked row's widest value cell and its tree depth, kept per row. */
+const trackMeasures = new WeakMap<LinkedRow, { valueW: number; levels: number }>();
+function trackMeasure(state: LinkedRow, tree: boolean): { valueW: number; levels: number } {
+  let m = trackMeasures.get(state);
+  if (!m) {
+    let valueW = CELL_MIN_W;
+    for (const node of state.nodes.values()) if (node.value) valueW = Math.max(valueW, cellWidth(node.value));
+    m = { valueW, levels: tree ? Math.max(0, ...treeDepths(state).values()) + 1 : 1 };
+    trackMeasures.set(state, m);
+  }
+  return m;
+}
+
 /** Plan a loop scene's rows. */
 export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   const { rows, all, containers, scalars } = scene;
@@ -124,23 +170,38 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   for (const name of containers) {
     const labelW = textWidth(name) + 12;
     // A list of lists in every row where it has items: draw it as a grid.
-    const present = all.filter((row) => containerIn(row, name) && cellsOf(containerIn(row, name)!).length);
     if (scene.grids.has(name)) {
       let cellW = CELL_MIN_W;
       let gridRows = 1;
       let cols = 1;
       let pointersW = 0;
       let hasColumnPointers = false;
-      for (const row of present) {
-        const grid = gridIn(row, name)!;
-        gridRows = Math.max(gridRows, grid.length);
-        for (const r of grid) {
-          cols = Math.max(cols, r.items.length);
-          for (const item of r.items) cellW = Math.max(cellW, cellWidth(item));
-        }
-        pointersW = Math.max(pointersW, rowPointersWidth(scene.pointers(row, name)));
-        const widest = Math.max(0, ...grid.map((r) => r.items.length));
-        if (scene.pointers(row, `${name}[]`).some((p) => p.index < widest)) hasColumnPointers = true;
+      for (const row of all) {
+        const m = measured<GridMeasure>(row, `grid|${name}`, () => {
+          const obj = containerIn(row, name);
+          if (!obj || !cellsOf(obj).length) return null;
+          const grid = gridIn(row, name)!;
+          let w = CELL_MIN_W;
+          let c = 1;
+          for (const r of grid) {
+            c = Math.max(c, r.items.length);
+            for (const item of r.items) w = Math.max(w, cellWidth(item));
+          }
+          const widest = Math.max(0, ...grid.map((r) => r.items.length));
+          return {
+            rows: grid.length,
+            cols: c,
+            cellW: w,
+            pointersW: rowPointersWidth(scene.pointers(row, name)),
+            columnPointers: scene.pointers(row, `${name}[]`).some((p) => p.index < widest),
+          };
+        });
+        if (!m) continue;
+        gridRows = Math.max(gridRows, m.rows);
+        cols = Math.max(cols, m.cols);
+        cellW = Math.max(cellW, m.cellW);
+        pointersW = Math.max(pointersW, m.pointersW);
+        if (m.columnPointers) hasColumnPointers = true;
       }
       const rowIndexW = textWidth(String(gridRows - 1), 10.5) + 10;
       const column: ContainerColumn = {
@@ -169,13 +230,24 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
     let hasPointers = false;
     let strip = false;
     for (const row of all) {
-      const obj = containerIn(row, name);
-      if (!obj) continue;
-      const cells = cellsOf(obj);
-      maxCells = Math.max(maxCells, cells.length);
-      for (const cell of cells) cellW = Math.max(cellW, cellWidth(cell.value), textWidth(cell.label, 11) + 10);
-      if (scene.pointers(row, name).length) hasPointers = true;
-      if (obj.kind !== "dict" && obj.strip) strip = true;
+      const m = measured<ListMeasure>(row, `list|${name}`, () => {
+        const obj = containerIn(row, name);
+        if (!obj) return null;
+        const cells = cellsOf(obj);
+        let w = CELL_MIN_W;
+        for (const cell of cells) w = Math.max(w, cellWidth(cell.value), textWidth(cell.label, 11) + 10);
+        return {
+          cells: cells.length,
+          cellW: w,
+          pointers: scene.pointers(row, name).length > 0,
+          strip: obj.kind !== "dict" && !!obj.strip,
+        };
+      });
+      if (!m) continue;
+      maxCells = Math.max(maxCells, m.cells);
+      cellW = Math.max(cellW, m.cellW);
+      if (m.pointers) hasPointers = true;
+      if (m.strip) strip = true;
     }
     const column: ContainerColumn = {
       name,
@@ -202,9 +274,7 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   let trackLayout: TrackLayout | null = null;
   if (track) {
     let valueW = CELL_MIN_W;
-    for (const state of trackRows) {
-      for (const node of state!.nodes.values()) if (node.value) valueW = Math.max(valueW, cellWidth(node.value));
-    }
+    for (const state of trackRows) valueW = Math.max(valueW, trackMeasure(state!, track.shape === "tree").valueW);
     const nodeW = valueW + track.links.length * SLOT_W;
     const labelW = textWidth(track.typeName) + 12;
     trackLayout = { track, x: x + labelW, valueW, nodeW };
@@ -263,7 +333,7 @@ export function planLoop(scene: LoopScene, options: LoopViewOptions): LoopPlan {
   const trackPointers = trackRows.some((r) => !!r?.pointers.length);
   let trackBodyH = 0;
   if (track && isTree) {
-    const levels = Math.max(1, ...trackRows.map((r) => Math.max(0, ...treeDepths(r!).values()) + 1));
+    const levels = Math.max(1, ...trackRows.map((r) => trackMeasure(r!, true).levels));
     trackBodyH = (levels - 1) * LEVEL_H + CELL_H + POINTER_H;
   } else if (track) {
     trackBodyH = CELL_H + (trackPointers ? POINTER_H : 6) + (track.links.length > 1 ? ARC_BOTTOM : 0);

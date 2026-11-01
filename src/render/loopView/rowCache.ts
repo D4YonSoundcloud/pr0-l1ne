@@ -18,12 +18,15 @@
  * other thing a row reads from the scene is worked out from those and the
  * run's hints, the same each step. What is shared by the whole view goes in
  * one key per drawing (sceneKey); what is the row's own, in its key
- * (rowKey). Rows with a graph or a linked list are always drawn: their
- * layout is worked out across every row.
+ * (rowKey). A graph's layout and legend, and a linked track's columns, are
+ * worked out across every row, so they're in the drawing's key: rows are
+ * kept while they stay the same, and drawn again when they change (a new
+ * node in the track, a new kind of mark in the legend).
  */
 import { containerIn, type LoopScene } from "../../scene/loopScene";
 import type { LoopRow } from "../../trace/loopHistory";
 import type { Mark } from "../drawing";
+import { legendItems } from "../graphView";
 import type { LoopPlan } from "./plan";
 import type { DrawnRow } from "./row";
 
@@ -48,8 +51,37 @@ export const passKey = (row: LoopRow | null | undefined): string =>
 
 /** What every row of a drawing shares: the plan, and what the scene shows. Null when rows can't be kept. */
 export function sceneKey(scene: LoopScene, plan: LoopPlan, vertical: boolean): string | null {
-  if (scene.live || scene.graph || scene.track || plan.graph || plan.track) return null;
+  if (scene.live) return null;
+  const graph = plan.graph
+    ? {
+        first: idOf(scene.graph?.first),
+        name: scene.graph?.first.name,
+        layout: idOf(plan.graph.layout),
+        legend: legendItems(plan.graph.overlays),
+        x: plan.graph.x,
+        h: plan.graph.h,
+        top: plan.graphTop,
+      }
+    : null;
+  const track = plan.track
+    ? {
+        type: plan.track.track.typeName,
+        links: plan.track.track.links,
+        value: plan.track.track.valueField,
+        shape: plan.track.track.shape,
+        order: plan.track.track.order,
+        x: plan.track.x,
+        valueW: plan.track.valueW,
+        nodeW: plan.track.nodeW,
+        places: plan.track.places ? [...plan.track.places] : null,
+        lines: plan.track.lines ?? null,
+        lineStep: plan.track.lineStep ?? null,
+        top: plan.trackTop,
+      }
+    : null;
   return JSON.stringify({
+    graph,
+    track,
     vertical,
     tall: !!scene.tall,
     nested: !!scene.history.nested,
@@ -85,6 +117,10 @@ export function rowKey(
 ): string {
   const prevRow = index > 0 ? scene.all[index - 1] : null;
   const sizes = scene.sizes(row);
+  const graphRow = scene.graph?.rows[index];
+  const trackRow = scene.track?.rows[index];
+  const prevTrack = prevDrawn ? scene.track?.rows[prevDrawn.index] : null;
+  const prevGraph = prevDrawn ? scene.graph?.rows[prevDrawn.index] : null;
   return [
     passKey(row),
     index,
@@ -103,6 +139,18 @@ export function rowKey(
           return obj ? sizes.total(obj.id) : "";
         })}`
       : "-",
+    // The row's graph and linked nodes (kept per row, so the same objects when the same).
+    graphRow ? `${idOf(graphRow.graph)}/${idOf(graphRow.overlay)}` : "-",
+    prevGraph ? `${idOf(prevGraph.graph)}/${idOf(prevGraph.overlay)}` : "-",
+    trackRow ? idOf(trackRow) : "-",
+    prevTrack ? idOf(prevTrack) : "-",
+    // Their memory sizes, if shown.
+    sizes && graphRow
+      ? graphRow.graph.objectNodes
+        ? sizes.of([...graphRow.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id })))
+        : sizes.total(graphRow.graph.hostId)
+      : "-",
+    sizes && trackRow ? sizes.of([...trackRow.nodes.keys()].map((id) => ({ kind: "ref" as const, id }))) : "-",
   ].join("|");
 }
 
