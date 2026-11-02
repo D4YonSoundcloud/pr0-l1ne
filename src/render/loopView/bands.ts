@@ -67,6 +67,39 @@ export function drawGap(layer: Mark, item: Item<"gap">, y: number, plan: LoopPla
   return BAND_H + 6;
 }
 
+/**
+ * Rows folded past the detail budget (scene/loopSummaries.ts), as one band
+ * to click: it opens by its key, as a memory summary does (the window
+ * reports a click on a `data-node-key`; data-summary says it opens).
+ */
+export function drawFold(layer: Mark, item: Item<"fold">, y: number, plan: LoopPlan, scene: LoopScene): number {
+  const { contentW } = plan;
+  const text = `${scene.label(item.first)} to ${scene.label(item.last)}: ${item.count.toLocaleString()} passes folded · click to show`;
+  const textX = MARGIN + plan.gutter;
+  const h = BAND_H + 6;
+  layer.append(
+    s(
+      "g",
+      {
+        class: "quiet-band fold-band is-summary",
+        "data-node-key": item.key,
+        "data-summary": item.key,
+        "data-x": MARGIN,
+        "data-y": y,
+        "data-w": Math.round(contentW - MARGIN),
+        "data-h": h,
+        "data-title": text,
+      },
+      s("title", {}, "Passes far from the one running, folded so the history stays quick to draw. Click to show them."),
+      s("rect", { class: "fold-hit", x: MARGIN, y, width: contentW - MARGIN, height: h, fill: "transparent" }),
+      s("line", { x1: MARGIN, x2: contentW, y1: y + BAND_H / 2, y2: y + BAND_H / 2 }),
+      s("rect", { x: textX - 8, y: y + 4, width: uiTextWidth(text, 12.5) + 16, height: BAND_H - 8, rx: 4 }),
+      s("text", { x: textX, y: y + BAND_H / 2, "dominant-baseline": "central" }, text),
+    ),
+  );
+  return h;
+}
+
 /** Passes where nothing that's shown changed, as one band. */
 export function drawQuietBand(layer: Mark, item: Item<"band">, y: number, plan: LoopPlan): number {
   const { contentW } = plan;

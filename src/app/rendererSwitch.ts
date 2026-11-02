@@ -16,6 +16,7 @@ import type {
   AutoFit,
   Hit,
   LoopRenderer,
+  LoopRendererEvents,
   MemoryRenderer,
   MemoryRendererEvents,
   Point,
@@ -164,8 +165,12 @@ class SwitchingMemory extends Switching<MemoryScene, MemoryRenderer, MemoryRende
   }
 }
 
-class SwitchingLoop extends Switching<LoopScene, LoopRenderer, RendererEvents> implements LoopRenderer {
+class SwitchingLoop extends Switching<LoopScene, LoopRenderer, LoopRendererEvents> implements LoopRenderer {
   private layout = { vertical: false };
+
+  detailBudget(): number {
+    return this.inner.detailBudget();
+  }
 
   setLayout(layout: { vertical: boolean }): void {
     this.layout = { ...layout };

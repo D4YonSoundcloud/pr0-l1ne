@@ -28,6 +28,7 @@
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { timed } from "../../perf";
+import { FOLD_PREFIX, loopDetailBudget } from "../../scene/loopSummaries";
 import { detailBudget, summaryBoxes } from "../../scene/summaries";
 import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
 // PixiJS builds some of its code with new Function(), which the app's
@@ -38,6 +39,7 @@ import { prefersReducedMotion } from "../../appearance";
 import type {
   Hit,
   LoopRenderer,
+  LoopRendererEvents,
   LoopWindowScene,
   MemoryRenderer,
   MemoryRendererEvents,
@@ -760,8 +762,23 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   private scene: LoopWindowScene | null = null;
   private redraw = 0;
 
-  constructor(el: HTMLElement, events: RendererEvents, options: CanvasOptions = {}) {
+  constructor(el: HTMLElement, events: LoopRendererEvents, options: CanvasOptions = {}) {
     super(el, "Loop history", events, options);
+    this.onLayoutChange = events.onLayoutChange;
+    this.onExpand = events.onExpand;
+  }
+  private readonly onLayoutChange?: () => void;
+  private readonly onExpand?: (key: string) => void;
+  /** The cell budget the scene on screen was folded with (scene/loopSummaries.ts). */
+  private budgetDrawn: number | undefined;
+
+  /** The cell budget at the zoom now: zoomed out, rows far from the running one fold sooner. */
+  detailBudget(): number {
+    return loopDetailBudget(this.view.lod, this.view.autoFitState.on);
+  }
+
+  protected override nodeClicked(key: string): void {
+    if (key.startsWith(FOLD_PREFIX)) this.onExpand?.(key);
   }
 
   setLayout(layout: { vertical: boolean }): void {
@@ -770,6 +787,7 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
 
   render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
     this.scene = scene;
+    this.budgetDrawn = "kind" in scene ? undefined : scene.cellBudget;
     this.draw(scene, true);
   }
 
@@ -804,11 +822,18 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
     return loopDrawing(this.scene, { vertical: this.vertical, visible: this.visible });
   }
 
-  /** Zoomed in past the detail the rows were built with: drawn again, once the zoom settles. */
+  /**
+   * Zoomed (or Auto-fit turned) to where the cell budget differs: the
+   * history is folded again (the app makes its scene again). Zoomed in past
+   * the detail the rows were built with: drawn again. Once the zoom settles.
+   */
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
     this.relayoutTimer = window.setTimeout(() => {
-      if (this.scene && this.needsDetail) this.draw(this.scene, false);
+      if (!this.scene) return;
+      if (this.budgetDrawn !== undefined && this.detailBudget() !== this.budgetDrawn && this.onLayoutChange)
+        this.onLayoutChange();
+      else if (this.needsDetail) this.draw(this.scene, false);
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;

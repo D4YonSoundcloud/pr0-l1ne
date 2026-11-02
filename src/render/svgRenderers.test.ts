@@ -163,6 +163,41 @@ describe("SvgLoopRenderer", () => {
 
   const code = "const a = [1, 2];\nconst b = [3, 4];\nfor (let i = 0; i < 2; i++) {\n  a[i] = b[i];\n  b[i] = 0;\n}\n";
 
+  it("clicking a fold in the loop history asks for its rows; the zoom settling at another budget asks to fold again", async () => {
+    vi.useFakeTimers();
+    try {
+      const el = windowEl();
+      const opened: string[] = [];
+      let refolds = 0;
+      const r = SVG_RENDERERS.loop(el, { onExpand: (key) => opened.push(key), onLayoutChange: () => refolds++ });
+      const t = await traceJavaScript("const a = [];\nfor (let i = 0; i < 30; i++) {\n  a.push(i);\n}\n");
+      const at = t.steps.length - 2;
+      const budget = r.detailBudget();
+      const scene = loopScene(t, buildLoopHistory(t, at, null)!, {
+        hideQuiet: false,
+        detail: { cells: 40, expanded: new Set() },
+      });
+      r.render({ ...scene, cellBudget: budget }, null);
+      const band = el.querySelector<SVGGElement>(".fold-band")!;
+      expect(band).not.toBeNull();
+      pointer("pointerdown", band.querySelector("text") ?? band, 50, 50);
+      pointer("pointerup", el, 50, 50);
+      expect(opened).toEqual([band.dataset.summary]);
+      // A press that pans opens nothing.
+      pointer("pointerdown", band, 50, 50);
+      pointer("pointermove", el, 120, 90);
+      pointer("pointerup", el, 120, 90);
+      expect(opened).toHaveLength(1);
+      // Zoomed out to where the budget is smaller: once it settles, the app is asked to fold again.
+      r.setViewport({ zoom: 0.05 });
+      vi.advanceTimersByTime(300);
+      expect(r.detailBudget()).toBeLessThan(budget);
+      expect(refolds).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("draws a loop scene side by side or stacked, keeping the running row in view", async () => {
     const el = windowEl();
     const r = SVG_RENDERERS.loop(el, {});

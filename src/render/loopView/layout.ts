@@ -4,7 +4,7 @@ import type { LoopScene } from "../../scene/loopScene";
 import { arrowMarkers, s } from "../draw";
 import type { Mark } from "../drawing";
 import { buildAt } from "../lod";
-import { drawGap, drawHeader, drawQuietBand } from "./bands";
+import { drawFold, drawGap, drawHeader, drawQuietBand } from "./bands";
 import { type LoopPlan, planLoop } from "./plan";
 import { type DrawnRow, drawRow } from "./row";
 import { rowKey, sceneKey } from "./rowCache";
@@ -33,7 +33,7 @@ export function loopSize(scene: LoopScene, plan: LoopPlan): { width: number; hei
   if (scene.hiddenRows && !scene.live) y += NOTE_H;
   for (const item of scene.items) {
     if (item.kind === "header") y += scene.info(item.loop) ? BAND_H : 0;
-    else if (item.kind === "gap" || item.kind === "band") y += BAND_H + 6;
+    else if (item.kind === "gap" || item.kind === "band" || item.kind === "fold") y += BAND_H + 6;
     else y += plan.rowH + ROW_GAP;
   }
   return { width: plan.contentW + MARGIN, height: y - ROW_GAP + MARGIN };
@@ -75,6 +75,12 @@ function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): M
     }
     if (item.kind === "band") {
       y += drawQuietBand(rowLayer, item, y, plan);
+      continue;
+    }
+    if (item.kind === "fold") {
+      // Rows folded (scene/loopSummaries.ts): no change arrows across it, as across a gap.
+      y += drawFold(rowLayer, item, y, plan, scene);
+      afterGap = true;
       continue;
     }
     const { row, index } = item;

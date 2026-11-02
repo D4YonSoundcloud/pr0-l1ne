@@ -24,9 +24,13 @@ const NO_CHILDREN: readonly never[] = Object.freeze([]);
 
 /** A run of text in a mark (a DOM text node). */
 export class TextMark {
-  readonly nodeType = 3;
   parentElement: Mark | null = null;
   constructor(private text: string) {}
+
+  /** A DOM text node's type (on the prototype: a drawing has hundreds of thousands of marks). */
+  get nodeType(): 3 {
+    return 3;
+  }
 
   get textContent(): string {
     return this.text;
@@ -40,6 +44,21 @@ export class TextMark {
 }
 
 type Child = Mark | string | null | undefined | false;
+
+/** Mark.flags: something worked out from the mark is kept; it's shared between two drawings. (Bits 0–4: levels.) */
+const CACHED = 1 << 5;
+const SHARED = 1 << 6;
+
+/** What few marks need, kept apart so the many that don't are smaller. */
+interface MarkMore {
+  /** Properties set with style.setProperty, in order (toSvg sets them the same way). */
+  styleProps: [string, string][] | null;
+  classes: MarkClasses | null;
+  /** signature(), kept until this mark or one in it changes. */
+  sig: string | null;
+  /** atLevel()'s copies at each level (lod.ts); kept like sig. */
+  levels: (Mark | undefined)[] | null;
+}
 
 /** Classes on a mark, like an element's classList. */
 class MarkClasses {
@@ -61,6 +80,14 @@ class MarkClasses {
     this.mark.setAttribute("class", tokens.join(" "));
   }
 
+  /**
+   * Adding classes to a class attribute gives the same string every time
+   * (a cell's "cell has-v-num" and "heat heat-3"...): worked out once, and
+   * the same string object after, so a grid's cells don't each make their own.
+   */
+  private static added = new Map<string, Map<string, string>>();
+  private static addedCount = 0;
+
   contains(name: string): boolean {
     const value = this.mark.getAttribute("class");
     if (!value) return false;
@@ -74,9 +101,26 @@ class MarkClasses {
       this.mark.setAttribute("class", names[0]);
       return;
     }
-    const tokens = this.tokens;
-    for (const name of names) if (!tokens.includes(name)) tokens.push(name);
-    this.set(tokens);
+    const value = this.mark.getAttribute("class") ?? "";
+    const key = names.length === 1 ? names[0] : names.join("\u0001");
+    let results = MarkClasses.added.get(value);
+    let result = results?.get(key);
+    if (result === undefined) {
+      const tokens = this.tokens;
+      for (const name of names) if (!tokens.includes(name)) tokens.push(name);
+      result = tokens.join(" ");
+      if (++MarkClasses.addedCount > 20_000) {
+        MarkClasses.added.clear();
+        MarkClasses.addedCount = 1;
+        results = undefined;
+      }
+      if (!results) {
+        results = new Map();
+        MarkClasses.added.set(value, results);
+      }
+      results.set(key, result);
+    }
+    this.mark.setAttribute("class", result);
   }
 
   remove(...names: string[]): void {
@@ -95,34 +139,58 @@ class MarkClasses {
 
 /** One element of a drawing: an SVG element, as data. */
 export class Mark {
-  readonly nodeType = 1;
   parentElement: Mark | null = null;
   /** Its children. Most marks have none, and share one empty list until they get one (kids()). */
   childNodes: readonly (Mark | TextMark)[] = NO_CHILDREN;
-  /** Attributes in order, as name, value, name, value...: lighter than a Map for the few a mark has. */
-  private attrs: string[] = [];
-  /** Properties set with style.setProperty, in order (toSvg sets them the same way). */
-  private styleProps: [string, string][] | null = null;
-  private classes: MarkClasses | null = null;
-  /** Put in a drawing by appendShared (in two drawings at once): the SVG patcher keeps its own element. */
-  isShared = false;
-  /** signature(), kept until this mark or one in it changes. */
-  private sig: string | null = null;
-  /** signatureId(), and the generation of numbers it's from; kept like sig. */
+  /**
+   * Attributes in order, as name, value, name, value...: lighter than a Map
+   * for the few a mark has. A value given as a number stays one until it's
+   * read as text (value()), so a grid's coordinates aren't each made into a
+   * string the canvas then parses back (numberAttribute).
+   */
+  private attrs: (string | number)[] = [];
+  /**
+   * Bits: the levels at which it's its own atLevel result (0 to 4, so most
+   * marks need no array of copies); CACHED, something is worked out from
+   * this mark and kept here or in a mark it's in (changed() must forget it,
+   * here and above; a mark whose parent keeps something always does too);
+   * SHARED (isShared).
+   */
+  private flags = 0;
+  /** signatureId(), and the generation of numbers it's from; kept until this mark or one in it changes. */
   private sid = 0;
   private sidGeneration = -1;
-  /** atLevel()'s result at each level (lod.ts): a copy, or this mark itself when it loses nothing. Kept like sig. */
-  private levels: (Mark | undefined)[] | null = null;
-  /** The levels at which it's its own result, as bits (most marks: no array to make for them). */
-  private selfLevels = 0;
-  /**
-   * Something is worked out from this mark and kept (a signature, a copy at
-   * a level) here or in a mark it's in: changed() must forget it, here and
-   * above. A mark whose parent keeps something always does too.
-   */
-  private cached = false;
+  /** What few marks need: inline styles, a classList, a string signature, copies at levels. */
+  private more: MarkMore | null = null;
 
   constructor(readonly localName: string) {}
+
+  /** A DOM element's type (on the prototype: a drawing has hundreds of thousands of marks). */
+  get nodeType(): 1 {
+    return 1;
+  }
+
+  /** Put in a drawing by appendShared (in two drawings at once): the SVG patcher keeps its own element. */
+  get isShared(): boolean {
+    return (this.flags & SHARED) !== 0;
+  }
+  set isShared(shared: boolean) {
+    this.flags = shared ? this.flags | SHARED : this.flags & ~SHARED;
+  }
+
+  private get extra(): MarkMore {
+    this.more ??= { styleProps: null, classes: null, sig: null, levels: null };
+    return this.more;
+  }
+
+  /** An attribute's value as text, by its place in attrs (a number is made text once, and kept so). */
+  private value(i: number): string {
+    const v = this.attrs[i];
+    if (typeof v === "string") return v;
+    const text = String(v);
+    this.attrs[i] = text;
+    return text;
+  }
 
   /**
    * Everything this mark and the marks in it say, as one string: two marks
@@ -132,17 +200,21 @@ export class Mark {
    * string object comes back each time, so a Map keyed by it hashes it once.
    */
   signature(): string {
-    if (this.sig !== null) return this.sig;
+    const kept = this.more?.sig;
+    if (kept) return kept;
     let out = `<${this.localName}`;
     const attrs = this.attrs;
-    for (let i = 0; i < attrs.length; i += 2) out += ` ${attrs[i]}=${attrs[i + 1].length}:${attrs[i + 1]}`;
+    for (let i = 0; i < attrs.length; i += 2) {
+      const v = this.value(i + 1);
+      out += ` ${attrs[i]}=${v.length}:${v}`;
+    }
     out += ">";
     for (const child of this.childNodes) {
       out += child instanceof Mark ? child.signature() : `"${child.textContent.length}:${child.textContent}`;
     }
     out += "/";
-    this.sig = out;
-    this.cached = true;
+    this.extra.sig = out;
+    this.flags |= CACHED;
     return out;
   }
 
@@ -159,7 +231,10 @@ export class Mark {
     if (this.sid !== 0 && this.sidGeneration === generation) return this.sid;
     let key = this.localName;
     const attrs = this.attrs;
-    for (let i = 0; i < attrs.length; i += 2) key += ` ${attrs[i]}=${attrs[i + 1].length}:${attrs[i + 1]}`;
+    for (let i = 0; i < attrs.length; i += 2) {
+      const v = this.value(i + 1);
+      key += ` ${attrs[i]}=${v.length}:${v}`;
+    }
     key += ">";
     const children = this.childNodes;
     for (let i = 0; i < children.length; i++) {
@@ -177,40 +252,43 @@ export class Mark {
     }
     this.sid = id;
     this.sidGeneration = generation;
-    this.cached = true;
+    this.flags |= CACHED;
     return id;
   }
 
   /** atLevel's result at a level, if it's kept (lod.ts). */
   levelCopy(level: number): Mark | undefined {
-    if (this.selfLevels & (1 << level)) return this;
-    return this.levels?.[level];
+    if (this.flags & (1 << level)) return this;
+    return this.more?.levels?.[level];
   }
 
   /** Keep atLevel's result at a level. */
   keepLevelCopy(level: number, copy: Mark): void {
-    if (copy === this) this.selfLevels |= 1 << level;
+    if (copy === this) this.flags |= 1 << level;
     else {
-      this.levels ??= [];
-      this.levels[level] = copy;
+      const extra = this.extra;
+      extra.levels ??= [];
+      extra.levels[level] = copy;
     }
-    this.cached = true;
+    this.flags |= CACHED;
   }
 
   /** What's worked out above from this mark depends on it (lod.ts: a mark a copy leaves out). */
   noteDependedOn(): void {
-    this.cached = true;
+    this.flags |= CACHED;
   }
 
   /** This mark changed: it, and every mark it's in, forget what was worked out from them. (For TextMark too.) */
   changed(): void {
     // A mark keeping nothing has nothing kept above it either (what a mark keeps is made from its children's).
-    for (let m: Mark | null = this; m?.cached; m = m.parentElement) {
-      m.cached = false;
-      m.sig = null;
+    for (let m: Mark | null = this; m && m.flags & CACHED; m = m.parentElement) {
+      m.flags &= SHARED;
       m.sid = 0;
-      m.levels = null;
-      m.selfLevels = 0;
+      const more = m.more;
+      if (more) {
+        more.sig = null;
+        more.levels = null;
+      }
     }
   }
 
@@ -218,7 +296,8 @@ export class Mark {
   shallowCopy(): Mark {
     const out = new Mark(this.localName);
     out.attrs = this.attrs.slice();
-    if (this.styleProps) out.styleProps = this.styleProps.map(([n, v]) => [n, v]);
+    const styleProps = this.more?.styleProps;
+    if (styleProps) out.extra.styleProps = styleProps.map(([n, v]) => [n, v]);
     return out;
   }
 
@@ -252,6 +331,12 @@ export class Mark {
 
   getAttribute(name: string): string | null {
     const i = this.at(name);
+    return i < 0 ? null : this.value(i + 1);
+  }
+
+  /** An attribute as a number, if it was given as one (the canvas reads coordinates this way); else as text, or null. */
+  numberAttribute(name: string): number | string | null {
+    const i = this.at(name);
     return i < 0 ? null : this.attrs[i + 1];
   }
 
@@ -261,17 +346,17 @@ export class Mark {
 
   /** Like the DOM: an attribute already set keeps its place; a new one goes last. */
   setAttribute(name: string, value: string | number): void {
-    const text = String(value);
     const i = this.at(name);
     if (i >= 0) {
-      if (this.attrs[i + 1] === text) return;
-      this.attrs[i + 1] = text;
-    } else this.attrs.push(name, text);
+      const was = this.attrs[i + 1];
+      if (was === value || (typeof was !== typeof value && String(was) === String(value))) return;
+      this.attrs[i + 1] = value;
+    } else this.attrs.push(name, value);
     this.changed();
   }
 
   /** setAttribute for a mark being made (mark()): nothing has asked for its signature yet. */
-  setOwnAttribute(name: string, value: string): void {
+  setOwnAttribute(name: string, value: string | number): void {
     const i = this.at(name);
     if (i >= 0) this.attrs[i + 1] = value;
     else this.attrs.push(name, value);
@@ -282,13 +367,14 @@ export class Mark {
     if (i < 0) return;
     this.attrs.splice(i, 2);
     this.changed();
-    if (name === "style") this.styleProps = null;
+    if (name === "style" && this.more) this.more.styleProps = null;
   }
 
   /** Every attribute, in order. */
   get attributes(): { name: string; value: string }[] {
     const out: { name: string; value: string }[] = [];
-    for (let i = 0; i < this.attrs.length; i += 2) out.push({ name: this.attrs[i], value: this.attrs[i + 1] });
+    for (let i = 0; i < this.attrs.length; i += 2)
+      out.push({ name: this.attrs[i] as string, value: this.value(i + 1) });
     return out;
   }
 
@@ -299,16 +385,16 @@ export class Mark {
 
   /** The nth attribute's name and value, in order (for walking them without making pairs: toSvg, the patcher). */
   attributeName(n: number): string {
-    return this.attrs[2 * n];
+    return this.attrs[2 * n] as string;
   }
   attributeValue(n: number): string {
-    return this.attrs[2 * n + 1];
+    return this.value(2 * n + 1);
   }
 
   /** The attributes as [name, value] pairs, in order. */
   *attributeEntries(): IterableIterator<[string, string]> {
     const attrs = this.attrs;
-    for (let i = 0; i < attrs.length; i += 2) yield [attrs[i], attrs[i + 1]];
+    for (let i = 0; i < attrs.length; i += 2) yield [attrs[i] as string, this.value(i + 1)];
   }
 
   get id(): string {
@@ -316,20 +402,23 @@ export class Mark {
   }
 
   get classList(): MarkClasses {
-    this.classes ??= new MarkClasses(this);
-    return this.classes;
+    const extra = this.extra;
+    extra.classes ??= new MarkClasses(this);
+    return extra.classes;
   }
 
   /** Custom properties and other inline styles, as element.style.setProperty. */
   get style(): { setProperty(name: string, value: string): void } {
     return {
       setProperty: (name, value) => {
-        this.styleProps ??= [];
-        const at = this.styleProps.findIndex(([n]) => n === name);
-        if (at >= 0) this.styleProps[at][1] = value;
-        else this.styleProps.push([name, value]);
+        const extra = this.extra;
+        extra.styleProps ??= [];
+        const props = extra.styleProps;
+        const at = props.findIndex(([n]) => n === name);
+        if (at >= 0) props[at][1] = value;
+        else props.push([name, value]);
         // The style attribute appears where the DOM would put it: last, on the first property.
-        const text = this.styleProps.map(([n, v]) => `${n}: ${v};`).join(" ");
+        const text = props.map(([n, v]) => `${n}: ${v};`).join(" ");
         const i = this.at("style");
         if (i >= 0) this.attrs[i + 1] = text;
         else this.attrs.push("style", text);
@@ -340,7 +429,7 @@ export class Mark {
 
   /** The inline style properties, in order (for toSvg). */
   get styleProperties(): readonly [string, string][] {
-    return this.styleProps ?? [];
+    return this.more?.styleProps ?? [];
   }
 
   // -- the tree -----------------------------------------------------------------
@@ -555,7 +644,8 @@ export function mark(
   for (const name in attrs) {
     const value = attrs[name];
     if (value === null || value === undefined || value === false) continue;
-    m.setOwnAttribute(name, typeof value === "string" ? value : String(value));
+    // Numbers stay numbers until read as text (Mark.value).
+    m.setOwnAttribute(name, value);
   }
   if (children.length) m.append(...children);
   return m;

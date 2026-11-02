@@ -134,7 +134,9 @@ export interface Paint {
 }
 
 const num = (el: DrawingNode, name: string, fallback = 0) => {
-  const v = Number.parseFloat(el.getAttribute(name) ?? "");
+  // A mark's coordinates are numbers as the layout gave them: no text to parse.
+  const raw = el instanceof Mark ? el.numberAttribute(name) : el.getAttribute(name);
+  const v = typeof raw === "number" ? raw : Number.parseFloat(raw ?? "");
   return Number.isFinite(v) ? v : fallback;
 };
 

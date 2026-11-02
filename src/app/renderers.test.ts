@@ -83,6 +83,7 @@ function fakeRenderers() {
       const r: LoopRenderer = {
         ...loop.renderer,
         setLayout: (layout) => loop.calls.push({ method: "setLayout", args: [layout] }) && undefined,
+        detailBudget: () => 40_000,
       };
       return r;
     },

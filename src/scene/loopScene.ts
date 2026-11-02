@@ -43,6 +43,7 @@ import {
   type Trace,
   type Value,
 } from "../trace/types";
+import { type Fold, foldRows, type LoopDetail } from "./loopSummaries";
 import { type Pointer, pointersFor } from "./pointers";
 import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
@@ -202,7 +203,9 @@ export type LoopItem =
   /** Passes that ran but weren't recorded (a sampled loop). */
   | { kind: "gap"; from: number; to: number; name: string | null }
   /** A run of a loop starts: its header as written, and with its values. */
-  | { kind: "header"; loop: string; call: string | undefined; depth: number };
+  | { kind: "header"; loop: string; call: string | undefined; depth: number }
+  /** Rows far from the running one, folded past the detail budget (loopSummaries.ts). */
+  | Fold;
 
 /** A loop's variable, from its header: "for j in ..." / "for (let j = ..." -> "j". Null for while loops. */
 export function loopVariable(info: LoopInfo | undefined): string | null {
@@ -304,6 +307,8 @@ export interface LoopSceneOptions {
   live?: LiveRow | LiveRow[];
   /** The window is taller than wide: very wide layered graphs run left to right (render/graphView.ts). */
   tall?: boolean;
+  /** Fold rows far from the running one past a budget of cells (loopSummaries.ts). Stacked mode only; none if not given. */
+  detail?: LoopDetail;
 }
 
 /** One loop's live state in animated mode. */
@@ -359,6 +364,8 @@ export interface LoopScene {
   items: LoopItem[];
   /** Rows left out from the start (the history was too long). */
   hiddenRows: number;
+  /** The cell budget it was folded with (loopSummaries.ts), if any. */
+  cellBudget?: number;
   /** The row the first drawn row compares with (animated mode: the step before). */
   before: { row: LoopRow; index: number } | null;
   /** A row's label: "before", "#3", or with every loop together "j #3". */
@@ -418,6 +425,8 @@ interface RowFacts {
   overlays: Map<GraphData, GraphOverlay>;
   /** Containers: present with cells, and a grid. */
   shapes: Map<string, { cells: boolean; grid: boolean }>;
+  /** Cells each container draws in this row (loopSummaries.ts's budget). */
+  cells: Map<string, number>;
   /** `viz: watch` values and false `viz: check`s, once worked out. */
   watches?: { text: string; value: string }[];
   failedChecks?: string[];
@@ -431,6 +440,7 @@ function factsOf(row: LoopRow): RowFacts {
       signatures: new Map(),
       overlays: new Map(),
       shapes: new Map(),
+      cells: new Map(),
     };
     rowFacts.set(row, facts);
   }
@@ -446,6 +456,19 @@ function rowSignature(row: LoopRow, name: string): string {
     signatures.set(name, sig);
   }
   return sig;
+}
+
+/** How many cells a container draws in a row (a grid: all its rows' cells), kept per row. */
+function rowCells(row: LoopRow, name: string): number {
+  const { cells } = factsOf(row);
+  let n = cells.get(name);
+  if (n === undefined) {
+    const grid = gridIn(row, name);
+    const obj = containerIn(row, name);
+    n = grid ? grid.reduce((sum, r) => sum + r.items.length, 0) : obj ? cellsOf(obj).length : 0;
+    cells.set(name, n);
+  }
+  return n;
 }
 
 /** A graph's signature with its overlay, kept per overlay (one per row and graph). */
@@ -618,6 +641,15 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
       }
     }
   }
+  // Past the budget, rows far from the running one fold into a band (loopSummaries.ts).
+  if (!live && options.detail) {
+    const cost = (index: number) =>
+      1 +
+      containers.reduce((sum, name) => sum + rowCells(rows[index], name), 0) +
+      (graphRows[index]?.graph.nodes.size ?? 0) +
+      (trackRows[index]?.nodes.size ?? 0);
+    items = foldRows(items, (item) => (item.kind === "row" ? item : null), cost, options.detail);
+  }
   let before: LoopScene["before"] = null;
   if (live) {
     // A row per live loop: its state, compared with the step before it.
@@ -677,6 +709,7 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     changed,
     items,
     hiddenRows,
+    cellBudget: !live && options.detail ? options.detail.cells : undefined,
     before,
     label: (row) => {
       if (row.iteration === 0) return "before";

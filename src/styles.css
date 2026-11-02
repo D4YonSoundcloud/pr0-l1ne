@@ -4098,6 +4098,37 @@ select {
   fill: color-mix(in srgb, var(--ink) 6%, var(--cell));
   stroke-dasharray: 60 30;
 }
+/* Loop history rows folded past the budget (scene/loopSummaries.ts): a band
+   like a quiet one, in the summaries' dashed ink, that opens on a click.
+   Zoomed out, where its text isn't drawn, the band is a wide dashed bar. */
+.fold-band {
+  cursor: pointer;
+}
+.fold-band .fold-hit {
+  fill: transparent;
+  stroke: none;
+}
+.fold-band line {
+  stroke: var(--ink);
+  stroke-dasharray: 5 3;
+  stroke-width: 1.25;
+}
+.fold-band rect:not(.fold-hit) {
+  fill: color-mix(in srgb, var(--header) 55%, var(--cell));
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 5 3;
+}
+.fold-band text {
+  font-style: normal;
+  font-weight: 600;
+  fill: var(--ink);
+}
+.lod-2 .fold-band line,
+.lod-3 .fold-band line,
+.lod-4 .fold-band line {
+  stroke-width: 6;
+}
 
 /* ------------------------------------------------------------ levels of detail
    Zoomed out, a drawing is drawn in less detail (render/lod.ts). The level is

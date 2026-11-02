@@ -134,6 +134,9 @@ export class LoopController {
   /** Containers one above another instead of side by side. */
   private vertical: boolean;
   private mode: LoopMode;
+  /** Folds the person opened, by key (scene/loopSummaries.ts): drawn in full, step after step. */
+  private readonly expanded = new Set<string>();
+  private readonly foldButton: HTMLButtonElement;
 
   constructor(private readonly options: LoopOptions) {
     const { els, settings } = options;
@@ -144,7 +147,25 @@ export class LoopController {
     this.renderer = options.renderers.loop(els.loop, {
       onAutoFitChange: (state) => settings.autoFit("loop").set(JSON.stringify(state)),
       controls: settings.controlsCollapsed("loop"),
+      // The zoom settled where the cell budget differs: fold the history again.
+      onLayoutChange: () => this.render(),
+      // A fold clicked: its rows, drawn in full from now on (until Fold again, or another program).
+      onExpand: (key) => {
+        this.expanded.add(key);
+        this.render();
+        this.updateFoldButton();
+      },
     });
+    this.foldButton = this.renderer.addControl(
+      "Fold again",
+      "Fold the passes you opened, far from the one running, again",
+      () => {
+        this.expanded.clear();
+        this.render();
+        this.updateFoldButton();
+      },
+    );
+    this.updateFoldButton();
     this.renderer.setViewport({ autoFit: storedAutoFit(settings.autoFit("loop")) });
     this.renderer.setLayout({ vertical: this.vertical });
 
@@ -181,10 +202,16 @@ export class LoopController {
     els.loopAnimated.setAttribute("aria-pressed", String(this.mode === "animated"));
   }
 
-  /** A different program (or language): back to the loop that's running, fitted afresh. */
+  /** A different program (or language): back to the loop that's running, fitted afresh, everything folded. */
   reset(): void {
     this.selected = null;
+    this.expanded.clear();
+    this.updateFoldButton();
     this.renderer.setViewport({ refit: true });
+  }
+
+  private updateFoldButton(): void {
+    this.foldButton.hidden = !this.expanded.size;
   }
 
   /** Nothing to show yet. */
@@ -274,6 +301,8 @@ export class LoopController {
         live,
         sizes: this.options.sizes(),
         tall: isTall(this.options.els.loop),
+        // Stacked: rows far from the running one fold past the budget the zoom allows.
+        detail: live ? undefined : { cells: this.renderer.detailBudget(), expanded: this.expanded },
       });
       this.renderer.setAppearance({ step: this.options.animation() });
       timed("loop.render", () => this.renderer.render(scene, this.drawn));

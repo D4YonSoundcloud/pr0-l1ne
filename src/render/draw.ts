@@ -75,6 +75,24 @@ function primClass(value: PrimValue): string {
   }
 }
 
+const PRIM_CLASSES = ["v-str", "v-num", "v-bool", "v-none", "v-other"];
+/** "has-v-num"..., and "value v-num"...: made once, not for every cell. */
+const HOLDS: Record<string, string> = Object.fromEntries(PRIM_CLASSES.map((c) => [c, `has-${c}`]));
+const VALUE_CLASS: Record<string, string> = Object.fromEntries(PRIM_CLASSES.map((c) => [c, `value ${c}`]));
+
+/** A cell's class attribute, made once for each kind of cell (a big grid has thousands of the same). */
+const cellClassCache = new Map<string, string>();
+function cellClasses(holds: string, variant: string | undefined, changed: boolean): string {
+  const key = `${holds}|${variant ?? ""}|${changed ? 1 : 0}`;
+  let classes = cellClassCache.get(key);
+  if (classes === undefined) {
+    classes = ["cell", holds, variant, changed && "is-changed"].filter(Boolean).join(" ");
+    if (cellClassCache.size > 1000) cellClassCache.clear();
+    cellClassCache.set(key, classes);
+  }
+  return classes;
+}
+
 export interface CellOptions {
   x: number;
   y: number;
@@ -91,9 +109,9 @@ export interface CellOptions {
 export function valueCell(value: Value, opts: CellOptions): { el: Mark; dot?: { x: number; y: number } } {
   const h = opts.h ?? CELL_H;
   // What kind of value it holds (has-v-num, has-ref...): zoomed out, a cell is a block in that kind's color (lod.ts).
-  const holds = value.kind === "ref" ? "has-ref" : `has-${primClass(value)}`;
-  const classes = ["cell", holds, opts.variant, opts.changed && "is-changed"].filter(Boolean).join(" ");
-  const g = s("g", { class: classes });
+  const prim = value.kind === "ref" ? null : primClass(value);
+  const holds = prim ? HOLDS[prim] : "has-ref";
+  const g = s("g", { class: cellClasses(holds, opts.variant, !!opts.changed) });
   g.append(s("rect", { x: opts.x, y: opts.y, width: opts.w, height: h, rx: 3 }));
   const cx = opts.x + opts.w / 2;
   const cy = opts.y + h / 2;
@@ -104,7 +122,7 @@ export function valueCell(value: Value, opts: CellOptions): { el: Mark; dot?: { 
   g.append(
     s(
       "text",
-      { class: `value ${primClass(value)}`, x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central" },
+      { class: VALUE_CLASS[prim!], x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central" },
       value.repr,
     ),
   );

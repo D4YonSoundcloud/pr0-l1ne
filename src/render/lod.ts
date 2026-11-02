@@ -116,10 +116,17 @@ function hasClass(classes: string | null | undefined, name: string): boolean {
   return false;
 }
 const SMALL_TEXT_LIST = [...SMALL_TEXT];
+/** Answers by class attribute: a drawing's cells share a few (render/draw.ts makes each kind once). */
+const smallTextAnswers = new Map<string, boolean>();
 const hasSmallText = (classes: string | null | undefined) => {
   if (!classes) return false;
-  for (const name of SMALL_TEXT_LIST) if (hasClass(classes, name)) return true;
-  return false;
+  let answer = smallTextAnswers.get(classes);
+  if (answer === undefined) {
+    answer = SMALL_TEXT_LIST.some((name) => hasClass(classes, name));
+    if (smallTextAnswers.size > 5000) smallTextAnswers.clear();
+    smallTextAnswers.set(classes, answer);
+  }
+  return answer;
 };
 
 /** Is this mark left out at this level? The same as styles.css's display: none for it. */

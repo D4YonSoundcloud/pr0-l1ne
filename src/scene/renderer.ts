@@ -137,10 +137,19 @@ export interface MemoryRenderer extends Renderer<MemoryWindowScene> {
 export interface LoopRenderer extends Renderer<LoopWindowScene> {
   /** Each container on its own line, one above another, instead of side by side. */
   setLayout(layout: { vertical: boolean }): void;
+  /** How many cells to draw before folding rows, at the zoom now (scene/loopSummaries.ts loopDetailBudget). */
+  detailBudget(): number;
+}
+
+export interface LoopRendererEvents extends RendererEvents {
+  /** The zoom settled where the detail budget differs: the history needs folding again. */
+  onLayoutChange?(): void;
+  /** A fold was clicked (scene/loopSummaries.ts): show the rows it stands for, by its key. */
+  onExpand?(key: string): void;
 }
 
 /** Makes a window's renderer, in its element. */
 export interface RendererFactory {
   memory(el: HTMLElement, events: MemoryRendererEvents): MemoryRenderer;
-  loop(el: HTMLElement, events: RendererEvents): LoopRenderer;
+  loop(el: HTMLElement, events: LoopRendererEvents): LoopRenderer;
 }

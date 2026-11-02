@@ -749,6 +749,11 @@ export class Viewport {
     if (this.pointers.size > 2) return;
 
     const node = e.button === 0 && this.options.onNodeMove ? this.nodeAt(target, e.clientX, e.clientY) : null;
+    // Boxes that can't be dragged (the loop history's folds) can still be clicked: a press that doesn't pan.
+    this.pressed =
+      !node && e.button === 0 && this.options.onNodeClick
+        ? (this.nodeAt(target, e.clientX, e.clientY)?.key ?? null)
+        : null;
     if (node) {
       this.gesture = {
         kind: "node",
@@ -768,6 +773,8 @@ export class Viewport {
   }
 
   private pressMoved = false;
+  /** The keyed group a press that pans started on, if any (see onPointerDown). */
+  private pressed: string | null = null;
 
   /** The draggable box under the pointer: an SVG <g data-node-key>, or what the surface says. `under`: if the target isn't in one, the box at that point on the drawing. */
   private nodeAt(target: Element, clientX: number, clientY: number, under = false): NodeHit | null {
@@ -859,6 +866,9 @@ export class Viewport {
     if (g?.kind === "node" && g.moved) {
       this.options.onNodeMove!(g.key, this.nodePosition(g, e.clientX - g.startX, e.clientY - g.startY), true);
     } else if (g?.kind === "node" && !g.moved && e.type === "pointerup") this.options.onNodeClick?.(g.key);
+    else if (g?.kind === "pan" && !this.pressMoved && this.pressed && e.type === "pointerup")
+      this.options.onNodeClick?.(this.pressed);
+    this.pressed = null;
     this.el.classList.remove("is-panning", "is-dragging-node");
     // Lifting one finger of a pinch carries on as a pan with the other.
     const remaining = [...this.pointers.values()][0];
