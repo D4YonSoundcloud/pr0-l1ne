@@ -69,7 +69,15 @@ import { ProbeStyles, type StyleProbe } from "./styles";
 /** How the canvas renderers read styles (tests give their own: jsdom can't resolve the app's CSS). */
 export interface CanvasOptions {
   styles?(host: Element): StyleProbe;
+  /**
+   * What PixiJS draws with: Canvas 2D (the default), or WebGL, which falls
+   * back to Canvas 2D if it can't start. The scene built is the same.
+   */
+  backend?: "canvas" | "webgl";
 }
+
+/** How long a lost WebGL context may take to come back before the renderer starts again with a new one. */
+const CONTEXT_BACK_WITHIN = 2000;
 
 /** How often a window being resized resizes its canvas, at most (see resizeSoon). */
 const RESIZE_EVERY = 120;
@@ -97,7 +105,10 @@ function parseAnimation(value: string): { duration: number; easing: string } | n
 /** What both canvas windows share: the canvas, its viewport, and drawing a paint list there. */
 abstract class CanvasWindow {
   protected readonly view: Viewport;
-  readonly canvas: HTMLCanvasElement;
+  /** The canvas drawn on (a new one if WebGL couldn't start on it, or lost its context for good). */
+  canvas: HTMLCanvasElement;
+  /** What PixiJS draws with (CanvasOptions.backend). */
+  private readonly backend: "canvas" | "webgl";
   protected readonly styles: StyleProbe;
   /** Resolves once PixiJS can draw; rejects if it can't start here. */
   readonly ready: Promise<void>;
@@ -177,6 +188,7 @@ abstract class CanvasWindow {
       },
     });
     el.classList.add("is-canvas");
+    this.backend = options.backend ?? "canvas";
     this.canvas = document.createElement("canvas");
     this.canvas.className = "viewport-canvas";
     this.canvas.setAttribute("aria-hidden", "true");
@@ -206,9 +218,26 @@ abstract class CanvasWindow {
   }
 
   private async start(): Promise<void> {
-    const pixi = await autoDetectRenderer({
-      preference: ["canvas"],
-      canvas: this.canvas,
+    const pixi = await this.makeRenderer();
+    if (this.disposed) {
+      pixi.destroy();
+      return;
+    }
+    this.pixi = pixi;
+    this.el.dataset.backend = pixi.name === "webgl" ? "webgl" : "canvas";
+    if (pixi.name === "webgl") this.watchContext();
+    this.resize();
+  }
+
+  /**
+   * A PixiJS renderer on the window's canvas: WebGL first if asked
+   * (`preference: ["webgl", "canvas"]`), else Canvas 2D. A canvas that has
+   * tried to start WebGL can't give a 2D context after, so if WebGL fails
+   * to start, Canvas 2D starts on a new one.
+   */
+  private async makeRenderer(): Promise<PixiRenderer> {
+    const options = (canvas: HTMLCanvasElement) => ({
+      canvas,
       backgroundAlpha: 0,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
@@ -216,12 +245,80 @@ abstract class CanvasWindow {
       width: Math.max(1, this.el.clientWidth),
       height: Math.max(1, this.el.clientHeight),
     });
-    if (this.disposed) {
-      pixi.destroy();
-      return;
+    if (this.backend === "webgl") {
+      try {
+        return await autoDetectRenderer({ ...options(this.canvas), preference: ["webgl", "canvas"] });
+      } catch (error) {
+        console.warn("WebGL couldn't start; drawing with Canvas 2D.", error);
+        this.newCanvas();
+      }
     }
-    this.pixi = pixi;
-    this.resize();
+    return autoDetectRenderer({ ...options(this.canvas), preference: ["canvas"] });
+  }
+
+  /** Put a new canvas element where the old one was (one a context failed on, or lost for good). */
+  private newCanvas(): void {
+    const canvas = document.createElement("canvas");
+    canvas.className = "viewport-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    this.canvas.replaceWith(canvas);
+    this.canvas = canvas;
+  }
+
+  /**
+   * WebGL contexts can be lost (the GPU reset, too many contexts, the tab
+   * put to sleep). PixiJS asks for it back; nothing is drawn meanwhile.
+   * When it's back, the scene is built again from the paint list kept
+   * (nothing is laid out or painted again), since what was on the GPU is
+   * gone. If it isn't back soon, the renderer starts again on a new canvas.
+   */
+  private watchContext(): void {
+    const canvas = this.canvas;
+    const signal = this.listening.signal;
+    canvas.addEventListener(
+      "webglcontextlost",
+      () => {
+        this.contextLost = true;
+        window.clearTimeout(this.contextTimer);
+        this.contextTimer = window.setTimeout(() => void this.restart(), CONTEXT_BACK_WITHIN);
+      },
+      { signal },
+    );
+    canvas.addEventListener(
+      "webglcontextrestored",
+      () => {
+        window.clearTimeout(this.contextTimer);
+        this.contextLost = false;
+        this.rebuild();
+      },
+      { signal },
+    );
+  }
+  private contextLost = false;
+  private contextTimer = 0;
+
+  /** Build the scene again from the paint list kept, and draw it. */
+  private rebuild(): void {
+    if (!this.pixi || this.disposed) return;
+    this.kept.clear();
+    this.build(false);
+    this.drawNow();
+  }
+
+  /** The context never came back: a new renderer on a new canvas, drawing the paint list kept. */
+  private async restart(): Promise<void> {
+    if (this.disposed || !this.contextLost) return;
+    const old = this.pixi;
+    this.pixi = null;
+    this.contextLost = false;
+    this.newCanvas();
+    try {
+      old?.destroy();
+    } catch {
+      // A renderer whose context is gone may not let go cleanly: it's dropped either way.
+    }
+    await this.start();
+    this.rebuild();
   }
 
   /**
@@ -271,7 +368,7 @@ abstract class CanvasWindow {
 
   /** Draw the picture where the view is now. */
   protected drawNow(): void {
-    if (!this.pixi || this.disposed) return;
+    if (!this.pixi || this.disposed || this.contextLost) return;
     const { x, y, z } = this.at;
     this.stage.position.set(x, y);
     this.stage.scale.set(z);
@@ -548,6 +645,7 @@ abstract class CanvasWindow {
     this.tweens.clear();
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     window.clearTimeout(this.textTimer);
+    window.clearTimeout(this.contextTimer);
     if (this.resizeTimer !== null) window.clearTimeout(this.resizeTimer);
     this.listening.abort();
     this.resizes?.disconnect();
@@ -557,6 +655,8 @@ abstract class CanvasWindow {
     this.pixi?.destroy();
     this.pixi = null;
     this.el.classList.remove("is-canvas");
+    delete this.el.dataset.backend;
+    delete this.el.dataset.builtLod;
     this.view.dispose();
   }
 }
@@ -859,7 +959,7 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   }
 }
 
-/** Canvas 2D renderers for the app's windows. */
+/** Canvas renderers for the app's windows: Canvas 2D, or WebGL (options.backend). */
 export function canvasRenderers(options: CanvasOptions = {}): RendererFactory {
   return {
     memory: (el, events) => new CanvasMemoryRenderer(el, events, options),
@@ -869,3 +969,6 @@ export function canvasRenderers(options: CanvasOptions = {}): RendererFactory {
 
 /** The Canvas 2D renderers, reading the page's CSS. */
 export const CANVAS_RENDERERS: RendererFactory = canvasRenderers();
+
+/** The same, drawn with WebGL (Canvas 2D if WebGL can't start). */
+export const WEBGL_RENDERERS: RendererFactory = canvasRenderers({ backend: "webgl" });

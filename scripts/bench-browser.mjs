@@ -133,7 +133,7 @@ async function zoomSuite(browser, files) {
   const out = [];
   for (const file of files.filter((f) => f.endsWith(".js"))) {
     const code = readFileSync(join(PROGRAMS, file), "utf8");
-    for (const renderer of ["svg", "canvas"]) {
+    for (const renderer of ["svg", "canvas", "webgl"]) {
       for (const lod of [true, false]) {
         process.stderr.write(`${file} (${renderer}, ${lod ? "levels" : "no levels"})…\n`);
         const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
@@ -202,7 +202,7 @@ for (const file of files) {
   const language = file.endsWith(".py") ? "python" : "javascript";
   const code = readFileSync(join(PROGRAMS, file), "utf8");
   const result = { program: file, views: {} };
-  for (const renderer of ["svg", "canvas"]) {
+  for (const renderer of ["svg", "canvas", "webgl"]) {
     process.stderr.write(`${file} (${renderer})…\n`);
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     page.on("pageerror", (e) => process.stderr.write(`  page error: ${e.message}\n`));
@@ -236,8 +236,8 @@ const old = new Map(against.map((r) => [r.program, r]));
 const f = (n) => (n === undefined || n === null || Number.isNaN(n) ? "–" : n.toFixed(0));
 const vs = (now, before) => (before === undefined ? f(now) : `${f(now)} (was ${f(before)})`);
 const lines = [
-  "| Program | Run | Steps | Objects: most | Step, SVG arrows / nested | Step, canvas arrows / nested | Layout arrows | Routing | SVG patch | Canvas paint |",
-  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  "| Program | Run | Steps | Objects: most | Step, SVG arrows / nested | Step, canvas arrows / nested | Step, WebGL arrows / nested | Layout arrows | Routing | SVG patch | Canvas paint | WebGL paint |",
+  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
 ];
 for (const r of results) {
   const o = old.get(r.program);
@@ -245,7 +245,7 @@ for (const r of results) {
   const ov = o?.views ?? {};
   const t = r.run?.trace;
   lines.push(
-    `| ${r.program}${r.error ? ` (${r.error})` : ""} | ${vs(r.run?.run, o?.run?.run)} ms${t?.truncated ? ` (stopped: ${t.stoppedBy})` : ""} | ${t?.steps ?? "–"} | ${t?.maxHeap ?? "–"} | ${vs(v["svg.arrows"]?.frame, ov["svg.arrows"]?.frame)} / ${vs(v["svg.nested"]?.frame, ov["svg.nested"]?.frame)} ms | ${vs(v["canvas.arrows"]?.frame, ov["canvas.arrows"]?.frame)} / ${vs(v["canvas.nested"]?.frame, ov["canvas.nested"]?.frame)} ms | ${f(v["svg.arrows"]?.layout)} ms | ${f(v["svg.arrows"]?.route)} ms | ${f(v["svg.arrows"]?.patch)} ms | ${f(v["canvas.arrows"]?.paint)} ms |`,
+    `| ${r.program}${r.error ? ` (${r.error})` : ""} | ${vs(r.run?.run, o?.run?.run)} ms${t?.truncated ? ` (stopped: ${t.stoppedBy})` : ""} | ${t?.steps ?? "–"} | ${t?.maxHeap ?? "–"} | ${vs(v["svg.arrows"]?.frame, ov["svg.arrows"]?.frame)} / ${vs(v["svg.nested"]?.frame, ov["svg.nested"]?.frame)} ms | ${vs(v["canvas.arrows"]?.frame, ov["canvas.arrows"]?.frame)} / ${vs(v["canvas.nested"]?.frame, ov["canvas.nested"]?.frame)} ms | ${vs(v["webgl.arrows"]?.frame, ov["webgl.arrows"]?.frame)} / ${vs(v["webgl.nested"]?.frame, ov["webgl.nested"]?.frame)} ms | ${f(v["svg.arrows"]?.layout)} ms | ${f(v["svg.arrows"]?.route)} ms | ${f(v["svg.arrows"]?.patch)} ms | ${f(v["canvas.arrows"]?.paint)} ms | ${f(v["webgl.arrows"]?.paint)} ms |`,
   );
 }
 console.log(lines.join("\n"));

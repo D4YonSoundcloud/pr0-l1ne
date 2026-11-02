@@ -6,6 +6,7 @@
  * both renderers.
  */
 import { expect, type Page, test } from "@playwright/test";
+import { rendererFor } from "./renderer";
 
 // 41 rows of a 30 × 30 grid: under the budget at full detail, over it from blocks (21%) on.
 const CODE = `const g = [];
@@ -26,7 +27,7 @@ async function open(page: Page, renderer: "svg" | "canvas") {
       localStorage.setItem("pr0l1ne:renderer", r);
       localStorage.setItem("pr0l1ne:loop-mode", "stacked");
     },
-    [CODE, renderer],
+    [CODE, rendererFor(renderer)],
   );
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");
@@ -73,6 +74,18 @@ async function scrollBy(page: Page, scrolls: number[]) {
   await page.waitForTimeout(300);
 }
 
+/** Where the band is on a canvas, near `y`: the point whose tooltip names it. */
+async function bandByTip(page: Page, x: number, y: number): Promise<number> {
+  const tip = page.locator("#loop .viewport-tip");
+  for (let d = 0; d <= 80; d += 2) {
+    for (const at of d ? [y - d, y + d] : [y]) {
+      await page.mouse.move(x, at);
+      if (/passes folded/.test((await tip.textContent().catch(() => "")) ?? "")) return at;
+    }
+  }
+  throw new Error("no band near there");
+}
+
 const foldAgain = (page: Page) => page.locator("#loop .viewport-controls button", { hasText: "Fold again" });
 
 test("svg: zoomed out, far passes fold; clicking the band shows them; Fold again folds them; zoomed in, all are drawn", async ({
@@ -110,7 +123,9 @@ test("canvas: clicking a fold opens it too", async ({ browser }) => {
   await open(page, "canvas");
   await expect(foldAgain(page)).toBeHidden();
   await scrollBy(page, scrolls);
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  // Scrolling lands within a few pixels of where it did in SVG: find the band by its tooltip, down the same line.
+  const y = await bandByTip(page, box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.click(box.x + box.width / 2, y);
   await expect(foldAgain(page)).toBeVisible();
   await page.close();
 });

@@ -112,7 +112,7 @@ describe("RendererSwitch", () => {
   it("passes every call to the renderer underneath", () => {
     const { made, factory } = kinds();
     const sw = new RendererSwitch(
-      { svg: () => factory("svg"), canvas: () => factory("canvas") },
+      { svg: () => factory("svg"), webgl: () => factory("webgl"), canvas: () => factory("canvas") },
       { kind: "svg", factory: factory("svg") },
     );
     const el = document.createElement("div");
@@ -140,7 +140,7 @@ describe("RendererSwitch", () => {
   it("swaps every window's renderer, and it looks just as it did", async () => {
     const { made, factory } = kinds();
     const sw = new RendererSwitch(
-      { svg: () => factory("svg"), canvas: async () => factory("canvas") },
+      { svg: () => factory("svg"), webgl: () => factory("webgl"), canvas: async () => factory("canvas") },
       { kind: "svg", factory: factory("svg") },
     );
     const memEl = document.createElement("div");
@@ -193,7 +193,7 @@ describe("RendererSwitch", () => {
   it("keeps Auto-fit, and lets it place the view", async () => {
     const { made, factory } = kinds();
     const sw = new RendererSwitch(
-      { svg: () => factory("svg"), canvas: () => factory("canvas") },
+      { svg: () => factory("svg"), webgl: () => factory("webgl"), canvas: () => factory("canvas") },
       { kind: "svg", factory: factory("svg") },
     );
     const remembered: AutoFit[] = [];
@@ -211,7 +211,11 @@ describe("RendererSwitch", () => {
   it("goes back to what was there if the new renderer can't start", async () => {
     const { made, factory } = kinds();
     const sw = new RendererSwitch(
-      { svg: () => factory("svg"), canvas: () => factory("canvas", () => Promise.reject(new Error("no canvas"))) },
+      {
+        svg: () => factory("svg"),
+        webgl: () => factory("webgl"),
+        canvas: () => factory("canvas", () => Promise.reject(new Error("no canvas"))),
+      },
       { kind: "svg", factory: factory("svg") },
     );
     const memory = sw.factory.memory(document.createElement("div"), {});
@@ -226,7 +230,11 @@ describe("RendererSwitch", () => {
     const { made, factory } = kinds();
     let finish: (f: RendererFactory) => void = () => {};
     const sw = new RendererSwitch(
-      { svg: () => factory("svg"), canvas: () => new Promise<RendererFactory>((r) => (finish = r)) },
+      {
+        svg: () => factory("svg"),
+        webgl: () => factory("webgl"),
+        canvas: () => new Promise<RendererFactory>((r) => (finish = r)),
+      },
       { kind: "svg", factory: factory("svg") },
     );
     sw.factory.loop(document.createElement("div"), {}).render({} as LoopScene, null);
@@ -244,6 +252,7 @@ describe("RendererSwitch", () => {
     const sw = new RendererSwitch(
       {
         svg: () => factory("svg"),
+        webgl: () => factory("webgl"),
         canvas: () => factory("canvas", () => new Promise<void>((_, reject) => (fail = reject))),
       },
       { kind: "svg", factory: factory("svg") },

@@ -69,10 +69,16 @@ PW_CHROMIUM=/path/to/chrome node scripts/bench-browser.mjs  # a Chromium of your
 
 Each program is run by the page itself (Python in Pyodide), opened with
 `?perf`, which turns on the timing of each stage (`src/perf.ts`). Then eight
-steps spread through the run are shown in each renderer (SVG and canvas) and
-each memory mode, with animation off. **Step** is the time from asking for a
-step to the frame after it's drawn; the stage times are medians from
-`src/perf.ts`.
+steps spread through the run are shown in each renderer (SVG, Canvas 2D and
+WebGL) and each memory mode, with animation off. **Step** is the time from
+asking for a step to the frame after it's drawn; the stage times are medians
+from `src/perf.ts`.
+
+Headless Chromium draws WebGL in software (SwiftShader), on the processor:
+its WebGL times say what WebGL costs the page (building the scene, uploading
+it), not how fast a graphics card draws it. Panning frames there are far
+slower than on a real GPU. `?noshare` draws every run of shapes from its own
+geometry, none shared (canvas/pixiScene.ts), to measure what sharing saves.
 
 ### At each zoom
 

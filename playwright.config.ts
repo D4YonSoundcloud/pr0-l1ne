@@ -33,6 +33,13 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"], ...(chromium ? { launchOptions: { executablePath: chromium } } : {}) },
     },
+    // The tests that draw on the canvas, again with WebGL (e2e/renderer.ts): `--project=chromium-webgl`.
+    {
+      name: "chromium-webgl",
+      testMatch: ["**/csp.e2e.ts", "**/zoom.e2e.ts", "**/summaries.e2e.ts", "**/loopFolds.e2e.ts"],
+      grep: /canvas|policy|WebGL/,
+      use: { ...devices["Desktop Chrome"], ...(chromium ? { launchOptions: { executablePath: chromium } } : {}) },
+    },
     { name: "firefox", use: devices["Desktop Firefox"] },
     { name: "webkit", use: devices["Desktop Safari"] },
   ],

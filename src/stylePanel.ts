@@ -49,6 +49,8 @@ export interface RenderingChoice {
   get(): RendererKind;
   /** Switch renderers; resolves once the windows are drawn, rejects (switched back) if it couldn't. */
   set(kind: RendererKind): Promise<void>;
+  /** What the canvas renderers draw with, once started ("webgl" or "canvas"): WebGL may fall back to Canvas 2D. */
+  drawnWith?(): string | null;
 }
 
 /** What each renderer is like, in the person's terms (shown under the choice). */
@@ -63,15 +65,20 @@ export const RENDERER_INFO: Record<RendererKind, { label: string; about: string 
     about:
       "Drawn with PixiJS on one canvas the size of the window, only what's in view. Panning and zooming stay smooth however big the drawing gets, but each step takes a little longer to show, since the canvas is painted whole. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself.",
   },
+  webgl: {
+    label: "WebGL",
+    about:
+      "The same canvas drawing as Canvas 2D, drawn by the graphics card: the same picture, with panning and zooming lighter on the processor. Shapes drawn the same are made once and shared, so a big grid is quick to put on screen. If WebGL can't start in this browser, it draws with Canvas 2D instead.",
+  },
 };
 
-/** The two side by side: [question, SVG, Canvas 2D]. */
-export const RENDERER_COMPARISON: [string, string, string][] = [
-  ["Stepping", "Quicker", "A little slower"],
-  ["Panning and zooming big drawings", "Can stutter", "Smooth"],
-  ["Zoomed in", "Always sharp", "Sharp once you stop zooming"],
-  ["Screen readers", "Read the values", "Read only the window names"],
-  ["Save SVG", "Yes", "Yes, the same file"],
+/** The three side by side: [question, SVG, Canvas 2D, WebGL]. */
+export const RENDERER_COMPARISON: [string, string, string, string][] = [
+  ["Stepping", "Quicker", "A little slower", "A little slower"],
+  ["Panning and zooming big drawings", "Can stutter", "Smooth", "Smooth, on the graphics card"],
+  ["Zoomed in", "Always sharp", "Sharp once you stop zooming", "Sharp once you stop zooming"],
+  ["Screen readers", "Read the values", "Read only the window names", "Read only the window names"],
+  ["Save SVG", "Yes", "Yes, the same file", "Yes, the same file"],
 ];
 
 export interface StylePanelOptions {
@@ -237,23 +244,29 @@ export class StylePanel {
   private renderingControls(rendering: RenderingChoice): HTMLElement {
     const about = h("p", { class: "style-help" });
     const status = h("p", { class: "style-status", role: "status", "aria-live": "polite" });
-    const kinds: RendererKind[] = ["svg", "canvas"];
+    const kinds: RendererKind[] = ["svg", "canvas", "webgl"];
     const choice = this.choice<RendererKind>(
       "Draw with",
       kinds.map((value) => ({ label: RENDERER_INFO[value].label, value })),
       () => rendering.get(),
       (kind) => {
         if (kind === rendering.get()) return;
-        status.textContent = kind === "canvas" ? "Starting the canvas renderer…" : "";
+        const name = kind === "webgl" ? "WebGL" : "canvas";
+        status.textContent = kind === "svg" ? "" : `Starting the ${name} renderer…`;
         status.classList.remove("is-warning");
         rendering
           .set(kind)
           .then(() => {
-            status.textContent = "";
+            // WebGL that couldn't start draws with Canvas 2D: say so.
+            const fellBack = kind === "webgl" && rendering.drawnWith?.() === "canvas";
+            status.textContent = fellBack
+              ? "WebGL couldn't start in this browser, so it's drawing with Canvas 2D."
+              : "";
+            status.classList.toggle("is-warning", fellBack);
           })
           .catch((error: unknown) => {
             const reason = error instanceof Error && error.message ? ` (${error.message})` : "";
-            status.textContent = `The canvas renderer couldn't start in this browser${reason}, so it's still SVG.`;
+            status.textContent = `The ${name} renderer couldn't start in this browser${reason}, so it's still SVG.`;
             status.classList.add("is-warning");
           })
           .finally(() => this.sync());
@@ -280,8 +293,8 @@ export class StylePanel {
       h(
         "tbody",
         {},
-        ...RENDERER_COMPARISON.map(([what, svgSays, canvasSays]) =>
-          h("tr", {}, h("th", { scope: "row" }, what), h("td", {}, svgSays), h("td", {}, canvasSays)),
+        ...RENDERER_COMPARISON.map(([what, ...says]) =>
+          h("tr", {}, h("th", { scope: "row" }, what), ...says.map((said) => h("td", {}, said))),
         ),
       ),
     );
@@ -295,7 +308,7 @@ export class StylePanel {
       h(
         "p",
         { class: "style-help" },
-        "Both draw exactly the same picture. Save SVG, in each window's toolbar, saves a vector file you can open in a drawing app, whichever you use.",
+        "All three draw the same picture. Save SVG, in each window's toolbar, saves a vector file you can open in a drawing app, whichever you use.",
       ),
     );
   }

@@ -4,6 +4,7 @@
  * shows every node, and Reset layout summarizes it again. In both renderers.
  */
 import { expect, type Page, test } from "@playwright/test";
+import { rendererFor } from "./renderer";
 
 const LIST = `class Node { constructor(val, next) { this.val = val; this.next = next; } }
 let head = null;
@@ -20,7 +21,7 @@ async function open(page: Page, renderer: "svg" | "canvas") {
       localStorage.setItem("pr0l1ne:code:javascript", code);
       localStorage.setItem("pr0l1ne:renderer", r);
     },
-    [LIST, renderer],
+    [LIST, rendererFor(renderer)],
   );
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");

@@ -184,6 +184,26 @@ describe("StyleController", () => {
       expect(section()!.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.svg.about);
     });
 
+    it("starts WebGL, and says when it fell back to Canvas 2D", async () => {
+      const { choice, asked } = rendering();
+      let drawn = "webgl";
+      choice.drawnWith = () => drawn;
+      setup(undefined, choice);
+      button("WebGL").click();
+      expect(asked).toEqual(["webgl"]);
+      const status = section()!.querySelector(".style-status")!;
+      expect(status.textContent).toBe("Starting the WebGL renderer…");
+      expect(section()!.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.webgl.about);
+      await flush();
+      expect(status.textContent).toBe("");
+      button("SVG").click();
+      drawn = "canvas";
+      button("WebGL").click();
+      await flush();
+      expect(status.textContent).toBe("WebGL couldn't start in this browser, so it's drawing with Canvas 2D.");
+      expect(status.classList.contains("is-warning")).toBe(true);
+    });
+
     it("leaves out a reason it doesn't have", async () => {
       const { choice } = rendering(() => Promise.reject("nope"));
       setup(undefined, choice);

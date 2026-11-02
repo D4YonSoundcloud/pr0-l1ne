@@ -1,7 +1,10 @@
 /**
  * A paint list (paint.ts) as PixiJS objects, ready to draw on a 2D canvas.
  *
- * Shapes in a row share one Graphics (fewer objects to draw); text is Text,
+ * Shapes in a row are one Graphics (fewer objects to draw), and runs that
+ * draw the same, measured from their own corner, share one GraphicsContext
+ * (the geometry is built, and on WebGL tessellated, once: a grid's
+ * thousands of cells are a few contexts; see SceneCache.contexts). Text is Text,
  * whose textures PixiJS shares between equal strings in equal styles, so a
  * loop history full of the same small numbers stays cheap. Every group the
  * animation can move (data-flip, data-cell) or the person can drag
@@ -9,7 +12,16 @@
  * their parent. Those containers are kept from one build to the next when
  * what they draw hasn't changed (SceneCache, below).
  */
-import { CanvasTextMetrics, Container, fontStringFromTextStyle, Graphics, Text, TextStyle } from "pixi.js";
+import {
+  CanvasTextMetrics,
+  Container,
+  fontStringFromTextStyle,
+  Graphics,
+  GraphicsContext,
+  Text,
+  TextStyle,
+} from "pixi.js";
+import { perf } from "../../perf";
 import type {
   FillPaint,
   Geometry,
@@ -67,7 +79,10 @@ function rectPath(x: number, y: number, w: number, h: number, r: number): PathCo
   ];
 }
 
-function tracePath(g: Graphics, commands: PathCommand[]): void {
+/** What drawShape draws into: a Graphics, or a context Graphics share. */
+type Drawable = Graphics | GraphicsContext;
+
+function tracePath(g: Drawable, commands: PathCommand[]): void {
   for (const c of commands) {
     switch (c.op) {
       case "M":
@@ -89,7 +104,7 @@ function tracePath(g: Graphics, commands: PathCommand[]): void {
   }
 }
 
-function traceGeometry(g: Graphics, geometry: Geometry): void {
+function traceGeometry(g: Drawable, geometry: Geometry): void {
   if (geometry.type === "rect") {
     const { x, y, w, h, r } = geometry;
     // PixiJS rounds corners with quadratic curves, which looks right for a
@@ -112,7 +127,7 @@ const strokeStyle = (s: StrokePaint, width = s.width) => ({
 });
 
 /** A dashed outline: the dashes as their own lines, stroked solid. */
-function dashedStroke(g: Graphics, geometry: Geometry, stroke: StrokePaint): void {
+function dashedStroke(g: Drawable, geometry: Geometry, stroke: StrokePaint): void {
   const commands =
     geometry.type === "rect"
       ? rectPath(geometry.x, geometry.y, geometry.w, geometry.h, geometry.r)
@@ -128,7 +143,7 @@ function dashedStroke(g: Graphics, geometry: Geometry, stroke: StrokePaint): voi
   g.stroke(strokeStyle(stroke));
 }
 
-function drawShape(g: Graphics, shape: PaintShape): void {
+function drawShape(g: Drawable, shape: PaintShape): void {
   const { geometry, fill, stroke } = shape;
   const solid = stroke && !stroke.dash.length;
   // fill() then stroke() straight after it share one path. (A dashed
@@ -137,6 +152,42 @@ function drawShape(g: Graphics, shape: PaintShape): void {
   if (fill) g.fill({ color: fill.color, alpha: fill.alpha });
   if (solid) g.stroke(strokeStyle(stroke));
   else if (stroke) dashedStroke(g, geometry, stroke);
+}
+
+/** A geometry moved by (-dx, -dy): drawn from its run's corner, to share its context. */
+function shifted(g: Geometry, dx: number, dy: number): Geometry {
+  if (g.type === "rect") return { ...g, x: g.x - dx, y: g.y - dy };
+  if (g.type === "circle") return { ...g, cx: g.cx - dx, cy: g.cy - dy };
+  return {
+    type: "path",
+    commands: g.commands.map((c): PathCommand => {
+      switch (c.op) {
+        case "M":
+        case "L":
+          return { ...c, x: c.x - dx, y: c.y - dy };
+        case "Q":
+          return { ...c, cx: c.cx - dx, cy: c.cy - dy, x: c.x - dx, y: c.y - dy };
+        case "C":
+          return { ...c, c1x: c.c1x - dx, c1y: c.c1y - dy, c2x: c.c2x - dx, c2y: c.c2y - dy, x: c.x - dx, y: c.y - dy };
+        default:
+          return c;
+      }
+    }),
+  };
+}
+
+/** A geometry's top-left corner (of its points: enough to measure a run from). */
+function cornerOf(g: Geometry): { x: number; y: number } {
+  if (g.type === "rect") return { x: g.x, y: g.y };
+  if (g.type === "circle") return { x: g.cx - g.r, y: g.cy - g.r };
+  let x = Number.POSITIVE_INFINITY;
+  let y = Number.POSITIVE_INFINITY;
+  for (const c of g.commands) {
+    if (c.op === "Z") continue;
+    x = Math.min(x, c.x);
+    y = Math.min(y, c.y);
+  }
+  return Number.isFinite(x) ? { x, y } : { x: 0, y: 0 };
 }
 
 /**
@@ -324,6 +375,34 @@ interface Entry {
   nested: Entry[];
   /** Its own flash overlays (not its keyed groups'). */
   overlays: Container[];
+  /** The shared contexts its own Graphics draw (not its keyed groups'): SceneCache.contexts. */
+  contexts: string[];
+}
+
+/**
+ * A context many Graphics draw: drawn once, before any Graphics draws it,
+ * and never changed after. Each Graphics listens to its context for changes
+ * ("update") and for its GPU data being let go ("unload"); with hundreds of
+ * Graphics on one context, letting each go searches all the others'
+ * listeners (quadratic: tens of ms for a big grid's scene). Neither can
+ * happen here (nothing changes it; PixiJS doesn't collect it, and it's
+ * destroyed only once no scene draws it), so Graphics don't listen.
+ */
+class SharedContext extends GraphicsContext {
+  constructor() {
+    super();
+    this.autoGarbageCollect = false;
+  }
+  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter's own signature
+  override on(event: any, fn: any, context?: any): this {
+    if ((event === "update" || event === "unload") && context instanceof Graphics) return this;
+    return super.on(event, fn, context);
+  }
+  // biome-ignore lint/suspicious/noExplicitAny: EventEmitter's own signature
+  override off(event: any, fn?: any, context?: any, once?: boolean): this {
+    if ((event === "update" || event === "unload") && context instanceof Graphics) return this;
+    return super.off(event, fn, context, once);
+  }
 }
 
 /** What one build keeps for the next. Pass the same cache to every build of a window. */
@@ -336,10 +415,56 @@ export class SceneCache {
    * One for builds with the flash, one without.
    */
   readonly sigs = [new WeakMap<PaintItem[], string>(), new WeakMap<PaintItem[], string>()];
+  /**
+   * Shared geometry: a GraphicsContext for each run of shapes drawn (by
+   * what it draws, from its own corner). Each build notes the contexts its
+   * scene draws (its new Graphics', and its kept bodies', Entry.contexts);
+   * the next build destroys the rest (their GPU buffers with them).
+   */
+  readonly contexts = new Map<string, GraphicsContext>();
+  /** The contexts the build under way draws. */
+  private used = new Set<string>();
 
   /** Forget everything (the objects were destroyed, or fonts changed). */
   clear(): void {
     this.entries.clear();
+  }
+
+  /** A Graphics drawing a run of shapes: its context shared with every other run that draws the same. */
+  graphicsFor(key: string, draw: (context: GraphicsContext) => void): Graphics {
+    if (perf.noShare) {
+      // Measuring what sharing saves: a Graphics with geometry of its own, as before.
+      const g = new Graphics();
+      draw(g.context);
+      return g;
+    }
+    let context = this.contexts.get(key);
+    if (!context) {
+      context = new SharedContext();
+      draw(context);
+      this.contexts.set(key, context);
+    }
+    this.used.add(key);
+    return new Graphics(context);
+  }
+
+  /**
+   * A build begins: contexts the last build's scene didn't draw are
+   * destroyed. Only the scene before that drew them, and it's been let go
+   * of by now (a window destroys its old scene once the new one is in).
+   */
+  beginBuild(): void {
+    for (const [key, context] of this.contexts) {
+      if (this.used.has(key)) continue;
+      this.contexts.delete(key);
+      context.destroy();
+    }
+    this.used = new Set();
+  }
+
+  /** A kept body is drawn again: the contexts it draws are still used. */
+  stillUsed(keys: readonly string[]): void {
+    for (const key of keys) this.used.add(key);
   }
 }
 
@@ -405,6 +530,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
   if (cache.resolution !== options.resolution) cache.clear();
   cache.resolution = options.resolution;
   const old = cache.entries;
+  cache.beginBuild();
   const kept = new Map<string, Entry[]>();
   /** Bodies taken from the last build, and everything they were in (which can't be taken now). */
   const taken = new Set<Container>();
@@ -460,6 +586,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
   /** A kept body is drawn for `group`: its keyed groups' layers are the ones inside it. */
   const adopt = (group: PaintGroup, entry: Entry) => {
     keep(entry);
+    cache.stillUsed(entry.contexts);
     for (const overlay of entry.overlays) {
       overlay.alpha = 1;
       flashes.push(overlay);
@@ -475,38 +602,62 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
     });
   };
 
-  const add = (group: PaintGroup, into: Container, entry: Pick<Entry, "nested" | "overlays">) => {
-    let shapes: Graphics | null = null;
+  /**
+   * A run of shapes as one Graphics, at the run's corner, drawing a context
+   * shared with every run that draws the same from its own corner.
+   */
+  const addRun = (run: PaintShape[], into: Container, contexts: string[]) => {
+    let x = Number.POSITIVE_INFINITY;
+    let y = Number.POSITIVE_INFINITY;
+    for (const shape of run) {
+      const g = shape.geometry;
+      x = Math.min(x, g.type === "rect" ? g.x : g.type === "circle" ? g.cx - g.r : cornerOf(g).x);
+      y = Math.min(y, g.type === "rect" ? g.y : g.type === "circle" ? g.cy - g.r : cornerOf(g).y);
+    }
+    let key = "";
+    for (const shape of run)
+      key += `${geometrySig(shape.geometry, x, y)}${fillSig(shape.fill)}${strokeSig(shape.stroke)};`;
+    const g = cache.graphicsFor(key, (context) => {
+      for (const shape of run) drawShape(context, { ...shape, geometry: shifted(shape.geometry, x, y) });
+    });
+    contexts.push(key);
+    g.position.set(x, y);
+    into.addChild(g);
+  };
+
+  const add = (group: PaintGroup, into: Container, entry: Pick<Entry, "nested" | "overlays" | "contexts">) => {
+    let run: PaintShape[] = [];
+    const endRun = () => {
+      if (run.length) addRun(run, into, entry.contexts);
+      run = [];
+    };
     for (const item of group.children) {
       if (item.kind === "shape") {
-        if (!shapes) {
-          shapes = new Graphics();
-          into.addChild(shapes);
-        }
-        drawShape(shapes, item);
+        run.push(item);
         if (item.flash && options.flash) {
+          endRun(); // later shapes go above the flash
           const overlay = flashOverlay(item);
           into.addChild(overlay);
           flashes.push(overlay);
           entry.overlays.push(overlay);
-          shapes = null; // later shapes go above the flash
         }
       } else if (item.kind === "text") {
+        endRun();
         drawText(into, item, options.resolution);
-        shapes = null;
       } else if (keyed(item)) {
+        endRun();
         const layer = new Container();
         if (item.alpha < 1) layer.alpha = item.alpha;
         layers.set(item, layer);
         into.addChild(layer);
         entry.nested.push(place(item, layer));
-        shapes = null;
       } else {
-        // Shapes after a plain group must still draw above it: start a new Graphics.
+        // Shapes after a plain group must still draw above it: a new run.
+        endRun();
         add(item, into, entry);
-        shapes = null;
       }
     }
+    endRun();
   };
   /** A keyed group's body in its layer: kept from the last build if it draws the same, or built. */
   const place = (group: PaintGroup, layer: Container): Entry => {
@@ -522,13 +673,13 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
     }
     const body = new Container();
     layer.addChild(body);
-    const entry: Entry = { sig, body, layer, built: at, nested: [], overlays: [] };
+    const entry: Entry = { sig, body, layer, built: at, nested: [], overlays: [], contexts: [] };
     add(group, body, entry);
     keep(entry);
     return entry;
   };
 
-  add(paint.root, root, { nested: [], overlays: [] });
+  add(paint.root, root, { nested: [], overlays: [], contexts: [] });
   cache.entries = kept;
   // Each Text listens to its style for changes. These styles are shared and
   // never change, and with thousands of texts on one style, unsubscribing

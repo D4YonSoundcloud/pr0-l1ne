@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
-import { CanvasTextMetrics, type Container, Graphics, Text } from "../../testing/fakePixi";
+import { CanvasTextMetrics, type Container, Graphics, GraphicsContext, Text } from "../../testing/fakePixi";
 import { paintDrawing } from "./paint";
-import { buildScene, forgetFonts } from "./pixiScene";
+import { buildScene, forgetFonts, SceneCache } from "./pixiScene";
 import type { ComputedPaint } from "./styles";
 
 vi.mock("pixi.js", () => import("../../testing/fakePixi"));
@@ -198,5 +198,76 @@ describe("buildScene: text", () => {
       stroke: "rgb(0, 0, 0)",
     }));
     expect(texts(root)[0].style.options.fill).toEqual({ color: 0, alpha: 0 });
+  });
+});
+
+describe("buildScene: shared geometry", () => {
+  /** A grid of cells, each its own keyed group (data-cell), in a few colors. */
+  const grid = (rows: number, cols: number) => {
+    let out = "";
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        out += `<g class="cell c${(r + c) % 4}" data-cell="g|${r}|${c}"><rect x="${10 + c * 34}" y="${10 + r * 24}" width="34" height="24" rx="3"/></g>`;
+    return out;
+  };
+  const colors = (el: Element): Partial<ComputedPaint> => {
+    const c = /\bc(\d)\b/.exec(el.parentElement?.getAttribute("class") ?? "")?.[1] ?? "0";
+    return { fill: ["rgb(255, 0, 0)", "rgb(0, 255, 0)", "rgb(0, 0, 255)", "rgb(9, 9, 9)"][Number(c)], stroke: "none" };
+  };
+  const graphicsIn = (c: Container, out: Graphics[] = []): Graphics[] => {
+    for (const child of c.children) {
+      if (child instanceof Graphics) out.push(child);
+      else graphicsIn(child, out);
+    }
+    return out;
+  };
+
+  it("draws every same-looking cell from one context, each Graphics at its own corner", () => {
+    const cache = new SceneCache();
+    const made = GraphicsContext.made;
+    const built = buildScene(
+      paintDrawing(svgOf(grid(30, 30)), fakeStyles(colors)),
+      { resolution: 1, flash: false },
+      cache,
+    );
+    const all = graphicsIn(built.root as unknown as Container);
+    expect(all).toHaveLength(900);
+    // Four colors, one size: four contexts for 900 cells, each drawn once, from its own corner.
+    expect(GraphicsContext.made - made).toBe(4);
+    expect(new Set(all.map((g) => g.context)).size).toBe(4);
+    expect(cache.contexts.size).toBe(4);
+    const g = all[31]; // row 1, column 1
+    expect([g.x, g.y]).toEqual([44, 34]);
+    expect(g.calls[0]).toEqual(["roundRect", 0, 0, 34, 24, 3]);
+    // Nothing changes a shared context, and nothing collects it: its Graphics don't listen to it.
+    expect(g.context.listening.get("update") ?? []).toHaveLength(0);
+    expect(g.context.autoGarbageCollect).toBe(false);
+  });
+
+  it("lets a context go once no scene draws it, keeping those a kept body still draws", () => {
+    const cache = new SceneCache();
+    const paint = (markup: string) => paintDrawing(svgOf(markup), fakeStyles(colors));
+    const build = (markup: string) => buildScene(paint(markup), { resolution: 1, flash: false }, cache);
+    const first = build(grid(2, 2));
+    const contexts = () => [...cache.contexts.values()] as unknown as GraphicsContext[];
+    const cells = contexts();
+    expect(cells).toHaveLength(3); // colors 0, 1, 1, 2
+    // The next drawing keeps three of the four cells (the fourth moved, drawn by its color's context) and adds a wider one.
+    const next = `${grid(2, 2).replace('x="44" y="34"', 'x="400" y="400"')}<g data-cell="w"><rect x="10" y="200" width="90" height="24"/></g>`;
+    const second = build(next);
+    (first.root as unknown as Container).destroy({ children: true });
+    expect(contexts()).toHaveLength(4);
+    // Drawings of the wide one alone: the cells' contexts stay while the scene before still draws them,
+    // and go at the build after (by then that scene has been let go of).
+    const wide = `<g data-cell="w"><rect x="10" y="200" width="90" height="24"/></g>`;
+    const third = build(wide);
+    (second.root as unknown as Container).destroy({ children: true });
+    expect(cells.some((c) => c.destroyed)).toBe(false);
+    const fourth = build(wide);
+    (third.root as unknown as Container).destroy({ children: true });
+    expect(cells.every((c) => c.destroyed)).toBe(true);
+    expect(contexts()).toHaveLength(1);
+    expect(contexts()[0].destroyed).toBe(false);
+    (fourth.root as unknown as Container).destroy({ children: true });
   });
 });

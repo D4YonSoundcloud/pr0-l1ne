@@ -409,6 +409,65 @@ describe("CanvasMemoryRenderer", () => {
     r.dispose();
   });
 
+  it("draws with WebGL when asked, and with Canvas 2D on a new canvas if WebGL can't start", async () => {
+    const el = windowEl();
+    const r = new CanvasMemoryRenderer(el, {}, { styles: () => probe(), backend: "webgl" });
+    await r.ready;
+    expect(pixi.renderers.at(-1)!.options.preference).toEqual(["webgl", "canvas"]);
+    expect(el.dataset.backend).toBe("webgl");
+    r.dispose();
+    expect(el.dataset.backend).toBeUndefined();
+
+    pixi.fail = new Error("no WebGL");
+    const el2 = windowEl();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const r2 = new CanvasMemoryRenderer(el2, {}, { styles: () => probe(), backend: "webgl" });
+    const first = r2.canvas;
+    await r2.ready;
+    expect(warn).toHaveBeenCalled();
+    expect(pixi.renderers.at(-1)!.options.preference).toEqual(["canvas"]);
+    expect(r2.canvas).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+    expect(r2.canvas.isConnected).toBe(true);
+    expect(el2.dataset.backend).toBe("canvas");
+    r2.render(sceneAt(await traceJavaScript("const a = [1];\n")), null);
+    expect(pixi.renderers.at(-1)!.renders).toBeGreaterThan(0);
+    r2.dispose();
+  });
+
+  it("a lost WebGL context: nothing drawn until it's back, then the scene built again; never back, a new renderer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const el = windowEl();
+      const r = new CanvasMemoryRenderer(el, {}, { styles: () => probe(), backend: "webgl" });
+      await r.ready;
+      r.render(sceneAt(await traceJavaScript("const a = [1, 2];\n")), null);
+      const gl = pixi.renderers.at(-1)!;
+      const before = gl.lastStage!.children[0];
+      r.canvas.dispatchEvent(new Event("webglcontextlost"));
+      const renders = gl.renders;
+      r.setViewport({ zoom: 0.5 });
+      expect(gl.renders).toBe(renders);
+      r.canvas.dispatchEvent(new Event("webglcontextrestored"));
+      expect(gl.renders).toBe(renders + 1);
+      // Built again from the paint kept: a new scene, nothing laid out again.
+      expect(gl.lastStage!.children[0]).not.toBe(before);
+
+      const count = pixi.renderers.length;
+      const lost = r.canvas;
+      lost.dispatchEvent(new Event("webglcontextlost"));
+      vi.advanceTimersByTime(2500);
+      await r.ready;
+      await vi.waitFor(() => expect(pixi.renderers.length).toBe(count + 1));
+      expect(gl.destroyed).toBe(true);
+      expect(r.canvas).not.toBe(lost);
+      await vi.waitFor(() => expect(pixi.renderers.at(-1)!.renders).toBeGreaterThan(0));
+      r.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lets go of the window, even before PixiJS has started", async () => {
     const el = windowEl();
     const r = new CanvasMemoryRenderer(el, {}, { styles: () => probe() });

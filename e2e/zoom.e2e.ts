@@ -6,6 +6,8 @@
  * divider doesn't redraw the diagram on every move (app/resizeRedraw.ts).
  */
 import { expect, type Page, test } from "@playwright/test";
+import { inked } from "./pixels";
+import { rendererFor } from "./renderer";
 
 const CODE = `function build(n) {
   const items = [];
@@ -27,7 +29,7 @@ async function open(page: Page, renderer: "svg" | "canvas") {
       localStorage.setItem("pr0l1ne:code:javascript", code);
       localStorage.setItem("pr0l1ne:renderer", r);
     },
-    [CODE, renderer],
+    [CODE, rendererFor(renderer)],
   );
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript?perf");
@@ -123,16 +125,6 @@ test("zoomed out to outline, arrows are laid out straight or with one bend; zoom
   await zoomOut(page, 0);
   await expect.poll(() => mostBends(page)).toBeGreaterThan(1);
 });
-
-/** How many pixels of a window's canvas are drawn on. */
-const inked = (page: Page, window: string) =>
-  page.evaluate((w) => {
-    const c = document.querySelector<HTMLCanvasElement>(`${w} canvas.viewport-canvas`)!;
-    const data = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) n++;
-    return n;
-  }, window);
 
 test("canvas: back at a level after another, then a window resized, the level is still drawn", async ({ page }) => {
   await open(page, "canvas");

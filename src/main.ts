@@ -46,6 +46,8 @@ import { createSettings, type RendererKind } from "./settings";
 const query = new URLSearchParams(window.location.search);
 // ?nolod: everything drawn in full at every zoom, to measure what levels of detail save.
 perf.noLod = query.has("nolod");
+// ?noshare: no geometry shared between Graphics (canvas/pixiScene.ts), to measure what sharing saves.
+perf.noShare = query.has("noshare");
 if (query.has("perf")) {
   perf.on = true;
   (window as unknown as { __pr0l1nePerf: typeof perf }).__pr0l1nePerf = perf;
@@ -74,6 +76,7 @@ const rendererSwitch = new RendererSwitch(
   {
     svg: () => SVG_RENDERERS,
     canvas: () => import("./render/canvas/canvasRenderers").then((m) => m.CANVAS_RENDERERS),
+    webgl: () => import("./render/canvas/canvasRenderers").then((m) => m.WEBGL_RENDERERS),
   },
   { kind: "svg", factory: SVG_RENDERERS },
 );
@@ -203,7 +206,11 @@ const style: StyleController = new StyleController({
   replay: () => playback.replay(),
   redraw: () => view.render(false),
   onOpen: () => closePanelsBut("style"),
-  rendering: { get: () => settings.renderer.get(), set: useRenderer },
+  rendering: {
+    get: () => settings.renderer.get(),
+    set: useRenderer,
+    drawnWith: () => els.memory.dataset.backend ?? null,
+  },
 });
 // The Layout panel: the memory and loop views' spacing, redrawn as it changes.
 const spacing = new SpacingController({
@@ -393,10 +400,11 @@ routes.start();
 void shares.openFromLocation().then((opened) => {
   if (!opened) runNow();
 });
-// Canvas 2D last time: switch to it once it has loaded (SVG draws until then).
-if (settings.renderer.get() === "canvas") {
-  useRenderer("canvas").catch((error: unknown) => {
-    console.warn("The canvas renderer couldn't start; drawing with SVG.", error);
+// Canvas 2D or WebGL last time: switch to it once it has loaded (SVG draws until then).
+const lastRenderer = settings.renderer.get();
+if (lastRenderer !== "svg") {
+  useRenderer(lastRenderer).catch((error: unknown) => {
+    console.warn(`The ${lastRenderer} renderer couldn't start; drawing with SVG.`, error);
   });
 }
 

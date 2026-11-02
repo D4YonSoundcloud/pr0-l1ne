@@ -150,7 +150,7 @@ The layout button and the window buttons aren't shown on a phone, which has this
 
 | Section | What you can change |
 | --- | --- |
-| **Rendering** | Whether the windows are drawn with **SVG** (the default) or **Canvas 2D**. See [SVG or Canvas 2D](#svg-or-canvas-2d) below. |
+| **Rendering** | Whether the windows are drawn with **SVG** (the default), **Canvas 2D** or **WebGL**. See [SVG, Canvas 2D or WebGL](#svg-canvas-2d-or-webgl) below. |
 | **Theme** | A starting point: **Graph paper** (the default), **Whiteboard** (white, no grid), **Dot grid**, **Blueprint** (white lines on blue), **Night** (dark) and **High contrast**. Changing anything after that makes it **Custom**. **Reset all** goes back to Graph paper. |
 | **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. Its **duration**, from 0 (no animation) to 1000 ms. And how new things arrive: **Fade in** (on by default) and **Slide in** (from the left, with the window's easing; off by default), together, one or the other, or neither so they just appear. **Same as the memory window** copies all of it to the loop history. |
 | **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, sliding windows, regions, compared cells, failed checks, heatmaps' lowest and highest colors, intervals, memory sizes, the printed-output card and its text, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
@@ -164,20 +164,20 @@ The layout button and the window buttons aren't shown on a phone, which has this
 
 The window headers (the strips with "Memory" and the Arrows | Nested switch) take their colors from each window's background, so a dark theme is dark all the way up.
 
-### SVG or Canvas 2D
+### SVG, Canvas 2D or WebGL
 
-The **Rendering** section at the top of the Style panel picks how the two windows are drawn. Both draw exactly the same picture, from the same layout, in the same colors, with the same animations, dragging, hover highlights, Auto-fit and zooming. What differs is how the picture reaches the screen.
+The **Rendering** section at the top of the Style panel picks how the two windows are drawn. All three draw the same picture, from the same layout, in the same colors, with the same animations, dragging, hover highlights, Auto-fit and zooming. What differs is how the picture reaches the screen.
 
-| | SVG (the default) | Canvas 2D |
-| --- | --- | --- |
-| **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) on one canvas the size of the window, only what's in view |
-| **Stepping** | Quicker: each step changes only the elements that changed | A little slower: the canvas is painted whole each step |
-| **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets |
-| **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming |
-| **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names |
-| **Save SVG** | Yes | Yes, the same file |
+| | SVG (the default) | Canvas 2D | WebGL |
+| --- | --- | --- | --- |
+| **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) on one canvas the size of the window, only what's in view | The same canvas drawing, drawn by the graphics card |
+| **Stepping** | Quicker: each step changes only the elements that changed | A little slower: the canvas is painted whole each step | Like Canvas 2D |
+| **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets | Smooth, and lighter on the processor |
+| **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming | Like Canvas 2D |
+| **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names | Like Canvas 2D |
+| **Save SVG** | Yes | Yes, the same file | Yes, the same file |
 
-Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG.
+Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG. **WebGL** is the canvas drawing again, drawn by your graphics card: worth trying on a big drawing if Canvas 2D still feels heavy. If WebGL can't start (an old graphics driver, or it's turned off), it draws with Canvas 2D and the Style panel says so. If the graphics card is reset while you're using it, the drawing comes back by itself.
 
 A few small differences on the canvas: a box doesn't get a soft shadow while you hover over it, and a box being dimmed (by [Dim others](#printed-output)) fades each of its parts rather than the box as a whole, which can show a hint of the box's outline through its cells.
 

@@ -45,17 +45,105 @@ export class Container {
   }
 
   destroy(options?: { children?: boolean }): void {
+    if (this.destroyed) return;
     this.destroyed = true;
     if (options?.children) for (const c of this.children) c.destroy(options);
+    for (const listener of this.listeners.get("destroyed") ?? []) listener(this);
+    this.listeners.clear();
+  }
+
+  private readonly listeners = new Map<string, ((target: Container) => void)[]>();
+  once(event: string, listener: (target: Container) => void): this {
+    const list = this.listeners.get(event) ?? [];
+    list.push(listener);
+    this.listeners.set(event, list);
+    return this;
   }
 }
 
 export type DrawCall = [string, ...unknown[]];
 
-export class Graphics extends Container {
+/** What a Graphics draws: here, the calls made to draw it. Graphics drawing the same share one. */
+export class GraphicsContext {
+  static made = 0;
   readonly calls: DrawCall[] = [];
+  destroyed = false;
+  constructor() {
+    GraphicsContext.made++;
+  }
   private record(name: string, ...args: unknown[]): this {
     this.calls.push([name, ...args]);
+    return this;
+  }
+  rect(...a: number[]) {
+    return this.record("rect", ...a);
+  }
+  roundRect(...a: number[]) {
+    return this.record("roundRect", ...a);
+  }
+  circle(...a: number[]) {
+    return this.record("circle", ...a);
+  }
+  moveTo(...a: number[]) {
+    return this.record("moveTo", ...a);
+  }
+  lineTo(...a: number[]) {
+    return this.record("lineTo", ...a);
+  }
+  quadraticCurveTo(...a: number[]) {
+    return this.record("quadraticCurveTo", ...a);
+  }
+  bezierCurveTo(...a: number[]) {
+    return this.record("bezierCurveTo", ...a);
+  }
+  closePath() {
+    return this.record("closePath");
+  }
+  fill(style: unknown) {
+    return this.record("fill", style);
+  }
+  stroke(style: unknown) {
+    return this.record("stroke", style);
+  }
+  destroy() {
+    this.destroyed = true;
+  }
+  autoGarbageCollect = true;
+  /** Who listens to it, by event (Graphics listen for changes, as in PixiJS). */
+  readonly listening = new Map<string, unknown[]>();
+  on(event: string, _fn: unknown, context?: unknown): this {
+    this.listening.set(event, [...(this.listening.get(event) ?? []), context]);
+    return this;
+  }
+  off(event: string, _fn?: unknown, context?: unknown): this {
+    this.listening.set(
+      event,
+      (this.listening.get(event) ?? []).filter((c) => c !== context),
+    );
+    return this;
+  }
+}
+
+export class Graphics extends Container {
+  readonly context: GraphicsContext;
+  constructor(context?: GraphicsContext) {
+    super();
+    this.context = context ?? new GraphicsContext();
+    // As in PixiJS: a Graphics listens to its context for changes, and for its GPU data being let go.
+    this.context.on("update", null, this);
+    this.context.on("unload", null, this);
+  }
+  override destroy(options?: { children?: boolean }): void {
+    this.context.off("update", null, this);
+    this.context.off("unload", null, this);
+    super.destroy(options);
+  }
+  /** The calls drawing it (its context's: shared with every Graphics drawing the same). */
+  get calls(): DrawCall[] {
+    return this.context.calls;
+  }
+  private record(name: string, ...args: unknown[]): this {
+    this.context.calls.push([name, ...args]);
     return this;
   }
   rect(...a: number[]) {
@@ -144,7 +232,11 @@ export class FakeRenderer {
   renders = 0;
   destroyed = false;
   lastStage: Container | null = null;
+  /** "webgl" or "canvas": the first backend asked for, as if it started. */
+  readonly name: string;
   constructor(readonly options: Record<string, number | string | unknown>) {
+    const preference = options.preference;
+    this.name = Array.isArray(preference) ? String(preference[0]) : String(preference ?? "canvas");
     this.width = options.width as number;
     this.height = options.height as number;
     this.resolution = options.resolution as number;

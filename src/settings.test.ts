@@ -83,7 +83,7 @@ describe("settings", () => {
         "pr0l1ne:memory-mode": "sideways",
         "pr0l1ne:speed": "fast",
         "pr0l1ne:split": "",
-        "pr0l1ne:renderer": "webgl",
+        "pr0l1ne:renderer": "webgpu",
       }),
     );
     expect(s.renderer.get()).toBe("svg");

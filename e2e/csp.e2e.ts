@@ -5,9 +5,10 @@
  * falls back to SVG quietly when it can't start, so it's checked it did.
  */
 import { expect, test } from "@playwright/test";
+import { rendererFor } from "./renderer";
 
 test("the app runs under its policy, with no violations", async ({ page }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript((renderer) => {
     const seen: string[] = [];
     (window as unknown as { violations: string[] }).violations = seen;
     document.addEventListener("securitypolicyviolation", (e) =>
@@ -20,13 +21,14 @@ test("the app runs under its policy, with no violations", async ({ page }) => {
       "pr0l1ne:code:javascript",
       "const a = [3, 1, 2];\na.sort();\nconsole.log(a);\nfunction f(n) { let s = 0; for (let i = 0; i < n; i++) s += i; return s; }\nf(20);\n",
     );
-    localStorage.setItem("pr0l1ne:renderer", "canvas");
-  });
+    localStorage.setItem("pr0l1ne:renderer", renderer);
+  }, rendererFor("canvas"));
   const response = await page.goto("/");
   expect(response?.headers()["content-security-policy"]).toContain("script-src 'self'");
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 90_000 });
-  // Canvas 2D really started (PixiJS needs pixi.js/unsafe-eval under this policy).
+  // Canvas 2D (or WebGL) really started (PixiJS needs pixi.js/unsafe-eval under this policy, for its shaders too).
   await expect(page.locator("#memory canvas.viewport-canvas")).toHaveCount(1);
+  if (rendererFor("canvas") === "webgl") await expect(page.locator("#memory")).toHaveAttribute("data-backend", "webgl");
   await page.locator("#first").click();
   for (let i = 0; i < 3; i++) await page.locator("#next").click();
   await page.locator("#measure").click();
