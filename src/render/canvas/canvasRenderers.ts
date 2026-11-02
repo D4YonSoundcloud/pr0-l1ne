@@ -29,7 +29,7 @@
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { timed } from "../../perf";
 import { detailBudget, summaryBoxes } from "../../scene/summaries";
-import { atLevel, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
+import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
 // PixiJS builds some of its code with new Function(), which the app's
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
 // versions that don't.
@@ -296,6 +296,8 @@ abstract class CanvasWindow {
     const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
     this.drawing = drawing;
+    // The level it was built at (lod.ts buildAt), to see from outside (tests, the browser's inspector).
+    this.el.dataset.builtLod = String(builtAt(drawing));
     this.view.setLandmarks(landmarksIn(drawing));
     this.paint = timed("canvas.paint", () => paintDrawing(atLevel(drawing, this.level), this.styles, this.keptPaint));
     const effects = motion !== null && !prefersReducedMotion() && !this.el.classList.contains("is-dragging-node");
@@ -517,12 +519,23 @@ abstract class CanvasWindow {
     return this.view.addControl(label, title, onClick);
   }
 
+  /** Zoomed in past the detail the drawing on screen was built with (lod.ts buildAt): it must be laid out again. */
+  protected get needsDetail(): boolean {
+    return !!this.drawing && this.view.lod < builtAt(this.drawing);
+  }
+
+  /** The drawing on screen in full detail, for saving: laid out again if it was built with less. */
+  protected fullDrawing(): Mark | null {
+    return this.drawing && builtAt(this.drawing) === 0 ? this.drawing : null;
+  }
+
   toSVG(): string | null {
-    if (!this.drawing) return null;
+    const drawing = this.fullDrawing();
+    if (!drawing) return null;
     // Saved in full, whatever the zoom: styles read at full detail.
     const full = this.level === 0 ? this.styles : new ProbeStyles(this.view.contentLayer);
     try {
-      return standaloneSvg(toSvg(this.drawing) as SVGSVGElement, full, getComputedStyle(this.el).backgroundColor);
+      return standaloneSvg(toSvg(drawing) as SVGSVGElement, full, getComputedStyle(this.el).backgroundColor);
     } finally {
       if (full !== this.styles) full.dispose();
     }
@@ -617,6 +630,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
     this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
     this.budgetDrawn = "kind" in scene ? undefined : scene.detailBudget;
     this.summaryKeys = "kind" in scene ? new Map() : summaryBoxes(scene);
+    this.scene = scene;
     const drawing =
       "kind" in scene
         ? sqlTableDrawing(scene)
@@ -625,6 +639,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
             raise: this.dragging,
             boxes: this.boxes,
             simpleArrows: this.simpleArrows,
+            level: this.view.lod,
           });
     this.refreshFocus(false, drawing);
     this.show(drawing, this.step);
@@ -641,10 +656,18 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
       if (!this.drawing) return;
       // Arrows go simple (or back), or the detail budget changes (summaries).
       const arrows = this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows;
-      if (arrows || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
+      if (arrows || this.needsDetail || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
+  /** The scene on screen (to lay it out again in full, for saving). */
+  private scene: MemoryWindowScene | null = null;
+
+  protected override fullDrawing(): Mark | null {
+    const drawn = super.fullDrawing();
+    if (drawn || !this.drawing || !this.scene || "kind" in this.scene) return drawn;
+    return memoryDrawing(this.scene, { positions: this.positions, simpleArrows: this.simpleArrows });
+  }
 
   /** The detail budget at the zoom now (scene/summaries.ts): zoomed out, long runs are summarized sooner. */
   detailBudget(): number {
@@ -760,7 +783,10 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
         autoFit: this.view.autoFitState.on,
         span: (m) => this.view.visibleSpan(m),
       });
-      this.show(loopDrawing(scene, { vertical: this.vertical, rows: this.rows, visible }), motion);
+      // Built at the level it'll be drawn at: with Auto-fit, where the fit will put it.
+      const level = (size: { width: number; height: number }) => this.view.levelFor(size);
+      this.show(loopDrawing(scene, { vertical: this.vertical, rows: this.rows, visible, level }), motion);
+      this.visible = visible;
     }
     if (!step) return;
     // As you step, keep the iteration that's running in view.
@@ -768,6 +794,24 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
     if (current)
       this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   }
+
+  /** The rows drawn last (to lay them out again in full, for saving). */
+  private visible: { top: number; bottom: number } | undefined;
+
+  protected override fullDrawing(): Mark | null {
+    const drawn = super.fullDrawing();
+    if (drawn || !this.drawing || !this.scene || "kind" in this.scene) return drawn;
+    return loopDrawing(this.scene, { vertical: this.vertical, visible: this.visible });
+  }
+
+  /** Zoomed in past the detail the rows were built with: drawn again, once the zoom settles. */
+  protected override levelChanged(_lod: Lod): void {
+    window.clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = window.setTimeout(() => {
+      if (this.scene && this.needsDetail) this.draw(this.scene, false);
+    }, RELAYOUT_AFTER);
+  }
+  private relayoutTimer = 0;
 
   /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
   protected override viewMoved(): void {
@@ -785,6 +829,7 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
 
   override dispose(): void {
     cancelAnimationFrame(this.redraw);
+    window.clearTimeout(this.relayoutTimer);
     super.dispose();
   }
 }

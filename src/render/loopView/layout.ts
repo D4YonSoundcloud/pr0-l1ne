@@ -3,11 +3,12 @@ import { timed } from "../../perf";
 import type { LoopScene } from "../../scene/loopScene";
 import { arrowMarkers, s } from "../draw";
 import type { Mark } from "../drawing";
+import { buildAt } from "../lod";
 import { drawGap, drawHeader, drawQuietBand } from "./bands";
 import { type LoopPlan, planLoop } from "./plan";
 import { type DrawnRow, drawRow } from "./row";
 import { rowKey, sceneKey } from "./rowCache";
-import { type LoopViewOptions, MARGIN, ROW_GAP } from "./shared";
+import { BAND_H, type LoopViewOptions, MARGIN, ROW_GAP } from "./shared";
 
 /** Lay out a loop scene as a drawing (drawing.ts). */
 export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Mark {
@@ -16,14 +17,30 @@ export function loopDrawing(scene: LoopScene, options: LoopViewOptions = {}): Ma
 
 function drawLoop(scene: LoopScene, options: LoopViewOptions): Mark {
   const plan = planLoop(scene, options);
+  const level = typeof options.level === "function" ? options.level(loopSize(scene, plan)) : (options.level ?? 0);
   const cache = options.rows;
-  cache?.begin(sceneKey(scene, plan, !!options.vertical));
+  cache?.begin(sceneKey(scene, plan, !!options.vertical), level);
   try {
-    return drawRows(scene, options, plan);
+    return buildAt(level, () => drawRows(scene, options, plan));
   } finally {
     cache?.end();
   }
 }
+
+/** The drawing's size, without drawing it: what drawRows will make it (layout.test.ts holds them together). */
+export function loopSize(scene: LoopScene, plan: LoopPlan): { width: number; height: number } {
+  let y = MARGIN;
+  if (scene.hiddenRows && !scene.live) y += NOTE_H;
+  for (const item of scene.items) {
+    if (item.kind === "header") y += scene.info(item.loop) ? BAND_H : 0;
+    else if (item.kind === "gap" || item.kind === "band") y += BAND_H + 6;
+    else y += plan.rowH + ROW_GAP;
+  }
+  return { width: plan.contentW + MARGIN, height: y - ROW_GAP + MARGIN };
+}
+
+/** The "earlier iterations not shown" note's height. */
+const NOTE_H = 28;
 
 function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): Mark {
   const cache = options.rows;
@@ -41,7 +58,7 @@ function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): M
     rowLayer.append(
       s("text", { class: "loop-note", x: MARGIN, y: y + 12 }, `${hiddenRows} earlier iterations not shown`),
     );
-    y += 28;
+    y += NOTE_H;
   }
 
   let prevDrawn: DrawnRow | null = scene.before ? { ...scene.before, y: Number.NaN } : null;

@@ -40,7 +40,7 @@ function baseKey(node: Drawn): string {
 }
 
 /** Keys for a list of children: the base key, and which one of those it is. */
-function keysOf(nodes: Drawn[]): string[] {
+function keysOf(nodes: readonly Drawn[]): string[] {
   const seen = new Map<string, number>();
   return nodes.map((node) => {
     const base = baseKey(node);
@@ -51,12 +51,10 @@ function keysOf(nodes: Drawn[]): string[] {
 }
 
 function sameAttributes(a: Mark, b: Mark): boolean {
-  if (a.attributeCount !== b.attributeCount) return false;
-  const bs = b.attributeEntries();
-  for (const [name, value] of a.attributeEntries()) {
-    const next = bs.next().value as [string, string];
-    if (next[0] !== name || next[1] !== value) return false;
-  }
+  const n = a.attributeCount;
+  if (n !== b.attributeCount) return false;
+  for (let i = 0; i < n; i++)
+    if (a.attributeName(i) !== b.attributeName(i) || a.attributeValue(i) !== b.attributeValue(i)) return false;
   return true;
 }
 
@@ -126,11 +124,12 @@ export class SvgPatcher {
   }
 
   private setAttributes(el: Element, m: Mark): void {
-    for (const [name, value] of m.attributeEntries()) {
+    for (let i = 0; i < m.attributeCount; i++) {
+      const name = m.attributeName(i);
       if (name === "style" && m.styleProperties.length) {
         const style = (el as SVGElement).style;
         for (const [prop, v] of m.styleProperties) style.setProperty(prop, v);
-      } else el.setAttribute(name, value);
+      } else el.setAttribute(name, m.attributeValue(i));
     }
   }
 
@@ -155,20 +154,18 @@ export class SvgPatcher {
     // The same names in the same order: set the values that changed (each
     // keeps its place). Otherwise, or if the inline style changed, set them
     // all again in order, so the order is toSvg's.
-    let inPlace = old.attributeCount === next.attributeCount;
-    if (inPlace) {
-      const was = old.attributeEntries();
-      for (const [name, value] of next.attributeEntries()) {
-        const [oldName, oldValue] = was.next().value as [string, string];
-        if (oldName !== name || (name === "style" && oldValue !== value)) {
-          inPlace = false;
-          break;
-        }
-      }
+    const n = next.attributeCount;
+    let inPlace = old.attributeCount === n;
+    for (let i = 0; inPlace && i < n; i++) {
+      const name = next.attributeName(i);
+      if (old.attributeName(i) !== name || (name === "style" && old.attributeValue(i) !== next.attributeValue(i)))
+        inPlace = false;
     }
     if (inPlace) {
-      for (const [name, value] of next.attributeEntries())
-        if (old.getAttribute(name) !== value) el.setAttribute(name, value);
+      for (let i = 0; i < n; i++) {
+        const value = next.attributeValue(i);
+        if (old.attributeValue(i) !== value) el.setAttribute(next.attributeName(i), value);
+      }
       return;
     }
     while (el.attributes.length) el.removeAttribute(el.attributes[0].name);

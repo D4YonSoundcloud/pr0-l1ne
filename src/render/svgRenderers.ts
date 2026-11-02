@@ -30,7 +30,7 @@ import { detailBudget, summaryBoxes } from "../scene/summaries";
 import { ProbeStyles } from "./canvas/styles";
 import type { Mark } from "./drawing";
 import { standaloneSvg } from "./export";
-import { atLevel, type Lod, landmarksIn, SIMPLE_ARROWS_FROM, setLodClass } from "./lod";
+import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM, setLodClass } from "./lod";
 import { loopDrawing } from "./loopView";
 import { RowCache, RowsInView } from "./loopView/rowCache";
 import { applyFocus, memoryDrawing } from "./memory";
@@ -39,7 +39,7 @@ import { SvgPatcher } from "./patch";
 import { sqlPipelineDrawing, sqlTableDrawing } from "./sqlView";
 import { Viewport } from "./viewport";
 
-/** How long the zoom must rest before the memory window lays its step out again for a new level (see levelChanged). */
+/** How long the zoom must rest before a window lays its drawing out again for a new level (see levelChanged). */
 const RELAYOUT_AFTER = 160;
 const STILL: StepStyle = { duration: 0, easing: "linear", enter: { fade: false, slide: false } };
 
@@ -86,12 +86,23 @@ abstract class SvgWindow {
   /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
   protected viewMoved(): void {}
 
-  /** The drawing on screen, in full: drawn again at another level of detail without laying it out again. */
+  /**
+   * The drawing on screen, as laid out: drawn again at another level of
+   * detail without laying it out again, down to the level it was built at
+   * (lod.ts buildAt). For more detail than that, it's laid out again.
+   */
   protected full: Mark | null = null;
+
+  /** Zoomed in past the detail the drawing on screen was built with: it must be laid out again. */
+  protected get needsDetail(): boolean {
+    return !!this.full && this.view.lod < builtAt(this.full);
+  }
 
   /** Show a drawing (animating from the last), at the level of detail the zoom calls for. */
   protected showDrawing(drawing: Mark, duration: number, easing: string, enter: StepStyle["enter"]): void {
     this.full = drawing;
+    // The level it was built at (lod.ts buildAt), to see from outside (tests, the browser's inspector).
+    this.el.dataset.builtLod = String(builtAt(drawing));
     this.view.updateContent(
       () => timed("svg.patch", () => this.patcher.show(atLevel(drawing, this.view.lod))),
       duration,
@@ -226,6 +237,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
             raise: this.dragging,
             boxes: this.boxes,
             simpleArrows: this.simpleArrows,
+            level: this.view.lod,
           });
     // The focus is part of the drawing, so the patch carries it over.
     applyFocus(drawing, this.dragging ?? this.hovered);
@@ -233,9 +245,10 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   }
 
   /**
-   * Zoomed across where arrows go simple (or back): the step is laid out
-   * again, once the zoom settles (a zoom glides through the levels between,
-   * and laying out mid-glide would do it for each).
+   * Zoomed across where arrows go simple (or back), or in past the detail
+   * the drawing was built with: the step is laid out again, once the zoom
+   * settles (a zoom glides through the levels between, and laying out
+   * mid-glide would do it for each).
    */
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
@@ -243,7 +256,7 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
       if (!this.full) return;
       // Arrows go simple (or back), or the detail budget changes (summaries).
       const arrows = this.view.lod >= SIMPLE_ARROWS_FROM !== this.simpleArrows;
-      if (arrows || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
+      if (arrows || this.needsDetail || this.detailBudget() !== this.budgetDrawn) this.onLayoutChange?.();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
@@ -308,6 +321,8 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
           vertical: this.vertical,
           rows: this.rows,
           visible: this.inView.next({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) }),
+          // Built at the level it'll be drawn at: with Auto-fit, where the fit will put it.
+          level: (size) => this.view.levelFor(size),
         });
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
     this.showDrawing(drawing, step && !sql && scene.live ? duration : 0, easing, enter);
@@ -317,6 +332,15 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     if (current)
       this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   }
+
+  /** Zoomed in past the detail the rows were built with: drawn again, once the zoom settles. */
+  protected override levelChanged(_lod: Lod): void {
+    window.clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = window.setTimeout(() => {
+      if (this.scene && this.needsDetail) this.draw(this.scene, false);
+    }, RELAYOUT_AFTER);
+  }
+  private relayoutTimer = 0;
 
   /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
   protected override viewMoved(): void {
@@ -334,6 +358,7 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
 
   override dispose(): void {
     cancelAnimationFrame(this.redraw);
+    window.clearTimeout(this.relayoutTimer);
     super.dispose();
   }
 }

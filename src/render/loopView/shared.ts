@@ -10,6 +10,7 @@ import type { LoopRow } from "../../trace/loopHistory";
 import type { Value } from "../../trace/types";
 import { CELL_H, s } from "../draw";
 import type { Mark } from "../drawing";
+import type { Lod } from "../lod";
 import { onSpacingChange, spacing } from "../spacing";
 import type { RowCache } from "./rowCache";
 
@@ -62,6 +63,12 @@ export interface LoopViewOptions {
   visible?: { top: number; bottom: number };
   /** Rows kept from the last drawing, drawn again only when they've changed (rowCache.ts). */
   rows?: RowCache;
+  /**
+   * The level of detail to build it at (lod.ts buildAt): what the level
+   * leaves out isn't made. Or, given the drawing's size, the level (the
+   * window works out where Auto-fit will put it). Full detail if not given.
+   */
+  level?: Lod | ((size: { width: number; height: number }) => Lod);
 }
 
 export interface ContainerColumn {

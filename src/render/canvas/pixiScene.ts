@@ -188,9 +188,49 @@ function textStyle(run: TextRun): TextStyle {
   return style;
 }
 
+/**
+ * Text measured once. PixiJS measures every Text it makes, for its bounds
+ * and again when it draws its texture, and drawText measures each run to
+ * place it, all through CanvasTextMetrics.measureText, which keeps the
+ * last 1,000 strings. A big drawing has many more, so by the time PixiJS
+ * draws a texture its measurement is long gone and it's measured again.
+ * This one table, keyed as PixiJS keys it (the text, its style, wrapping),
+ * stands in for PixiJS's own, so each string in each style is measured
+ * once, until the fonts change (forgetFonts). It starts again past
+ * MAX_MEASURED strings, to bound the memory it holds.
+ */
+export class TextMeasures<V> {
+  private readonly map = new Map<string, V>();
+  constructor(private readonly max: number) {}
+  has(key: string): boolean {
+    return this.map.has(key);
+  }
+  get(key: string): V | undefined {
+    return this.map.get(key);
+  }
+  set(key: string, value: V): this {
+    if (this.map.size >= this.max && !this.map.has(key)) this.map.clear();
+    this.map.set(key, value);
+    return this;
+  }
+  clear(): void {
+    this.map.clear();
+  }
+  get size(): number {
+    return this.map.size;
+  }
+}
+const MAX_MEASURED = 50_000;
+export const textMeasures = new TextMeasures<unknown>(MAX_MEASURED);
+/** PixiJS's own table (CanvasTextMetrics._measurementCache, a private static), replaced: canvas/pixiText.test.ts checks it's still there. */
+const metrics = CanvasTextMetrics as unknown as { _measurementCache?: unknown };
+if ("_measurementCache" in metrics) metrics._measurementCache = textMeasures;
+
 /** Forget measured fonts (a web font finished loading, so sizes changed). */
 export function forgetFonts(): void {
   CanvasTextMetrics.clearMetrics();
+  // PixiJS forgets the fonts, not the strings measured in them.
+  textMeasures.clear();
   styles.clear();
   emBoxes.clear();
 }

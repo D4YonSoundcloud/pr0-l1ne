@@ -396,6 +396,19 @@ describe("CanvasMemoryRenderer", () => {
     r.dispose();
   });
 
+  it("zoomed out, builds the step without what the level leaves out, and saves it in full", async () => {
+    const el = windowEl();
+    const r = new CanvasMemoryRenderer(el, {}, { styles: () => probe() });
+    await r.ready;
+    r.setViewport({ zoom: 0.2 }); // blocks: no text
+    r.render(sceneAt(await traceJavaScript("const a = [17, 23];\n")), null);
+    expect(el.dataset.builtLod).toBe("2");
+    const svg = r.toSVG()!;
+    expect(svg).toContain(">17</text>");
+    expect(el.dataset.builtLod).toBe("2");
+    r.dispose();
+  });
+
   it("lets go of the window, even before PixiJS has started", async () => {
     const el = windowEl();
     const r = new CanvasMemoryRenderer(el, {}, { styles: () => probe() });

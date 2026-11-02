@@ -21,7 +21,7 @@
  * nothing in SVG, and in canvas only paints again.
  */
 
-import { Mark } from "./drawing";
+import { buildingWithout, Mark, type OmitRule, type TextMark } from "./drawing";
 
 export type Lod = 0 | 1 | 2 | 3 | 4;
 
@@ -106,39 +106,129 @@ const SMALL_TEXT = new Set([
   "arrow-legend",
 ]);
 
-const classesOf = (m: Mark) => (m.getAttribute("class") ?? "").split(" ");
+/** Does a class attribute have this class? Without splitting it (atLevel asks for every mark). */
+function hasClass(classes: string | null | undefined, name: string): boolean {
+  if (!classes) return false;
+  for (let at = classes.indexOf(name); at >= 0; at = classes.indexOf(name, at + 1)) {
+    const end = at + name.length;
+    if ((at === 0 || classes[at - 1] === " ") && (end === classes.length || classes[end] === " ")) return true;
+  }
+  return false;
+}
+const SMALL_TEXT_LIST = [...SMALL_TEXT];
+const hasSmallText = (classes: string | null | undefined) => {
+  if (!classes) return false;
+  for (const name of SMALL_TEXT_LIST) if (hasClass(classes, name)) return true;
+  return false;
+};
 
 /** Is this mark left out at this level? The same as styles.css's display: none for it. */
-function leftOut(m: Mark, lod: Lod, inNode: boolean, parent: Mark): boolean {
+export function leftOut(m: Mark, lod: Lod, inNode: boolean, parent: Mark): boolean {
   if (lod >= 2 && m.localName === "text") return true;
-  const classes = classesOf(m);
-  if (lod >= 1 && classes.some((c) => SMALL_TEXT.has(c))) return true;
-  if (lod >= 1 && m.localName === "text" && classesOf(parent).includes("pointer")) return true;
-  if (lod >= 3 && classes.includes("arrow-tops")) return true;
-  if (lod >= 4 && inNode && !classes.includes("node-outline") && !classes.includes("node-hit")) return true;
+  if (lod === 0) return false;
+  const classes = m.getAttribute("class");
+  if (hasSmallText(classes)) return true;
+  if (m.localName === "text" && hasClass(parent.getAttribute("class"), "pointer")) return true;
+  if (lod >= 3 && hasClass(classes, "arrow-tops")) return true;
+  if (lod >= 4 && inNode && !hasClass(classes, "node-outline") && !hasClass(classes, "node-hit")) return true;
   return false;
 }
 
 /**
  * The drawing as it's drawn at a level: what the level hides (styles.css)
  * left out of it, so it's never put in the page or painted at all. The CSS
- * would hide it anyway; leaving it out saves making it. A new drawing:
- * the one given is untouched, so the renderer can draw it at another level
- * later without laying it out again.
+ * would hide it anyway; leaving it out saves making it. The drawing given
+ * is untouched, so the renderer can draw it at another level later without
+ * laying it out again.
+ *
+ * Each mark's result is kept on it (Mark.levelCopy) until it or a mark in
+ * it changes, so a box or row kept from the last step (boxCache.ts,
+ * rowCache.ts) is the same marks at this level too, and the patcher and
+ * the paint skip it at once as they do at full detail. A mark that loses
+ * nothing at this level is its own result, not a copy: a big grid drawn
+ * as blocks (built at the level, buildAt) isn't copied at all.
  */
 export function atLevel(drawing: Mark, lod: Lod): Mark {
   if (lod === 0) return drawing;
-  const copy = (m: Mark): Mark => {
-    const out = new Mark(m.localName);
-    for (const [name, value] of m.attributeEntries()) if (name !== "style") out.setAttribute(name, value);
-    for (const [name, value] of m.styleProperties) out.style.setProperty(name, value);
-    const node = m.localName === "g" && classesOf(m).includes("node");
-    for (const child of m.childNodes) {
-      if (child instanceof Mark) {
-        if (!leftOut(child, lod, node, m)) out.append(copy(child));
-      } else out.append(child.textContent);
-    }
-    return out;
-  };
-  return copy(drawing);
+  return levelOf(drawing, lod);
 }
+
+function levelOf(m: Mark, lod: Lod): Mark {
+  const kept = m.levelCopy(lod);
+  if (kept) {
+    // In the drawing before at this level too: the SVG patcher keeps its element.
+    kept.isShared = true;
+    return kept;
+  }
+  const node = m.localName === "g" && hasClass(m.getAttribute("class"), "node");
+  const list = m.childNodes;
+  let out: Mark | null = null;
+  for (let i = 0; i < list.length; i++) {
+    const child = list[i];
+    let next: Mark | TextMark | null = child;
+    if (child instanceof Mark) {
+      if (leftOut(child, lod, node, m)) {
+        // Not in the copy, but the copy depends on it: if it changes (to be shown, say), the copy is made again.
+        child.noteDependedOn();
+        next = null;
+      } else next = levelOf(child, lod);
+    }
+    if (!out && next === child) continue;
+    if (!out) {
+      // The first child that's left out or changed: from here on it's a copy, with the children before as they are.
+      out = m.shallowCopy();
+      for (let j = 0; j < i; j++) keepChild(out, list[j]);
+    }
+    if (next === child) keepChild(out, child);
+    else if (next) out.appendKept(next, true);
+  }
+  const result = out ?? m;
+  m.keepLevelCopy(lod, result);
+  return result;
+}
+
+/** A child of the drawing given, unchanged, in a copy: a mark as it is (still the drawing's); text as new text. */
+function keepChild(out: Mark, child: Mark | TextMark): void {
+  if (child instanceof Mark) out.appendKept(child, false);
+  else out.append(child.textContent);
+}
+
+/**
+ * The finest level a drawing could be at once the view is at this zoom,
+ * whichever way it got there (lodFor's margin keeps the level it had a
+ * little past each threshold): what to build it at (buildAt) so it never
+ * has to be built again for more detail when it gets there.
+ */
+export function finestLodAt(zoom: number): Lod {
+  return lodAt(zoom / (1 - MARGIN));
+}
+
+/**
+ * Build a drawing at a level: marks the level leaves out whatever their
+ * place (text from blocks on; small text from reduced on) are never made,
+ * so building a big grid zoomed out doesn't make its 430,000 texts only to
+ * leave them out. What depends on where a mark is (a pointer's name, the
+ * inside of a box in overview) is still made and left out by atLevel, so
+ * atLevel(buildAt(lod, build), lod) is atLevel(build(), lod), mark for
+ * mark (lod.test.ts). The drawing is drawn at this level or one with less
+ * detail; drawn with more, it must be built again (builtAt).
+ */
+export function buildAt(lod: Lod, build: () => Mark): Mark {
+  const drawing = buildingWithout(omitRules[lod], build);
+  built.set(drawing, lod);
+  return drawing;
+}
+
+/** The level a drawing was built at (buildAt): 0, full, unless it was built at another. */
+export function builtAt(drawing: Mark): Lod {
+  return built.get(drawing) ?? 0;
+}
+const built = new WeakMap<Mark, Lod>();
+
+const omitRules: (OmitRule | null)[] = [
+  null,
+  (_tag, classes) => hasSmallText(classes),
+  (tag, classes) => tag === "text" || hasSmallText(classes),
+  (tag, classes) => tag === "text" || hasSmallText(classes) || hasClass(classes, "arrow-tops"),
+  (tag, classes) => tag === "text" || hasSmallText(classes) || hasClass(classes, "arrow-tops"),
+];

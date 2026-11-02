@@ -12,7 +12,7 @@ import { type MemoryScene, nodeKey } from "../../scene/memoryScene";
 import { arrowStyle } from "../arrowStyle";
 import { arrowMarkers, FONT, SMALL, s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
-import type { Landmark } from "../lod";
+import { buildAt, type Landmark } from "../lod";
 import { findFreeY, type Rect, roundedPath, routeEdges, runsBehind, simpleRoutes } from "../route";
 import { onSpacingChange, spacing } from "../spacing";
 import { RectGrid } from "../spatial";
@@ -109,9 +109,10 @@ export function memoryDrawing(scene: MemoryScene, layout: MemoryLayout = { posit
 }
 
 function layoutMemory(scene: MemoryScene, layout: MemoryLayout): Mark {
-  layout.boxes?.begin();
+  const level = layout.level ?? 0;
+  layout.boxes?.begin(level);
   try {
-    return layoutMemoryOnce(scene, layout);
+    return buildAt(level, () => layoutMemoryOnce(scene, layout));
   } finally {
     layout.boxes?.end();
   }

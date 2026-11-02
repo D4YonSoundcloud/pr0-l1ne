@@ -23,7 +23,7 @@ import { perf } from "../perf";
 import type { AutoFit } from "../scene/renderer";
 import { type Enter, snapshot, transition as transition_ } from "./animate";
 import { easing as easeOf } from "./canvas/motion";
-import { type Landmark, type Lod, lodFor } from "./lod";
+import { finestLodAt, type Landmark, type Lod, lodFor } from "./lod";
 
 export interface Point {
   x: number;
@@ -446,6 +446,22 @@ export class Viewport {
   /** The level of detail now (lod.ts). */
   get lod(): Lod {
     return this.level;
+  }
+
+  /**
+   * The level a new drawing of this size will be drawn at: with Auto-fit
+   * on, the finest the level could be once it's fitted (lod.ts
+   * finestLodAt); otherwise the level now. What to build it at (buildAt).
+   */
+  levelFor(size: { width: number; height: number }): Lod {
+    if (perf.noLod || !this.autoFit.on) return this.level;
+    // As refit() will fit it: "Zoom out only" fits the biggest seen so far.
+    const keep = this.autoFit.mode === "out" && !this.snugNext;
+    const w = keep ? Math.max(this.fitSize.w, size.width) : size.width;
+    const h = keep ? Math.max(this.fitSize.h, size.height) : size.height;
+    const z = this.fitZoom(w, h);
+    // Not laid out yet: the fit isn't known, so in full.
+    return z === null ? 0 : finestLodAt(z);
   }
 
   /**

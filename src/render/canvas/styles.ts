@@ -139,7 +139,10 @@ function ownKey(el: DrawingNode): string {
   let key = `${el.localName}.${el.getAttribute("class") ?? ""}`;
   // A mark's attributes, read in place.
   if (el instanceof Mark) {
-    for (const [name, value] of el.attributeEntries()) if (IS_PRESENTATION.has(name)) key += `|${name}=${value}`;
+    for (let i = 0; i < el.attributeCount; i++) {
+      const name = el.attributeName(i);
+      if (IS_PRESENTATION.has(name)) key += `|${name}=${el.attributeValue(i)}`;
+    }
     return key;
   }
   // Through the element's few attributes, not a lookup for every possible one.

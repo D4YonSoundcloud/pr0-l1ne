@@ -475,6 +475,5 @@ export function heatCell(el: Mark | void, value: Value, range: { min: number; ma
   if (!el || !range) return;
   const level = heatLevel(value, range);
   if (level === null) return;
-  el.classList.add("heat");
-  el.classList.add(`heat-${level}`);
+  el.classList.add("heat", `heat-${level}`);
 }

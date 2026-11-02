@@ -75,7 +75,27 @@ for (const renderer of ["svg", "canvas"] as const) {
     await zoomOut(page, 0);
     await expect(memory).toHaveAttribute("data-lod", "0");
     await expect(memory.locator(".viewport-landmarks")).toBeHidden();
-    if (renderer === "svg") expect(await memory.locator(".viewport-layer svg text").count()).toBeGreaterThan(0);
+    // Built with less detail while zoomed out, the step is laid out again once the zoom settles.
+    await expect(memory).toHaveAttribute("data-built-lod", "0");
+    if (renderer === "svg")
+      await expect.poll(() => memory.locator(".viewport-layer svg text").count()).toBeGreaterThan(0);
+  });
+
+  test(`${renderer}: zoomed out, a step is built without what the level hides; zoomed in, in full again`, async ({
+    page,
+  }) => {
+    await open(page, renderer);
+    const memory = page.locator("#memory");
+    await zoomOut(page, 7); // 21%: blocks
+    await expect(memory).toHaveAttribute("data-lod", "2");
+    await page.keyboard.press("ArrowRight"); // a step drawn at blocks
+    await expect(memory).toHaveAttribute("data-built-lod", "2");
+    await zoomOut(page, 3); // 51%: reduced, more than it was built with
+    await expect(memory).toHaveAttribute("data-built-lod", "1");
+    await zoomOut(page, 0);
+    await expect(memory).toHaveAttribute("data-built-lod", "0");
+    if (renderer === "svg")
+      await expect.poll(() => memory.locator(".viewport-layer svg text").count()).toBeGreaterThan(0);
   });
 }
 

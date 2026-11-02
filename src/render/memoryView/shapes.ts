@@ -5,6 +5,7 @@
  * Shapes measure with arithmetic (see draw.ts), so the layout can place
  * everything before anything is drawn.
  */
+
 import type { DrawAs, MemoryScene } from "../../scene/memoryScene";
 import type { Pointer } from "../../scene/pointers";
 import type { CompareSpan, WindowSpan } from "../../scene/windows";
@@ -14,6 +15,7 @@ import { formatBytes, type StepSizes } from "../../trace/memory";
 import type { HeapObject, Step, Value } from "../../trace/types";
 import { s, uiTextWidth } from "../draw";
 import type { Mark } from "../drawing";
+import type { Lod } from "../lod";
 import type { BoxCache } from "./boxCache";
 import type { CellCache } from "./cellCache";
 
@@ -57,6 +59,8 @@ export interface MemoryLayout {
   boxes?: BoxCache;
   /** Too small to read (zoomed out to outline): arrows straight or with one bend, not routed (route.ts simpleRoutes). */
   simpleArrows?: boolean;
+  /** The level of detail to build it at (lod.ts buildAt): what the level leaves out isn't made. Full if not given. */
+  level?: Lod;
 }
 
 /** Room around a box nested in a cell or row. */

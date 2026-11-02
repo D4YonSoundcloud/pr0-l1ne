@@ -61,18 +61,26 @@ export class BoxCache {
   private entries = new Map<string, Entry>();
   private next = new Map<string, Entry>();
   private epoch = epoch;
+  /** The least detail any kept box (or cell) was built with. */
+  private level = 0;
   /** How many boxes the last layout drew, and how many it kept (for tests and the benchmarks). */
   stats = { drawn: 0, kept: 0 };
   /** Cells kept inside boxes drawn again (cellCache.ts). */
   readonly cells = new CellCache();
 
-  /** A layout begins: what isn't used in it is forgotten after it. */
-  begin(): void {
-    if (this.epoch !== epoch) {
+  /**
+   * A layout begins, built at this level of detail (lod.ts buildAt): what
+   * isn't used in it is forgotten after it. Boxes built with more detail
+   * are kept for a layout with less (atLevel leaves out the rest); not the
+   * other way.
+   */
+  begin(level = 0): void {
+    if (this.epoch !== epoch || level < this.level) {
       this.entries.clear();
       this.cells.clear();
       this.epoch = epoch;
-    }
+      this.level = level;
+    } else this.level = Math.max(this.level, level);
     this.next = new Map();
     this.stats = { drawn: 0, kept: 0 };
     this.cells.begin();

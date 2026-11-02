@@ -50,7 +50,11 @@ and scene (rows and what's known about them kept, `src/trace/loopHistory.ts`,
 `src/scene/loopScene.ts`), and laying it out (rows kept,
 `src/render/loopView/rowCache.ts`); **in view** draws only the rows a
 window 900 pixels tall shows at 100%, at the bottom of the history, with a
-window's height more each way.
+window's height more each way. **Loop first draw zoomed out** is drawing
+the whole history from nothing at outline (as Auto-fit puts a tall one),
+and what's drawn there: before, laid out in full and copied without what
+the level hides; now, built at the level (`src/render/lod.ts` `buildAt`)
+and drawn there.
 
 ## In the browser
 

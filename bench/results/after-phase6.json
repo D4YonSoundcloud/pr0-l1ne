@@ -1,0 +1,401 @@
+[
+  {
+    "program": "1-long-list.js",
+    "trace": {
+      "steps": 5021,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 1001,
+      "meanHeap": 419,
+      "ran": 6534,
+      "ms": 6067.880684,
+      "parseMs": 0,
+      "size": 21603467
+    },
+    "hintsMs": 1.0225140000002284,
+    "stages": {
+      "memory.scene.arrows": 3.3473149999999805,
+      "memory.route": 0.48704800000086834,
+      "memory.layout.arrows": 43.38657299999977,
+      "memory.next.arrows": 30.65782500000023,
+      "memory.scene.nested": 3.1899630000007164,
+      "memory.layout.nested": 17.44616700000006,
+      "memory.next.nested": 18.698389000001043,
+      "loop.history": 0.8142409999982192,
+      "loop.scene": 113.98906499999975,
+      "loop.layout": 7.868922999999995,
+      "loop.full": 14.425755000000208,
+      "loop.outlineBefore": 18.118412000001626,
+      "loop.outline": 19.118162000000666,
+      "loop.nextScene": 17.413801999999123,
+      "loop.next": 1.3170289999998204,
+      "loop.inView": 6.924838999999338
+    },
+    "marks": {
+      "arrows": 21109,
+      "nested": 12529
+    }
+  },
+  {
+    "program": "1-long-list.py",
+    "trace": {
+      "steps": 732,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 2001,
+      "meanHeap": 1632,
+      "ran": 12559,
+      "ms": 6015.475662,
+      "parseMs": 307.6421739999987,
+      "size": 897767
+    },
+    "hintsMs": 0.04944699999941804,
+    "stages": {
+      "memory.scene.arrows": 12.062511000000086,
+      "memory.route": 1.2055070000023989,
+      "memory.layout.arrows": 92.17794400000275,
+      "memory.next.arrows": 57.54390200000125,
+      "memory.scene.nested": 10.32129999999961,
+      "memory.layout.nested": 38.77220899999884,
+      "memory.next.nested": 17.83936999999787,
+      "loop.history": 0.22482600000148523,
+      "loop.scene": 98.00079499999993,
+      "loop.layout": 1.459113000000798,
+      "loop.full": 24.051525999999285,
+      "loop.outlineBefore": 48.54822899999999,
+      "loop.outline": 37.63763299999846,
+      "loop.nextScene": 15.235839000000851,
+      "loop.next": 0.9711119999992661,
+      "loop.inView": 5.956300000001647
+    },
+    "marks": {
+      "arrows": 42113,
+      "nested": 24963
+    }
+  },
+  {
+    "program": "2-big-tree.js",
+    "trace": {
+      "steps": 12847,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 1027,
+      "meanHeap": 59,
+      "ran": 71703,
+      "ms": 2546.1292299999986,
+      "parseMs": 0,
+      "size": 13828275
+    },
+    "hintsMs": 0.05015000000275904,
+    "stages": {
+      "memory.scene.arrows": 0.22782500000175787,
+      "memory.route": 0.08406800000011572,
+      "memory.layout.arrows": 2.883025999999518,
+      "memory.next.arrows": 0.6978360000030079,
+      "memory.scene.nested": 0.17903800000203773,
+      "memory.layout.nested": 1.025164999999106,
+      "memory.next.nested": 0.9951430000000983,
+      "loop.history": 0.008592000001954148,
+      "loop.scene": 31.146169999999984,
+      "loop.layout": 1.7351979999984906,
+      "loop.full": 8.586679000000004,
+      "loop.outlineBefore": 9.349119000002247,
+      "loop.outline": 4.4387470000001485,
+      "loop.nextScene": 3.114234000000579,
+      "loop.next": 0.6539290000000619,
+      "loop.inView": 0.9924060000012105
+    },
+    "marks": {
+      "arrows": 27441,
+      "nested": 19181
+    }
+  },
+  {
+    "program": "2-big-tree.py",
+    "trace": {
+      "steps": 12843,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 1027,
+      "meanHeap": 58,
+      "ran": 71700,
+      "ms": 6136.679564,
+      "parseMs": 261.8300390000004,
+      "size": 11451465
+    },
+    "hintsMs": 0.03739599999971688,
+    "stages": {
+      "memory.scene.arrows": 0.16317999999955646,
+      "memory.route": 0.043513000000530155,
+      "memory.layout.arrows": 3.4263219999993453,
+      "memory.next.arrows": 0.47297400000024936,
+      "memory.scene.nested": 0.13307199999690056,
+      "memory.layout.nested": 0.8120230000022275,
+      "memory.next.nested": 0.8043139999972482,
+      "loop.history": 0.007099999998899875,
+      "loop.scene": 43.75297800000044,
+      "loop.layout": 1.588937000000442,
+      "loop.full": 2.3074779999988095,
+      "loop.outlineBefore": 3.137245999998413,
+      "loop.outline": 2.2639320000016596,
+      "loop.nextScene": 3.054187000001548,
+      "loop.next": 0.5887179999990622,
+      "loop.inView": 1.0781779999997525
+    },
+    "marks": {
+      "arrows": 27441,
+      "nested": 19181
+    }
+  },
+  {
+    "program": "3-big-grid.js",
+    "trace": {
+      "steps": 2813,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 61,
+      "meanHeap": 60,
+      "ran": 10689,
+      "ms": 1611.5862450000022,
+      "parseMs": 0,
+      "size": 5585747
+    },
+    "hintsMs": 943.5545450000027,
+    "stages": {
+      "memory.scene.arrows": 2.305527999997139,
+      "memory.route": 0.035209000001486856,
+      "memory.layout.arrows": 34.94309300000168,
+      "memory.next.arrows": 18.056711999997788,
+      "memory.scene.nested": 1.7478590000027907,
+      "memory.layout.nested": 21.833395000001474,
+      "memory.next.nested": 12.419891999998072,
+      "loop.history": 1.117685999997775,
+      "loop.scene": 105.14195599999948,
+      "loop.layout": 514.3146669999987,
+      "loop.full": 2923.7543650000007,
+      "loop.outlineBefore": 3815.6935280000034,
+      "loop.outline": 1803.9512130000003,
+      "loop.nextScene": 4.1408229999942705,
+      "loop.next": 36.96433000000252,
+      "loop.inView": 37.303061999999045
+    },
+    "marks": {
+      "arrows": 11029,
+      "nested": 11018
+    }
+  },
+  {
+    "program": "3-big-grid.py",
+    "trace": {
+      "steps": 2752,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 61,
+      "meanHeap": 60,
+      "ran": 10628,
+      "ms": 2337.395151,
+      "parseMs": 89.36835000000428,
+      "size": 4759312
+    },
+    "hintsMs": 1775.0231829999975,
+    "stages": {
+      "memory.scene.arrows": 1.7037569999956759,
+      "memory.route": 0.04680299999017734,
+      "memory.layout.arrows": 26.95431600000302,
+      "memory.next.arrows": 22.075576999995974,
+      "memory.scene.nested": 1.9918849999958184,
+      "memory.layout.nested": 22.865912000008393,
+      "memory.next.nested": 15.907623999999487,
+      "loop.history": 0.6844010000058915,
+      "loop.scene": 91.7182790000079,
+      "loop.layout": 39.861693999991985,
+      "loop.full": 2174.567697999999,
+      "loop.outlineBefore": 3131.502636999998,
+      "loop.outline": 1814.1295190000092,
+      "loop.nextScene": 3.8732170000002952,
+      "loop.next": 24.144317999991472,
+      "loop.inView": 39.869877000004635
+    },
+    "marks": {
+      "arrows": 11029,
+      "nested": 11018
+    }
+  },
+  {
+    "program": "4-dense-graph.js",
+    "trace": {
+      "steps": 6538,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 64,
+      "meanHeap": 63,
+      "ran": 27565,
+      "ms": 2453.733023000008,
+      "parseMs": 0,
+      "size": 11769646
+    },
+    "hintsMs": 0.8660479999962263,
+    "stages": {
+      "memory.scene.arrows": 1.361404000010225,
+      "memory.route": 0.4383279999892693,
+      "memory.layout.arrows": 6.913512999992236,
+      "memory.next.arrows": 2.8405110000021523,
+      "memory.scene.nested": 0.6382169999997132,
+      "memory.layout.nested": 2.371583999993163,
+      "memory.next.nested": 2.451174000001629,
+      "loop.history": 4.755951000013738,
+      "loop.scene": 122.57517100000405,
+      "loop.layout": 15.844782000000123,
+      "loop.full": 119.00946300000942,
+      "loop.outlineBefore": 163.39048100000946,
+      "loop.outline": 96.9494369999884,
+      "loop.nextScene": 12.61820599999919,
+      "loop.next": 4.954190000004019,
+      "loop.inView": 16.627183000004152
+    },
+    "marks": {
+      "arrows": 3401,
+      "nested": 2701
+    }
+  },
+  {
+    "program": "4-dense-graph.py",
+    "trace": {
+      "steps": 5847,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 64,
+      "meanHeap": 59,
+      "ran": 17556,
+      "ms": 3593.870736,
+      "parseMs": 160.924491999991,
+      "size": 8170585
+    },
+    "hintsMs": 0.045083000004524365,
+    "stages": {
+      "memory.scene.arrows": 0.5969420000037644,
+      "memory.route": 0.3755189999938011,
+      "memory.layout.arrows": 8.836498000004212,
+      "memory.next.arrows": 5.1892360000056215,
+      "memory.scene.nested": 0.8121069999906467,
+      "memory.layout.nested": 2.8582490000117105,
+      "memory.next.nested": 2.9121459999878425,
+      "loop.history": 1.5696009999956004,
+      "loop.scene": 86.52394100000674,
+      "loop.layout": 12.782340999998269,
+      "loop.full": 99.06488499999978,
+      "loop.outlineBefore": 129.8717949999991,
+      "loop.outline": 90.24198700000125,
+      "loop.nextScene": 4.942218999989564,
+      "loop.next": 3.3035669999953825,
+      "loop.inView": 12.788670000009006
+    },
+    "marks": {
+      "arrows": 3406,
+      "nested": 2706
+    }
+  },
+  {
+    "program": "5-deep-recursion.js",
+    "trace": {
+      "steps": 1248,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 250,
+      "meanHeap": 125,
+      "ran": 1248,
+      "ms": 383.3759979999886,
+      "parseMs": 0,
+      "size": 2188516
+    },
+    "hintsMs": 0.0411350000067614,
+    "stages": {
+      "memory.scene.arrows": 1.308218999998644,
+      "memory.route": 6.9364280000154395,
+      "memory.layout.arrows": 31.310817000019597,
+      "memory.next.arrows": 32.0545020000136,
+      "memory.scene.nested": 1.9775059999956284,
+      "memory.layout.nested": 29.446790999994846,
+      "memory.next.nested": 33.0032760000031,
+      "loop.history": 0.015278000006219372
+    },
+    "marks": {
+      "arrows": 11772,
+      "nested": 11751
+    }
+  },
+  {
+    "program": "5-deep-recursion.py",
+    "trace": {
+      "steps": 3218,
+      "truncated": false,
+      "stoppedBy": null,
+      "maxHeap": 402,
+      "meanHeap": 301,
+      "ran": 3218,
+      "ms": 5432.651082,
+      "parseMs": 331.9236600000004,
+      "size": 13773508
+    },
+    "hintsMs": 0.04204599998774938,
+    "stages": {
+      "memory.scene.arrows": 2.784378000011202,
+      "memory.route": 10.807280999986688,
+      "memory.layout.arrows": 53.46405899999081,
+      "memory.next.arrows": 37.30150299999514,
+      "memory.scene.nested": 2.1385909999953583,
+      "memory.layout.nested": 28.850577000004705,
+      "memory.next.nested": 36.62069700000575,
+      "loop.history": 0.11731200001668185,
+      "loop.scene": 26.51605199999176,
+      "loop.layout": 0.921740999998292,
+      "loop.full": 6.031508999993093,
+      "loop.outlineBefore": 6.596707999997307,
+      "loop.outline": 10.914115999999922,
+      "loop.nextScene": 1.3231090000190306,
+      "loop.next": 0.648114000010537,
+      "loop.inView": 0.7411070000089239
+    },
+    "marks": {
+      "arrows": 18925,
+      "nested": 18915
+    }
+  },
+  {
+    "program": "6-everything.py",
+    "trace": {
+      "steps": 4497,
+      "truncated": true,
+      "stoppedBy": "time",
+      "maxHeap": 1583,
+      "meanHeap": 315,
+      "ran": 4498,
+      "ms": 6079.959762,
+      "parseMs": 511.3452600000019,
+      "size": 5328167
+    },
+    "hintsMs": 0.042738999996799976,
+    "stages": {
+      "memory.scene.arrows": 0.22635599999921396,
+      "memory.route": 0.017044999985955656,
+      "memory.layout.arrows": 0.5878910000028554,
+      "memory.next.arrows": 41.35996199998772,
+      "memory.scene.nested": 0.13821699999971315,
+      "memory.layout.nested": 0.16740100001334213,
+      "memory.next.nested": 11.396015000005718,
+      "loop.history": 0.46682900001178496,
+      "loop.scene": 58.52753199997824,
+      "loop.layout": 7.9353059999994,
+      "loop.full": 13.259519000013825,
+      "loop.outlineBefore": 20.303122999990592,
+      "loop.outline": 14.295592000009492,
+      "loop.nextScene": 5.405765000003157,
+      "loop.next": 1.5787190000119153,
+      "loop.inView": 7.806475000019418
+    },
+    "marks": {
+      "arrows": 48388,
+      "nested": 33569
+    }
+  }
+]

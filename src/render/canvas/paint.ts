@@ -16,7 +16,7 @@
  * and <title> tooltips. Groups keep the data-* attributes the animation
  * and dragging work from.
  */
-import { type DrawingNode, Mark } from "../drawing";
+import { type DrawingNode, Mark, startSignatures } from "../drawing";
 import { parseColor, type Rgba } from "./color";
 import { endDirection, type PathCommand, parsePath, pathBounds } from "./path";
 import type { ComputedPaint, StyleSource } from "./styles";
@@ -295,33 +295,29 @@ function hasClass(classes: string, name: string): boolean {
  * element's style (ProbeStyles). Clear it when the styles are cleared.
  */
 export class PaintCache {
-  /** By the chain of styles reaching the group, then by its marks' signature (Mark.signature). */
+  /** By the chain of styles reaching the group, then by its marks' signature number (Mark.signatureId). */
   groups = new GroupMap();
+  /** The generation of signature numbers the groups are kept by (drawing.ts startSignatures). */
+  generation = -1;
 
   clear(): void {
     this.groups = new GroupMap();
   }
 }
 
-/**
- * Groups by their style chain's number and their signature. Two levels,
- * not one "<number><signature>" string: a mark's signature is the same
- * string object every time it's asked (Mark.signature), whose hash the
- * engine works out once, where a new string made from it would be hashed
- * all through again, every paint.
- */
+/** Groups by their style chain's number, then their signature number. */
 class GroupMap {
-  private readonly byContext = new Map<number, Map<string, PaintGroup>>();
+  private readonly byContext = new Map<number, Map<number, PaintGroup>>();
 
-  get(context: number, sig: string): PaintGroup | undefined {
+  get(context: number, sig: number): PaintGroup | undefined {
     return this.byContext.get(context)?.get(sig);
   }
 
-  has(context: number, sig: string): boolean {
+  has(context: number, sig: number): boolean {
     return this.byContext.get(context)?.has(sig) ?? false;
   }
 
-  set(context: number, sig: string, group: PaintGroup): void {
+  set(context: number, sig: number, group: PaintGroup): void {
     let inner = this.byContext.get(context);
     if (!inner) {
       inner = new Map();
@@ -343,12 +339,18 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
   // Groups whose paint is kept: found while reading styles, so what's
   // inside them isn't read.
   const kept = new Map<DrawingNode, PaintGroup>();
-  const keys = new Map<DrawingNode, { context: number; sig: string }>();
+  const keys = new Map<DrawingNode, { context: number; sig: number }>();
   const next = new GroupMap();
+  // Numbers from an older generation mean nothing now.
+  const generation = startSignatures();
+  if (cache && cache.generation !== generation) {
+    cache.clear();
+    cache.generation = generation;
+  }
   const skip = cache
     ? (el: DrawingNode, context: number) => {
         if (el === svg || el.localName !== "g" || !(el instanceof Mark) || !isLayer(el)) return false;
-        const sig = el.signature();
+        const sig = el.signatureId();
         const group = cache.groups.get(context, sig);
         // Two identical groups in one drawing: the second paints its own.
         if (group && !next.has(context, sig)) {

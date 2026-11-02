@@ -19,6 +19,9 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+/** The children of a mark with none (Mark.childNodes): one list for them all, never changed. */
+const NO_CHILDREN: readonly never[] = Object.freeze([]);
+
 /** A run of text in a mark (a DOM text node). */
 export class TextMark {
   readonly nodeType = 3;
@@ -48,7 +51,10 @@ class MarkClasses {
     // The layout's own classes are single-spaced and never repeat: no need for the regex then.
     const simple = !/[\t\n\f\r]| {2}|^ | $/.test(value);
     const tokens = simple ? value.split(" ") : value.split(/[\t\n\f\r ]+/).filter(Boolean);
-    return simple && tokens.length < 2 ? tokens : [...new Set(tokens)];
+    // Repeats go, as in the DOM; there are almost never any, and a mark has few classes.
+    for (let i = 1; i < tokens.length; i++)
+      for (let j = 0; j < i; j++) if (tokens[i] === tokens[j]) return [...new Set(tokens)];
+    return tokens;
   }
 
   private set(tokens: string[]): void {
@@ -91,8 +97,10 @@ class MarkClasses {
 export class Mark {
   readonly nodeType = 1;
   parentElement: Mark | null = null;
-  readonly childNodes: (Mark | TextMark)[] = [];
-  private readonly attrs = new Map<string, string>();
+  /** Its children. Most marks have none, and share one empty list until they get one (kids()). */
+  childNodes: readonly (Mark | TextMark)[] = NO_CHILDREN;
+  /** Attributes in order, as name, value, name, value...: lighter than a Map for the few a mark has. */
+  private attrs: string[] = [];
   /** Properties set with style.setProperty, in order (toSvg sets them the same way). */
   private styleProps: [string, string][] | null = null;
   private classes: MarkClasses | null = null;
@@ -100,6 +108,19 @@ export class Mark {
   isShared = false;
   /** signature(), kept until this mark or one in it changes. */
   private sig: string | null = null;
+  /** signatureId(), and the generation of numbers it's from; kept like sig. */
+  private sid = 0;
+  private sidGeneration = -1;
+  /** atLevel()'s result at each level (lod.ts): a copy, or this mark itself when it loses nothing. Kept like sig. */
+  private levels: (Mark | undefined)[] | null = null;
+  /** The levels at which it's its own result, as bits (most marks: no array to make for them). */
+  private selfLevels = 0;
+  /**
+   * Something is worked out from this mark and kept (a signature, a copy at
+   * a level) here or in a mark it's in: changed() must forget it, here and
+   * above. A mark whose parent keeps something always does too.
+   */
+  private cached = false;
 
   constructor(readonly localName: string) {}
 
@@ -113,64 +134,181 @@ export class Mark {
   signature(): string {
     if (this.sig !== null) return this.sig;
     let out = `<${this.localName}`;
-    for (const [name, value] of this.attrs) out += ` ${name}=${value.length}:${value}`;
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i += 2) out += ` ${attrs[i]}=${attrs[i + 1].length}:${attrs[i + 1]}`;
     out += ">";
     for (const child of this.childNodes) {
       out += child instanceof Mark ? child.signature() : `"${child.textContent.length}:${child.textContent}`;
     }
     out += "/";
     this.sig = out;
+    this.cached = true;
     return out;
   }
 
-  /** This mark changed: it, and every mark it's in, works out its signature again. (For TextMark too.) */
+  /**
+   * The signature as a number: two marks with the same number draw the
+   * same, as with signature(). Each mark's number is looked up from its own
+   * tag, attributes and text, and its children's numbers, so working it out
+   * costs the same at any depth, where signature()'s string holds the whole
+   * subtree. Numbers are only comparable within a generation
+   * (signatureGeneration): the table of them is started again when it's
+   * grown too big, between drawings (startSignatures).
+   */
+  signatureId(): number {
+    if (this.sid !== 0 && this.sidGeneration === generation) return this.sid;
+    let key = this.localName;
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i += 2) key += ` ${attrs[i]}=${attrs[i + 1].length}:${attrs[i + 1]}`;
+    key += ">";
+    const children = this.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child instanceof Mark) key += `#${child.signatureId()}`;
+      else {
+        const text = child.textContent;
+        key += `"${text.length}:${text}`;
+      }
+    }
+    let id = signatureIds.get(key);
+    if (id === undefined) {
+      id = signatureIds.size + 1;
+      signatureIds.set(key, id);
+    }
+    this.sid = id;
+    this.sidGeneration = generation;
+    this.cached = true;
+    return id;
+  }
+
+  /** atLevel's result at a level, if it's kept (lod.ts). */
+  levelCopy(level: number): Mark | undefined {
+    if (this.selfLevels & (1 << level)) return this;
+    return this.levels?.[level];
+  }
+
+  /** Keep atLevel's result at a level. */
+  keepLevelCopy(level: number, copy: Mark): void {
+    if (copy === this) this.selfLevels |= 1 << level;
+    else {
+      this.levels ??= [];
+      this.levels[level] = copy;
+    }
+    this.cached = true;
+  }
+
+  /** What's worked out above from this mark depends on it (lod.ts: a mark a copy leaves out). */
+  noteDependedOn(): void {
+    this.cached = true;
+  }
+
+  /** This mark changed: it, and every mark it's in, forget what was worked out from them. (For TextMark too.) */
   changed(): void {
-    // A mark without one has no ancestor with one either (an ancestor's is made from its children's).
-    for (let m: Mark | null = this; m && m.sig !== null; m = m.parentElement) m.sig = null;
+    // A mark keeping nothing has nothing kept above it either (what a mark keeps is made from its children's).
+    for (let m: Mark | null = this; m?.cached; m = m.parentElement) {
+      m.cached = false;
+      m.sig = null;
+      m.sid = 0;
+      m.levels = null;
+      m.selfLevels = 0;
+    }
+  }
+
+  /** A new mark with this one's tag and attributes (inline styles too), and no children. */
+  shallowCopy(): Mark {
+    const out = new Mark(this.localName);
+    out.attrs = this.attrs.slice();
+    if (this.styleProps) out.styleProps = this.styleProps.map(([n, v]) => [n, v]);
+    return out;
+  }
+
+  /**
+   * Add a child without taking it from where it is (lod.ts's copies): a
+   * mark of another drawing stays that drawing's (`adopt` false), or comes
+   * to this one (true), as appendShared does.
+   */
+  appendKept(child: Mark | TextMark, adopt: boolean): void {
+    if (adopt) {
+      child.parentElement = this;
+      if (child instanceof Mark) child.isShared = true;
+    }
+    this.kids().push(child);
+  }
+
+  /** Its own list of children, to change. */
+  private kids(): (Mark | TextMark)[] {
+    if (this.childNodes === NO_CHILDREN) this.childNodes = [];
+    return this.childNodes as (Mark | TextMark)[];
   }
 
   // -- attributes ---------------------------------------------------------------
 
+  /** Where an attribute's name is in attrs, or -1. */
+  private at(name: string): number {
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i += 2) if (attrs[i] === name) return i;
+    return -1;
+  }
+
   getAttribute(name: string): string | null {
-    return this.attrs.get(name) ?? null;
+    const i = this.at(name);
+    return i < 0 ? null : this.attrs[i + 1];
   }
 
   hasAttribute(name: string): boolean {
-    return this.attrs.has(name);
+    return this.at(name) >= 0;
   }
 
   /** Like the DOM: an attribute already set keeps its place; a new one goes last. */
   setAttribute(name: string, value: string | number): void {
     const text = String(value);
-    if (this.attrs.get(name) === text) return;
-    this.attrs.set(name, text);
+    const i = this.at(name);
+    if (i >= 0) {
+      if (this.attrs[i + 1] === text) return;
+      this.attrs[i + 1] = text;
+    } else this.attrs.push(name, text);
     this.changed();
   }
 
   /** setAttribute for a mark being made (mark()): nothing has asked for its signature yet. */
   setOwnAttribute(name: string, value: string): void {
-    this.attrs.set(name, value);
+    const i = this.at(name);
+    if (i >= 0) this.attrs[i + 1] = value;
+    else this.attrs.push(name, value);
   }
 
   removeAttribute(name: string): void {
-    if (!this.attrs.delete(name)) return;
+    const i = this.at(name);
+    if (i < 0) return;
+    this.attrs.splice(i, 2);
     this.changed();
     if (name === "style") this.styleProps = null;
   }
 
   /** Every attribute, in order. */
   get attributes(): { name: string; value: string }[] {
-    return [...this.attrs].map(([name, value]) => ({ name, value }));
+    const out: { name: string; value: string }[] = [];
+    for (let i = 0; i < this.attrs.length; i += 2) out.push({ name: this.attrs[i], value: this.attrs[i + 1] });
+    return out;
   }
 
   /** How many attributes it has. */
   get attributeCount(): number {
-    return this.attrs.size;
+    return this.attrs.length / 2;
   }
 
-  /** The attributes as [name, value] pairs, without copying (for toSvg and the style probe). */
-  attributeEntries(): IterableIterator<[string, string]> {
-    return this.attrs.entries();
+  /** The nth attribute's name and value, in order (for walking them without making pairs: toSvg, the patcher). */
+  attributeName(n: number): string {
+    return this.attrs[2 * n];
+  }
+  attributeValue(n: number): string {
+    return this.attrs[2 * n + 1];
+  }
+
+  /** The attributes as [name, value] pairs, in order. */
+  *attributeEntries(): IterableIterator<[string, string]> {
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i += 2) yield [attrs[i], attrs[i + 1]];
   }
 
   get id(): string {
@@ -191,7 +329,10 @@ export class Mark {
         if (at >= 0) this.styleProps[at][1] = value;
         else this.styleProps.push([name, value]);
         // The style attribute appears where the DOM would put it: last, on the first property.
-        this.attrs.set("style", this.styleProps.map(([n, v]) => `${n}: ${v};`).join(" "));
+        const text = this.styleProps.map(([n, v]) => `${n}: ${v};`).join(" ");
+        const i = this.at("style");
+        if (i >= 0) this.attrs[i + 1] = text;
+        else this.attrs.push("style", text);
         this.changed();
       },
     };
@@ -224,8 +365,8 @@ export class Mark {
   /** Add children at the end; strings become text. Falsy children are skipped (as s() does). */
   append(...children: Child[]): void {
     for (const child of children) {
-      if (child === null || child === undefined || child === false) continue;
-      this.childNodes.push(this.adopt(child));
+      if (child === null || child === undefined || child === false || child === OMITTED) continue;
+      this.kids().push(this.adopt(child));
     }
     this.changed();
   }
@@ -238,18 +379,19 @@ export class Mark {
    */
   appendShared(...children: Mark[]): void {
     for (const child of children) {
+      if (child === OMITTED) continue;
       child.isShared = true;
       child.parentElement = this;
-      this.childNodes.push(child);
+      this.kids().push(child);
     }
     this.changed();
   }
 
   prepend(...children: Child[]): void {
     const nodes = children
-      .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false)
+      .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false && c !== OMITTED)
       .map((c) => this.adopt(c));
-    this.childNodes.unshift(...nodes);
+    this.kids().unshift(...nodes);
     this.changed();
   }
 
@@ -258,9 +400,9 @@ export class Mark {
     const parent = this.parentElement;
     if (!parent) return;
     const nodes = children
-      .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false)
+      .filter((c): c is Mark | string => c !== null && c !== undefined && c !== false && c !== OMITTED)
       .map((c) => parent.adopt(c));
-    parent.childNodes.splice(parent.childNodes.indexOf(this), 0, ...nodes);
+    parent.kids().splice(parent.childNodes.indexOf(this), 0, ...nodes);
     parent.changed();
   }
 
@@ -268,7 +410,7 @@ export class Mark {
     const parent = this.parentElement;
     if (!parent) return;
     const at = parent.childNodes.indexOf(this);
-    if (at >= 0) parent.childNodes.splice(at, 1);
+    if (at >= 0) parent.kids().splice(at, 1);
     parent.changed();
     this.parentElement = null;
   }
@@ -300,7 +442,7 @@ function find(root: Mark, compounds: Compound[], first: boolean): Mark[] {
   const out: Mark[] = [];
   // A stack of children lists still to go through, walked by hand: a
   // recursive generator costs a step per level for every mark it yields.
-  const lists: (Mark | TextMark)[][] = [root.childNodes];
+  const lists: (readonly (Mark | TextMark)[])[] = [root.childNodes];
   const at: number[] = [0];
   while (lists.length) {
     const top = lists.length - 1;
@@ -333,12 +475,81 @@ export function descendants(root: Mark): Mark[] {
   return find(root, [{ tag: null, classes: [], id: null, attrs: [] }], false);
 }
 
+// ---------------------------------------------------------------------------
+// Signature numbers
+// ---------------------------------------------------------------------------
+
+/** Every signature numbered so far (Mark.signatureId), by what it's made of. */
+const signatureIds = new Map<string, number>();
+let generation = 0;
+/** How many numbers the table holds before it starts again. */
+const MAX_SIGNATURE_IDS = 1 << 21;
+
+/**
+ * Before a drawing's signature numbers are asked for (canvas/paint.ts): if
+ * the table's grown too big, it starts again, and numbers from before
+ * mean nothing now. Returns the generation, which whatever keeps numbers
+ * (a paint cache) compares with the one its numbers are from.
+ */
+export function startSignatures(limit = MAX_SIGNATURE_IDS): number {
+  if (signatureIds.size > limit) {
+    signatureIds.clear();
+    generation++;
+  }
+  return generation;
+}
+
+// ---------------------------------------------------------------------------
+// Leaving marks out while building
+// ---------------------------------------------------------------------------
+
+/**
+ * A mark never made: what mark() gives while a drawing is built without
+ * marks of its kind (buildingWithout). Appending it adds nothing, and
+ * changing it changes nothing, so the layout code needn't know.
+ */
+class OmittedMark extends Mark {
+  override setAttribute(): void {}
+  override setOwnAttribute(): void {}
+  override removeAttribute(): void {}
+  override append(): void {}
+  override appendShared(): void {}
+  override appendKept(): void {}
+  override prepend(): void {}
+  override before(): void {}
+  override remove(): void {}
+  override changed(): void {}
+  override get style(): { setProperty(name: string, value: string): void } {
+    return { setProperty: () => {} };
+  }
+}
+const OMITTED: Mark = new OmittedMark("omitted");
+
+/** Which marks to leave out: by tag, and class attribute as made. */
+export type OmitRule = (tag: string, classes: string | undefined) => boolean;
+let omitting: OmitRule | null = null;
+
+/** Build a drawing with `build`, leaving out (never making) the marks `rule` says. */
+export function buildingWithout<T>(rule: OmitRule | null, build: () => T): T {
+  const outer = omitting;
+  omitting = rule;
+  try {
+    return build();
+  } finally {
+    omitting = outer;
+  }
+}
+
 /** Make a mark: mark("rect", { x: 0, class: "cell" }, ...children). Attributes that are null, undefined or false are left out. */
 export function mark(
   tag: string,
   attrs: Record<string, string | number | null | undefined | false> = {},
   ...children: Child[]
 ): Mark {
+  if (omitting !== null) {
+    const cls = attrs.class;
+    if (omitting(tag, typeof cls === "string" ? cls : undefined)) return OMITTED;
+  }
   const m = new Mark(tag);
   // A new mark: its attributes go straight in (nothing to compare, no signature to forget).
   for (const name in attrs) {
@@ -461,10 +672,11 @@ function matchesCompound(m: Mark, c: Compound): boolean {
 /** A mark tree as real SVG elements: the same elements, attributes in the same order. */
 export function toSvg(root: Mark, doc: Document = document): SVGElement {
   const el = doc.createElementNS(SVG_NS, root.localName) as SVGElement;
-  for (const [name, value] of root.attributeEntries()) {
+  for (let i = 0; i < root.attributeCount; i++) {
+    const name = root.attributeName(i);
     if (name === "style" && root.styleProperties.length) {
       for (const [prop, v] of root.styleProperties) el.style.setProperty(prop, v);
-    } else el.setAttribute(name, value);
+    } else el.setAttribute(name, root.attributeValue(i));
   }
   const children = root.childNodes;
   for (let i = 0; i < children.length; i++) {

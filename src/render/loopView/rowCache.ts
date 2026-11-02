@@ -165,10 +165,20 @@ export class RowCache {
   private kept = new Map<string, Kept>();
   private next = new Map<string, Kept>();
   private scene: string | null = null;
+  /** The least detail any kept row was built with. */
+  private level = 0;
   stats = { drawn: 0, kept: 0 };
 
-  begin(key: string | null): void {
-    if (key !== this.scene) this.kept.clear();
+  /**
+   * A drawing begins, of a scene with this key (sceneKey), built at this
+   * level of detail (lod.ts buildAt). Rows built with more detail are kept
+   * for one with less (atLevel leaves out the rest); not the other way.
+   */
+  begin(key: string | null, level = 0): void {
+    if (key !== this.scene || level < this.level) {
+      this.kept.clear();
+      this.level = level;
+    } else this.level = Math.max(this.level, level);
     this.scene = key;
     this.next = new Map();
     this.stats = { drawn: 0, kept: 0 };

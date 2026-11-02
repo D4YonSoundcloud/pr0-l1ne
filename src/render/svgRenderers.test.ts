@@ -133,6 +133,34 @@ describe("SvgMemoryRenderer", () => {
 });
 
 describe("SvgLoopRenderer", () => {
+  it("zoomed out, builds the step at the level; zoomed in past it, lays it out again once the zoom settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const el = windowEl();
+      const changes: number[] = [];
+      const r = SVG_RENDERERS.memory(el, { onLayoutChange: () => changes.push(1) });
+      const scene = sceneAt(await traceJavaScript("const a = [17, 23];\n"));
+      r.setViewport({ zoom: 0.2 }); // blocks
+      vi.advanceTimersByTime(1000);
+      changes.length = 0;
+      r.render(scene, null);
+      expect(el.dataset.builtLod).toBe("2");
+      r.setViewport({ zoom: 0.25 }); // still blocks: nothing to do
+      vi.advanceTimersByTime(1000);
+      expect(changes).toHaveLength(0);
+      r.setViewport({ zoom: 1 }); // full: more detail than it was built with
+      vi.advanceTimersByTime(100);
+      expect(changes).toHaveLength(0); // not mid-zoom
+      vi.advanceTimersByTime(200);
+      expect(changes).toHaveLength(1);
+      r.render(scene, scene);
+      expect(el.dataset.builtLod).toBe("0");
+      expect(el.querySelector(".memory-svg text")?.textContent).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   const code = "const a = [1, 2];\nconst b = [3, 4];\nfor (let i = 0; i < 2; i++) {\n  a[i] = b[i];\n  b[i] = 0;\n}\n";
 
   it("draws a loop scene side by side or stacked, keeping the running row in view", async () => {
@@ -146,6 +174,18 @@ describe("SvgLoopRenderer", () => {
     r.setLayout({ vertical: true });
     r.render(scene, scene);
     expect(Number(el.querySelector(".loop-svg")!.getAttribute("width"))).toBeLessThan(side);
+    // Zoomed out, then in again past what it was built with: drawn again once the zoom settles.
+    vi.useFakeTimers();
+    try {
+      r.setViewport({ zoom: 0.05 });
+      r.render(scene, scene);
+      expect(el.dataset.builtLod).toBe("3");
+      r.setViewport({ zoom: 1 });
+      vi.advanceTimersByTime(300);
+      expect(el.dataset.builtLod).toBe("0");
+    } finally {
+      vi.useRealTimers();
+    }
     r.showMessage("No loop");
     expect(el.querySelector(".loop-svg")).toBeNull();
     expect(el.textContent).toContain("No loop");
