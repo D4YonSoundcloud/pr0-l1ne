@@ -11,16 +11,21 @@
  *   node scripts/bench-browser.mjs --compare baseline  beside a saved run
  *   node scripts/bench-browser.mjs --only grid         programs whose name has "grid"
  *   PW_CHROMIUM=/path/to/chrome ...                    a Chromium of your own
+ *   node scripts/bench-browser.mjs --headed            in a window, so WebGL is drawn by the
+ *                                                      graphics card (headless draws it in software)
+ *   node scripts/bench-browser.mjs --channel chrome     with the Google Chrome installed here
  *   node scripts/bench-browser.mjs --zooms             levels of detail: each JavaScript
  *                                                      program at 100% to 1%, with them and
  *                                                      without (?nolod), steps and panning
  */
+
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const { chromium } = createRequire(import.meta.url)("playwright");
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PROGRAMS = join(ROOT, "bench/programs");
 const RESULTS = join(ROOT, "bench/results");
 const arg = (name) => {
@@ -140,7 +145,7 @@ async function zoomSuite(browser, files) {
         try {
           await open(page, "javascript", code, renderer, lod ? "" : "&nolod");
           await page.locator("#mode-arrows").click();
-          const row = { program: file, renderer, lod, zooms: {} };
+          const row = { program: file, renderer, lod, gpu, zooms: {} };
           let pressed = 0;
           await page.locator("#memory").focus();
           await page.keyboard.press("0"); // 100%, Auto-fit off
@@ -169,7 +174,41 @@ async function zoomSuite(browser, files) {
 }
 
 const executablePath = process.env.PW_CHROMIUM;
-const browser = await chromium.launch(executablePath ? { executablePath } : {});
+const channel = arg("channel");
+const headed = process.argv.includes("--headed");
+const browser = await chromium.launch({
+  ...(executablePath ? { executablePath } : {}),
+  ...(channel ? { channel } : {}),
+  headless: !headed,
+  // A window behind others still draws every frame (Chrome slows hidden pages' frames down).
+  args: [
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-background-timer-throttling",
+  ],
+});
+
+/** What draws WebGL in this browser: the graphics card's name, or SwiftShader (software, on the processor). */
+async function webglRenderer() {
+  const page = await browser.newPage();
+  await page.goto(URL_BASE).catch(() => {
+    process.stderr.write(`Nothing at ${URL_BASE}: build, then start \`npm run preview\` in another terminal.\n`);
+    process.exit(1);
+  });
+  const name = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl) return "no WebGL";
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    return String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  });
+  await page.close();
+  return name;
+}
+const gpu = await webglRenderer();
+process.stderr.write(`WebGL drawn by: ${gpu}\n`);
+if (/swiftshader|llvmpipe|software/i.test(gpu))
+  process.stderr.write("  (software: WebGL times won't say what a graphics card does; try --headed)\n");
 const only = arg("only");
 const files = readdirSync(PROGRAMS)
   .filter((name) => /\.(js|py)$/.test(name) && (!only || name.includes(only)))
@@ -179,7 +218,7 @@ if (process.argv.includes("--zooms")) {
   await browser.close();
   const f = (n) => (n === undefined || n === null ? "–" : n.toFixed(0));
   const lines = [
-    `| Program | Renderer | ${ZOOMS.map(([z]) => `${z}: step / drawing`).join(" | ")} |`,
+    `| Program | Renderer | ${ZOOMS.map(([z]) => `${z}: step / drawing / pan frame`).join(" | ")} |`,
     `| --- | --- | ${ZOOMS.map(() => "---").join(" | ")} |`,
   ];
   for (const r of rows.filter((x) => x.lod)) {
@@ -187,10 +226,11 @@ if (process.argv.includes("--zooms")) {
     const cell = ([z]) => {
       const on = r.zooms[z];
       const was = off?.zooms[z];
-      return `${f(on?.step)} / ${f(on?.draw)} ms (without: ${f(was?.step)} / ${f(was?.draw)})`;
+      return `${f(on?.step)} / ${f(on?.draw)} / ${f(on?.pan)} ms (without: ${f(was?.step)} / ${f(was?.draw)} / ${f(was?.pan)})`;
     };
     lines.push(`| ${r.program} | ${r.renderer} | ${ZOOMS.map(cell).join(" | ")} |`);
   }
+  console.log(`WebGL drawn by: ${gpu}\n`);
   console.log(lines.join("\n"));
   const save = arg("save");
   if (save) writeFileSync(join(RESULTS, `zooms-${save}.json`), `${JSON.stringify(rows, null, 2)}\n`);
@@ -201,7 +241,7 @@ const results = [];
 for (const file of files) {
   const language = file.endsWith(".py") ? "python" : "javascript";
   const code = readFileSync(join(PROGRAMS, file), "utf8");
-  const result = { program: file, views: {} };
+  const result = { program: file, gpu, views: {} };
   for (const renderer of ["svg", "canvas", "webgl"]) {
     process.stderr.write(`${file} (${renderer})…\n`);
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
@@ -248,6 +288,7 @@ for (const r of results) {
     `| ${r.program}${r.error ? ` (${r.error})` : ""} | ${vs(r.run?.run, o?.run?.run)} ms${t?.truncated ? ` (stopped: ${t.stoppedBy})` : ""} | ${t?.steps ?? "–"} | ${t?.maxHeap ?? "–"} | ${vs(v["svg.arrows"]?.frame, ov["svg.arrows"]?.frame)} / ${vs(v["svg.nested"]?.frame, ov["svg.nested"]?.frame)} ms | ${vs(v["canvas.arrows"]?.frame, ov["canvas.arrows"]?.frame)} / ${vs(v["canvas.nested"]?.frame, ov["canvas.nested"]?.frame)} ms | ${vs(v["webgl.arrows"]?.frame, ov["webgl.arrows"]?.frame)} / ${vs(v["webgl.nested"]?.frame, ov["webgl.nested"]?.frame)} ms | ${f(v["svg.arrows"]?.layout)} ms | ${f(v["svg.arrows"]?.route)} ms | ${f(v["svg.arrows"]?.patch)} ms | ${f(v["canvas.arrows"]?.paint)} ms | ${f(v["webgl.arrows"]?.paint)} ms |`,
   );
 }
+console.log(`WebGL drawn by: ${gpu}\n`);
 console.log(lines.join("\n"));
 const save = arg("save");
 if (save) writeFileSync(join(RESULTS, `browser-${save}.json`), `${JSON.stringify(results, null, 2)}\n`);

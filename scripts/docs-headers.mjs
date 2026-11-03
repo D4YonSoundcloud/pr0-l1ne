@@ -11,11 +11,13 @@
  *
  * Run by `npm run docs:build` (part of `npm run build`).
  */
+
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const DIST = new URL("../dist/", import.meta.url).pathname;
+const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const DOCS = join(DIST, "docs");
 const HEADERS = join(DIST, "_headers");
 

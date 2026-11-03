@@ -77,7 +77,11 @@ from `src/perf.ts`.
 Headless Chromium draws WebGL in software (SwiftShader), on the processor:
 its WebGL times say what WebGL costs the page (building the scene, uploading
 it), not how fast a graphics card draws it. Panning frames there are far
-slower than on a real GPU. `?noshare` draws every run of shapes from its own
+slower than on a real GPU. To measure a graphics card, run it in a window
+with `--headed` (and `--channel chrome` for the Google Chrome installed on
+the machine): the first line printed, **WebGL drawn by**, names what draws
+WebGL, and it's saved with the results. Leave the window alone while it
+runs; it's set to draw every frame even behind other windows. `?noshare` draws every run of shapes from its own
 geometry, none shared (canvas/pixiScene.ts), to measure what sharing saves.
 
 ### At each zoom

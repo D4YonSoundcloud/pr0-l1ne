@@ -1,0 +1,19 @@
+﻿WebGL drawn by: ANGLE (NVIDIA, NVIDIA GeForce RTX 4050 Laptop GPU (0x000028E1) Direct3D11 vs_5_0 ps_5_0, D3D11)
+
+| Program | Renderer | 100%: step / drawing / pan frame | 41%: step / drawing / pan frame | 21%: step / drawing / pan frame | 5.5%: step / drawing / pan frame | 1%: step / drawing / pan frame |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1-long-list.js | svg | 32 / 2 / 33 ms (without: 32 / 2 / 33) | 32 / 1 / 33 ms (without: 32 / 2 / 33) | 32 / 1 / 33 ms (without: 31 / 2 / 33) | 32 / 1 / 33 ms (without: 32 / 2 / 33) | 32 / 0 / 33 ms (without: 32 / 2 / 33) |
+| 1-long-list.js | canvas | 32 / 4 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 33 / 3 / 33) | 32 / 1 / 33 ms (without: 32 / 3 / 33) | 32 / 1 / 33 ms (without: 33 / 4 / 33) | 32 / 1 / 33 ms (without: 33 / 5 / 33) |
+| 1-long-list.js | webgl | 32 / 4 / 33 ms (without: 32 / 3 / 33) | 33 / 3 / 33 ms (without: 32 / 3 / 33) | 32 / 1 / 33 ms (without: 32 / 3 / 33) | 32 / 1 / 33 ms (without: 32 / 4 / 33) | 32 / 0 / 33 ms (without: 32 / 4 / 33) |
+| 2-big-tree.js | svg | 32 / 1 / 33 ms (without: 32 / 1 / 33) | 33 / 1 / 33 ms (without: 33 / 1 / 33) | 32 / 1 / 33 ms (without: 32 / 1 / 33) | 32 / 1 / 33 ms (without: 32 / 1 / 33) | 32 / 0 / 33 ms (without: 32 / 1 / 33) |
+| 2-big-tree.js | canvas | 32 / 4 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 33 / 4 / 33) | 32 / 3 / 33 ms (without: 32 / 4 / 33) | 32 / 1 / 33 ms (without: 32 / 4 / 33) |
+| 2-big-tree.js | webgl | 32 / 5 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 32 / 4 / 33) | 32 / 3 / 33 ms (without: 32 / 4 / 33) | 33 / 1 / 33 ms (without: 32 / 4 / 33) |
+| 3-big-grid.js | svg | 127 / 28 / 33 ms (without: 273 / 58 / 33) | 114 / 26 / 33 ms (without: 242 / 54 / 33) | 102 / 28 / 33 ms (without: 256 / 57 / 33) | 108 / 29 / 33 ms (without: 248 / 48 / 33) | 88 / 29 / 33 ms (without: 244 / 51 / 33) |
+| 3-big-grid.js | canvas | 155 / 48 / 33 ms (without: 226 / 87 / 33) | 145 / 45 / 33 ms (without: 228 / 80 / 33) | 109 / 38 / 33 ms (without: 243 / 94 / 44) | 114 / 41 / 33 ms (without: 259 / 98 / 59) | 87 / 42 / 33 ms (without: 242 / 89 / 61) |
+| 3-big-grid.js | webgl | 104 / 41 / 33 ms (without: 147 / 63 / 33) | 94 / 36 / 33 ms (without: 134 / 55 / 33) | 73 / 29 / 33 ms (without: 128 / 56 / 33) | 68 / 27 / 33 ms (without: 134 / 55 / 33) | 57 / 28 / 33 ms (without: 136 / 56 / 33) |
+| 4-dense-graph.js | svg | 41 / 2 / 33 ms (without: 62 / 4 / 33) | 42 / 2 / 33 ms (without: 49 / 3 / 33) | 34 / 2 / 33 ms (without: 50 / 4 / 33) | 34 / 1 / 33 ms (without: 51 / 3 / 33) | 33 / 1 / 33 ms (without: 48 / 3 / 34) |
+| 4-dense-graph.js | canvas | 45 / 7 / 33 ms (without: 56 / 8 / 33) | 45 / 6 / 33 ms (without: 49 / 8 / 33) | 38 / 3 / 33 ms (without: 48 / 7 / 33) | 38 / 4 / 33 ms (without: 56 / 11 / 33) | 33 / 2 / 33 ms (without: 59 / 10 / 33) |
+| 4-dense-graph.js | webgl | 44 / 7 / 34 ms (without: 49 / 10 / 33) | 44 / 6 / 33 ms (without: 48 / 8 / 33) | 37 / 4 / 33 ms (without: 47 / 8 / 33) | 37 / 4 / 33 ms (without: 53 / 11 / 33) | 33 / 2 / 33 ms (without: 50 / 11 / 33) |
+| 5-deep-recursion.js | svg | 36 / 7 / 33 ms (without: 35 / 7 / 33) | 33 / 6 / 33 ms (without: 35 / 8 / 33) | 32 / 5 / 33 ms (without: 37 / 7 / 33) | 32 / 3 / 34 ms (without: 37 / 7 / 33) | 32 / 2 / 33 ms (without: 35 / 7 / 33) |
+| 5-deep-recursion.js | canvas | 32 / 13 / 33 ms (without: 33 / 14 / 33) | 32 / 10 / 33 ms (without: 33 / 13 / 33) | 32 / 7 / 33 ms (without: 33 / 11 / 33) | 33 / 4 / 33 ms (without: 33 / 12 / 33) | 32 / 3 / 33 ms (without: 36 / 18 / 33) |
+| 5-deep-recursion.js | webgl | 32 / 13 / 33 ms (without: 33 / 12 / 33) | 32 / 10 / 33 ms (without: 33 / 11 / 33) | 32 / 7 / 33 ms (without: 32 / 11 / 33) | 33 / 5 / 33 ms (without: 33 / 12 / 33) | 32 / 3 / 33 ms (without: 33 / 16 / 33) |

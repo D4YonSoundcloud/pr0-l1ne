@@ -9,9 +9,11 @@
  *   npx tsx scripts/bench.ts --compare baseline print them beside a saved run
  *   npx tsx scripts/bench.ts --only grid        programs whose name has "grid"
  */
+
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { serialize } from "node:v8";
 import { traceJavaScript } from "../src/js/trace";
 import { perf, traceStats } from "../src/perf";
@@ -31,7 +33,7 @@ import { buildLoopHistory, buildNestedHistory } from "../src/trace/loopHistory";
 import { POLICY } from "../src/trace/policy";
 import type { Trace } from "../src/trace/types";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PROGRAMS = join(ROOT, "bench/programs");
 const RESULTS = join(ROOT, "bench/results");
 const arg = (name: string) => {
