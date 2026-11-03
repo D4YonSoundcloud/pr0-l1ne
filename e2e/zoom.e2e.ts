@@ -155,6 +155,8 @@ test("double-clicking a box too small to read zooms in on it", async ({ page }) 
   const memory = page.locator("#memory");
   await zoomOut(page, 13);
   await expect(memory).toHaveAttribute("data-lod", "3");
+  // Laid out again for that level (simple arrows, built without text) before anything is measured or hovered.
+  await expect(memory).toHaveAttribute("data-built-lod", "3");
   await page.waitForTimeout(800); // the zoom glides there: measure where it ends
 
   const box = (await memory.locator('.viewport-layer .node[data-node-key^="obj:"] .node-hit').first().boundingBox())!;

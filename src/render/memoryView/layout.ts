@@ -290,11 +290,21 @@ function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
         fill: "transparent",
       }),
     );
+    // What's inside is drawn from the box's own corner and moved there, so a
+    // box that moves is the same marks (boxCache.ts keeps them wherever it is).
+    // The outline and backing above stay put: the overview draws only those.
+    const inside = s("g", { class: "node-body", transform: `translate(${x} ${y})` });
+    g.append(inside);
     const before = refs.length;
     const id = idOf(key);
-    if (boxes && kept.has(id)) boxes.draw(id, x, y, g, refs);
-    else shape.draw(x, y, g, refs);
-    for (let i = before; i < refs.length; i++) refs[i].source = key;
+    if (boxes && kept.has(id)) boxes.draw(id, inside, refs);
+    else shape.draw(0, 0, inside, refs);
+    for (let i = before; i < refs.length; i++) {
+      const ref = refs[i];
+      ref.source = key;
+      // Arrows start where the box is.
+      ref.from = { x: ref.from.x + x, y: ref.from.y + y };
+    }
     // Arrows leaving list cells downward turn under the box like the teeth
     // of a comb: the leftmost cell turns highest, so they stay in order.
     const down = refs

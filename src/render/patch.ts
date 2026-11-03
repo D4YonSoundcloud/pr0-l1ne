@@ -13,7 +13,7 @@
  * difference (patch.test.ts checks this for every step of the examples).
  *
  * Children are matched by key where they have one (data-node-key, data-flip,
- * data-cell: boxes, linked nodes, cells), otherwise by position among
+ * data-cell, data-key: boxes, linked nodes, cells, loop rows), otherwise by position among
  * siblings of the same tag. Elements whose CSS animation plays when they
  * appear (a changed cell's flash, the printed-output card) are made afresh,
  * so it plays each step as it did when every element was new.
@@ -35,7 +35,11 @@ function playsOnArrival(m: Mark): boolean {
 /** How a child is matched with the one drawn before it. */
 function baseKey(node: Drawn): string {
   if (!(node instanceof Mark)) return "#text";
-  const key = node.getAttribute("data-node-key") ?? node.getAttribute("data-flip") ?? node.getAttribute("data-cell");
+  const key =
+    node.getAttribute("data-node-key") ??
+    node.getAttribute("data-flip") ??
+    node.getAttribute("data-cell") ??
+    node.getAttribute("data-key");
   return key === null ? node.localName : `${node.localName}=${key}`;
 }
 

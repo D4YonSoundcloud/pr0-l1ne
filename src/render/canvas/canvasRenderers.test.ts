@@ -234,7 +234,8 @@ describe("CanvasMemoryRenderer", () => {
     vi.advanceTimersByTime(1000);
     // Everything has arrived (a finished flash is invisible: that's its end).
     expect(all(stage()).filter((c) => c.alpha === 0 && !(c instanceof Graphics && isFlash(c)))).toEqual([]);
-    expect(layers().some((c) => c.x !== 0)).toBe(false);
+    // Nothing still sliding in from the left (bodies sit at their boxes' corners: moved, never slid).
+    expect(layers().some((c) => c.x < 0)).toBe(false);
     r.dispose();
   });
 

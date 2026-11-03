@@ -109,8 +109,17 @@ export interface PaintGroup {
   label?: string;
   /** Its classes (for the few animations that depend on them: the output card). */
   classes: string;
-  /** Around everything drawn in it, in diagram units; null when it draws nothing. */
+  /**
+   * Around everything drawn in it, in its parent's units (diagram units,
+   * unless a group it's in is moved: offset); null when it draws nothing.
+   */
   bounds: Rect | null;
+  /**
+   * Where it's moved to (transform="translate(x y)"): what's in it is drawn
+   * from there, in its own units. A box and a loop row are drawn from their
+   * own corner this way, so one that moves is the same paint (render/memoryView/layout.ts).
+   */
+  offset?: { x: number; y: number };
   /** A row of the loop history, with its vertical extent (data-top / data-bottom). */
   current?: { top: number; bottom: number };
   /**
@@ -504,6 +513,8 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
       };
     if (el.hasAttribute("data-no-fade")) out.noFade = true;
     if (el.hasAttribute("data-top")) out.current = { top: num(el, "data-top"), bottom: num(el, "data-bottom") };
+    const offset = translateOf(el.getAttribute("transform"));
+    if (offset) out.offset = offset;
 
     for (const child of el.children) {
       const s = styles.get(child);
@@ -566,6 +577,8 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
         out.bounds = union(out.bounds, into.bounds);
       }
     }
+    // Bounds are in the parent's units: moved with the group.
+    if (offset && out.bounds) out.bounds = { ...out.bounds, x: out.bounds.x + offset.x, y: out.bounds.y + offset.y };
     return out;
   };
 
@@ -583,6 +596,31 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
 export function* groups(root: PaintGroup): Generator<PaintGroup> {
   yield root;
   for (const child of root.children) if (child.kind === "group") yield* groups(child);
+}
+
+/**
+ * Every group in a paint list with its bounds in diagram units (a group's
+ * own bounds are in its parent's, which may be moved: PaintGroup.offset),
+ * depth first, in drawing order.
+ */
+export function* placedGroups(
+  root: PaintGroup,
+  dx = 0,
+  dy = 0,
+): Generator<{ group: PaintGroup; bounds: Rect | null; dx: number; dy: number }> {
+  const b = root.bounds;
+  yield { group: root, bounds: b && (dx || dy) ? { ...b, x: b.x + dx, y: b.y + dy } : b, dx, dy };
+  const ix = dx + (root.offset?.x ?? 0);
+  const iy = dy + (root.offset?.y ?? 0);
+  for (const child of root.children) if (child.kind === "group") yield* placedGroups(child, ix, iy);
+}
+
+/** A translate transform's offset ("translate(10 20)", "translate(10, 20)", "translate(10)"); null for none (or anything else). */
+export function translateOf(transform: string | null): { x: number; y: number } | null {
+  if (!transform) return null;
+  const m = /^\s*translate\(\s*(-?[\d.]+(?:e[-+]?\d+)?)(?:[\s,]+(-?[\d.]+(?:e[-+]?\d+)?))?\s*\)\s*$/i.exec(transform);
+  if (!m) return null;
+  return { x: Number(m[1]), y: m[2] === undefined ? 0 : Number(m[2]) };
 }
 
 export type { Rgba };

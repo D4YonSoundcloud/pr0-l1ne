@@ -18,6 +18,7 @@ import { buildLoopHistory } from "../../trace/loopHistory";
 import type { Mark } from "../drawing";
 import { loopDrawing } from "../loopView";
 import { applyFocus, memoryDrawing, type Point } from "../memory";
+import { cellMesh } from "./cellMesh";
 import { PaintCache, paintDrawing } from "./paint";
 import { buildScene, SceneCache } from "./pixiScene";
 import type { ComputedPaint } from "./styles";
@@ -66,6 +67,20 @@ function picture(c: Container, ox = 0, oy = 0, alpha = 1, out: string[] = []): s
       const moved = args.map((v, i) => (i < pairs * 2 && typeof v === "number" ? v + (i % 2 ? y : x) : v));
       out.push(`${op}(${moved.map(r2).join(",")})@${r2(a)}`);
     }
+  } else if ("geometry" in c && "sync" in c) {
+    // Cells drawn as one (cellMesh.ts): each cell, where its layer has it now.
+    (c as unknown as { sync(): void }).sync();
+    const geometry = (
+      c as unknown as { geometry: { instanceCount: number; attributes: { aRect: { buffer: { data: Float32Array } } } } }
+    ).geometry;
+    const data = geometry.attributes.aRect.buffer.data;
+    const words = new Uint32Array(data.buffer);
+    for (let i = 0; i < geometry.instanceCount; i++) {
+      const o = i * 9;
+      out.push(
+        `cell(${r2(data[o] + x)},${r2(data[o + 1] + y)},${r2(data[o + 2])},${r2(data[o + 3])},${data[o + 4]},${data[o + 5]},${words[o + 7]},${words[o + 8]})@${r2(a * data[o + 6])}`,
+      );
+    }
   } else if (c instanceof Text) {
     out.push(
       `text ${JSON.stringify(c.text)} ${r2(x)},${r2(y)} ${JSON.stringify(c.style.options)} ${c.resolution}@${r2(a)}`,
@@ -75,8 +90,8 @@ function picture(c: Container, ox = 0, oy = 0, alpha = 1, out: string[] = []): s
   return out;
 }
 
-/** Draws drawings one after another, keeping what it can, like a canvas window. */
-function keeper() {
+/** Draws drawings one after another, keeping what it can, like a canvas window (on WebGL: `cells`). */
+function keeper(cells: boolean) {
   const styles = fakeStyles(rule, { "--flash": "mark 450ms" }, { contexts: true });
   const paints = new PaintCache();
   const scenes = new SceneCache();
@@ -85,7 +100,11 @@ function keeper() {
     paints,
     scenes,
     draw(drawing: Mark, flash: boolean) {
-      const built = buildScene(paintDrawing(drawing, styles, paints), { resolution: 2, flash }, scenes);
+      const built = buildScene(
+        paintDrawing(drawing, styles, paints),
+        { resolution: 2, flash, ...(cells ? { cells: cellMesh, renderGroups: true, batchMin: 3 } : {}) },
+        scenes,
+      );
       last?.destroy({ children: true });
       last = built.root as unknown as Container;
       return built;
@@ -94,22 +113,32 @@ function keeper() {
 }
 
 /** The same drawing, built from nothing. */
-function fresh(drawing: Mark, flash: boolean) {
-  return buildScene(paintDrawing(drawing, fakeStyles(rule, { "--flash": "mark 450ms" })), { resolution: 2, flash });
+function fresh(drawing: Mark, flash: boolean, cells: boolean) {
+  return buildScene(paintDrawing(drawing, fakeStyles(rule, { "--flash": "mark 450ms" })), {
+    resolution: 2,
+    flash,
+    ...(cells ? { cells: cellMesh, batchMin: 3 } : {}),
+  });
 }
 
-const examples = JAVASCRIPT_EXAMPLES.filter((_, i) => i % 3 === 0);
+/** Each example, as Canvas 2D draws it and as WebGL does (cells as one draw). */
+const examples = JAVASCRIPT_EXAMPLES.filter((_, i) => i % 3 === 0).flatMap((e) =>
+  [false, true].map((cells) => [`${e.name}${cells ? " (cells as one)" : ""}`, e.code, cells] as const),
+);
 
 describe("kept paint and objects draw what a fresh build draws", () => {
-  it.each(examples.map((e) => [e.name, e.code] as const))(
+  /** The examples whose cells were drawn as one somewhere (it runs after them). */
+  const batchedIn = new Set<string>();
+  it.each(examples)(
     "%s: the memory view, step by step, with boxes moved and hovered",
-    async (_name, code) => {
+    async (name, code, cells) => {
       const trace = applyHints(await traceJavaScript(code, 600));
-      const keep = keeper();
+      const keep = keeper(cells);
       const positions = new Map<string, Point>();
       // Bodies drawn in the last build, and how many were drawn again.
       let before = new Set<unknown>();
       let reused = 0;
+      let batches = 0;
       const n = trace.steps.length;
       for (let i = 0; i < Math.min(n, 40); i++) {
         const scene = memoryScene(trace, i, diffSteps(trace.steps[i - 1], trace.steps[i]));
@@ -119,39 +148,45 @@ describe("kept paint and objects draw what a fresh build draws", () => {
         const flash = i % 2 === 0;
         const kept = keep.draw(drawing, flash);
         expect(picture(kept.root as unknown as Container), `step ${i + 1}`).toEqual(
-          picture(fresh(drawing, flash).root as unknown as Container),
+          picture(fresh(drawing, flash, cells).root as unknown as Container),
         );
-        expect(kept.flashes.length).toBe(fresh(drawing, flash).flashes.length);
+        expect(kept.flashes.length).toBe(fresh(drawing, flash, cells).flashes.length);
         // Hovering a box: the same drawing, with its arrows in focus.
         const key = scene.objects.at(-1)?.key;
         if (key && i % 5 === 1) {
           applyFocus(drawing, key);
           expect(picture(keep.draw(drawing, false).root as unknown as Container)).toEqual(
-            picture(fresh(drawing, false).root as unknown as Container),
+            picture(fresh(drawing, false, cells).root as unknown as Container),
           );
           applyFocus(drawing, null);
         }
+        batches += kept.batches.length;
         const bodies = new Set([...kept.layers.values()].map((layer) => layer.children[0]));
         for (const body of bodies) if (before.has(body)) reused++;
         before = bodies;
       }
       expect(reused).toBeGreaterThan(0);
+      if (batches) batchedIn.add(name);
     },
     60_000,
   );
 
-  it.each(examples.map((e) => [e.name, e.code] as const))(
+  it("drew cells as one in the examples with lists", () => {
+    expect(batchedIn.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(examples)(
     "%s: the loop history, step by step",
-    async (_name, code) => {
+    async (_name, code, cells) => {
       const trace = applyHints(await traceJavaScript(code, 600));
-      const keep = keeper();
+      const keep = keeper(cells);
       for (let i = 0; i < Math.min(trace.steps.length, 60); i++) {
         const history = buildLoopHistory(trace, i, null);
         if (!history?.rows.length) continue;
         for (const vertical of [false, true]) {
           const drawing = loopDrawing(loopScene(trace, history, { hideQuiet: false }), { vertical });
           expect(picture(keep.draw(drawing, true).root as unknown as Container), `step ${i + 1}`).toEqual(
-            picture(fresh(drawing, true).root as unknown as Container),
+            picture(fresh(drawing, true, cells).root as unknown as Container),
           );
         }
       }

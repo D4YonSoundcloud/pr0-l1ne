@@ -9,7 +9,8 @@
  * memory size, and so on. A box is drawn again only when one of those reads
  * gives a different answer now. Placement still runs over every box each
  * step (it's cheap), so a kept box never drifts from where a full layout
- * would put it: a kept box is used again only at the same place.
+ * would put it. A box is drawn from its own corner and moved where it goes
+ * (memoryView/layout.ts drawNode), so a box kept is used again wherever it is.
  *
  * A box's drawing reaches the step only through its context (shapes.ts's
  * Ctx), so the reads are recorded by handing it a context that writes down
@@ -43,8 +44,8 @@ interface Entry {
   /** How many reads it had once drawn the first time: drawing it again elsewhere reads the same again. */
   readsDrawn: number;
   shape: Shape;
-  /** Its drawing at a place, once drawn there: the marks inside its box, and the arrows leaving them. */
-  drawn: { x: number; y: number; marks: Mark[]; refs: OutRef[]; cells: string[] } | null;
+  /** Its drawing from its own corner, once drawn: the marks inside its box, and the arrows leaving them. */
+  drawn: { marks: Mark[]; refs: OutRef[]; cells: string[] } | null;
   /** It shows a change (a flash, a new box): drawn afresh, so the animation plays. */
   fresh: boolean;
 }
@@ -118,14 +119,16 @@ export class BoxCache {
   }
 
   /**
-   * Draw an object's box at (x, y) into `g`, adding the arrows leaving it to
-   * `refs`: its kept marks if it was drawn there before, else drawn now.
+   * Draw an object's box from its own corner into `g` (which the layout
+   * moves to where the box is), adding the arrows leaving it to `refs`
+   * (from the corner too): its kept marks if it was drawn before, wherever
+   * it was, else drawn now.
    */
-  draw(id: string, x: number, y: number, g: Mark, refs: OutRef[]): void {
+  draw(id: string, g: Mark, refs: OutRef[]): void {
     const entry = this.next.get(id);
     if (!entry) throw new Error(`no box for ${id}`);
     const drawn = entry.drawn;
-    if (drawn && drawn.x === x && drawn.y === y) {
+    if (drawn) {
       g.appendShared(...drawn.marks);
       for (const ref of drawn.refs) refs.push({ ...ref });
       // Its cells too, so they're still kept when one of them next changes.
@@ -137,15 +140,13 @@ export class BoxCache {
     // the same as when its shape was made, so its shape draws it as this step would.
     const before = refs.length;
     const start = g.childNodes.length;
-    const cells = this.cells.record(() => entry.shape.draw(x, y, g, refs));
+    const cells = this.cells.record(() => entry.shape.draw(0, 0, g, refs));
     this.stats.drawn++;
     // Drawn before, it read all this then: the reads it just added say nothing new.
     if (entry.readsDrawn >= 0) entry.reads.length = entry.readsDrawn;
     else entry.readsDrawn = entry.reads.length;
     if (entry.fresh) return;
     entry.drawn = {
-      x,
-      y,
       marks: g.childNodes.slice(start) as Mark[],
       // As drawn, before the layout adds where each starts from.
       refs: refs.slice(before).map((r) => ({ ...r })),

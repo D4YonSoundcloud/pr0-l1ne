@@ -37,6 +37,19 @@ export class Container {
     return child;
   }
 
+  addChildAt<T extends Container>(child: T, index: number): T {
+    if (child.parent) child.parent.children = child.parent.children.filter((c) => c !== child);
+    child.parent = this;
+    this.children.splice(index, 0, child);
+    return child;
+  }
+
+  removeChild<T extends Container>(child: T): T {
+    this.children = this.children.filter((c) => c !== child);
+    child.parent = null;
+    return child;
+  }
+
   removeChildren(): Container[] {
     const removed = this.children;
     for (const c of removed) c.parent = null;
@@ -211,6 +224,84 @@ export class Text extends Container {
 }
 
 export const fontStringFromTextStyle = (style: TextStyle) => `${style.fontSize}px ${style.fontFamily}`;
+
+// The parts of a mesh drawn with a shader of its own (render/canvas/cellMesh.ts): what it was given.
+
+export class Rectangle {
+  constructor(
+    readonly x = 0,
+    readonly y = 0,
+    readonly width = 0,
+    readonly height = 0,
+  ) {}
+  get right(): number {
+    return this.x + this.width;
+  }
+  get bottom(): number {
+    return this.y + this.height;
+  }
+}
+
+export class Bounds {
+  constructor(
+    readonly minX = 0,
+    readonly minY = 0,
+    readonly maxX = 0,
+    readonly maxY = 0,
+  ) {}
+}
+
+export const BufferUsage = { VERTEX: 32, COPY_DST: 8 };
+
+export class Buffer {
+  readonly data: ArrayLike<number>;
+  /** How many times it was uploaded again. */
+  updates = 0;
+  destroyed = false;
+  constructor(options: { data: ArrayLike<number> }) {
+    this.data = options.data;
+  }
+  update(): void {
+    this.updates++;
+  }
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
+export class Geometry {
+  readonly attributes: Record<string, { buffer: Buffer; format: string }> = {};
+  readonly instanceCount: number;
+  destroyed = false;
+  constructor(options: {
+    attributes: Record<string, { buffer: Buffer | ArrayLike<number>; format: string }>;
+    instanceCount?: number;
+  }) {
+    for (const [name, a] of Object.entries(options.attributes))
+      this.attributes[name] = { ...a, buffer: a.buffer instanceof Buffer ? a.buffer : new Buffer({ data: a.buffer }) };
+    this.instanceCount = options.instanceCount ?? 1;
+  }
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
+export const GlProgram = { from: (options: { vertex: string; fragment: string }) => ({ ...options }) };
+
+export class Shader {
+  constructor(readonly options: unknown) {}
+}
+
+export class Mesh<G extends Geometry = Geometry, S = Shader> extends Container {
+  readonly geometry: G;
+  readonly shader: S;
+  boundsArea: Rectangle | null = null;
+  constructor(options: { geometry: G; shader: S }) {
+    super();
+    this.geometry = options.geometry;
+    this.shader = options.shader;
+  }
+}
 
 /** Monospace-ish: 0.6em a character; an ascent of 0.75em. */
 export const CanvasTextMetrics = {

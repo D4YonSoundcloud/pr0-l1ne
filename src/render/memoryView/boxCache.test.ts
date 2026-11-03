@@ -93,6 +93,26 @@ describe("BoxCache", () => {
     expect(cache.stats).toEqual({ drawn: 0, kept: 0 });
   });
 
+  it("keeps a box that moves: drawn from its own corner, only where it's moved to changes", async () => {
+    const t = applyHints(await traceJavaScript("const a = [1, 2, 3];\nconst b = { x: 1 };\nlet done = 1;\n", 100));
+    const i = t.steps.length - 1;
+    const scene = memoryScene(t, i, diffSteps(t.steps[i - 1], t.steps[i]), {});
+    const boxes = new BoxCache();
+    const positions = new Map<string, Point>();
+    const first = memoryDrawing(scene, { positions, boxes });
+    const key = scene.objects[0].key;
+    const inside = (d: ReturnType<typeof memoryDrawing>) =>
+      d.querySelector(`.node[data-node-key="${CSS.escape(key)}"]`)!.querySelector(".node-body")!;
+    // Dragged somewhere else: kept whole, moved there.
+    positions.set(key, { x: 640, y: 420 });
+    const moved = memoryDrawing(scene, { positions, boxes });
+    expect(boxes.stats.drawn).toBe(0);
+    expect(inside(moved).childNodes[0]).toBe(inside(first).childNodes[0]);
+    expect(inside(moved).getAttribute("transform")).toBe("translate(640 420)");
+    // And it's what a fresh layout draws there.
+    expect(html(toSvg(moved) as Element)).toBe(html(toSvg(memoryDrawing(scene, { positions })) as Element));
+  });
+
   it("puts kept marks into the new drawing without taking them out of the old one", () => {
     const shared = mark("rect", { x: 1 });
     const old = mark("g", {}, shared);

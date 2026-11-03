@@ -27,7 +27,7 @@
  */
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
-import { timed } from "../../perf";
+import { perf, timed } from "../../perf";
 import { FOLD_PREFIX, loopDetailBudget } from "../../scene/loopSummaries";
 import { detailBudget, summaryBoxes } from "../../scene/summaries";
 import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
@@ -35,6 +35,8 @@ import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../
 // Content-Security-Policy doesn't allow (public/_headers): this swaps in
 // versions that don't.
 import "pixi.js/unsafe-eval";
+// Meshes aren't among what the renderer draws by default: WebGL draws cells as one (cellMesh.ts).
+import "pixi.js/mesh";
 import { prefersReducedMotion } from "../../appearance";
 import type {
   Hit,
@@ -63,7 +65,7 @@ import { type View, Viewport } from "../viewport";
 import { HitIndex } from "./hitIndex";
 import { easing, Tweens } from "./motion";
 import { groups, type Paint, PaintCache, type PaintGroup, paintDrawing, type Rect } from "./paint";
-import { type BuiltScene, buildScene, forgetFonts, SceneCache } from "./pixiScene";
+import { type BuiltScene, buildScene, type CellBatch, type CellRect, forgetFonts, SceneCache } from "./pixiScene";
 import { ProbeStyles, type StyleProbe } from "./styles";
 
 /** How the canvas renderers read styles (tests give their own: jsdom can't resolve the app's CSS). */
@@ -121,6 +123,8 @@ abstract class CanvasWindow {
   private pixi: PixiRenderer | null = null;
   private readonly stage: Container = new PixiContainer();
   private built: BuiltScene | null = null;
+  /** On WebGL: makes the one draw of a body's cells (cellMesh.ts). */
+  private cellMesh: ((cells: CellRect[], layers: Container[]) => CellBatch & Container) | null = null;
   /** What's kept of the scene from one build to the next (pixiScene.ts), and of the paint (paint.ts). */
   private readonly kept = new SceneCache();
   /** Paint kept between steps, one for each level of detail (they paint differently). */
@@ -225,7 +229,12 @@ abstract class CanvasWindow {
     }
     this.pixi = pixi;
     this.el.dataset.backend = pixi.name === "webgl" ? "webgl" : "canvas";
-    if (pixi.name === "webgl") this.watchContext();
+    if (pixi.name === "webgl") {
+      this.watchContext();
+      // Cells drawn as one, with a shader of their own (cellMesh.ts): loaded with WebGL, which has shaders.
+      if (!perf.noCells) this.cellMesh = (await import("./cellMesh")).cellMesh;
+      if (this.disposed) return;
+    }
     this.resize();
   }
 
@@ -384,6 +393,8 @@ abstract class CanvasWindow {
       const moving = c.layer.x !== 0 || c.layer.y !== 0;
       c.layer.visible = moving || overlaps(c.bounds, visible);
     }
+    // Cells drawn as one follow their layers (slid or faded by the step animation, kept bodies' set back).
+    if (this.built) for (const batch of this.built.batches) batch.sync();
     this.pixi.render({ container: this.stage });
   }
 
@@ -448,6 +459,8 @@ abstract class CanvasWindow {
       {
         resolution: (window.devicePixelRatio || 1) * this.textScale,
         flash: flash && !!parseAnimation(this.styles.variable("--flash")),
+        ...(this.cellMesh ? { cells: this.cellMesh } : {}),
+        renderGroups: this.pixi?.name === "webgl" && !perf.noGroups,
       },
       this.kept,
     );

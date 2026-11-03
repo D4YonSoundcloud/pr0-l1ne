@@ -26,6 +26,10 @@ export const perf = {
   noLod: false,
   /** Draw every run of shapes from its own geometry, none shared (?noshare): to measure what sharing saves. */
   noShare: false,
+  /** On WebGL, draw each cell as a Graphics, not with the others in one draw (?nocells): to measure what that saves. */
+  noCells: false,
+  /** On WebGL, no box or row body is a render group of its own (?nogroups): to measure what they save. */
+  noGroups: false,
   /** The last trace the page showed, in numbers (the browser benchmark reads it). */
   lastTrace: null as TraceStats | null,
   /** Every time recorded, by stage, in milliseconds. */

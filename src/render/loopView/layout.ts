@@ -87,18 +87,25 @@ function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): M
     // Only the rows in view (and the current one, which the window keeps in view) are drawn.
     const inView = !visible || scene.isCurrent(index) || (y + plan.rowH + 4 >= visible.top && y - 6 <= visible.bottom);
     if (inView) {
-      const key = cache?.on ? rowKey(scene, plan, row, index, y, prevDrawn, afterGap) : null;
+      // Drawn from its own top and moved down to y, with its change arrows: the row above is where it is from here.
+      const above = prevDrawn ? { ...prevDrawn, y: prevDrawn.y - y } : null;
+      const shell = rowShell(scene, row, index, y, plan.rowH);
+      // Keyed, so the SVG patcher matches each row with itself, wherever it's moved (patch.ts).
+      const arrows = s("g", { class: "row-arrows", "data-key": `arrows:${index}`, transform: `translate(0 ${y})` });
+      rowLayer.append(shell);
+      arrowLayer.append(arrows);
+      const key = cache?.on ? rowKey(scene, plan, row, index, above, afterGap) : null;
       const kept = key ? cache!.get(key) : undefined;
       if (kept) {
-        rowLayer.appendShared(kept.row);
-        arrowLayer.appendShared(...kept.arrows);
+        shell.appendShared(kept.row);
+        arrows.appendShared(...kept.arrows);
       } else {
-        const arrowsBefore = arrowLayer.childNodes.length;
-        const drawn = drawRow(row, index, y, { plan, scene, arrowLayer, prevDrawn, afterGap });
+        const drawn = drawRow(row, index, 0, { plan, scene, arrowLayer: arrows, prevDrawn: above, afterGap });
         if (live) scopeToLoop(drawn, row.loop ?? scene.history.info.id);
-        rowLayer.append(drawn);
-        if (key) cache!.set(key, { row: drawn, arrows: arrowLayer.childNodes.slice(arrowsBefore) as Mark[] });
+        shell.append(drawn);
+        if (key) cache!.set(key, { row: drawn, arrows: [...arrows.childNodes] as Mark[] });
       }
+      if (!arrows.childNodes.length) arrows.remove();
     }
     prevDrawn = { row, y, index };
     afterGap = false;
@@ -111,6 +118,26 @@ function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): M
   svg.setAttribute("height", String(height));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   return svg;
+}
+
+/**
+ * What a row is moved to its place with: its classes (the running row, a
+ * failing check) and its extent (data-top / data-bottom, so the viewport
+ * can keep it in view without measuring the page), around its body.
+ */
+function rowShell(scene: LoopScene, row: LoopScene["rows"][number], index: number, y: number, rowH: number): Mark {
+  const classes = [
+    "loop-row",
+    scene.isCurrent(index) && "is-current",
+    scene.failedChecks(row).length > 0 && "is-failing",
+  ];
+  return s("g", {
+    class: classes.filter(Boolean).join(" "),
+    "data-key": `row:${index}`,
+    "data-top": y - 6,
+    "data-bottom": y + rowH + 4,
+    transform: `translate(0 ${y})`,
+  });
 }
 
 /**

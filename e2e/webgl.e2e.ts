@@ -10,7 +10,7 @@
  *   WEBGL_EVERY_STEP=1 npx playwright test e2e/webgl.e2e.ts --project=chromium
  */
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { pixelDifference } from "./pixels";
+import { inked, pixelDifference } from "./pixels";
 
 const EVERY_STEP = !!process.env.WEBGL_EVERY_STEP;
 /** A pixel differs when a channel is this far off (anti-aliased edges and text differ a little between backends). */
@@ -30,10 +30,22 @@ async function open(browser: Browser, renderer: "canvas" | "webgl", init?: () =>
     localStorage.setItem("pr0l1ne:loop-mode", "stacked");
   }, renderer);
   if (init) await page.addInitScript(init);
+  // Nothing may throw while drawing (checked as each page closes: closeChecked).
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  pageErrors.set(page, errors);
   await page.goto("/javascript");
   await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
   await expect(page.locator("#memory")).toHaveAttribute("data-backend", /./);
   return page;
+}
+
+const pageErrors = new WeakMap<Page, string[]>();
+
+/** Close a page opened by open(), checking nothing on it threw. */
+async function closeChecked(page: Page): Promise<void> {
+  expect(pageErrors.get(page) ?? [], "errors on the page").toEqual([]);
+  await page.close();
 }
 
 /** Open an example (by its place in the list) and wait for it to have run. */
@@ -98,14 +110,16 @@ test("WebGL draws what Canvas 2D draws, step by step, on every example", async (
     }
   }
   console.log(`compared ${compared} windows; most different: ${(worst.share * 100).toFixed(2)}% (${worst.where})`);
-  await canvas.close();
-  await webgl.close();
+  await closeChecked(canvas);
+  await closeChecked(webgl);
 });
 
 test("WebGL: a lost context comes back, and draws the same again", async ({ browser }) => {
   const page = await open(browser, "webgl");
   await page.locator("#step-label").click();
   await page.keyboard.press("End");
+  // Drawn first, and settled.
+  await expect.poll(() => inked(page, "#memory")).toBeGreaterThan(1000);
   const [before] = await shots(page);
   await page.evaluate(async () => {
     const canvas = document.querySelector<HTMLCanvasElement>("#memory canvas.viewport-canvas")!;
@@ -116,7 +130,7 @@ test("WebGL: a lost context comes back, and draws the same again", async ({ brow
     lose.restoreContext();
   });
   await expect.poll(async () => difference(page, before, (await shots(page))[0])).toBeLessThan(MOST_DIFFERENT);
-  await page.close();
+  await closeChecked(page);
 });
 
 test("WebGL: with no WebGL in the browser, it draws with Canvas 2D", async ({ browser }) => {
@@ -132,5 +146,5 @@ test("WebGL: with no WebGL in the browser, it draws with Canvas 2D", async ({ br
   await page.keyboard.press("End");
   const [shot] = await shots(page);
   expect(shot.length).toBeGreaterThan(2000); // drawn on, not blank
-  await page.close();
+  await closeChecked(page);
 });

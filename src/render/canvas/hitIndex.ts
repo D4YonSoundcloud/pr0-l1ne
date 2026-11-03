@@ -12,7 +12,7 @@
  * What's found is what a walk through the groups in drawing order would
  * find last (the topmost): each group keeps its place in that order.
  */
-import { groups, type PaintGroup, type Rect } from "./paint";
+import { type PaintGroup, placedGroups, type Rect } from "./paint";
 
 /** A grid cell's side, in diagram units: about a box's size, so a cell lists a few groups. */
 const CELL = 256;
@@ -36,14 +36,15 @@ export class HitIndex {
   /** Index the groups of a paint list that `wanted` keeps. */
   constructor(root: PaintGroup, wanted: (group: PaintGroup) => boolean) {
     let order = 0;
-    for (const group of groups(root)) {
+    // Bounds in diagram units: a group inside a moved one (a box's cells) is where it's drawn.
+    for (const { group, bounds } of placedGroups(root)) {
       order++;
-      if (!group.bounds || !wanted(group)) continue;
-      const entry = { group, bounds: group.bounds, order };
-      const x0 = Math.floor(group.bounds.x / CELL);
-      const y0 = Math.floor(group.bounds.y / CELL);
-      const x1 = Math.floor((group.bounds.x + group.bounds.w) / CELL);
-      const y1 = Math.floor((group.bounds.y + group.bounds.h) / CELL);
+      if (!bounds || !wanted(group)) continue;
+      const entry = { group, bounds, order };
+      const x0 = Math.floor(bounds.x / CELL);
+      const y0 = Math.floor(bounds.y / CELL);
+      const x1 = Math.floor((bounds.x + bounds.w) / CELL);
+      const y1 = Math.floor((bounds.y + bounds.h) / CELL);
       if (x1 - x0 > MAX_SPAN || y1 - y0 > MAX_SPAN) {
         this.big.push(entry);
         continue;

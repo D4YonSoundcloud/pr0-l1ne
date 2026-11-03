@@ -2,7 +2,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
 import { CanvasTextMetrics, type Container, Graphics, GraphicsContext, Text } from "../../testing/fakePixi";
-import { paintDrawing } from "./paint";
+import { cellMesh } from "./cellMesh";
+import { type PaintGroup, paintDrawing } from "./paint";
 import { buildScene, forgetFonts, SceneCache } from "./pixiScene";
 import type { ComputedPaint } from "./styles";
 
@@ -269,5 +270,146 @@ describe("buildScene: shared geometry", () => {
     expect(contexts()).toHaveLength(1);
     expect(contexts()[0].destroyed).toBe(false);
     (fourth.root as unknown as Container).destroy({ children: true });
+  });
+});
+
+describe("buildScene: moved groups", () => {
+  /** Where each Graphics' first shape and each Text is, in the scene's own units. */
+  const placed = (root: Container) => {
+    const out: string[] = [];
+    const walk = (c: Container, x: number, y: number) => {
+      for (const child of c.children) {
+        const cx = x + child.x;
+        const cy = y + child.y;
+        if (child instanceof Graphics) {
+          const [, gx, gy, w, h] = child.calls[0] as [string, number, number, number, number];
+          out.push(`G ${cx + gx},${cy + gy} ${w}x${h}`);
+        } else if (child instanceof Text)
+          out.push(`T ${child.text} ${Math.round(cx * 100) / 100},${Math.round(cy * 100) / 100}`);
+        else walk(child, cx, cy);
+      }
+    };
+    walk(root, 0, 0);
+    return out.sort();
+  };
+  const scene = (markup: string, cache = new SceneCache()) =>
+    asFake(buildScene(paintDrawing(svgOf(markup), fakeStyles(ink)), { resolution: 1, flash: false }, cache));
+  const moved = (x: number, y: number) =>
+    `<g data-node-key="b" data-x="${x}" data-y="${y}"><rect class="node-outline" x="${x}" y="${y}" width="60" height="30"/><g class="node-body" transform="translate(${x} ${y})"><g data-cell="b|0"><rect x="4" y="4" width="20" height="20"/><text x="14" y="14">7</text></g><rect x="30" y="4" width="20" height="20"/></g></g>`;
+  const flat = (x: number, y: number) =>
+    `<g data-node-key="b" data-x="${x}" data-y="${y}"><rect class="node-outline" x="${x}" y="${y}" width="60" height="30"/><g class="node-body"><g data-cell="b|0"><rect x="${x + 4}" y="${y + 4}" width="20" height="20"/><text x="${x + 14}" y="${y + 14}">7</text></g><rect x="${x + 30}" y="${y + 4}" width="20" height="20"/></g></g>`;
+
+  it("draws what's in a moved group where it's moved to, as if drawn there", () => {
+    expect(placed(scene(moved(100, 50)).root)).toEqual(placed(scene(flat(100, 50)).root));
+  });
+
+  it("keeps a moved group's cells from the last build, wherever it moves", () => {
+    const cache = new SceneCache();
+    const first = scene(moved(100, 50), cache);
+    const cellOf = (s: typeof first) =>
+      [...(s.layers as Map<PaintGroup, Container>).entries()].find(([g]) => g.cell)![1];
+    const cellLayer = cellOf(first);
+    const body = cellLayer.children[0];
+    const second = scene(moved(300, 220), cache);
+    const again = cellOf(second);
+    expect(again.children[0]).toBe(body);
+    expect(placed(second.root)).toEqual(placed(scene(flat(300, 220)).root));
+  });
+});
+
+describe("buildScene: cells as one draw, and render groups (WebGL)", () => {
+  type Batch = Container & { geometry: { instanceCount: number; data: Float32Array } };
+  const box = (x: number, y: number, n: number, between = "") => {
+    let cells = "";
+    for (let i = 0; i < n; i++) {
+      cells += `<g data-cell="b|${i}"><rect x="${4 + i * 24}" y="4" width="20" height="20" rx="3"/><text x="${14 + i * 24}" y="14">${i}</text></g>`;
+      if (i === 1) cells += between;
+    }
+    return `<g data-node-key="b" data-x="${x}" data-y="${y}"><rect class="node-outline" x="${x}" y="${y}" width="200" height="30"/><g class="node-body" transform="translate(${x} ${y})"><text x="2" y="2">label</text>${cells}</g></g>`;
+  };
+  const options = (more: Partial<Parameters<typeof buildScene>[1]> = {}) => ({
+    resolution: 1,
+    flash: false,
+    cells: cellMesh,
+    batchMin: 2,
+    ...more,
+  });
+  const scene = (markup: string, more: Partial<Parameters<typeof buildScene>[1]> = {}, cache = new SceneCache()) =>
+    buildScene(paintDrawing(svgOf(markup), fakeStyles(ink)), options(more), cache) as unknown as {
+      root: Container;
+      layers: Map<PaintGroup, Container>;
+      batches: Batch[];
+    };
+  const all = (c: Container): Container[] => c.children.flatMap((k) => [k, ...all(k)]);
+  /** Each batch's cells: x, y, w, h (in diagram units, its body placed), radius, stroke width. */
+  const cellsOf = (b: Batch) => {
+    let x = 0;
+    let y = 0;
+    for (let at: Container | null = b; at; at = at.parent) {
+      x += at.x;
+      y += at.y;
+    }
+    const d = b.geometry.data;
+    return Array.from({ length: b.geometry.instanceCount }, (_, i) =>
+      [d[i * 9] + x, d[i * 9 + 1] + y, d[i * 9 + 2], d[i * 9 + 3], d[i * 9 + 4], d[i * 9 + 5]].join(","),
+    );
+  };
+
+  it("draws a box's cells' rectangles as one batch, where Graphics would draw them, their text in their layers", () => {
+    const { root, batches, layers } = scene(box(100, 50, 6));
+    expect(batches).toHaveLength(1);
+    expect(cellsOf(batches[0])).toEqual([0, 1, 2, 3, 4, 5].map((i) => `${104 + i * 24},54,20,20,3,1`));
+    // No Graphics for them: only the box's outline is one.
+    expect(all(root).filter((c) => c instanceof Graphics)).toHaveLength(1);
+    const cellLayers = [...layers.entries()].filter(([g]) => g.cell).map(([, l]) => l);
+    expect(cellLayers).toHaveLength(6);
+    for (const layer of cellLayers) expect(all(layer).every((c) => !(c instanceof Graphics))).toBe(true);
+    // The batch is drawn where the first cell was, under every cell's text.
+    const parent = cellLayers[0].parent!;
+    expect(parent.children.indexOf(batches[0].parent!)).toBe(parent.children.indexOf(cellLayers[0]) - 1);
+    // Without it (Canvas 2D), the same cells are Graphics.
+    expect(scene(box(100, 50, 6), { cells: undefined }).batches).toEqual([]);
+  });
+
+  it("draws fewer cells than the least batched as Graphics, each under its text in its layer", () => {
+    const { root, batches, layers } = scene(box(100, 50, 6), { batchMin: undefined });
+    expect(batches).toEqual([]);
+    const cellLayers = [...layers.entries()].filter(([g]) => g.cell).map(([, l]) => l);
+    for (const layer of cellLayers) expect(layer.children[0]).toBeInstanceOf(Graphics);
+    expect(all(root).filter((c) => c instanceof Graphics)).toHaveLength(7);
+  });
+
+  it("starts another batch after a shape drawn between cells, and leaves dashed cells as they were", () => {
+    const { batches } = scene(box(0, 0, 4, `<rect x="0" y="0" width="5" height="5"/>`));
+    expect(batches.map((b) => b.geometry.instanceCount)).toEqual([2, 2]);
+    const dashed = buildScene(
+      paintDrawing(
+        svgOf(box(0, 0, 3)),
+        fakeStyles(() => ({ ...ink(), dash: [2, 2] })),
+      ),
+      options(),
+    );
+    expect(dashed.batches).toEqual([]);
+  });
+
+  it("keeps a box's batch with its body, wherever the box moves, and follows each cell's layer", () => {
+    const cache = new SceneCache();
+    const first = scene(box(100, 50, 6), {}, cache);
+    const second = scene(box(300, 220, 6), {}, cache);
+    expect(second.batches).toEqual(first.batches);
+    expect(cellsOf(second.batches[0])[0]).toBe("304,224,20,20,3,1");
+    // A cell's layer slid by the step animation: its rectangle with it, once synced.
+    const layer = [...second.layers.entries()].find(([g]) => g.cell)![1];
+    layer.position.set(-10, 5);
+    (second.batches[0] as unknown as { sync(): void }).sync();
+    expect(cellsOf(second.batches[0])[0]).toBe("294,229,20,20,3,1");
+  });
+
+  it("makes the bodies of boxes with many things in them render groups, and only when asked", () => {
+    const body = (s: ReturnType<typeof scene>) =>
+      [...s.layers.entries()].find(([g]) => g.nodeKey)![1].children[0] as Container & { isRenderGroup?: boolean };
+    expect(body(scene(box(0, 0, 250), { renderGroups: true })).isRenderGroup).toBe(true);
+    expect(body(scene(box(0, 0, 30), { renderGroups: true })).isRenderGroup).toBeFalsy();
+    expect(body(scene(box(0, 0, 250))).isRenderGroup).toBeFalsy();
   });
 });

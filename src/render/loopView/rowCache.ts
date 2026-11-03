@@ -5,8 +5,10 @@
  * In stacked mode a step adds at most a row (or moves which row is the
  * current one), but each step drew every row again: a 60 × 60 grid in 120
  * rows is about 430,000 cells. A row's drawing is the same as last step's
- * when it's the same pass of the loop, drawn in the same place, compared
- * with the same row above it, under the same plan (columns, their places
+ * when it's the same pass of the loop, compared with the same row above it
+ * (as far above as before: a row is drawn from its own top and moved into
+ * place, layout.ts, so one that moves down, past a fold growing above it
+ * or earlier rows left out, is the same marks), under the same plan (columns, their places
  * and widths) and the same things the whole loop view shares (which
  * variables and containers are shown, heatmap ranges...). Then its marks go
  * into the new drawing as they are (Mark.appendShared): the SVG patcher and
@@ -111,7 +113,7 @@ export function rowKey(
   plan: LoopPlan,
   row: LoopRow,
   index: number,
-  y: number,
+  /** The row drawn above, where it is from this row's top (rows are drawn from their own top). */
   prevDrawn: DrawnRow | null,
   afterGap: boolean,
 ): string {
@@ -124,7 +126,6 @@ export function rowKey(
   return [
     passKey(row),
     index,
-    y,
     scene.isCurrent(index) ? 1 : 0,
     passKey(prevRow),
     prevDrawn ? `${passKey(prevDrawn.row)}@${prevDrawn.y}#${prevDrawn.index}` : "-",

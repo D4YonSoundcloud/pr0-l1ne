@@ -5,7 +5,15 @@ import { memoryScene } from "../../scene/memoryScene";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
 import { diffSteps } from "../../trace/diff";
 import { renderMemory } from "../memory";
-import { groups, type PaintGroup, type PaintShape, type PaintText, paintDrawing } from "./paint";
+import {
+  groups,
+  type PaintGroup,
+  type PaintShape,
+  type PaintText,
+  paintDrawing,
+  placedGroups,
+  translateOf,
+} from "./paint";
 
 const shapes = (g: PaintGroup) => g.children.filter((c): c is PaintShape => c.kind === "shape");
 const texts = (g: PaintGroup) => g.children.filter((c): c is PaintText => c.kind === "text");
@@ -318,5 +326,32 @@ describe("paintDrawing: a real memory drawing", () => {
     expect(keys).toEqual([...svg.querySelectorAll(".node")].map((n) => (n as SVGGElement).dataset.nodeKey));
     expect(paint.classes).toContain("memory-svg");
     for (const g of groups(paint.root)) if (g.nodeKey) expect(g.bounds).not.toBeNull();
+  });
+});
+
+describe("paintDrawing: moved groups", () => {
+  it("reads a translate, keeps what's in it in its own units, and gives its bounds in its parent's", () => {
+    const paint = paintDrawing(
+      svgOf(
+        `<g data-node-key="n"><g transform="translate(100 40)"><g data-cell="c"><rect x="5" y="6" width="10" height="10"/></g></g></g>`,
+      ),
+      fakeStyles(() => ({ fill: "rgb(0, 0, 0)" })),
+    );
+    const moved = [...groups(paint.root)].find((g) => g.offset)!;
+    expect(moved.offset).toEqual({ x: 100, y: 40 });
+    const cell = [...groups(paint.root)].find((g) => g.cell)!;
+    expect(cell.bounds).toMatchObject({ x: 5, y: 6 }); // in the moved group's units
+    expect(moved.bounds).toMatchObject({ x: 105, y: 46 }); // in its parent's
+    // In diagram units, where it's drawn.
+    const placed = [...placedGroups(paint.root)].find((p) => p.group === cell)!;
+    expect(placed.bounds).toMatchObject({ x: 105, y: 46 });
+  });
+
+  it("knows a translate when it sees one", () => {
+    expect(translateOf("translate(3 4)")).toEqual({ x: 3, y: 4 });
+    expect(translateOf("translate(3.5, -4e1)")).toEqual({ x: 3.5, y: -40 });
+    expect(translateOf("translate(7)")).toEqual({ x: 7, y: 0 });
+    expect(translateOf("scale(2)")).toBeNull();
+    expect(translateOf(null)).toBeNull();
   });
 });

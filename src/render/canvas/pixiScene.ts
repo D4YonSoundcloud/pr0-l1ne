@@ -41,6 +41,8 @@ export interface BuiltScene {
   layers: Map<PaintGroup, Container>;
   /** The flash drawn over each changed cell, to fade out (see motion.ts). */
   flashes: Container[];
+  /** Cells drawn as one (BuildOptions.cells), kept bodies' too: synced with their layers before each frame. */
+  batches: CellBatch[];
 }
 
 export interface BuildOptions {
@@ -48,7 +50,56 @@ export interface BuildOptions {
   resolution: number;
   /** Draw the changed-cell flash overlays. */
   flash: boolean;
+  /**
+   * Draw the rectangles of the cells in each box or row as one, by this
+   * (cellMesh.ts: an instanced mesh, on WebGL). Without it, each is a Graphics.
+   */
+  cells?: (cells: CellRect[], layers: Container[]) => CellBatch & Container;
+  /** At least this many cells in a row are drawn as one (BATCH_MIN unless given: tests give fewer). */
+  batchMin?: number;
+  /**
+   * Make the body of each box and row with more than a few things in it a
+   * PixiJS render group (WebGL): its draw is kept on the GPU, so moving it
+   * (a box that moved, a row shifted down, a new scene it's put in) changes
+   * one transform, and nothing in it is batched or uploaded again.
+   */
+  renderGroups?: boolean;
 }
+
+/** A cell's rectangle, drawn with many others (BuildOptions.cells): where it is in its body, and its paint. */
+export interface CellRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  r: number;
+  fill: FillPaint | null;
+  stroke: StrokePaint | null;
+}
+
+/**
+ * Many cells drawn as one (BuildOptions.cells). Each cell keeps its own
+ * layer (for its text, and for the step animation to slide and fade);
+ * `sync` puts where each layer is now, and how faded, into its cell.
+ */
+export interface CellBatch {
+  sync(): void;
+}
+
+/**
+ * A body with at least this many things drawn in it is a render group
+ * (BuildOptions.renderGroups): each is a draw call of its own, which costs
+ * more than it saves on smaller ones (a call stack of small frames was
+ * slower with them).
+ */
+export const RENDER_GROUP_MIN = 200;
+
+/**
+ * At least this many cells in a row are drawn as one (BuildOptions.cells).
+ * Fewer stay Graphics, batched with the shapes around them: a mesh is a
+ * draw call of its own, and a few cells' worth isn't worth one.
+ */
+export const BATCH_MIN = 32;
 
 /** Corners at least this round are traced as arcs (see traceGeometry). */
 const ROUND_EXACTLY = 6;
@@ -309,13 +360,13 @@ function emBox(font: string, size: number): { ascent: number; descent: number } 
 
 const fontString = (style: TextStyle) => fontStringFromTextStyle(style);
 
-function drawText(container: Container, t: PaintText, resolution: number): void {
+function drawText(container: Container, t: PaintText, resolution: number, ox = 0, oy = 0): void {
   // Lay the runs out left to right, then place them by the anchor.
   const pieces = t.runs.map((run) => {
     const style = textStyle(run);
+    const font = fontString(style);
     // Snapped to whole pixels: a text texture drawn between pixels is blurred.
     const text = new Text({ text: run.text, style, resolution, roundPixels: true });
-    const font = fontString(style);
     const halfStroke = run.stroke ? run.stroke.width / 2 : 0;
     const advance = CanvasTextMetrics.measureText(run.text, style).width - halfStroke * 2;
     return { text, run, font, halfStroke, advance, pixiAscent: CanvasTextMetrics.measureFont(font).ascent };
@@ -334,8 +385,8 @@ function drawText(container: Container, t: PaintText, resolution: number): void 
           : t.baseline === "hanging"
             ? t.y + ascent * 0.8
             : t.y;
-    p.text.x = x - p.halfStroke;
-    p.text.y = baseline - p.pixiAscent - p.halfStroke;
+    p.text.x = ox + x - p.halfStroke;
+    p.text.y = oy + baseline - p.pixiAscent - p.halfStroke;
     if (t.alpha < 1) p.text.alpha = t.alpha;
     container.addChild(p.text);
     x += p.advance;
@@ -377,6 +428,8 @@ interface Entry {
   overlays: Container[];
   /** The shared contexts its own Graphics draw (not its keyed groups'): SceneCache.contexts. */
   contexts: string[];
+  /** Its own cell batches (not its keyed groups'): BuildOptions.cells. */
+  batches: CellBatch[];
 }
 
 /**
@@ -521,10 +574,40 @@ function keyedChildren(group: PaintGroup, out: PaintGroup[] = []): PaintGroup[] 
   return out;
 }
 
+/**
+ * A cell drawn with the others in its body (BuildOptions.cells): a value
+ * in a slot (data-cell) that's a plain rectangle, filled or outlined with a
+ * solid line, and its text. Its rectangle is the shape returned.
+ */
+function batchedCell(group: PaintGroup): PaintShape | null {
+  if (!group.cell || group.nodeKey || group.layer || group.current || group.flip) return null;
+  const [first, ...rest] = group.children;
+  if (first?.kind !== "shape" || first.geometry.type !== "rect") return null;
+  if (!first.fill && !first.stroke) return null;
+  if (first.stroke?.dash.length) return null;
+  for (const item of rest) if (item.kind !== "text") return null;
+  return first;
+}
+
+/** How many PixiJS objects draw in a container (to the RENDER_GROUP_MIN), not counting containers. */
+function drawsAtLeast(c: Container, n: number): boolean {
+  let count = 0;
+  const walk = (at: Container): boolean => {
+    for (const child of at.children) {
+      if (child.children.length) {
+        if (walk(child)) return true;
+      } else if (++count >= n) return true;
+    }
+    return false;
+  };
+  return walk(c);
+}
+
 /** Build a paint list as PixiJS objects, reusing what `cache` kept from the last build. */
 export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCache = new SceneCache()): BuiltScene {
   const layers = new Map<PaintGroup, Container>();
   const flashes: Container[] = [];
+  const batches: CellBatch[] = [];
   const root = new Container();
   // Text is drawn at a resolution: kept text at another one won't do.
   if (cache.resolution !== options.resolution) cache.clear();
@@ -542,7 +625,8 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
     let sig = sigs.get(group) ?? known.get(group.children);
     if (sig !== undefined) return sig;
     const { x, y } = originOf(group);
-    sig = itemsSig(group, x, y);
+    // Its children are in its own units (moved by its offset): measured from its corner in those.
+    sig = itemsSig(group, x - (group.offset?.x ?? 0), y - (group.offset?.y ?? 0));
     sigs.set(group, sig);
     known.set(group.children, sig);
     return sig;
@@ -557,7 +641,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
       else if (keyed(item)) {
         const at = originOf(item);
         out += `<${q(at.x - ox)},${q(at.y - oy)}:${sigOf(item)}>`;
-      } else out += `{${itemsSig(item, ox, oy)}}`;
+      } else out += `{${itemsSig(item, ox - (item.offset?.x ?? 0), oy - (item.offset?.y ?? 0))}}`;
     }
     return out;
   };
@@ -587,6 +671,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
   const adopt = (group: PaintGroup, entry: Entry) => {
     keep(entry);
     cache.stillUsed(entry.contexts);
+    batches.push(...entry.batches);
     for (const overlay of entry.overlays) {
       overlay.alpha = 1;
       flashes.push(overlay);
@@ -606,7 +691,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
    * A run of shapes as one Graphics, at the run's corner, drawing a context
    * shared with every run that draws the same from its own corner.
    */
-  const addRun = (run: PaintShape[], into: Container, contexts: string[]) => {
+  const addRun = (run: PaintShape[], into: Container, contexts: string[], ox: number, oy: number) => {
     let x = Number.POSITIVE_INFINITY;
     let y = Number.POSITIVE_INFINITY;
     for (const shape of run) {
@@ -621,70 +706,166 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
       for (const shape of run) drawShape(context, { ...shape, geometry: shifted(shape.geometry, x, y) });
     });
     contexts.push(key);
-    g.position.set(x, y);
+    g.position.set(ox + x, oy + y);
     into.addChild(g);
   };
 
-  const add = (group: PaintGroup, into: Container, entry: Pick<Entry, "nested" | "overlays" | "contexts">) => {
+  /**
+   * Draw a group's children into `into`, (ox, oy) from where `into` is:
+   * the offsets of the moved groups it's flattened through (PaintGroup.offset).
+   */
+  const add = (
+    group: PaintGroup,
+    into: Container,
+    entry: Pick<Entry, "nested" | "overlays" | "contexts" | "batches">,
+    ox = 0,
+    oy = 0,
+    from = 0,
+  ) => {
     let run: PaintShape[] = [];
     const endRun = () => {
-      if (run.length) addRun(run, into, entry.contexts);
+      if (run.length) {
+        addRun(run, into, entry.contexts, ox, oy);
+        // Shapes drawn here go above the cells before them: the next cells are another batch.
+        pending.delete(into);
+      }
       run = [];
     };
-    for (const item of group.children) {
+    for (let i = from; i < group.children.length; i++) {
+      const item = group.children[i];
       if (item.kind === "shape") {
         run.push(item);
         if (item.flash && options.flash) {
           endRun(); // later shapes go above the flash
           const overlay = flashOverlay(item);
+          overlay.position.set(ox, oy);
           into.addChild(overlay);
           flashes.push(overlay);
           entry.overlays.push(overlay);
         }
       } else if (item.kind === "text") {
         endRun();
-        drawText(into, item, options.resolution);
+        drawText(into, item, options.resolution, ox, oy);
       } else if (keyed(item)) {
         endRun();
+        const rect = options.cells ? batchedCell(item) : null;
+        if (rect) {
+          // Its rectangle drawn with the other cells here, at the first one's place; its layer holds its text.
+          let batch = pending.get(into);
+          if (!batch) {
+            const holder = new Container();
+            into.addChild(holder);
+            batch = { holder, cells: [], layers: [], entry };
+            pending.set(into, batch);
+            open.push(batch);
+          }
+          const g = rect.geometry as Extract<Geometry, { type: "rect" }>;
+          const dx = ox + (item.offset?.x ?? 0);
+          const dy = oy + (item.offset?.y ?? 0);
+          const layer = new Container();
+          if (item.alpha < 1) layer.alpha = item.alpha;
+          layers.set(item, layer);
+          into.addChild(layer);
+          batch.cells.push({ x: dx + g.x, y: dy + g.y, w: g.w, h: g.h, r: g.r, fill: rect.fill, stroke: rect.stroke });
+          batch.layers.push(layer);
+          entry.nested.push(place(item, layer, ox, oy, rect));
+          continue;
+        }
+        pending.delete(into);
         const layer = new Container();
         if (item.alpha < 1) layer.alpha = item.alpha;
         layers.set(item, layer);
         into.addChild(layer);
-        entry.nested.push(place(item, layer));
+        entry.nested.push(place(item, layer, ox, oy));
       } else {
         // Shapes after a plain group must still draw above it: a new run.
         endRun();
-        add(item, into, entry);
+        add(item, into, entry, ox + (item.offset?.x ?? 0), oy + (item.offset?.y ?? 0));
       }
     }
     endRun();
   };
-  /** A keyed group's body in its layer: kept from the last build if it draws the same, or built. */
-  const place = (group: PaintGroup, layer: Container): Entry => {
-    const sig = sigOf(group);
+  /** Cells being gathered into one batch, by the container they're drawn in (BuildOptions.cells). */
+  interface Gathering {
+    holder: Container;
+    cells: CellRect[];
+    layers: Container[];
+    entry: Pick<Entry, "batches" | "contexts">;
+  }
+  const pending = new Map<Container, Gathering>();
+  const open: Gathering[] = [];
+  /**
+   * A keyed group's body in its layer: kept from the last build if it draws
+   * the same, or built. (ox, oy): where its parent's units are, from the
+   * layer's (moved groups flattened above it). The body carries it, never
+   * the layer, which the step animation moves.
+   */
+  const place = (group: PaintGroup, layer: Container, ox = 0, oy = 0, batched: PaintShape | null = null): Entry => {
+    // A batched cell's body draws all but its rectangle: another body than the same cell drawn whole.
+    const sig = batched ? `I${sigOf(group)}` : sigOf(group);
     const at = originOf(group);
     const reused = take(sig);
     if (reused) {
       layer.addChild(reused.body);
-      reused.body.position.set(at.x - reused.built.x, at.y - reused.built.y);
+      reused.body.position.set(ox + at.x - reused.built.x, oy + at.y - reused.built.y);
       reused.layer = layer;
       adopt(group, reused);
       return reused;
     }
     const body = new Container();
     layer.addChild(body);
-    const entry: Entry = { sig, body, layer, built: at, nested: [], overlays: [], contexts: [] };
-    add(group, body, entry);
+    const entry: Entry = { sig, body, layer, built: at, nested: [], overlays: [], contexts: [], batches: [] };
+    body.position.set(ox, oy);
+    const gx = group.offset?.x ?? 0;
+    const gy = group.offset?.y ?? 0;
+    if (batched) {
+      // Its rectangle is in the batch; its flash still goes over it, under its text.
+      if (batched.flash && options.flash) {
+        const overlay = flashOverlay(batched);
+        overlay.position.set(gx, gy);
+        body.addChild(overlay);
+        flashes.push(overlay);
+        entry.overlays.push(overlay);
+      }
+      add(group, body, entry, gx, gy, 1);
+    } else add(group, body, entry, gx, gy);
+    if (options.renderGroups && (group.nodeKey || group.current) && drawsAtLeast(body, RENDER_GROUP_MIN))
+      body.isRenderGroup = true;
     keep(entry);
     return entry;
   };
 
-  add(paint.root, root, { nested: [], overlays: [], contexts: [] });
+  add(paint.root, root, { nested: [], overlays: [], contexts: [], batches: [] });
+  // Each batch of cells is made once all its cells are known, where its first cell is.
+  for (const batch of open) {
+    if (batch.cells.length < (options.batchMin ?? BATCH_MIN)) {
+      // Too few: each rectangle a Graphics under its cell's text, in its layer (so it slides with it).
+      batch.cells.forEach((c, i) => {
+        const shape: PaintShape = {
+          kind: "shape",
+          geometry: { type: "rect", x: c.x, y: c.y, w: c.w, h: c.h, r: c.r },
+          fill: c.fill,
+          stroke: c.stroke,
+          flash: false,
+        };
+        const layer = batch.layers[i];
+        addRun([shape], layer, batch.entry.contexts, 0, 0);
+        layer.addChildAt(layer.children[layer.children.length - 1], 0);
+      });
+      batch.holder.parent?.removeChild(batch.holder);
+      batch.holder.destroy();
+      continue;
+    }
+    const mesh = options.cells!(batch.cells, batch.layers);
+    batch.holder.addChild(mesh);
+    batch.entry.batches.push(mesh);
+    batches.push(mesh);
+  }
   cache.entries = kept;
   // Each Text listens to its style for changes. These styles are shared and
   // never change, and with thousands of texts on one style, unsubscribing
   // them one by one when the scene is replaced costs more than drawing it
   // (it's a search through every listener, each time). Drop the listeners.
   for (const style of styles.values()) style.removeAllListeners("update");
-  return { root, layers, flashes };
+  return { root, layers, flashes, batches };
 }

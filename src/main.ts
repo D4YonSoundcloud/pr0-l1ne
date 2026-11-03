@@ -48,6 +48,8 @@ const query = new URLSearchParams(window.location.search);
 perf.noLod = query.has("nolod");
 // ?noshare: no geometry shared between Graphics (canvas/pixiScene.ts), to measure what sharing saves.
 perf.noShare = query.has("noshare");
+perf.noCells = query.has("nocells");
+perf.noGroups = query.has("nogroups");
 if (query.has("perf")) {
   perf.on = true;
   (window as unknown as { __pr0l1nePerf: typeof perf }).__pr0l1nePerf = perf;

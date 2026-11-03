@@ -47,7 +47,12 @@ export interface RowContext {
   afterGap: boolean;
 }
 
-/** Draw a row with its top at y, as a <g class="loop-row">. */
+/**
+ * Draw a row with its top at y, as a <g class="row-body">: the layout
+ * draws each row at y 0 and moves it where it goes (layout.ts), with its
+ * change arrows (ctx.arrowLayer) from its own top too, so a row that moves
+ * down is the same marks (rowCache.ts).
+ */
 export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext): Mark {
   const { plan, scene, arrowLayer, prevDrawn, afterGap } = ctx;
   const { all, live, scalars, history } = scene;
@@ -61,17 +66,11 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
   const trackRows = scene.track?.rows ?? [];
   const isCurrent = scene.isCurrent(index);
   const prevRow = index > 0 ? all[index - 1] : null;
-  // data-top / data-bottom: the row's extent, so the viewport can keep it
-  // in view without measuring the page.
-  const g = s("g", {
-    class: ["loop-row", isCurrent && "is-current"].filter(Boolean).join(" "),
-    "data-top": y - 6,
-    "data-bottom": y + rowH + 4,
-  });
+  // Its classes and extent are on the group the layout moves it with (layout.ts rowShell).
+  const g = s("g", { class: "row-body" });
   // A `viz: check` that's false here: the row turns red.
   const failed = scene.failedChecks(row);
   if (failed.length) {
-    g.classList.add("is-failing");
     g.append(
       s("rect", {
         class: "failing-band",

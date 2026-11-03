@@ -118,6 +118,27 @@ describe("folding the loop history", () => {
     expect(rows.stats.kept).toBeGreaterThan(5);
   });
 
+  it("keeps the rows below the band when it grows and they move up: only what changed is drawn", async () => {
+    const { t, steps } = await longLoop();
+    const rows = new RowCache();
+    let moves = 0;
+    let lastCount = -1;
+    for (const i of steps.slice(10)) {
+      const scene = loopScene(t, historyAt(t, i)!, { hideQuiet: false, detail: detail(600) });
+      const fold = foldsOf(scene)[0];
+      loopDrawing(scene, { rows });
+      if (fold && lastCount >= 0 && fold.count !== lastCount) {
+        moves++;
+        // A chunk of rows folded and every row below moved up: still kept, all but the new one and the
+        // ones whose highlight moved (the running row, the one before it).
+        expect(rows.stats.drawn).toBeLessThanOrEqual(3);
+        expect(rows.stats.kept).toBeGreaterThan(5);
+      }
+      lastCount = fold?.count ?? -1;
+    }
+    expect(moves).toBeGreaterThan(0);
+  });
+
   it("folds nested loops' passes, keeping the header that starts the first run below the band", async () => {
     const t = await trace(`const g = [];
 for (let i = 0; i < 30; i++) {
