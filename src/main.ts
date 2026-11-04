@@ -29,6 +29,7 @@ import { RendererSwitch } from "./app/rendererSwitch";
 import { resizeRedraw } from "./app/resizeRedraw";
 import { LanguageRoutes, languageFromPath } from "./app/routing";
 import { RunController } from "./app/runController";
+import { RunProgressView } from "./app/runProgress";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
 import { toolsMenu } from "./app/sectionTools";
 import { ShareController } from "./app/shareController";
@@ -71,9 +72,10 @@ const currentLanguage = () => app.get().language;
 const measurable = () => LANGUAGES[currentLanguage()].kind === "program";
 const els = findElements();
 showLanguageKind(LANGUAGES[currentLanguage()].kind);
-// What draws the two windows (see scene/renderer.ts): SVG, or Canvas 2D
-// (PixiJS), which is only downloaded when someone picks it. Windows start
-// with SVG, which is ready at once, and switch once the canvas is.
+// What draws the two windows (see scene/renderer.ts): SVG, or the canvas
+// (PixiJS) on WebGL (the one offered, falling back to Canvas 2D) or Canvas 2D,
+// which is only downloaded when someone picks it. Windows start with SVG,
+// which is ready at once, and switch once the canvas is.
 const rendererSwitch = new RendererSwitch(
   {
     svg: () => SVG_RENDERERS,
@@ -158,11 +160,24 @@ const playback = new PlaybackController({
   reducedMotion: prefersReducedMotion,
 });
 
+// How a run is going, while it goes: the toolbar's line, and for Run a card over the canvas, each with Stop.
+const runProgress = new RunProgressView(
+  {
+    line: els.runProgress,
+    card: els.runCard,
+    canvas: els.canvas,
+    announce: (text) => {
+      els.announce.textContent = text;
+    },
+  },
+  () => runs.stop(),
+);
 const runs = new RunController({
   app,
   status: els.status,
   editor,
   setBanner,
+  progress: runProgress,
   onResult: (updateMarks) => view.render(updateMarks),
   onStatus: (status, download) => loadingCard.show(status, download),
 });

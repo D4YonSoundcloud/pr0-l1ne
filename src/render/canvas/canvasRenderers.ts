@@ -28,6 +28,7 @@
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
 import { perf, timed } from "../../perf";
+import { CLUSTER_PREFIX } from "../../scene/graphClusters";
 import { FOLD_PREFIX, loopDetailBudget } from "../../scene/loopSummaries";
 import { detailBudget, summaryBoxes } from "../../scene/summaries";
 import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM } from "../lod";
@@ -168,7 +169,7 @@ abstract class CanvasWindow {
         events.onAutoFitChange?.(state);
         this.levelChanged(this.view.lod);
       },
-      onNodeClick: (key) => this.nodeClicked(key),
+      onNodeClick: (key, part) => this.nodeClicked(key, part),
       controls: events.controls,
       onLod: (lod) => this.setLevel(lod),
       surface: {
@@ -189,6 +190,7 @@ abstract class CanvasWindow {
             ...(node.label ? { title: node.label } : {}),
           };
         },
+        clickAt: (x, y) => this.clickAt(x, y),
       },
     });
     el.classList.add("is-canvas");
@@ -435,7 +437,7 @@ abstract class CanvasWindow {
   protected levelChanged(_lod: Lod): void {}
 
   /** A box was clicked (pressed and let go without dragging). */
-  protected nodeClicked(_key: string): void {}
+  protected nodeClicked(_key: string, _part?: string): void {}
 
   /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
   protected viewMoved(): void {}
@@ -550,8 +552,19 @@ abstract class CanvasWindow {
   private hitIndex(): HitIndex | null {
     if (!this.paint) return null;
     if (this.hits?.paint !== this.paint)
-      this.hits = { paint: this.paint, index: new HitIndex(this.paint.root, (g) => !!(g.nodeKey || g.title)) };
+      this.hits = {
+        paint: this.paint,
+        index: new HitIndex(this.paint.root, (g) => !!(g.nodeKey || g.title || g.click)),
+      };
     return this.hits.index;
+  }
+
+  /** The clickable part (data-click) under a point: a graph's cluster. */
+  private clickAt(clientX: number, clientY: number): string | null {
+    const index = this.hitIndex();
+    if (!index) return null;
+    const { x, y } = this.toDiagram(clientX, clientY);
+    return index.at(x, y, (g) => !!g.click)?.click ?? null;
   }
 
   /** The topmost draggable box under a point. */
@@ -794,7 +807,12 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
   private summaryKeys = new Map<string, string>();
   private readonly onExpand?: (key: string) => void;
 
-  protected override nodeClicked(key: string): void {
+  protected override nodeClicked(key: string, part?: string): void {
+    // A graph's cluster (scene/graphClusters.ts) opens like a summary.
+    if (part?.startsWith(CLUSTER_PREFIX)) {
+      this.onExpand?.(part);
+      return;
+    }
     const summary = this.summaryKeys.get(key);
     if (summary) this.onExpand?.(summary);
   }
@@ -890,8 +908,9 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
     return loopDetailBudget(this.view.lod, this.view.autoFitState.on);
   }
 
-  protected override nodeClicked(key: string): void {
-    if (key.startsWith(FOLD_PREFIX)) this.onExpand?.(key);
+  protected override nodeClicked(key: string, part?: string): void {
+    if (part?.startsWith(CLUSTER_PREFIX)) this.onExpand?.(part);
+    else if (key.startsWith(FOLD_PREFIX)) this.onExpand?.(key);
   }
 
   setLayout(layout: { vertical: boolean }): void {

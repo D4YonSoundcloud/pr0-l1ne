@@ -7,9 +7,8 @@
  * loads the tracer's modules into it (pythonModules.ts), then answers "run"
  * messages with a Trace and "measure" messages with a Measurement.
  */
-import { expandHeaps } from "../trace/delta";
-import type { Trace } from "../trace/types";
 import { workerChannel } from "./channel";
+import { meterDownloads, PYTHON_DOWNLOADS } from "./downloads";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
 import { loadPythonTracer, type PyodideFiles } from "./pythonModules";
 
@@ -33,7 +32,13 @@ interface Pyodide extends PyodideFiles {
   version: string;
 }
 
-type RunTrace = (source: string, maxSteps: number, maxSeconds: number, samplingJson: string) => string;
+type RunTrace = (
+  source: string,
+  maxSteps: number,
+  maxSeconds: number,
+  samplingJson: string,
+  report: (json: string) => void,
+) => string;
 type RunMeasure = (source: string, limitMs: number, report: (json: string) => void, overridesJson?: string) => string;
 
 const channel = workerChannel();
@@ -44,13 +49,18 @@ let runMeasure: RunMeasure | null = null;
 const queue: ToWorker[] = [];
 
 async function boot(): Promise<void> {
+  // How much of Python has downloaded, for the loading card.
+  const unmeter = meterDownloads(PYTHON_DOWNLOADS, ({ loaded, total }) =>
+    post({ type: "loadProgress", loaded, total }),
+  );
   try {
     const module = await import(/* @vite-ignore */ `${INDEX_URL}pyodide.mjs`);
     // A fixed hash seed: sets of strings come out in the same order on every
     // run and every page load (Python randomizes it by default), so a
     // program's output and drawing are repeatable.
     const pyodide: Pyodide = await module.loadPyodide({ indexURL: INDEX_URL, env: { PYTHONHASHSEED: "0" } });
-    ({ runTrace, runMeasure } = loadPythonTracer(pyodide, PYTHON_FILES));
+    unmeter();
+    ({ runTraceStreaming: runTrace, runMeasure } = loadPythonTracer(pyodide, PYTHON_FILES));
     const pythonVersion = String(pyodide.runPython("import sys; sys.version.split()[0]"));
     post({ type: "ready", label: `Python ${pythonVersion}`, protocolVersion: PROTOCOL_VERSION });
     while (queue.length) handle(queue.shift()!);
@@ -82,11 +92,18 @@ function handle(message: ToWorker): void {
     return;
   }
   const started = performance.now();
+  const runId = message.runId;
   try {
-    const json = runTrace(message.source, message.maxSteps, message.maxSeconds, JSON.stringify(message.sampling));
-    // Rebuilt here, so the page gets heaps that share unchanged objects.
-    const trace = expandHeaps(JSON.parse(json) as Trace);
-    post({ type: "result", runId: message.runId, trace, elapsedMs: performance.now() - started });
+    // Progress and the trace a piece at a time as it runs, the rest at the end: the page reads the
+    // JSON and rebuilds the heaps as it arrives (trace/stream.ts), and keeps what had come if stopped.
+    const json = runTrace(
+      message.source,
+      message.maxSteps,
+      message.maxSeconds,
+      JSON.stringify(message.sampling),
+      (report) => post({ type: "progress", runId, json: report }),
+    );
+    post({ type: "streamed", runId, json, elapsedMs: performance.now() - started });
   } catch (error) {
     post({
       type: "crash",

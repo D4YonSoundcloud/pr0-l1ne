@@ -82,6 +82,12 @@
         <a id="docs" class="button quiet docs-link" href="/docs/user-guide.html" target="_blank" rel="noopener" title="The user guide and how PR0L1NE works (opens in a new tab)">Docs</a>
         </div>
         <span id="status" class="status" role="status" aria-live="polite">Loading…</span>
+        <!-- How a run is going, while it goes (app/runProgress.ts). -->
+        <span id="run-progress" class="run-progress" hidden>
+          <span class="run-progress-bar" role="progressbar" aria-label="How far the run has got" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></span>
+          <span class="run-progress-text"></span>
+          <button type="button" class="button quiet run-stop" title="Stop the run and show what was recorded so far">Stop</button>
+        </span>
       </header>
 
       <!-- On a phone: which one or two windows show (app/mobileViews.ts). Hidden on a wide screen. -->
@@ -128,10 +134,22 @@
           <!-- While Python or PostgreSQL downloads (app/loadingCard.ts). -->
           <div id="loading-card" class="loading-card" hidden>
             <div class="loading-spinner" aria-hidden="true"></div>
-            <p class="loading-title">Downloading <span class="loading-what">Python</span></p>
-            <div class="loading-bar" aria-hidden="true"><span></span></div>
+            <p class="loading-title"><span class="loading-verb">Downloading</span> <span class="loading-what">Python</span><span class="loading-percent"></span></p>
+            <div class="loading-bar" role="progressbar" aria-label="How much has downloaded" aria-valuemin="0" aria-valuemax="100"><span></span></div>
             <p class="loading-detail">About <span class="loading-size">6 MB</span>, and only the first time: your browser keeps a copy.</p>
             <p class="loading-free">Free, no sign-up, and it runs in your own browser: your code never leaves it.</p>
+          </div>
+          <!-- While Run goes (app/runProgress.ts): its stages and numbers, over the last drawing. -->
+          <div id="run-card" class="run-card" hidden>
+            <p class="run-card-title">Running your code</p>
+            <ol class="run-stages">
+              <li data-stage="run">Run your code</li>
+              <li data-stage="prepare">Prepare the drawing</li>
+            </ol>
+            <div class="run-card-bar" role="progressbar" aria-label="How far the run has got" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+            <p class="run-card-numbers"></p>
+            <p class="run-card-left"></p>
+            <button type="button" class="button run-card-stop" title="Stop the run and show what was recorded so far">Stop and show what's recorded</button>
           </div>
           <div class="canvas" id="canvas">
             <section class="canvas-section" id="memory-section" aria-labelledby="memory-title">

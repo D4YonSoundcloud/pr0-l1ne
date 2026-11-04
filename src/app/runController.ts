@@ -13,13 +13,15 @@
 import { type HintContext, hintContext } from "../hintAssist";
 import { LANGUAGES, type LanguageId } from "../languages";
 import { perf, timed, traceStats } from "../perf";
-import { applyHints } from "../trace/hints";
 import { POLICY } from "../trace/policy";
+import { prepareTrace } from "../trace/prepare";
 import type { Trace } from "../trace/types";
+import { finishInSlices } from "../trace/work";
 import { Runner, type RunnerStatus, type RunOutcome } from "../worker/runner";
 import type { BannerTone } from "./banner";
 import { escapeHtml } from "./html";
 import { firstStepFor } from "./playbackController";
+import type { ProgressView } from "./runProgress";
 import type { AppStore } from "./state";
 
 // The step budget, how long tracing may take (Live or Run) and how long
@@ -45,7 +47,7 @@ export const LIVE_DELAY_MS = 600;
 export type Budget = "live" | "run";
 
 /** The part of a Runner this controller uses (tests pass a fake). */
-export type RunnerLike = Pick<Runner, "run" | "status" | "measure" | "stopMeasure">;
+export type RunnerLike = Pick<Runner, "run" | "status" | "measure" | "stopMeasure" | "stop">;
 
 export interface RunEditor {
   /** Show an error under a line (null clears the marks). */
@@ -81,6 +83,14 @@ export interface RunOptions {
   onStatus?(status: RunnerStatus, download: Download | null): void;
   /** Make a language's runner. */
   createRunner?(language: LanguageId, onStatus: (status: RunnerStatus) => void): RunnerLike;
+  /** How a run is going, while it goes (app/runProgress.ts). */
+  progress?: ProgressView;
+  /** Resolves once the page has painted (so "Preparing the drawing" shows before the work that blocks it). */
+  nextFrame?(): Promise<void>;
+  /** Between slices of preparing a trace, a frame for the page (trace/work.ts pauseForFrame; tests pass their own). */
+  pauseForFrame?(): Promise<void>;
+  /** Work per slice of preparing, in milliseconds (trace/work.ts; tests pass 0, to pause after every step). */
+  sliceMs?: number;
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;
 }
@@ -171,11 +181,18 @@ export class RunController {
           ? status.message // a long error may be cut short on screen
           : "";
     switch (status.kind) {
-      case "loading":
-        el.textContent = download
-          ? `Downloading ${download.name} (${download.size})…`
-          : `Loading ${LANGUAGES[this.language].label}…`;
+      case "loading": {
+        const bytes = status.download;
+        const share = bytes && bytes.total > 0 ? Math.min(1, bytes.loaded / bytes.total) : null;
+        el.textContent = !download
+          ? `Loading ${LANGUAGES[this.language].label}…`
+          : share === null
+            ? `Downloading ${download.name} (${download.size})…`
+            : share < 1
+              ? `Downloading ${download.name}… ${Math.floor(share * 100)}%`
+              : `Starting ${download.name}…`;
         break;
+      }
       case "running":
         el.textContent = "Running…";
         break;
@@ -212,16 +229,57 @@ export class RunController {
       return;
     }
     this.inFlight = true;
+    this.running = language;
     const seconds = budget === "live" ? POLICY.liveSeconds : POLICY.runSeconds;
     const started = perf.on ? performance.now() : 0;
-    const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling);
+    const view = this.options.progress;
+    view?.start({ budget, maxSteps: POLICY.maxSteps, maxSeconds: seconds });
+    const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling, (progress) =>
+      view?.update(progress),
+    );
     if (perf.on) perf.record("run.trace", performance.now() - started);
     this.lastBudget = budget;
-    this.inFlight = false;
+    this.running = null;
     // Report a crash whatever the language now; show results only for the language on screen.
     if (outcome.kind === "crash") this.options.reportCrash?.({ language, message: outcome.message });
-    if (language === this.language) this.apply(outcome, code, language);
+    if (language === this.language) {
+      let prepared: Trace | null = null;
+      if (outcome.kind === "trace" && !(outcome.trace.error && outcome.trace.steps.length === 0)) {
+        // The progress showing: say the drawing's being prepared, and let that paint.
+        if (view?.preparing()) await this.nextFrame();
+        const started = perf.on ? performance.now() : 0;
+        prepared = await finishInSlices(prepareTrace(outcome.trace), (p) => view?.prepare(p), {
+          ...(this.options.pauseForFrame ? { pause: this.options.pauseForFrame } : {}),
+          ...(this.options.sliceMs !== undefined ? { sliceMs: this.options.sliceMs } : {}),
+        });
+        if (perf.on) perf.record("run.prepare", performance.now() - started);
+        // Then the first drawing, which blocks the page: let "Drawing" paint first.
+        if (view?.drawing()) await this.nextFrame();
+      }
+      // Still the language on screen (it can change while a big trace is prepared)?
+      if (language === this.language) this.apply(outcome, code, language, prepared);
+    }
+    view?.done();
+    this.inFlight = false;
     this.resumeQueued();
+  }
+
+  /** The language of the run going now, if any. */
+  private running: LanguageId | null = null;
+
+  /**
+   * Stop the run going now (the toolbar's or the card's Stop): it ends with
+   * what had been recorded, drawn like any trace that stopped early.
+   */
+  stop(): void {
+    if (this.running) this.runnerFor(this.running).stop();
+  }
+
+  private nextFrame(): Promise<void> {
+    if (this.options.nextFrame) return this.options.nextFrame();
+    if (typeof requestAnimationFrame !== "function") return Promise.resolve();
+    // Two frames: the first runs before the paint, the second after it.
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   }
 
   /** Start the run that was waiting, if any (Measure calls this when it finishes). */
@@ -237,7 +295,8 @@ export class RunController {
     while (this.inFlight) await new Promise((resolve) => this.setTimer(() => resolve(undefined), 30));
   }
 
-  private apply(outcome: RunOutcome, code: string, language: LanguageId): void {
+  /** Show a run's outcome: `prepared` is its trace, ready to draw (prepareTrace). */
+  private apply(outcome: RunOutcome, code: string, language: LanguageId, prepared: Trace | null): void {
     const { app, setBanner, editor, onResult } = this.options;
     if (outcome.kind !== "trace") {
       // Nothing new to show: keep the last picture, dimmed, and say why.
@@ -270,7 +329,7 @@ export class RunController {
     // Stay on the last step if we were there, so live edits show the result.
     const { trace: before, stepIndex } = app.get();
     const wasAtEnd = !before || stepIndex >= before.steps.length - 1;
-    const trace = timed("run.hints", () => applyHints(next));
+    const trace = prepared ?? next;
     if (perf.on) perf.lastTrace = traceStats(trace);
     const warnings = trace.viz?.warnings ?? [];
     editor.setHintWarnings(warnings);
@@ -301,6 +360,10 @@ export class RunController {
   private truncationBanner(t: Trace): string {
     const ran = t.counts ? ` (${t.counts.steps.toLocaleString()} steps ran)` : "";
     const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
+    if (t.stoppedBy === "person") {
+      const steps = t.steps.length.toLocaleString();
+      return `You stopped the run: here are the ${steps} steps recorded up to then${ran}, with long loops sampled. <button type="button" class="banner-link" data-action="run">Run</button> to trace it again. ${measure}`;
+    }
     if (t.stoppedBy === "time") {
       const seconds = this.lastBudget === "live" ? POLICY.liveSeconds : POLICY.runSeconds;
       const runLonger =
@@ -320,6 +383,11 @@ export function failureBanner(
 ): [string, BannerTone] {
   const name = LANGUAGES[language].label;
   switch (outcome.kind) {
+    case "stopped":
+      return [
+        `You stopped the run before anything was recorded. <button type="button" class="banner-link" data-action="run">Run</button> to start it again.`,
+        "budget",
+      ];
     case "timeout":
       // The program's doing, like any other limit.
       return [

@@ -565,3 +565,47 @@ class LongListTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StreamingTests(unittest.TestCase):
+    """run_trace_streaming: progress as the run goes, and the trace a piece at a time."""
+
+    SOURCE = "total = 0\nnums = []\nfor i in range(300):\n    nums.append(i)\n    total += i\nprint(total)\n"
+
+    def setUp(self):
+        import tracer as T
+
+        self.T = T
+        self.saved = (T.REPORT_EVERY, T.PIECE_EVERY, T.CLOCK_EVERY)
+        # Report at every chance, so a short run sends many pieces.
+        T.REPORT_EVERY, T.PIECE_EVERY, T.CLOCK_EVERY = 0, 0, 10
+
+    def tearDown(self):
+        self.T.REPORT_EVERY, self.T.PIECE_EVERY, self.T.CLOCK_EVERY = self.saved
+
+    def stream(self, source, max_steps=2000):
+        reports = []
+        policy = json.dumps(json.load(open("fixtures/policy.json"))["sampling"])
+        rest = json.loads(self.T.run_trace_streaming(source, max_steps, 6.0, policy, reports.append))
+        return [json.loads(r) for r in reports], rest
+
+    def test_the_pieces_and_the_rest_are_the_whole_trace(self):
+        reports, rest = self.stream(self.SOURCE)
+        pieces = [r["chunk"] for r in reports if "chunk" in r]
+        self.assertGreater(len(pieces), 2)
+        self.assertIn("header", pieces[0])
+        self.assertNotIn("header", pieces[1])
+        steps = [s for p in pieces for s in p["steps"]] + rest["trace"]["steps"]
+        whole = json.loads(run_trace(self.SOURCE, 2000, 6.0))
+        self.assertEqual(steps, whole["steps"])
+        # The rest's stdout is the whole output (the page keeps it, not the pieces').
+        self.assertEqual(rest["trace"]["stdout"], whole["stdout"])
+        self.assertTrue(whole["stdout"].startswith("".join(p["stdout"] for p in pieces)))
+        self.assertEqual(pieces[0]["header"]["loops"], whole["loops"])
+
+    def test_progress_counts_steps_and_time_and_says_where(self):
+        reports, _ = self.stream(self.SOURCE)
+        progress = [r["progress"] for r in reports]
+        self.assertTrue(all(p["seconds"] >= 0 for p in progress))
+        self.assertEqual([p["steps"] for p in progress], sorted(p["steps"] for p in progress))
+        self.assertTrue({p["line"] for p in progress} <= set(range(7)))  # 0: the module starting

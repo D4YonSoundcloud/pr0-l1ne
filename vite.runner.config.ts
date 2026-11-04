@@ -7,7 +7,7 @@
  *   npm run build:runner     build it (Cloudflare's runner project runs this)
  *   npm run dev              the app and this, together (scripts/dev.mjs)
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
@@ -52,6 +52,32 @@ function pyodide(): Plugin {
   };
 }
 
+/**
+ * The files the workers download, and their sizes, by name: the loading
+ * card counts their bytes as they arrive (src/worker/downloads.ts). The
+ * same bytes as the build serves (Pyodide's copied, the others hashed).
+ */
+function downloadSizes(): Record<string, number> {
+  const files: Record<string, string> = {
+    "pyodide.asm.wasm": `${PYODIDE_DIR}pyodide.asm.wasm`,
+    "python_stdlib.zip": `${PYODIDE_DIR}python_stdlib.zip`,
+    "pyodide-lock.json": `${PYODIDE_DIR}pyodide-lock.json`,
+    "pglite.wasm": "./node_modules/@electric-sql/pglite/dist/pglite.wasm",
+    "pglite.data": "./node_modules/@electric-sql/pglite/dist/pglite.data",
+    "initdb.wasm": "./node_modules/@electric-sql/pglite/dist/initdb.wasm",
+    "libpg-query.wasm": "./node_modules/libpg-query/wasm/libpg-query.wasm",
+  };
+  const sizes: Record<string, number> = {};
+  for (const [name, path] of Object.entries(files)) {
+    try {
+      sizes[name] = statSync(path.startsWith("./") ? fileURLToPath(new URL(path, import.meta.url)) : path).size;
+    } catch {
+      // Not there (a package changed its layout): that file's bar goes by what the server says.
+    }
+  }
+  return sizes;
+}
+
 /** The runner's headers, as Cloudflare reads them (`_headers`), from the same list the dev servers send. */
 function headersFile(headers: Record<string, string>): Plugin {
   const lines = (entries: Record<string, string>) => Object.entries(entries).map(([k, v]) => `  ${k}: ${v}`);
@@ -94,6 +120,7 @@ export default defineConfig(({ command }) => {
     define: {
       "import.meta.env.VITE_APP_ORIGINS": JSON.stringify(JSON.stringify(appOrigins)),
       "import.meta.env.VITE_PYODIDE_VERSION": JSON.stringify(PYODIDE_VERSION),
+      "import.meta.env.VITE_DOWNLOAD_SIZES": JSON.stringify(JSON.stringify(downloadSizes())),
     },
     // The workers are ES modules (Pyodide's is loaded with import()).
     worker: { format: "es" },

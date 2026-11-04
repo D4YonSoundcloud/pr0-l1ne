@@ -8,11 +8,11 @@
  * animation, panning and zooming, boxes the person has dragged, and what
  * hovering shows. Nothing outside src/render/ touches the drawing itself.
  *
- * There are two: SVG (render/svgRenderers.ts) and Canvas 2D through PixiJS
- * (render/canvas/canvasRenderers.ts). They share one layout, and the person
- * picks one in the Style panel (app/rendererSwitch.ts swaps them live). A
- * WebGL or WebGPU renderer would implement the same interfaces, and the
- * rest of the app wouldn't change. See docs/how-it-works.md, "Scenes and
+ * There are two: SVG (render/svgRenderers.ts) and the canvas through PixiJS
+ * (render/canvas/canvasRenderers.ts), on WebGL or Canvas 2D. They share one
+ * layout, and the person picks one in the Style panel (app/rendererSwitch.ts
+ * swaps them live). A WebGPU backend would go behind the same interfaces,
+ * and the rest of the app wouldn't change. See docs/how-it-works.md, "Scenes and
  * renderers".
  */
 

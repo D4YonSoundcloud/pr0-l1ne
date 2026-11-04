@@ -24,7 +24,7 @@ import * as t from "@babel/types";
 import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrumentAst, parseProgram } from "./instrument";
-import { traceProgram } from "./trace";
+import { type TraceSoFar, traceProgram } from "./trace";
 
 export function stripTypes(ast: t.File, source: string): t.File {
   // Remember where each enum and namespace was declared, by name.
@@ -81,6 +81,7 @@ export function traceTypeScript(
   maxSteps = 2000,
   maxSeconds = POLICY.runSeconds,
   sampling: SamplingPolicy = POLICY.sampling,
+  onProgress?: (state: TraceSoFar) => void,
 ): Promise<Trace> {
-  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds, sampling);
+  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds, sampling, onProgress);
 }

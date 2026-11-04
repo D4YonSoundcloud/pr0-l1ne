@@ -6,7 +6,7 @@
  * is a plain call.
  *
  *   run.trace       a run, from asking the runner to the trace arriving
- *   run.hints       applying the hints to it
+ *   run.prepare     preparing it: hints applied, graphs found over the run (trace/prepare.ts), in slices
  *   run.show        showing it: the first step drawn
  *   memory.scene    the memory scene (scene/memoryScene.ts)
  *   memory.layout   laying out the memory drawing, arrows included

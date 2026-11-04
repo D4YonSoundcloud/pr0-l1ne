@@ -92,6 +92,8 @@ export interface LayoutElements {
   loopSection: HTMLElement;
   /** Covers the memory window while Python or PostgreSQL downloads. */
   loadingCard?: HTMLElement;
+  /** Shows how a run is going, in the middle of the memory window. */
+  runCard?: HTMLElement;
 }
 
 type LayoutSettings = Pick<
@@ -314,11 +316,10 @@ export class LayoutController {
       divider.classList.toggle("is-paper", !this.besideEditor(d));
     });
 
-    // While Python downloads, the card covers the memory window (or the loop history's, if memory is folded).
-    if (els.loadingCard) {
-      const under: WindowName = this.folded.includes("memory") ? "loop" : "memory";
-      placeAt(els.loadingCard, t.windows[under]);
-    }
+    // While Python downloads, the loading card covers the memory window (or the loop history's, if memory is
+    // folded); while a run goes, the run card sits in the middle of the same window.
+    const under: WindowName = this.folded.includes("memory") ? "loop" : "memory";
+    for (const card of [els.loadingCard, els.runCard]) if (card) placeAt(card, t.windows[under]);
 
     // Tab follows the page: the code before or after the canvas, memory before or after loop history.
     const reading = order(a);

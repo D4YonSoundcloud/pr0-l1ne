@@ -533,10 +533,10 @@ export interface Trace {
    * unchanged objects between steps. Never set on a trace the page uses.
    */
   heapDelta?: boolean;
-  /** True when the step budget (or the time budget) ran out before the program finished. */
+  /** True when the step budget (or the time budget) ran out, or the person stopped it, before the program finished. */
   truncated: boolean;
-  /** What stopped a truncated trace. */
-  stoppedBy?: "steps" | "time";
+  /** What stopped a truncated trace: its steps or time running out, or the person (Stop: what had been recorded). */
+  stoppedBy?: "steps" | "time" | "person";
   /**
    * Some long loops were sampled: their first passes, passes at round
    * numbers (10, 20 ... 100, 200 ...) and last passes were recorded; the

@@ -39,7 +39,7 @@ export interface StyleOptions {
   redraw?(): void;
   /** The panel opened: close the other panels. */
   onOpen(): void;
-  /** The panel's Rendering choice (SVG or Canvas 2D). */
+  /** The panel's Rendering choice (SVG, WebGL or Canvas 2D). */
   rendering?: RenderingChoice;
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;

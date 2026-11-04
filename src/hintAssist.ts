@@ -35,6 +35,8 @@ export function hintContext(trace: Trace): HintContext {
   const every = Math.max(1, Math.ceil(steps.length / MAX_STEPS));
   const fieldsOf = new Map<string, Set<string>>();
   const linksOf = new Map<string, Set<string>>();
+  // Steps share the objects that didn't change: each one's fields are looked at once.
+  const seen = new WeakSet<object>();
   for (let i = 0; i < steps.length; i += every) {
     const step = steps[i];
     for (const frame of [...step.stack, ...(step.suspended ?? [])]) {
@@ -44,8 +46,11 @@ export function hintContext(trace: Trace): HintContext {
         ctx.variables.set(name, kinds);
       }
     }
+    if (seen.has(step.heap)) continue; // the same record as a step before
+    seen.add(step.heap);
     for (const obj of Object.values(step.heap)) {
-      if (obj.kind !== "object") continue;
+      if (obj.kind !== "object" || seen.has(obj)) continue;
+      seen.add(obj);
       const fields = fieldsOf.get(obj.typeName) ?? new Set<string>();
       const links = linksOf.get(obj.typeName) ?? new Set<string>();
       for (const [field, value] of obj.fields) {

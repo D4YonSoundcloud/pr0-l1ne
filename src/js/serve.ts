@@ -5,10 +5,9 @@
  * only contains what it needs (the TypeScript one adds Babel's core).
  */
 import type { Measurement, MeasureProgress } from "../trace/measurement";
-import type { SamplingPolicy } from "../trace/policy";
-import type { Trace } from "../trace/types";
 import { workerChannel } from "../worker/channel";
 import { PROTOCOL_VERSION, type ToWorker } from "../worker/protocol";
+import { streamTrace, type TraceFn } from "./streamTrace";
 
 type Measure = (
   source: string,
@@ -17,11 +16,7 @@ type Measure = (
   overrides?: Record<string, number>,
 ) => Promise<Measurement>;
 
-export function serve(
-  label: string,
-  trace: (source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy) => Promise<Trace>,
-  measure: Measure,
-): void {
+export function serve(label: string, trace: TraceFn, measure: Measure): void {
   const channel = workerChannel();
   const post = channel.post;
 
@@ -41,15 +36,9 @@ export function serve(
       }
       return;
     }
-    const { runId, source, maxSteps, maxSeconds, sampling } = message;
-    const started = performance.now();
+    const { runId } = message;
     try {
-      post({
-        type: "result",
-        runId,
-        trace: await trace(source, maxSteps, maxSeconds, sampling),
-        elapsedMs: performance.now() - started,
-      });
+      await streamTrace(trace, message, post);
     } catch (error) {
       post({ type: "crash", runId, message: error instanceof Error ? error.message : String(error) });
     }

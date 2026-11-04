@@ -236,7 +236,11 @@ test("a program that tampers with its own trace is refused, not drawn", async ({
     `// Change the trace on its way to the app.
 const post = MessagePort.prototype.postMessage;
 MessagePort.prototype.postMessage = function (message, transfer) {
-  if (message && message.type === "result") message.trace.surprise = true;
+  if (message && message.type === "streamed") {
+    const end = JSON.parse(message.json);
+    end.trace.surprise = true;
+    message = { ...message, json: JSON.stringify(end) };
+  }
   return post.call(this, message, transfer);
 };
 let a = 1;

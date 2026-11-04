@@ -53,29 +53,38 @@ export interface RenderingChoice {
   drawnWith?(): string | null;
 }
 
-/** What each renderer is like, in the person's terms (shown under the choice). */
+/**
+ * What each renderer is like, in the person's terms (shown under the choice).
+ * Of the two canvases, WebGL is the one to pick: on a graphics card it's the
+ * quicker (a 60 × 60 grid's step about a third quicker than Canvas 2D), and it
+ * falls back to Canvas 2D by itself. Canvas 2D stays for a graphics card or
+ * driver that gives trouble.
+ */
 export const RENDERER_INFO: Record<RendererKind, { label: string; about: string }> = {
   svg: {
     label: "SVG",
     about:
-      "Every box, arrow and value is part of the page, and each step changes only what changed. Stepping is quickest, it's sharp at any zoom, and screen readers can read the values. With very large drawings, panning and zooming can stutter.",
-  },
-  canvas: {
-    label: "Canvas 2D",
-    about:
-      "Drawn with PixiJS on one canvas the size of the window, only what's in view. Panning and zooming stay smooth however big the drawing gets, but each step takes a little longer to show, since the canvas is painted whole. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself.",
+      "Every box, arrow and value is part of the page, and each step changes only what changed. It's sharp at any zoom, screen readers can read the values, and for most programs it's as quick as anything. With very large drawings, panning and zooming can stutter.",
   },
   webgl: {
     label: "WebGL",
     about:
-      "The same canvas drawing as Canvas 2D, drawn by the graphics card: the same picture, with panning and zooming lighter on the processor. Shapes drawn the same are made once and shared, so a big grid is quick to put on screen. If WebGL can't start in this browser, it draws with Canvas 2D instead.",
+      "Drawn by the graphics card with PixiJS, on one canvas the size of the window, only what's in view. Panning and zooming stay smooth however big the drawing gets, and big grids and heatmaps show quickest of all. Text is pixels: it's redrawn sharp once you stop zooming, and screen readers can't read the diagram itself. If WebGL can't start in this browser, it draws with Canvas 2D instead.",
+  },
+  canvas: {
+    label: "Canvas 2D",
+    about:
+      "The same canvas drawing as WebGL, painted by the processor instead of the graphics card. Each step takes a little longer to show on big drawings. Pick it if WebGL gives trouble on this computer.",
   },
 };
 
-/** The three side by side: [question, SVG, Canvas 2D, WebGL]. */
+/** The order they're offered in: SVG first (the default), then the canvas to pick, then its fallback. */
+export const RENDERER_ORDER: RendererKind[] = ["svg", "webgl", "canvas"];
+
+/** The three side by side, in RENDERER_ORDER: [question, SVG, WebGL, Canvas 2D]. */
 export const RENDERER_COMPARISON: [string, string, string, string][] = [
-  ["Stepping", "Quicker", "A little slower", "A little slower"],
-  ["Panning and zooming big drawings", "Can stutter", "Smooth", "Smooth, on the graphics card"],
+  ["Stepping", "Quick", "Quickest on big grids", "A little slower on big drawings"],
+  ["Panning and zooming big drawings", "Can stutter", "Smooth, on the graphics card", "Smooth"],
   ["Zoomed in", "Always sharp", "Sharp once you stop zooming", "Sharp once you stop zooming"],
   ["Screen readers", "Read the values", "Read only the window names", "Read only the window names"],
   ["Save SVG", "Yes", "Yes, the same file", "Yes, the same file"],
@@ -93,7 +102,7 @@ export interface StylePanelOptions {
   replay(): void;
   /** Called when the panel opens, so other floating panels can close. */
   onOpen?(): void;
-  /** The Rendering section: SVG or Canvas 2D. Absent: not shown. */
+  /** The Rendering section: SVG, WebGL or Canvas 2D. Absent: not shown. */
   rendering?: RenderingChoice;
 }
 
@@ -240,11 +249,11 @@ export class StylePanel {
     return h("div", { class: "style-row style-theme" }, h("label", { for: id }, "Theme"), this.themeSelect, reset);
   }
 
-  /** SVG or Canvas 2D, what each is like, and how the switch went. */
+  /** SVG, WebGL or Canvas 2D, what each is like, and how the switch went. */
   private renderingControls(rendering: RenderingChoice): HTMLElement {
     const about = h("p", { class: "style-help" });
     const status = h("p", { class: "style-status", role: "status", "aria-live": "polite" });
-    const kinds: RendererKind[] = ["svg", "canvas", "webgl"];
+    const kinds = RENDERER_ORDER;
     const choice = this.choice<RendererKind>(
       "Draw with",
       kinds.map((value) => ({ label: RENDERER_INFO[value].label, value })),

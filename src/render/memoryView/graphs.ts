@@ -35,14 +35,15 @@ export function graphBoxes(scene: MemoryScene): Map<string, GraphBox> {
 /** A graph's size: its container (and everything in it), or all its node objects. */
 export function graphSize(box: GraphBox, ctx: Ctx): string | null {
   if (!ctx.sizes) return null;
-  if (!box.graph.objectNodes) return sizeLabel(ctx, box.graph.hostId);
-  const nodes = [...box.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id }));
+  if (!box.real.objectNodes) return sizeLabel(ctx, box.real.hostId);
+  const nodes = [...box.real.nodes.keys()].map((id) => ({ kind: "ref" as const, id }));
   return `total ${formatBytes(ctx.sizes.of(nodes), ctx.sizes.approximate)}`;
 }
 
 export function graphShape(box: GraphBox, obj: HeapObject, isNew: boolean, size: string | null): Shape {
-  const { graph, picture } = box;
-  const kind = `${graph.directed ? "directed" : "undirected"} graph, ${graph.nodes.size} node${graph.nodes.size === 1 ? "" : "s"}`;
+  const { graph, picture, real } = box;
+  const clusters = graph.clusters?.size ?? 0;
+  const kind = `${real.directed ? "directed" : "undirected"} graph, ${real.nodes.size} node${real.nodes.size === 1 ? "" : "s"}${clusters ? ` in ${clusters} cluster${clusters === 1 ? "" : "s"}` : ""}`;
   const title = graph.objectNodes ? `${graph.name} objects: ${kind}` : `${obj.typeName}: ${kind}`;
   const sizeW = size ? uiTextWidth(size, 11.5) * 1.08 + 14 : 0;
   const w = Math.max(picture.w + 16, uiTextWidth(title, 12) + 28 + sizeW);

@@ -20,6 +20,14 @@ export interface PyodideFiles {
 export interface PythonTracer {
   /** samplingJson: the run's SamplingPolicy (trace/policy.ts), as JSON. */
   runTrace(source: string, maxSteps: number, maxSeconds: number, samplingJson: string): string;
+  /** A run the page watches: progress and the trace's pieces to `report`, the rest returned (tracer.py run_trace_streaming). */
+  runTraceStreaming(
+    source: string,
+    maxSteps: number,
+    maxSeconds: number,
+    samplingJson: string,
+    report: (json: string) => void,
+  ): string;
   runMeasure(source: string, limitMs: number, report: (json: string) => void, overridesJson?: string): string;
 }
 
@@ -42,7 +50,10 @@ export function loadPythonTracer(pyodide: PyodideFiles, files: Record<string, st
   pyodide.runPython(
     `import sys\nif ${JSON.stringify(PYTHON_DIR)} not in sys.path: sys.path.append(${JSON.stringify(PYTHON_DIR)})`,
   );
-  const tracer = pyodide.pyimport("tracer") as { run_trace: PythonTracer["runTrace"] };
+  const tracer = pyodide.pyimport("tracer") as {
+    run_trace: PythonTracer["runTrace"];
+    run_trace_streaming: PythonTracer["runTraceStreaming"];
+  };
   const measure = pyodide.pyimport("measure") as { run_measure: PythonTracer["runMeasure"] };
-  return { runTrace: tracer.run_trace, runMeasure: measure.run_measure };
+  return { runTrace: tracer.run_trace, runTraceStreaming: tracer.run_trace_streaming, runMeasure: measure.run_measure };
 }

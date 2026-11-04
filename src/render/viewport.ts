@@ -50,8 +50,13 @@ export interface ViewportOptions {
   onLod?(lod: Lod): void;
   /** The view moved (panned or zoomed, a frame of a glide too). */
   onMove?(): void;
-  /** A box was pressed and let go without being dragged: a click on it. */
-  onNodeClick?(key: string): void;
+  /**
+   * A box was pressed and let go without being dragged: a click on it.
+   * `part`: what was clicked inside it, when that does something of its
+   * own (data-click: a graph's cluster). Boxes that can't be dragged (the
+   * loop history's) report a part on its own, as `key` too.
+   */
+  onNodeClick?(key: string, part?: string): void;
   /** Whether the floating controls are folded away, remembered (see ControlsSetting). */
   controls?: ControlsSetting;
   /**
@@ -75,6 +80,8 @@ export interface ViewSurface {
   onView(view: View): void;
   /** The draggable box under a point (client coordinates), with its top-left corner in diagram units. */
   nodeAt(clientX: number, clientY: number): NodeHit | null;
+  /** The clickable part (data-click) under a point, if any. */
+  clickAt?(clientX: number, clientY: number): string | null;
 }
 
 /** A box under the pointer: its key and top-left corner, and (when known) its size and what it is, in diagram units. */
@@ -749,10 +756,11 @@ export class Viewport {
     if (this.pointers.size > 2) return;
 
     const node = e.button === 0 && this.options.onNodeMove ? this.nodeAt(target, e.clientX, e.clientY) : null;
+    this.part = e.button === 0 && this.options.onNodeClick ? this.clickAt(target, e.clientX, e.clientY) : null;
     // Boxes that can't be dragged (the loop history's folds) can still be clicked: a press that doesn't pan.
     this.pressed =
       !node && e.button === 0 && this.options.onNodeClick
-        ? (this.nodeAt(target, e.clientX, e.clientY)?.key ?? null)
+        ? (this.nodeAt(target, e.clientX, e.clientY)?.key ?? this.part)
         : null;
     if (node) {
       this.gesture = {
@@ -775,6 +783,14 @@ export class Viewport {
   private pressMoved = false;
   /** The keyed group a press that pans started on, if any (see onPointerDown). */
   private pressed: string | null = null;
+  /** The clickable part (data-click) a press started on, if any. */
+  private part: string | null = null;
+
+  /** The clickable part under the pointer: an SVG element with data-click, or what the surface says. */
+  private clickAt(target: Element, clientX: number, clientY: number): string | null {
+    if (this.options.surface) return this.options.surface.clickAt?.(clientX, clientY) ?? null;
+    return target.closest<SVGElement>("[data-click]")?.getAttribute("data-click") ?? null;
+  }
 
   /** The draggable box under the pointer: an SVG <g data-node-key>, or what the surface says. `under`: if the target isn't in one, the box at that point on the drawing. */
   private nodeAt(target: Element, clientX: number, clientY: number, under = false): NodeHit | null {
@@ -865,10 +881,12 @@ export class Viewport {
     const g = this.gesture;
     if (g?.kind === "node" && g.moved) {
       this.options.onNodeMove!(g.key, this.nodePosition(g, e.clientX - g.startX, e.clientY - g.startY), true);
-    } else if (g?.kind === "node" && !g.moved && e.type === "pointerup") this.options.onNodeClick?.(g.key);
+    } else if (g?.kind === "node" && !g.moved && e.type === "pointerup")
+      this.options.onNodeClick?.(g.key, this.part ?? undefined);
     else if (g?.kind === "pan" && !this.pressMoved && this.pressed && e.type === "pointerup")
-      this.options.onNodeClick?.(this.pressed);
+      this.options.onNodeClick?.(this.pressed, this.part ?? undefined);
     this.pressed = null;
+    this.part = null;
     this.el.classList.remove("is-panning", "is-dragging-node");
     // Lifting one finger of a pinch carries on as a pan with the other.
     const remaining = [...this.pointers.values()][0];

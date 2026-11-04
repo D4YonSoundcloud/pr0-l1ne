@@ -10,6 +10,7 @@
  * gets an error.
  */
 import { workerChannel } from "../worker/channel";
+import { meterDownloads, SQL_DOWNLOADS } from "../worker/downloads";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "../worker/protocol";
 import { PgliteEngine } from "./engine";
 import { loadParser, type SqlParser } from "./parser";
@@ -47,7 +48,10 @@ channel.listen((message) => {
   queue = queue.then(() => handle(message));
 });
 
+// How much of PostgreSQL has downloaded, for the loading card.
+const unmeter = meterDownloads(SQL_DOWNLOADS, ({ loaded, total }) => post({ type: "loadProgress", loaded, total }));
 ready = Promise.all([PgliteEngine.create(), loadParser()]).then(([engine, parser]) => ({ engine, parser }));
+void ready.finally(unmeter).catch(() => {});
 ready.then(
   async ({ engine }) => post({ type: "ready", label: await engine.version(), protocolVersion: PROTOCOL_VERSION }),
   (error: unknown) => post({ type: "loadError", message: error instanceof Error ? error.message : String(error) }),

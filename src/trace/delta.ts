@@ -17,54 +17,129 @@ import type { Frame, HeapObject, Step, Trace } from "./types";
 /** A frame as sent: whole, or only its id when it's the same as in the step before. */
 type SentFrame = Frame | { id: string; same: true };
 
+/** A step as sent: its heap only what changed, and how to find the rest (see the top of this file). */
+type SentStep = Step & { sameIds?: boolean; heapIdsPart?: [number, number, string[]] };
+
 export function expandHeaps(trace: Trace): Trace {
   if (!trace.heapDelta) return trace;
+  const expander = new HeapExpander();
+  for (const step of trace.steps) expander.add(step);
+  delete trace.heapDelta;
+  return trace;
+}
+
+/**
+ * Rebuilds steps sent as deltas into full ones, in order, one at a time:
+ * a whole trace (expandHeaps), or a trace that arrives a piece at a time
+ * while it runs (trace/stream.ts), each piece following on from the last.
+ * Steps from the program's side are checked as they're rebuilt: a step of
+ * the wrong shape throws, and so does a `__proto__` id (an assignment to it
+ * would change the heap's prototype instead of adding an object).
+ */
+export class HeapExpander {
   /** Every object's last version, from whichever step sent it. */
-  const known = new Map<string, HeapObject>();
-  let prevIds: string[] = [];
-  let prevFrames = new Map<string, Frame>();
-  for (const step of trace.steps as (Step & { sameIds?: boolean; heapIdsPart?: [number, number, string[]] })[]) {
+  private readonly known = new Map<string, HeapObject>();
+  private prevIds: string[] = [];
+  private prevHeap: Record<string, HeapObject> | null = null;
+  private prevFrames = new Map<string, Frame>();
+
+  /** Rebuild `sent` in place (its heap, stack and paused frames), and return it. */
+  add(sent: Step): Step {
+    const step = sent as SentStep;
+    if (typeof step !== "object" || step === null || typeof step.heap !== "object" || step.heap === null)
+      throw new Error("a step isn't an object with a heap");
     // Frames first: the same as last step's, by id.
     const frames = new Map<string, Frame>();
-    const rebuild = (list: SentFrame[] | undefined): Frame[] | undefined =>
-      list?.map((sent) => {
-        const frame = "same" in sent ? prevFrames.get(sent.id) : sent;
-        if (!frame) throw new Error(`frame ${sent.id} isn't in the step before`);
+    const rebuild = (list: SentFrame[] | undefined): Frame[] | undefined => {
+      if (list !== undefined && !Array.isArray(list)) throw new Error("a step's stack isn't a list");
+      return list?.map((frameSent) => {
+        const frame = "same" in frameSent ? this.prevFrames.get(frameSent.id) : frameSent;
+        if (!frame) throw new Error(`frame ${frameSent.id} isn't in the step before`);
         frames.set(frame.id, frame);
         return frame;
       });
+    };
     step.stack = rebuild(step.stack as SentFrame[]) ?? [];
     if (step.suspended) step.suspended = rebuild(step.suspended as SentFrame[]);
-    prevFrames = frames;
+    this.prevFrames = frames;
 
     // The ids: as sent, the same as before, or a change to the step before's.
     const part = step.heapIdsPart;
+    if (part !== undefined && (!Array.isArray(part) || !Array.isArray(part[2])))
+      throw new Error("a step's heap ids aren't a list");
     const ids = step.sameIds
-      ? prevIds
+      ? this.prevIds
       : part
-        ? [...prevIds.slice(0, part[0]), ...part[2], ...prevIds.slice(prevIds.length - part[1])]
+        ? [...this.prevIds.slice(0, part[0]), ...part[2], ...this.prevIds.slice(this.prevIds.length - part[1])]
         : step.heapIds;
+    const changed = step.heap;
+    for (const id in changed) {
+      if (id === "__proto__") throw new Error('it has a "__proto__" key');
+      this.known.set(id, changed[id]);
+    }
     if (!ids) {
       // A full heap.
-      for (const id in step.heap) known.set(id, step.heap[id]);
-      prevIds = Object.keys(step.heap);
-      continue;
+      this.prevIds = Object.keys(step.heap);
+      this.prevHeap = step.heap;
+      return step;
     }
-    const changed = step.heap;
+    if (!Array.isArray(ids)) throw new Error("a step's heap ids aren't a list");
+    // The same ids and nothing sent: the step before's heap itself (trace/graph.ts keeps what it worked out by heap).
+    let sentAny = false;
+    for (const _ in changed) {
+      sentAny = true;
+      break;
+    }
+    if (step.sameIds && !sentAny && this.prevHeap) {
+      step.heap = this.prevHeap;
+      delete step.sameIds;
+      return step;
+    }
     const heap: Record<string, HeapObject> = {};
-    for (const id in changed) known.set(id, changed[id]);
     for (const id of ids) {
-      const obj = changed[id] ?? known.get(id);
+      if (id === "__proto__") throw new Error('it has a "__proto__" key');
+      const obj = this.known.get(id);
       if (obj) heap[id] = obj;
     }
     step.heap = heap;
+    this.prevHeap = heap;
     delete step.heapIds;
     delete step.sameIds;
     delete step.heapIdsPart;
-    prevIds = ids;
+    this.prevIds = ids;
+    return step;
   }
-  delete trace.heapDelta;
-  return trace;
+}
+
+/**
+ * The other way: full steps (a JavaScript trace's, whose unchanged objects
+ * are the same objects from step to step) as deltas, for sending a trace a
+ * piece at a time (js/serve.ts). Each object is sent when it isn't the one
+ * last sent under its id; frames are sent whole.
+ */
+export class HeapEncoder {
+  private readonly sent = new Map<string, HeapObject>();
+  private prevIds: string[] | null = null;
+
+  /** `step` as sent: a copy, its heap only the objects not sent before. */
+  encode(step: Step): Step {
+    const heap: Record<string, HeapObject> = {};
+    const ids: string[] = [];
+    for (const id in step.heap) {
+      ids.push(id);
+      const obj = step.heap[id];
+      if (this.sent.get(id) !== obj) {
+        heap[id] = obj;
+        this.sent.set(id, obj);
+      }
+    }
+    const out: SentStep = { ...step, heap };
+    const prev = this.prevIds;
+    if (prev && prev.length === ids.length && prev.every((id, i) => id === ids[i])) out.sameIds = true;
+    else out.heapIds = ids;
+    this.prevIds = ids;
+    return out;
+  }
 }
 
 /** Deep equality for trace values (plain objects, arrays and primitives). */

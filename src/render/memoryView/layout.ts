@@ -720,7 +720,7 @@ function describeNode(scene: MemoryScene, key: string): { title: string; kind: s
   const changed = scene.changes.newObjects.has(id) || (scene.changes.changedSlots.get(id)?.size ?? 0) > 0;
   const graph = scene.graphs.get(id);
   if (graph)
-    return { title: `graph ${graph.graph.name}, ${count(graph.graph.nodes.size, "node")}`, kind: "graph", changed };
+    return { title: `graph ${graph.real.name}, ${count(graph.real.nodes.size, "node")}`, kind: "graph", changed };
   if (!obj) return { title: key, kind: "object", changed };
   switch (obj.kind) {
     case "list":

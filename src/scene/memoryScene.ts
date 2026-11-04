@@ -26,6 +26,7 @@ import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
 import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
 import { type Printed, printedAt } from "../trace/output";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
+import { clusterGraph, clusterOverlay, drawnGraph } from "./graphClusters";
 import { chooseNested, incomingCounts, valuesOf } from "./nesting";
 import { type Pointer, pointersFor } from "./pointers";
 import { type DetailOptions, type Summary, summarize } from "./summaries";
@@ -91,6 +92,8 @@ export interface SceneGraph {
   previous: { graph: GraphData; overlay: GraphOverlay } | null;
   /** Every overlay the legend needs to explain, this step's first. */
   legendOverlays: GraphOverlay[];
+  /** The graph itself: `graph` is what's drawn, its clusters in place of nodes when it's clustered. */
+  real: GraphData;
 }
 
 /** A binary tree of objects, drawn top-down as one block. */
@@ -218,8 +221,12 @@ function findTrees(trace: Trace, step: Step, mode: MemoryMode): SceneTree[] {
   return trees;
 }
 
-/** The graphs at a step, by the heap id each one is drawn in place of. */
-function findGraphs(trace: Trace, stepIndex: number): Map<string, SceneGraph> {
+/**
+ * The graphs at a step, by the heap id each one is drawn in place of. One
+ * with more nodes than the detail budget is drawn as clusters
+ * (graphClusters.ts), the ones the person opened as their nodes.
+ */
+function findGraphs(trace: Trace, stepIndex: number, detail: DetailOptions | undefined): Map<string, SceneGraph> {
   const step = trace.steps[stepIndex];
   const before = trace.steps[stepIndex - 1];
   const prev = new Map(
@@ -231,12 +238,30 @@ function findGraphs(trace: Trace, stepIndex: number): Map<string, SceneGraph> {
   const graphs = new Map<string, SceneGraph>();
   for (const graph of graphsAt(trace, step)) {
     const overlay = graphOverlay(trace, graph, stepScopes(step), step.heap);
+    const legendOverlays = [overlay, ...legendOverlaysFor(trace, graph)];
+    const previous = before ? (prev.get(graph.id) ?? null) : null;
+    const view = detail ? clusterGraph(trace, graph, detail.budget, detail.expanded) : null;
+    if (view) {
+      graphs.set(graph.hostId, {
+        graph: view.graph,
+        overlay: clusterOverlay(view, overlay),
+        layout: view.layout,
+        previous: previous && {
+          graph: drawnGraph(view, previous.graph),
+          overlay: clusterOverlay(view, previous.overlay),
+        },
+        legendOverlays,
+        real: graph,
+      });
+      continue;
+    }
     graphs.set(graph.hostId, {
       graph,
       overlay,
       layout: layoutFor(trace, graph),
-      previous: before ? (prev.get(graph.id) ?? null) : null,
-      legendOverlays: [overlay, ...legendOverlaysFor(trace, graph)],
+      previous,
+      legendOverlays,
+      real: graph,
     });
   }
   return graphs;
@@ -254,7 +279,7 @@ export function memoryScene(
 
   // Graphs are drawn as one box, in place of the dict or list that holds
   // them (or, for graphs of objects, in place of all the node objects).
-  const graphs = findGraphs(trace, stepIndex);
+  const graphs = findGraphs(trace, stepIndex, options.detail);
   // Long chains, big trees and deep recursion, summarized (never a graph's members).
   const inGraphs = new Set([...graphs.values()].flatMap(({ graph }) => [graph.hostId, ...graph.members]));
   const { step, summaries, stackIndex } = summarize(trace, real, options.detail, inGraphs);

@@ -147,6 +147,10 @@ describe("StyleController", () => {
       expect(s.querySelector(".style-help")!.textContent).toBe(RENDERER_INFO.svg.about);
       const rows = [...s.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => c.textContent));
       expect(rows).toEqual(RENDERER_COMPARISON);
+      // SVG first, then the canvas to pick (WebGL), then its fallback.
+      const offered = [...s.querySelectorAll<HTMLButtonElement>(".segment")].map((b) => b.textContent);
+      expect(offered).toEqual(["SVG", "WebGL", "Canvas 2D"]);
+      expect([...s.querySelectorAll("thead th")].map((th) => th.textContent)).toEqual(["", ...offered]);
       expect(s.textContent).toContain("Save SVG");
     });
 

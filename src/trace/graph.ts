@@ -18,9 +18,11 @@
  * same node compare equal: "s:A" for strings, "n:3" for numbers, and the heap
  * id for object nodes.
  */
+
 import { computeLayout, type GraphLayout } from "./graphLayout";
 import { fieldsOf } from "./linked";
 import type { GraphHint, GraphOption, HeapObject, Step, Trace, Value } from "./types";
+import { finishNow, stepOf, type Work } from "./work";
 
 export type Scope = [string, Value][];
 
@@ -59,10 +61,21 @@ export interface GraphData {
   names: string[];
   /** Object graphs: true boolean fields per node (is_end, visited...). */
   flags: Map<string, string[]>;
+  /**
+   * Drawn as clusters (scene/graphClusters.ts): these nodes each stand for
+   * several of the graph's, by key; clicking one opens it.
+   */
+  clusters?: ReadonlyMap<string, { key: string; members: readonly string[] }>;
 }
 
 const MAX_AUTO_NODES = 40;
 const MAX_NODES = 60;
+/**
+ * Graphs of node objects can be much bigger: past the detail budget they're
+ * drawn as clusters (graphClusters.ts), so a few hundred people linked as
+ * friends are one box, not hundreds.
+ */
+const MAX_OBJECT_NODES = 500;
 
 // ---------------------------------------------------------------------------
 // Node keys
@@ -280,20 +293,13 @@ const typeOf = (obj: HeapObject | undefined) => (obj && fieldsOf(obj) ? obj.type
 
 /** Classes whose objects hold lists (or dicts) of objects of the same class. */
 function linkClasses(heap: Record<string, HeapObject>): Map<string, string[]> {
+  const known = sameHeap(heap);
+  if (known.links) return known.links;
   const found = new Map<string, string[]>();
-  for (const obj of Object.values(heap)) {
+  known.links = found;
+  for (const obj of known.objects) {
     if (obj.kind !== "object") continue;
-    for (const [field, value] of obj.fields) {
-      const inner = value.kind === "ref" ? heap[value.id] : undefined;
-      let links = false;
-      if (isSeq(inner) && inner.items.length) {
-        links = inner.items.every((item) => item.kind === "ref" && typeOf(heap[item.id]) === obj.typeName);
-      } else if (inner?.kind === "dict" && inner.entries.length) {
-        links = inner.entries.every(
-          ([k, v]) => k.kind === "prim" && v.kind === "ref" && typeOf(heap[v.id]) === obj.typeName,
-        );
-      }
-      if (!links) continue;
+    for (const field of linkFields(obj, heap)) {
       const fields = found.get(obj.typeName) ?? [];
       if (!fields.includes(field)) found.set(obj.typeName, [...fields, field]);
     }
@@ -301,7 +307,104 @@ function linkClasses(heap: Record<string, HeapObject>): Map<string, string[]> {
   return found;
 }
 
-const idNumber = (id: string) => Number(id.replace(/\D/g, "")) || 0;
+/**
+ * An object's fields that hold a list or dict of objects of its own class,
+ * kept with the object while what those fields hold is the same (objects
+ * are shared between steps until they change).
+ */
+const objectLinks = new WeakMap<HeapObject, { inners: (HeapObject | undefined)[]; fields: string[] }>();
+
+function linkFields(obj: Extract<HeapObject, { kind: "object" }>, heap: Record<string, HeapObject>): string[] {
+  const inners = obj.fields.map(([, value]) => (value.kind === "ref" ? heap[value.id] : undefined));
+  const known = objectLinks.get(obj);
+  if (known && sameObjects(known.inners, inners)) return known.fields;
+  const fields: string[] = [];
+  obj.fields.forEach(([field], i) => {
+    const inner = inners[i];
+    let links = false;
+    if (isSeq(inner) && inner.items.length) {
+      links = inner.items.every((item) => item.kind === "ref" && typeOf(heap[item.id]) === obj.typeName);
+    } else if (inner?.kind === "dict" && inner.entries.length) {
+      links = inner.entries.every(
+        ([k, v]) => k.kind === "prim" && v.kind === "ref" && typeOf(heap[v.id]) === obj.typeName,
+      );
+    }
+    if (links) fields.push(field);
+  });
+  objectLinks.set(obj, { inners, fields });
+  return fields;
+}
+
+const idNumbers = new Map<string, number>();
+const idNumber = (id: string) => {
+  let n = idNumbers.get(id);
+  if (n === undefined) {
+    n = Number(id.replace(/\D/g, "")) || 0;
+    if (idNumbers.size > 100_000) idNumbers.clear();
+    idNumbers.set(id, n);
+  }
+  return n;
+};
+
+/**
+ * The last graph of node objects made for each class (and links, and hint),
+ * with the objects it was made from. A step that left them all the same
+ * objects (a run shares unchanged objects between steps) gets the same
+ * graph: a few hundred nodes isn't built again at every step.
+ */
+const lastObjectGraphs = new Map<
+  string,
+  { objects: HeapObject[]; inners: (HeapObject | undefined)[]; graph: GraphData | null }
+>();
+
+const sameObjects = <T>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * What's worked out about a heap, kept while the steps' heaps hold the same
+ * objects: most steps change only variables, and a run shares unchanged
+ * objects between steps, so a step whose heap has every one of the last
+ * one's objects (and no others) gets the last one's answers.
+ */
+/** The heap's objects of a class, in the order they were made: once per heap (sameHeap). */
+function objectsOfType(heap: Record<string, HeapObject>, type: string): HeapObject[] {
+  const facts = sameHeap(heap);
+  if (!facts.byType) {
+    facts.byType = new Map();
+    for (const obj of facts.objects) {
+      const t = typeOf(obj);
+      if (!t) continue;
+      const list = facts.byType.get(t);
+      if (list) list.push(obj);
+      else facts.byType.set(t, [obj]);
+    }
+    for (const list of facts.byType.values()) list.sort((a, b) => idNumber(a.id) - idNumber(b.id));
+  }
+  return facts.byType.get(type) ?? [];
+}
+
+interface HeapFacts {
+  /** The last heap record compared (the same record is asked about several times a step). */
+  heap: Record<string, HeapObject>;
+  objects: HeapObject[];
+  links?: Map<string, string[]>;
+  byType?: Map<string, HeapObject[]>;
+  graphs: Map<string, GraphData | null>;
+}
+let lastHeap: HeapFacts | null = null;
+
+function sameHeap(heap: Record<string, HeapObject>): HeapFacts {
+  const known = lastHeap;
+  if (known?.heap === heap) return known;
+  // Each object knows its id: the same objects in the same order are the same heap.
+  const objects = Object.values(heap);
+  if (known && sameObjects(known.objects, objects)) {
+    known.heap = heap;
+    return known;
+  }
+  const facts: HeapFacts = { heap, objects, graphs: new Map() };
+  lastHeap = facts;
+  return facts;
+}
 
 function objectGraph(
   heap: Record<string, HeapObject>,
@@ -309,13 +412,44 @@ function objectGraph(
   links: string[] | null,
   hint: GraphHint | null,
 ): GraphData | null {
-  const objects = Object.values(heap)
-    .filter((obj) => typeOf(obj) === type)
-    .sort((a, b) => idNumber(a.id) - idNumber(b.id));
-  if (!objects.length || (!hint && objects.length > MAX_AUTO_NODES)) return null;
+  const facts = sameHeap(heap);
+  const factKey = `${type}|${links?.join(",") ?? ""}|${hint ? JSON.stringify(hint) : ""}`;
+  if (facts.graphs.has(factKey)) return facts.graphs.get(factKey)!;
+  const graph = objectGraphOf(heap, type, links, hint);
+  facts.graphs.set(factKey, graph);
+  return graph;
+}
+
+function objectGraphOf(
+  heap: Record<string, HeapObject>,
+  type: string,
+  links: string[] | null,
+  hint: GraphHint | null,
+): GraphData | null {
+  const objects = objectsOfType(heap, type);
+  if (!objects.length || objects.length > MAX_OBJECT_NODES) return null;
   const fields = links ?? linkClasses(heap).get(type) ?? [];
   if (!fields.length) return null;
-  const kept = objects.slice(0, MAX_NODES);
+  const memoKey = `${type}|${fields.join(",")}|${hint ? JSON.stringify(hint) : ""}`;
+  const inners: (HeapObject | undefined)[] = [];
+  for (const obj of objects)
+    for (const [name, value] of fieldsOf(obj)!)
+      if (fields.includes(name) && value.kind === "ref") inners.push(heap[value.id]);
+  const last = lastObjectGraphs.get(memoKey);
+  if (last && sameObjects(last.objects, objects) && sameObjects(last.inners, inners)) return last.graph;
+  const graph = buildObjectGraph(heap, type, objects, fields, hint);
+  lastObjectGraphs.set(memoKey, { objects, inners, graph });
+  return graph;
+}
+
+function buildObjectGraph(
+  heap: Record<string, HeapObject>,
+  type: string,
+  objects: HeapObject[],
+  fields: string[],
+  hint: GraphHint | null,
+): GraphData | null {
+  const kept = objects;
   const ids = new Set(kept.map((obj) => obj.id));
   const nodes = new Map<string, string>();
   const edges: GraphEdge[] = [];
@@ -826,15 +960,44 @@ export function nodeSignature(overlay: GraphOverlay, node: string): string {
   ].join("|");
 }
 
-/** Changes whenever anything drawn for the graph changes. */
+/** A node with nothing drawn on it, as nodeSignature writes it. */
+const UNMARKED = "|||";
+
+/** A graph's own part of its signature (its nodes and edges), and each node's place: kept with the graph, which steps share until it changes. */
+const graphParts = new WeakMap<GraphData, { key: string; order: Map<string, number> }>();
+
+/**
+ * Changes whenever anything drawn for the graph changes: its nodes and
+ * edges, and what's drawn on each node. Only the nodes with something on
+ * them are listed, so a loop history comparing a big graph from pass to
+ * pass costs what its algorithm marks, not every node every pass.
+ */
 export function graphSignature(graph: GraphData | undefined, overlay: GraphOverlay | undefined): string {
   if (!graph) return "";
-  const nodes = [...graph.nodes.keys()]
-    .map((node) => `${node}=${overlay ? nodeSignature(overlay, node) : ""}`)
+  let part = graphParts.get(graph);
+  if (!part) {
+    const nodes = [...graph.nodes.keys()];
+    const edges = graph.edges.map((e) => `${e.from}>${e.to}:${e.label ?? ""}`).join(",");
+    part = { key: `${nodes.join(",")}#${edges}`, order: new Map(nodes.map((node, i) => [node, i])) };
+    graphParts.set(graph, part);
+  }
+  if (!overlay) return `${part.key}##`;
+  const order = part.order;
+  const marked = new Set<string>([
+    ...overlay.visited.keys(),
+    ...overlay.frontier.keys(),
+    ...overlay.labels.keys(),
+    ...overlay.pathNodes,
+  ]);
+  const nodes = [...marked]
+    .filter((node) => order.has(node))
+    .sort((a, b) => order.get(a)! - order.get(b)!)
+    .map((node) => [node, nodeSignature(overlay, node)])
+    .filter(([, sig]) => sig !== UNMARKED)
+    .map(([node, sig]) => `${node}=${sig}`)
     .join(",");
-  const edges = graph.edges.map((e) => `${e.from}>${e.to}:${e.label ?? ""}`).join(",");
-  const extra = overlay ? [...overlay.treeEdges, ...overlay.pathEdges, ...overlay.chosenEdges].join(",") : "";
-  return `${nodes}#${edges}#${extra}`;
+  const extra = [...overlay.treeEdges, ...overlay.pathEdges, ...overlay.chosenEdges].join(",");
+  return `${part.key}#${nodes}#${extra}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -850,8 +1013,23 @@ export { computeLayout };
  * memory view and the loop history) while the graph is built up.
  */
 const layouts = new WeakMap<Trace, Map<string, GraphLayout>>();
+/** Every node and edge each graph has during the run (unionFor). */
+const unions = new WeakMap<Trace, Map<string, GraphUnion>>();
 /** Every kind of state drawn on each graph during the run, for a steady legend. */
 const legends = new WeakMap<Trace, Map<string, GraphOverlay[]>>();
+
+/** A graph over the whole run: every node it ever has (in the order first seen) and every edge. */
+export interface GraphUnion {
+  nodes: string[];
+  /** The same nodes, to look up. */
+  has: ReadonlySet<string>;
+  edges: GraphEdge[];
+  directed: boolean;
+  layout: GraphData["layout"];
+  angled: boolean;
+  /** Where the algorithm starts (startOf), if a step shows it. */
+  start: string | null;
+}
 
 /**
  * The overlays a graph's legend should cover: one for each different set of
@@ -859,90 +1037,137 @@ const legends = new WeakMap<Trace, Map<string, GraphOverlay[]>>();
  * the same from the first step to the last.
  */
 export function legendOverlaysFor(trace: Trace, graph: GraphData): GraphOverlay[] {
-  layoutFor(trace, graph);
+  unionsOf(trace);
   return legends.get(trace)?.get(graph.id) ?? [];
 }
 
+/** Every graph's union over the run, and its legend: found once per trace. */
+function unionsOf(trace: Trace): Map<string, GraphUnion> {
+  return unions.get(trace) ?? finishNow(graphUnionsWork(trace));
+}
+
+/**
+ * Find every graph's union over the run, and its legend, a step at a time
+ * (trace/work.ts), so the page can do it in slices before the first
+ * drawing; then unionFor, layoutFor and legendOverlaysFor have them at once.
+ * Nothing to do when they're found already.
+ */
+export function* graphUnionsWork(trace: Trace): Work<Map<string, GraphUnion>> {
+  const already = unions.get(trace);
+  if (already) return already;
+  const byId = new Map<string, GraphUnion>();
+  const legendById = new Map<string, Map<string, GraphOverlay>>();
+  const found = new Map<
+    string,
+    {
+      nodes: Map<string, true>;
+      edges: Map<string, GraphEdge>;
+      directed: boolean;
+      layout: GraphData["layout"];
+      angled: boolean;
+      start: string | null;
+    }
+  >();
+  /** The graph object last merged for each id: one found the same as last step's (graphs are kept, see objectGraph) is merged once. */
+  const merged = new Map<string, GraphData>();
+  const total = trace.steps.length;
+  for (let i = 0; i < total; i++) {
+    const step = trace.steps[i];
+    if (i) yield stepOf("Finding graphs", i, total);
+    for (const g of findGraphs(trace, stepScopes(step), step.heap)) {
+      const o = graphOverlay(trace, g, stepScopes(step), step.heap);
+      const names = {
+        ...emptyOverlay(),
+        visitedNames: o.visitedNames,
+        frontierName: o.frontierName,
+        labelNames: o.labelNames,
+        treeName: o.treeName,
+        pathName: o.pathName,
+        chosenName: o.chosenName,
+      };
+      const seen = legendById.get(g.id) ?? new Map<string, GraphOverlay>();
+      seen.set(
+        JSON.stringify([
+          names.visitedNames,
+          names.frontierName,
+          names.labelNames,
+          names.treeName,
+          names.pathName,
+          names.chosenName,
+        ]),
+        names,
+      );
+      legendById.set(g.id, seen);
+      const entry = found.get(g.id) ?? {
+        nodes: new Map(),
+        edges: new Map(),
+        directed: false,
+        layout: g.layout,
+        angled: g.edgeStyle === "angled",
+        start: null,
+      };
+      entry.start ??= startOf(o);
+      found.set(g.id, entry);
+      if (merged.get(g.id) === g) continue;
+      merged.set(g.id, g);
+      for (const node of g.nodes.keys()) entry.nodes.set(node, true);
+      for (const e of g.edges) entry.edges.set(`${e.from}>${e.to}`, e);
+      entry.directed ||= g.directed;
+    }
+  }
+  for (const [id, entry] of found)
+    byId.set(id, {
+      nodes: [...entry.nodes.keys()],
+      has: new Set(entry.nodes.keys()),
+      edges: [...entry.edges.values()],
+      directed: entry.directed,
+      layout: entry.layout,
+      angled: entry.angled,
+      start: entry.start,
+    });
+  legends.set(trace, new Map([...legendById].map(([id, seen]) => [id, [...seen.values()]])));
+  // Kept only once complete: work stopped part way (a newer run) leaves nothing half found.
+  unions.set(trace, byId);
+  return byId;
+}
+
+/**
+ * A graph over the whole run (every node and edge it ever has), or, for a
+ * graph found only in this view (say, from a loop's own frame), the graph
+ * itself.
+ */
+export function unionFor(trace: Trace, graph: GraphData): GraphUnion {
+  const known = unionsOf(trace).get(graph.id);
+  if (known && [...graph.nodes.keys()].every((node) => known.has.has(node))) return known;
+  return {
+    nodes: [...graph.nodes.keys()],
+    has: new Set(graph.nodes.keys()),
+    edges: graph.edges,
+    directed: graph.directed,
+    layout: graph.layout,
+    angled: graph.edgeStyle === "angled",
+    start: null,
+  };
+}
+
+/** The graph's layout for the run, made the first time it's asked for (a big graph drawn as clusters never is). */
 export function layoutFor(trace: Trace, graph: GraphData): GraphLayout {
   let byId = layouts.get(trace);
   if (!byId) {
     byId = new Map();
     layouts.set(trace, byId);
-    const legendById = new Map<string, Map<string, GraphOverlay>>();
-    const union = new Map<
-      string,
-      {
-        nodes: Map<string, true>;
-        edges: Map<string, GraphEdge>;
-        directed: boolean;
-        layout: GraphData["layout"];
-        angled: boolean;
-        start: string | null;
-      }
-    >();
-    for (const step of trace.steps) {
-      for (const g of findGraphs(trace, stepScopes(step), step.heap)) {
-        const o = graphOverlay(trace, g, stepScopes(step), step.heap);
-        const names = {
-          ...emptyOverlay(),
-          visitedNames: o.visitedNames,
-          frontierName: o.frontierName,
-          labelNames: o.labelNames,
-          treeName: o.treeName,
-          pathName: o.pathName,
-          chosenName: o.chosenName,
-        };
-        const seen = legendById.get(g.id) ?? new Map<string, GraphOverlay>();
-        seen.set(
-          JSON.stringify([
-            names.visitedNames,
-            names.frontierName,
-            names.labelNames,
-            names.treeName,
-            names.pathName,
-            names.chosenName,
-          ]),
-          names,
-        );
-        legendById.set(g.id, seen);
-        const entry = union.get(g.id) ?? {
-          nodes: new Map(),
-          edges: new Map(),
-          directed: false,
-          layout: g.layout,
-          angled: g.edgeStyle === "angled",
-          start: null,
-        };
-        entry.start ??= startOf(o);
-        for (const node of g.nodes.keys()) entry.nodes.set(node, true);
-        for (const e of g.edges) entry.edges.set(`${e.from}>${e.to}`, e);
-        entry.directed ||= g.directed;
-        union.set(g.id, entry);
-      }
-    }
-    for (const [id, entry] of union) {
-      byId.set(
-        id,
-        computeLayout([...entry.nodes.keys()], [...entry.edges.values()], {
-          directed: entry.directed,
-          mode: entry.layout,
-          angled: entry.angled,
-          start: entry.start,
-        }),
-      );
-    }
-    legends.set(trace, new Map([...legendById].map(([id, seen]) => [id, [...seen.values()]])));
   }
   const known = byId.get(graph.id);
   if (known && [...graph.nodes.keys()].every((node) => known.pos.has(node))) return known;
-  // A graph found only in this view (say, from a loop's own frame): lay it out alone.
-  const own = computeLayout([...graph.nodes.keys()], graph.edges, {
-    directed: graph.directed,
-    mode: graph.layout,
-    angled: graph.edgeStyle === "angled",
+  const union = unionFor(trace, graph);
+  const layout = computeLayout(union.nodes, union.edges, {
+    directed: union.directed,
+    mode: union.layout,
+    angled: union.angled,
+    start: union.start,
   });
-  byId.set(graph.id, own);
-  return own;
+  byId.set(graph.id, layout);
+  return layout;
 }
 
 /**

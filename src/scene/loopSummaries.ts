@@ -26,6 +26,7 @@
  * their place and aren't drawn again.
  */
 import type { LoopRow } from "../trace/loopHistory";
+import { detailBudget } from "./summaries";
 
 /** Cells drawn in the loop history at each level of detail (render/lod.ts), full to overview. */
 const CELL_BUDGETS = [40_000, 30_000, 20_000, 10_000, 5_000];
@@ -33,6 +34,16 @@ const CELL_BUDGETS = [40_000, 30_000, 20_000, 10_000, 5_000];
 /** The loop history's cell budget at a zoom's level of detail; with Auto-fit on, full detail's. */
 export function loopDetailBudget(lod: number, autoFit: boolean): number {
   return autoFit ? CELL_BUDGETS[0] : CELL_BUDGETS[Math.max(0, Math.min(CELL_BUDGETS.length - 1, lod))];
+}
+
+/**
+ * The detail budget for a graph drawn in each row (scene/graphClusters.ts):
+ * the memory view's at the level the cell budget is for. Live, or with no
+ * budget, full detail's: a big graph is drawn as clusters either way.
+ */
+export function loopGraphBudget(cells: number | undefined): number {
+  const level = cells === undefined ? 0 : Math.max(0, CELL_BUDGETS.indexOf(cells));
+  return detailBudget(level, false);
 }
 
 /** What to fold, and what not to. */

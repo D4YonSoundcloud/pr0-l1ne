@@ -1,6 +1,6 @@
 /**
  * Switching renderers while the app runs (the Style panel's "Rendering"
- * choice: SVG or Canvas 2D).
+ * choice: SVG, WebGL or Canvas 2D).
  *
  * The controllers each make their window's renderer once, from a factory
  * (scene/renderer.ts). The factory here hands them a stand-in for each
@@ -182,7 +182,7 @@ class SwitchingLoop extends Switching<LoopScene, LoopRenderer, LoopRendererEvent
   }
 }
 
-/** Where each kind of renderer comes from: Canvas 2D is loaded the first time it's picked. */
+/** Where each kind of renderer comes from: the canvas renderers are loaded the first time one is picked. */
 export type RendererSources = Record<RendererKind, () => RendererFactory | Promise<RendererFactory>>;
 
 export class RendererSwitch {

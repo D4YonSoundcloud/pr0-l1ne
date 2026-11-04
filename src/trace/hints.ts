@@ -40,6 +40,7 @@ import {
   type WindowBound,
   type WindowHint,
 } from "./types";
+import { finishNow, stepOf, type Work } from "./work";
 
 const NAME = /^[A-Za-z_$][\w$]*$/;
 const CONTAINER = /^([A-Za-z_$][\w$]*)(\[\])?$/;
@@ -575,9 +576,8 @@ interface ValueRules {
  * new lists' ids are the frame and name, so each is the same object from
  * step to step and animates like any list.
  */
-function transformValues(steps: Step[], rules: ValueRules): Step[] {
-  if (!rules.chars.size && !rules.bits.size && !rules.formats.size) return steps;
-  return steps.map((step) => {
+function transformStep(step: Step, rules: ValueRules): Step {
+  {
     let heap: Record<string, HeapObject> | null = null;
     const writable = () => {
       heap ??= { ...step.heap };
@@ -653,20 +653,17 @@ function transformValues(steps: Step[], rules: ValueRules): Step[] {
     return stack.some((f, i) => f !== step.stack[i]) || heap
       ? { ...out, stack, ...(suspended ? { suspended } : {}) }
       : step;
-  });
+  }
 }
 
-/** The most binary digits a hinted number takes anywhere in the run: its bits' width, so it doesn't change. */
-function widestBits(steps: Step[], names: Set<string>): Map<string, number> {
-  const widths = new Map<string, number>();
-  for (const step of steps)
-    for (const frame of [...step.stack, ...(step.suspended ?? [])])
-      for (const [name, value] of frame.locals) {
-        if (!names.has(name)) continue;
-        const digits = bitsOf(value, 1);
-        if (digits) widths.set(name, Math.max(widths.get(name) ?? 1, digits.length));
-      }
-  return widths;
+/** Widen `widths` to the binary digits hinted numbers take in this step: over the run, their bits' width, so it doesn't change. */
+function widenBits(step: Step, names: Set<string>, widths: Map<string, number>): void {
+  for (const frame of [...step.stack, ...(step.suspended ?? [])])
+    for (const [name, value] of frame.locals) {
+      if (!names.has(name)) continue;
+      const digits = bitsOf(value, 1);
+      if (digits) widths.set(name, Math.max(widths.get(name) ?? 1, digits.length));
+    }
 }
 
 /** A number's value from its repr; null for anything else (and for NaN). */
@@ -678,27 +675,6 @@ export function numberOf(value: Value | undefined): number | null {
   if (/^-?inf(inity)?$/i.test(repr)) return repr.startsWith("-") ? -Infinity : Infinity;
   const n = Number(repr);
   return Number.isNaN(n) ? null : n;
-}
-
-/** The numbers a heatmap's list holds: its items, or a grid's rows' items. */
-function heatNumbers(value: Value, heap: Record<string, HeapObject>): number[] {
-  if (value.kind !== "ref") return [];
-  const obj = heap[value.id];
-  if (!obj || (obj.kind !== "list" && obj.kind !== "tuple")) return [];
-  const out: number[] = [];
-  for (const item of obj.items) {
-    const n = numberOf(item);
-    if (n !== null) out.push(n);
-    else if (item.kind === "ref") {
-      const row = heap[item.id];
-      if (row && (row.kind === "list" || row.kind === "tuple"))
-        for (const cell of row.items) {
-          const m = numberOf(cell);
-          if (m !== null) out.push(m);
-        }
-    }
-  }
-  return out.filter(Number.isFinite);
 }
 
 /** Names of an interval's ends, tried in order when the hint doesn't name them. */
@@ -750,24 +726,84 @@ function intervalNumbers(value: Value, heap: Record<string, HeapObject>, fields?
   return items.flatMap((item) => intervalOf(item, heap, fields) ?? []).filter(Number.isFinite);
 }
 
-/** The smallest and largest number a variable holds anywhere in the run (none if it never holds one). */
-function numberRange(
-  steps: Step[],
+/** The smallest and largest number seen so far. */
+interface Range {
+  min: number;
+  max: number;
+}
+
+const emptyRange = (): Range => ({ min: Infinity, max: -Infinity });
+
+function widen(range: Range, x: number): void {
+  if (x < range.min) range.min = x;
+  if (x > range.max) range.max = x;
+}
+
+/** Widen `range` to take in `other` (nothing, when other is empty). */
+function merge(range: Range, other: Range): void {
+  if (other.min > other.max) return;
+  widen(range, other.min);
+  widen(range, other.max);
+}
+
+/** The range as a hint keeps it: none if the variable never held a number. */
+const rangeOf = (range: Range): { min?: number; max?: number } =>
+  range.min <= range.max ? { min: range.min, max: range.max } : {};
+
+/** Widen `range` to the numbers a variable holds in this step. */
+function widenTo(
+  step: Step,
   name: string,
-  numbers: (value: Value, heap: Record<string, HeapObject>) => number[],
-): { min?: number; max?: number } {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const step of steps)
-    for (const frame of [...step.stack, ...(step.suspended ?? [])])
-      for (const [n, value] of frame.locals) {
-        if (n !== name) continue;
-        for (const x of numbers(value, step.heap)) {
-          if (x < min) min = x;
-          if (x > max) max = x;
-        }
+  range: Range,
+  numbers: (value: Value, heap: Record<string, HeapObject>) => Range,
+): void {
+  for (const frame of [...step.stack, ...(step.suspended ?? [])])
+    for (const [n, value] of frame.locals) {
+      if (n !== name) continue;
+      merge(range, numbers(value, step.heap));
+    }
+}
+
+/**
+ * The range of the numbers a heatmap's list holds (its items, or a grid's
+ * rows' items), each list's own range remembered by its object: a step
+ * shares the rows that didn't change, so a 60 × 60 grid costs 60 lookups
+ * a step, not 3,600 numbers.
+ */
+function heatRangeWith(cache: WeakMap<HeapObject, Range>) {
+  const own = (obj: HeapObject & { items: Value[] }): Range => {
+    let range = cache.get(obj);
+    if (!range) {
+      range = emptyRange();
+      for (const item of obj.items) {
+        const n = numberOf(item);
+        if (n !== null && Number.isFinite(n)) widen(range, n);
       }
-  return min <= max ? { min, max } : {};
+      cache.set(obj, range);
+    }
+    return range;
+  };
+  return (value: Value, heap: Record<string, HeapObject>): Range => {
+    const range = emptyRange();
+    if (value.kind !== "ref") return range;
+    const obj = heap[value.id];
+    if (!obj || (obj.kind !== "list" && obj.kind !== "tuple")) return range;
+    merge(range, own(obj));
+    for (const item of obj.items) {
+      if (item.kind !== "ref") continue;
+      const row = heap[item.id];
+      if (!row || (row.kind !== "list" && row.kind !== "tuple")) continue;
+      merge(range, own(row));
+    }
+    return range;
+  };
+}
+
+/** A list of numbers' range. */
+function rangeOfNumbers(numbers: number[]): Range {
+  const range = emptyRange();
+  for (const x of numbers) widen(range, x);
+  return range;
 }
 
 /** One character as Python writes it: 'a', '\\'', '\\n'. */
@@ -783,6 +819,11 @@ function pyRepr(c: string): string {
  * `trace.viz` for the renderers.
  */
 export function applyHints(trace: Trace): Trace {
+  return finishNow(applyHintsWork(trace));
+}
+
+/** applyHints as work over the run's steps, to do a slice at a time (trace/work.ts). */
+export function* applyHintsWork(trace: Trace): Work<Trace> {
   // SQL has one hint of its own (`-- viz: database shop`, read by its tracer), which leaves it only the rest to warn about.
   if (trace.language === "sql") {
     const viz = emptyHints();
@@ -794,16 +835,6 @@ export function applyHints(trace: Trace): Trace {
   if (!trace.hints?.length) return { ...trace, viz };
 
   const hidden = new Set(viz.hide);
-  const filtered = hidden.size
-    ? trace.steps.map((step) => ({
-        ...step,
-        stack: step.stack.map((frame) => ({ ...frame, locals: frame.locals.filter(([name]) => !hidden.has(name)) })),
-        suspended: step.suspended?.map((frame) => ({
-          ...frame,
-          locals: frame.locals.filter(([name]) => !hidden.has(name)),
-        })),
-      }))
-    : trace.steps;
   const windows = viz.windows ?? [];
   const compares = viz.compares ?? [];
   // A string a window, region or compare is over is drawn as its characters too.
@@ -813,19 +844,54 @@ export function applyHints(trace: Trace): Trace {
     ...compares.map((c) => c.container),
   ]);
   const bitNames = new Set((viz.bits ?? []).flatMap((b) => b.names));
-  const widest = widestBits(filtered, bitNames);
-  const bits = new Map<string, number>();
-  for (const hint of viz.bits ?? []) for (const name of hint.names) bits.set(name, hint.width ?? widest.get(name) ?? 1);
   const formats = new Map<string, string>();
   for (const hint of viz.formats ?? []) for (const name of hint.names) formats.set(name, hint.spec);
-  // Heatmaps and intervals: the numbers they hold over the whole run, before any format changes them.
-  if (viz.heatmaps?.length)
-    viz.heatmaps = viz.heatmaps.map((h) => ({ ...h, ...numberRange(filtered, h.name, heatNumbers) }));
-  if (viz.intervals?.length)
-    viz.intervals = viz.intervals.map((h) => ({
-      ...h,
-      ...numberRange(filtered, h.name, (value, heap) => intervalNumbers(value, heap, h.fields)),
-    }));
+  const heatmaps = viz.heatmaps ?? [];
+  const intervals = viz.intervals ?? [];
+  const transforms = chars.size > 0 || bitNames.size > 0 || formats.size > 0;
+
+  // Two passes over the steps, each a step at a time: what the run holds
+  // (bits' widths, heatmaps' and intervals' ranges, with hidden variables
+  // taken out first), then the values as they're drawn.
+  const count = trace.steps.length;
+  const looks = hidden.size > 0 || bitNames.size > 0 || heatmaps.length > 0 || intervals.length > 0;
+  const total = count * ((looks ? 1 : 0) + (transforms ? 1 : 0));
+  let done = 0;
+  const widest = new Map<string, number>();
+  const heatRanges = heatmaps.map(emptyRange);
+  const intervalRanges = intervals.map(emptyRange);
+  const heatRange = heatRangeWith(new WeakMap());
+  let filtered = trace.steps;
+  if (looks) {
+    filtered = hidden.size ? [] : trace.steps;
+    for (const raw of trace.steps) {
+      const step = hidden.size
+        ? {
+            ...raw,
+            stack: raw.stack.map((frame) => ({ ...frame, locals: frame.locals.filter(([name]) => !hidden.has(name)) })),
+            suspended: raw.suspended?.map((frame) => ({
+              ...frame,
+              locals: frame.locals.filter(([name]) => !hidden.has(name)),
+            })),
+          }
+        : raw;
+      if (hidden.size) filtered.push(step);
+      if (bitNames.size) widenBits(step, bitNames, widest);
+      // Heatmaps and intervals: the numbers they hold over the whole run, before any format changes them.
+      for (let i = 0; i < heatmaps.length; i++) widenTo(step, heatmaps[i].name, heatRanges[i], heatRange);
+      for (let i = 0; i < intervals.length; i++) {
+        const fields = intervals[i].fields;
+        widenTo(step, intervals[i].name, intervalRanges[i], (value, heap) =>
+          rangeOfNumbers(intervalNumbers(value, heap, fields)),
+        );
+      }
+      yield stepOf("Applying hints", ++done, total);
+    }
+  }
+  const bits = new Map<string, number>();
+  for (const hint of viz.bits ?? []) for (const name of hint.names) bits.set(name, hint.width ?? widest.get(name) ?? 1);
+  if (heatmaps.length) viz.heatmaps = heatmaps.map((h, i) => ({ ...h, ...rangeOf(heatRanges[i]) }));
+  if (intervals.length) viz.intervals = intervals.map((h, i) => ({ ...h, ...rangeOf(intervalRanges[i]) }));
   // A table, heatmap or intervals is drawn its own way, never as a graph.
   const drawnOwnWay = [
     ...(viz.tables ?? []),
@@ -833,7 +899,15 @@ export function applyHints(trace: Trace): Trace {
     ...(viz.intervals ?? []).map((h) => h.name),
   ];
   if (drawnOwnWay.length) viz.plain = [...new Set([...viz.plain, ...drawnOwnWay])];
-  const steps = transformValues(filtered, { chars, bits, formats });
+  let steps = filtered;
+  if (transforms) {
+    const rules = { chars, bits, formats };
+    steps = [];
+    for (const step of filtered) {
+      steps.push(transformStep(step, rules));
+      yield stepOf("Applying hints", ++done, total);
+    }
+  }
 
   const indexNames = { ...trace.indexNames };
   const addIndexNames = (key: string, list: string[]) => {

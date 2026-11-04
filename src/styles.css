@@ -2713,7 +2713,8 @@ select {
   .editor-pane,
   .canvas-section,
   .workspace .divider,
-  .canvas-pane > .loading-card {
+  .canvas-pane > .loading-card,
+  .canvas-pane > .run-card {
     grid-column: var(--grid-column);
     grid-row: var(--grid-row);
   }
@@ -2852,6 +2853,15 @@ select {
   background: var(--highlight);
   animation: loading-slide 1.3s ease-in-out infinite;
 }
+/* Counted (worker/downloads.ts): the bar fills as the bytes arrive. */
+.loading-bar.is-counted > span {
+  width: 0;
+  animation: none;
+  transition: width 0.2s linear;
+}
+.loading-percent {
+  font-variant-numeric: tabular-nums;
+}
 .loading-detail {
   margin: 0;
   font-size: 13.5px;
@@ -2862,6 +2872,151 @@ select {
   font-size: 12.5px;
   color: var(--paper-ink-faint);
 }
+/* ---------------------------------------------------------------- a run's progress (app/runProgress.ts)
+
+   While a run goes: in the toolbar, a bar, the steps and seconds so far,
+   and Stop, in place of the status text; for Run, a card in the middle of
+   the canvas with the stages, the numbers and Stop, the last drawing
+   dimmed behind it. */
+.toolbar > .run-progress {
+  order: 1;
+}
+/* Like the status, it takes the room left over; but at least enough for the bar and Stop (the text gives way). */
+.run-progress {
+  flex: 1 1 0;
+  min-width: 7.5rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.run-progress[hidden],
+.toolbar:has(> .run-progress:not([hidden])) > .status {
+  display: none;
+}
+.run-progress-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.run-progress-bar,
+.run-card-bar {
+  position: relative;
+  flex: 0 1 72px;
+  min-width: 24px;
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--highlight) 22%, transparent);
+}
+.run-progress-bar > span,
+.run-card-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 3px;
+  background: var(--highlight);
+  transition: width 0.25s linear;
+}
+.run-progress .run-stop {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.run-progress .run-stop[hidden] {
+  display: none;
+}
+.run-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 14; /* under the loading card, which says the language is still on its way */
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100% - 32px));
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid var(--paper-edge);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  color: var(--paper-ink);
+}
+.run-card[hidden],
+.run-card-stop[hidden] {
+  display: none;
+}
+/* Both canvas windows folded to bars: in the corner, like the loading card. */
+.canvas-pane:has(.canvas-section.is-collapsed + .divider + .canvas-section.is-collapsed) .run-card {
+  position: fixed;
+  inset: auto 16px 72px auto;
+  transform: none;
+  width: min(340px, calc(100vw - 32px));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.run-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+.run-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--paper-ink-faint);
+}
+.run-stages > li::before {
+  content: "○";
+  display: inline-block;
+  width: 1.4em;
+}
+.run-stages > li.is-current {
+  color: var(--paper-ink);
+  font-weight: 600;
+}
+.run-stages > li.is-current::before {
+  content: "●";
+  color: var(--highlight);
+}
+.run-stages > li.is-done::before {
+  content: "✓";
+}
+.run-card-bar {
+  width: 100%;
+  height: 6px;
+}
+.run-card-numbers,
+.run-card-left {
+  margin: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.run-card-left {
+  color: var(--paper-ink-faint);
+}
+.run-card-left:empty {
+  display: none;
+}
+.run-card-stop {
+  justify-self: start;
+  margin-top: 4px;
+}
+.canvas.is-running :is(.viewport-layer, .viewport-canvas) {
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-progress-bar > span,
+  .run-card-bar > span,
+  .canvas.is-running :is(.viewport-layer, .viewport-canvas) {
+    transition: none;
+  }
+}
+
 .status.is-loading::before {
   content: "";
   display: inline-block;
@@ -2897,6 +3052,10 @@ select {
     animation: none;
     width: 100%;
     opacity: 0.6;
+  }
+  .loading-bar.is-counted > span {
+    opacity: 1;
+    transition: none;
   }
 }
 @keyframes loading-pulse {
@@ -2973,7 +3132,8 @@ select {
   #programs {
     width: 9.5rem;
   }
-  .toolbar > .status {
+  .toolbar > .status,
+  .toolbar > .run-progress {
     grid-column: 1 / -1;
     order: 0;
     margin: 0;
@@ -4079,6 +4239,23 @@ select {
 }
 .box.summary .box-empty,
 .box.frame.summary .box-empty {
+  font-style: italic;
+}
+/* A graph's cluster (scene/graphClusters.ts): a stack of two nodes, the
+   one behind dashed; clicking it shows its nodes. */
+.graph-cluster {
+  cursor: pointer;
+}
+.graph-cluster .cluster-back {
+  fill: color-mix(in srgb, var(--header) 45%, var(--cell));
+  stroke: var(--ink);
+  stroke-width: calc(var(--border-width) * 1.2);
+  stroke-dasharray: 4 3;
+}
+.graph-cluster:not(.is-visited) .node-body {
+  fill: color-mix(in srgb, var(--header) 30%, var(--cell));
+}
+.graph-cluster .node-text {
   font-style: italic;
 }
 .summary-triangle {

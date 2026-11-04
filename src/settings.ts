@@ -114,7 +114,7 @@ function browserStorage(): KeyValueStorage | null {
 
 export type SizeFamily = "python" | "javascript";
 
-/** The renderers the person can pick: SVG (the default) or Canvas 2D (PixiJS). */
+/** The renderers the person can pick: SVG (the default), or a canvas drawn with PixiJS: WebGL (falling back to Canvas 2D) or Canvas 2D. */
 export const RENDERER_KINDS = ["svg", "canvas", "webgl"] as const;
 export type RendererKind = (typeof RENDERER_KINDS)[number];
 export type Pane = "memory" | "loop";

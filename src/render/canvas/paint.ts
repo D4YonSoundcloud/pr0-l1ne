@@ -94,6 +94,8 @@ export interface PaintGroup {
   children: PaintItem[];
   /** A box the person can drag (data-node-key). */
   nodeKey?: string;
+  /** A part of a box a click does something with (data-click): a graph's cluster opens. */
+  click?: string;
   /** Where its top-left corner is, in diagram units (data-x / data-y): for dragging. */
   at?: { x: number; y: number };
   /** Animation identity (data-flip), and where it is (see render/animate.ts). */
@@ -499,6 +501,8 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
     // Everything in the memory drawing's arrows layer can be faded on its own.
     const layered = hasClass(classes, "arrows");
     if (nodeKey) out.nodeKey = nodeKey;
+    const click = el.getAttribute("data-click");
+    if (click) out.click = click;
     if (flip) out.flip = flip;
     if (nodeKey || flip) out.at = { x: num(el, "data-x"), y: num(el, "data-y") };
     if (nodeKey && el.hasAttribute("data-w")) out.size = { w: num(el, "data-w"), h: num(el, "data-h") };

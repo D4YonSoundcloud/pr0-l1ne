@@ -25,6 +25,7 @@
  * kept while they stay the same, and drawn again when they change (a new
  * node in the track, a new kind of mark in the legend).
  */
+import { realNodes } from "../../scene/graphClusters";
 import { containerIn, type LoopScene } from "../../scene/loopScene";
 import type { LoopRow } from "../../trace/loopHistory";
 import type { Mark } from "../drawing";
@@ -148,7 +149,7 @@ export function rowKey(
     // Their memory sizes, if shown.
     sizes && graphRow
       ? graphRow.graph.objectNodes
-        ? sizes.of([...graphRow.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id })))
+        ? sizes.of(realNodes(graphRow.graph).map((id) => ({ kind: "ref" as const, id })))
         : sizes.total(graphRow.graph.hostId)
       : "-",
     sizes && trackRow ? sizes.of([...trackRow.nodes.keys()].map((id) => ({ kind: "ref" as const, id }))) : "-",

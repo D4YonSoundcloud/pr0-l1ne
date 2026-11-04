@@ -25,6 +25,7 @@ import re
 import sys
 import time
 import warnings
+from collections.abc import Callable
 from itertools import chain
 from types import CodeType, FrameType
 from typing import Any
@@ -69,6 +70,8 @@ STEP_EVENTS = ("call", "line", "return", "exception", "resume", "yield", "await"
 warnings.filterwarnings("ignore", message="assigning None to unbound local", category=RuntimeWarning)
 
 CLOCK_EVERY = 1000  # events between checks of the clock
+REPORT_EVERY = 0.25  # seconds between progress reports (run_trace_streaming)
+PIECE_EVERY = 0.25  # seconds between the pieces of the trace sent with them (small: each is one task for the page)
 
 
 class StepLimitExceeded(BaseException):
@@ -80,8 +83,24 @@ class StepLimitExceeded(BaseException):
 
 
 class Tracer:
-    def __init__(self, source: str, max_steps: int, max_seconds: float, sampling: SamplingPolicy) -> None:
+    def __init__(
+        self,
+        source: str,
+        max_steps: int,
+        max_seconds: float,
+        sampling: SamplingPolicy,
+        report: Callable[[str], None] | None = None,
+    ) -> None:
         self.source = source
+        # Progress, and the trace a piece at a time, to the page (see `report_progress`).
+        self.report = report
+        self.result: dict[str, Any] | None = None
+        self.sent = 0  # steps sent in pieces so far
+        self.header_sent = False
+        self.sent_stdout = 0  # characters of output sent so far
+        self.started = 0.0
+        self.next_report = 0.0
+        self.next_piece = 0.0
         self.max_seconds = max_seconds
         self.log = StepLog(max_steps)
         self.stdout = io.StringIO()
@@ -135,7 +154,7 @@ class Tracer:
         kind = self.classify(frame, fid, event, arg)
         if kind in STEP_EVENTS:
             self.count(frame, kind)
-            self.check_clock()
+            self.check_clock(frame)
             where = self.sampler.place(frame, fid, kind, prev_line)
             if where == RECORD:
                 self.record(frame, kind, arg)
@@ -210,15 +229,50 @@ class Tracer:
         if depth > self.counts["depth"].get(name, 0):
             self.counts["depth"][name] = depth
 
-    def check_clock(self) -> None:
-        """Every so often, stop if the run is past its time budget."""
+    def check_clock(self, frame: FrameType) -> None:
+        """Every so often, stop if the run is past its time budget (and say how far it's got)."""
         self.tick -= 1
         if self.tick > 0:
             return
         self.tick = CLOCK_EVERY
-        if self.deadline is not None and time.perf_counter() > self.deadline:
+        now = time.perf_counter()
+        if self.deadline is not None and now > self.deadline:
             self.stopped_by = "time"
             raise StepLimitExceeded()
+        self.report_progress(now, frame.f_lineno)
+
+    def report_progress(self, now: float, line: int) -> None:
+        """Every quarter second, how far the run has got, with the steps
+        recorded since the last piece (as deltas), what the program printed
+        since, and its counts. The first piece carries the trace's header. The page
+        rebuilds the trace as it arrives (src/trace/stream.ts), and keeps what had
+        arrived if the person stops the run."""
+        if self.report is None or now < self.next_report:
+            return
+        self.next_report = now + REPORT_EVERY
+        message: dict[str, Any] = {
+            "progress": {"steps": len(self.log.steps), "seconds": now - self.started, "line": line}
+        }
+        if now >= self.next_piece:
+            self.next_piece = now + PIECE_EVERY
+            message["chunk"] = self.piece()
+        self.report(json.dumps(message))
+
+    def piece(self) -> dict[str, Any]:
+        """The steps and output since the last piece (the header with the first)."""
+        steps = self.log.steps
+        out = self.stdout.getvalue()
+        piece: dict[str, Any] = {
+            "steps": steps[self.sent :],
+            "stdout": out[self.sent_stdout :],
+            "counts": self.counts,
+        }
+        if not self.header_sent and self.result is not None:
+            self.header_sent = True
+            piece["header"] = {k: v for k, v in self.result.items() if k not in ("steps", "stdout", "counts")}
+        self.sent = len(steps)
+        self.sent_stdout = len(out)
+        return piece
 
     # -- recording a step --------------------------------------------------
 
@@ -230,9 +284,11 @@ class Tracer:
             raise StepLimitExceeded()
         # A recorded step can take milliseconds (a big heap): check the clock
         # each time, not only every CLOCK_EVERY events, or a run can go far past its time.
-        if self.deadline is not None and time.perf_counter() > self.deadline:
+        now = time.perf_counter()
+        if self.deadline is not None and now > self.deadline:
             self.stopped_by = "time"
             raise StepLimitExceeded()
+        self.report_progress(now, frame.f_lineno)
         frames = user_frames(frame)
         serializer = Serializer(self.keepalive, self.object_ids, focus=self.focus_of(frames), cache=self.heap_cache)
         # Serializing follows references depth first: a long chain of objects
@@ -372,6 +428,7 @@ class Tracer:
             "error": None,
             "truncated": False,
         }
+        self.result = result
         code = self.prepare(result)
         if code is None:
             return result
@@ -422,7 +479,10 @@ class Tracer:
         }
         old_stdout = sys.stdout
         sys.stdout = self.stdout
-        self.deadline = time.perf_counter() + self.max_seconds
+        self.started = time.perf_counter()
+        self.deadline = self.started + self.max_seconds
+        self.next_report = self.started + REPORT_EVERY
+        self.next_piece = self.started + PIECE_EVERY
         sys.settrace(self.trace)
         try:
             exec(code, user_globals)
@@ -481,6 +541,30 @@ def run_trace(
     result = tracer.run()
     tracer.keepalive.clear()
     return json.dumps(result)
+
+
+def run_trace_streaming(
+    source: str,
+    max_steps: int,
+    max_seconds: float,
+    sampling: str,
+    report: Callable[[str], None],
+) -> str:
+    """Entry point for a run the page watches: like run_trace, but `report` is
+    given progress as JSON every quarter second, with the trace's steps a piece
+    at a time (see Tracer.report_progress). Returns the rest as JSON: the trace
+    with the steps no piece sent, and `skippedAfter` when the last step had been
+    sent before events after it were counted."""
+    rules: SamplingPolicy = json.loads(sampling)
+    tracer = Tracer(source, int(max_steps), float(max_seconds), rules, report)
+    result = tracer.run()
+    tracer.keepalive.clear()
+    steps = result["steps"]
+    rest = dict(result, steps=steps[tracer.sent :])
+    out: dict[str, Any] = {"trace": rest}
+    if tracer.sent and tracer.sent == len(steps) and "skippedAfter" in steps[-1]:
+        out["skippedAfter"] = steps[-1]["skippedAfter"]
+    return json.dumps(out)
 
 
 if __name__ == "__main__" and sys.platform != "emscripten":

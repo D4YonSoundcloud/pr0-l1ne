@@ -12,6 +12,7 @@
  */
 
 import { timed } from "../perf";
+import { CLUSTER_PREFIX } from "../scene/graphClusters";
 import { FOLD_PREFIX, loopDetailBudget } from "../scene/loopSummaries";
 import type {
   Hit,
@@ -65,7 +66,7 @@ abstract class SvgWindow {
         events.onAutoFitChange?.(state);
         this.levelChanged(this.view.lod);
       },
-      onNodeClick: (key) => this.nodeClicked(key),
+      onNodeClick: (key, part) => this.nodeClicked(key, part),
       controls: events.controls,
       // The level of detail is a class on the layer the SVG is in: CSS hides and simplifies (lod.ts),
       // and what it hides is left out of the page altogether.
@@ -83,7 +84,7 @@ abstract class SvgWindow {
   protected levelChanged(_lod: Lod): void {}
 
   /** A box was clicked (pressed and let go without dragging). */
-  protected nodeClicked(_key: string): void {}
+  protected nodeClicked(_key: string, _part?: string): void {}
 
   /** The view moved (panned, zoomed). Called from the viewport's constructor too, before fields are set. */
   protected viewMoved(): void {}
@@ -273,7 +274,12 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
   private summaryKeys = new Map<string, string>();
   private readonly onExpand?: (key: string) => void;
 
-  protected override nodeClicked(key: string): void {
+  protected override nodeClicked(key: string, part?: string): void {
+    // A graph's cluster (scene/graphClusters.ts) opens like a summary.
+    if (part?.startsWith(CLUSTER_PREFIX)) {
+      this.onExpand?.(part);
+      return;
+    }
     const summary = this.summaryKeys.get(key);
     if (summary) this.onExpand?.(summary);
   }
@@ -316,8 +322,9 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     return loopDetailBudget(this.view.lod, this.view.autoFitState.on);
   }
 
-  protected override nodeClicked(key: string): void {
-    if (key.startsWith(FOLD_PREFIX)) this.onExpand?.(key);
+  protected override nodeClicked(key: string, part?: string): void {
+    if (part?.startsWith(CLUSTER_PREFIX)) this.onExpand?.(part);
+    else if (key.startsWith(FOLD_PREFIX)) this.onExpand?.(key);
   }
 
   setLayout(layout: { vertical: boolean }): void {

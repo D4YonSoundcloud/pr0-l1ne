@@ -16,7 +16,7 @@ It's free, there's no sign-up, and it runs entirely in your own browser, so ther
 
 ## Choosing a language
 
-The menu at the left of the toolbar switches between **Python**, **JavaScript**, **TypeScript** and **SQL**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python: while it loads, a card over the canvas shows a spinner and a moving bar with what's downloading and how big it is, and the status in the toolbar reads "Downloading Python (6 MB)…" beside a small spinner. Your browser keeps a copy after that. SQL's database (PostgreSQL, about 8 MB) is downloaded the same way, the first time you pick SQL.
+The menu at the left of the toolbar switches between **Python**, **JavaScript**, **TypeScript** and **SQL**. Each language keeps its own code, undo history, saved programs and examples, so switching back and forth doesn't lose anything. A first visit opens in JavaScript, and after that the page remembers the language you used last. Python's runtime (about 6 MB) is only downloaded the first time you pick Python: while it loads, a card over the canvas shows what's downloading, how big it is and how much has arrived ("Downloading Python · 42%", with a bar that fills), and the status in the toolbar says the same ("Downloading Python… 42%") beside a small spinner. Once it's all there, Python takes a few seconds to start ("Starting Python"). Your browser keeps a copy after that, so later visits only start it. SQL's database (PostgreSQL, about 8 MB) is downloaded the same way, the first time you pick SQL.
 
 Each language has its own address: [pr0l1ne.com/javascript](https://pr0l1ne.com/javascript), [/python](https://pr0l1ne.com/python), [/typescript](https://pr0l1ne.com/typescript) and [/sql](https://pr0l1ne.com/sql). The address changes as you switch language, so you can bookmark or link to a language, and the browser's Back button goes back to the language before. [pr0l1ne.com](https://pr0l1ne.com) itself opens the language you used last (JavaScript the first time) and shows its address. Share links keep working at any of them.
 
@@ -150,7 +150,7 @@ The layout button and the window buttons aren't shown on a phone, which has this
 
 | Section | What you can change |
 | --- | --- |
-| **Rendering** | Whether the windows are drawn with **SVG** (the default), **Canvas 2D** or **WebGL**. See [SVG, Canvas 2D or WebGL](#svg-canvas-2d-or-webgl) below. |
+| **Rendering** | Whether the windows are drawn with **SVG** (the default), **WebGL** or **Canvas 2D**. See [SVG, WebGL or Canvas 2D](#svg-webgl-or-canvas-2d) below. |
 | **Theme** | A starting point: **Graph paper** (the default), **Whiteboard** (white, no grid), **Dot grid**, **Blueprint** (white lines on blue), **Night** (dark) and **High contrast**. Changing anything after that makes it **Custom**. **Reset all** goes back to Graph paper. |
 | **Memory window** and **Loop history window**, separately | The **background color**. The **grid**: lines, dots or none, its **color** and its **size** (it still scales with zoom). The **easing** of the animation between steps: Smooth, Linear, Ease in and out, Ease out, Ease in, Overshoot, Snap, or any `cubic-bezier(...)` you type. Its **duration**, from 0 (no animation) to 1000 ms. And how new things arrive: **Fade in** (on by default) and **Slide in** (from the left, with the window's easing; off by default), together, one or the other, or neither so they just appear. **Same as the memory window** copies all of it to the loop history. |
 | **Colors** | Every color in the diagrams: lines and text, cell and box fills, box titles, function and class titles, numbers, strings and constants, the yellow "changed" highlighter, the red change arrows, the blue references and pointers, sliding windows, regions, compared cells, failed checks, heatmaps' lowest and highest colors, intervals, memory sizes, the printed-output card and its text, the graph colors (visited, waiting, search tree, path), and the text drawn straight on the background (names, labels, index numbers). |
@@ -164,20 +164,20 @@ The layout button and the window buttons aren't shown on a phone, which has this
 
 The window headers (the strips with "Memory" and the Arrows | Nested switch) take their colors from each window's background, so a dark theme is dark all the way up.
 
-### SVG, Canvas 2D or WebGL
+### SVG, WebGL or Canvas 2D
 
 The **Rendering** section at the top of the Style panel picks how the two windows are drawn. All three draw the same picture, from the same layout, in the same colors, with the same animations, dragging, hover highlights, Auto-fit and zooming. What differs is how the picture reaches the screen.
 
-| | SVG (the default) | Canvas 2D | WebGL |
+| | SVG (the default) | WebGL | Canvas 2D |
 | --- | --- | --- | --- |
-| **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) on one canvas the size of the window, only what's in view | The same canvas drawing, drawn by the graphics card |
-| **Stepping** | Quicker: each step changes only the elements that changed | A little slower: the canvas is painted whole each step | Like Canvas 2D |
-| **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets | Smooth, and lighter on the processor |
-| **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming | Like Canvas 2D |
-| **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names | Like Canvas 2D |
+| **How** | Every box, arrow and value is an element of the page | Drawn with [PixiJS](https://pixijs.com) by your graphics card, on one canvas the size of the window, only what's in view | The same canvas drawing, painted by the processor |
+| **Stepping** | Quick: each step changes only the elements that changed | Quickest on big grids and heatmaps (about a third quicker than Canvas 2D) | A little slower on big drawings |
+| **Panning and zooming big drawings** | Can stutter: the browser redraws thousands of elements as you zoom | Smooth, however big the drawing gets | Smooth |
+| **Zoomed in** | Always sharp | Lines are always sharp; text is redrawn sharp a moment after you stop zooming | Like WebGL |
+| **Screen readers** | Can read the values in the diagram | Can't read the diagram itself, only the window names | Like WebGL |
 | **Save SVG** | Yes | Yes, the same file | Yes, the same file |
 
-Pick **SVG** for most programs, or if you use a screen reader. Pick **Canvas 2D** if you're exploring a big drawing (hundreds of boxes, a long loop history) and panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If it can't start in your browser, the Style panel says so and the windows stay on SVG. **WebGL** is the canvas drawing again, drawn by your graphics card: worth trying on a big drawing if Canvas 2D still feels heavy. If WebGL can't start (an old graphics driver, or it's turned off), it draws with Canvas 2D and the Style panel says so. If the graphics card is reset while you're using it, the drawing comes back by itself.
+Pick **SVG** for most programs, or if you use a screen reader. Pick **WebGL** if you're exploring a big drawing (hundreds of boxes, a big grid, a long loop history) and stepping, panning or zooming around it stutters. Your choice is remembered. The canvas renderer downloads the first time you pick it (about 100 KB). If WebGL can't start (an old graphics driver, or it's turned off), it draws with Canvas 2D and the Style panel says so; if the graphics card is reset while you're using it, the drawing comes back by itself. Pick **Canvas 2D** yourself only if WebGL gives trouble on your computer. If neither can start in your browser, the Style panel says so and the windows stay on SVG.
 
 A few small differences on the canvas: a box doesn't get a soft shadow while you hover over it, and a box being dimmed (by [Dim others](#printed-output)) fades each of its parts rather than the box as a whole, which can show a hint of the box's outline through its cells.
 
@@ -395,9 +395,13 @@ A trace records the program step by step, which is what lets you scrub back and 
 
 **Long chains, big trees and deep recursion are summarized.** In the memory view, more than 64 nodes in a row of a linked list are drawn as the first and last of them with one dashed box between, "86 more Nodes", linked like a node. A binary tree that big shows the levels that fit and draws each subtree below them as a triangle with its node count. More than 64 calls of one function in a row on the call stack show the outermost and innermost calls with one frame between, "fib() × 336 more". Whatever your code holds is never summarized: a node a variable points to stays, with the nodes around it, so walking a list shows its head, where you are, and its tail, and the path down a tree to a variable's node stays open.
 
-Click a summary to show everything it stands for. It stays open as you step, until **Reset layout** (next to the zoom controls) summarizes it again. With Auto-fit off, zooming out summarizes sooner (from 48 nodes in a row down to 8 at the smallest zooms) and zooming back in draws them again, once the zoom settles. Graphs are never summarized.
+Click a summary to show everything it stands for. It stays open as you step, until **Reset layout** (next to the zoom controls) summarizes it again. With Auto-fit off, zooming out summarizes sooner (from 48 nodes in a row down to 8 at the smallest zooms) and zooming back in draws them again, once the zoom settles.
+
+**Big graphs are drawn as clusters.** A graph of more than 64 nodes (a few hundred people linked as friends, say) is drawn as its closely linked groups, each one dashed, stacked node with its count, "25 nodes", and the edges between groups gathered into one, labelled with how many ("×3"). The groups are found from the whole run, so they're the same at every step. What your algorithm marks is gathered onto them: a group whose nodes are all visited is filled in, one partly visited says how many ("12 seen"), one holding the next node out of the queue gets its number, and variables pointing at a node in it point at the group. Click a group to show its nodes, laid out with the other groups; it stays open as you step, until **Reset layout**. Zoomed out, graphs are grouped sooner, as other summaries are. In the loop history, a big graph is grouped the same way in every row; clicking a group there opens it in every row, until **Fold again**.
 
 **A long loop history folds its earlier passes.** Stacked, when a history would draw more than about 40,000 cells (120 passes over a 60 × 60 grid is 430,000), it keeps its first pass and the latest passes that fit, and folds the passes between into one dashed band, "#2 to #97: 96 passes folded · click to show". Click the band to show them; they stay shown as you step, until **Fold again** (next to the zoom controls). With Auto-fit off, zooming out folds sooner, and zooming back in unfolds, once the zoom settles. The band grows a few passes at a time, so the rows under it stay put as you step.
+
+**You can see how far a run has got, and stop it.** A run that takes more than a moment shows its progress in the toolbar, where the status usually is: a bar, how many steps it has recorded and how many seconds it has run ("Running · 5,414 steps · 2 s of 6 s"), and **Stop**. For **Run**, a card in the memory window shows the same, which line is running, and how long it can take at most (sooner if your code finishes), with the last drawing dimmed behind it; once the run is done, the card says it's preparing the drawing: for a big trace, the work over the whole run (applying hints, finding graphs at every step) shows its own progress ("Finding graphs: 2,100 of 6,552 steps"), and the page keeps answering meanwhile. Then "Drawing" while the first step is drawn. **Stop** ends the run at once and draws the steps recorded up to then (all but the last quarter second or so), and the banner says you stopped it.
 
 When a trace still stops early, the banner says why (the time or the step budget), how many steps ran in all, and offers **Measure**.
 
@@ -547,7 +551,7 @@ When your data is a graph, the memory view draws it as one: nodes and edges in a
 | --- | --- |
 | A dict, object or `Map` of neighbor lists or sets: `{"A": ["B", "C"], ...}` | Automatically, when most neighbors are also keys (so `{"fruit": ["apple"]}` isn't mistaken for one) |
 | Weighted: `{"A": {"B": 4}}`, or `{"A": [("B", 4)]}` | Automatically. Weights label the edges |
-| Objects that hold lists, sets or dicts of each other: `city.roads`, `node.children` | Automatically. This covers graphs of objects, trees with any number of children, and tries (a dict's keys label its edges) |
+| Objects that hold lists, sets or dicts of each other: `city.roads`, `node.children` | Automatically, up to 500 objects. This covers graphs of objects, trees with any number of children, and tries (a dict's keys label its edges). Past 64 nodes the graph is drawn as clusters (see [Big inputs](#big-inputs)) |
 | Neighbors by number: `adj = [[1, 2], [0], [0]]` | With a hint, `viz: graph adj`, because a grid looks the same |
 | An adjacency matrix: `m = [[0, 1], [1, 0]]` | With a hint, `viz: graph m`. A square list of lists is read as a matrix |
 | An edge list: `edges = [(0, 1), (1, 2, 5)]` | With a hint, `viz: graph edges`. JavaScript arrays need `viz: graph edges edgelist` |

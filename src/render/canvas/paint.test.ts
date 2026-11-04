@@ -5,6 +5,7 @@ import { memoryScene } from "../../scene/memoryScene";
 import { fakeStyles, svgOf } from "../../testing/canvasStyles";
 import { diffSteps } from "../../trace/diff";
 import { renderMemory } from "../memory";
+import { HitIndex } from "./hitIndex";
 import {
   groups,
   type PaintGroup,
@@ -264,6 +265,21 @@ describe("paintDrawing: groups", () => {
     expect(cell.cell).toEqual({ key: "list|0", value: "3", cx: 1, cy: 2 });
     expect(cell.noFade).toBe(true);
     expect(row.current).toEqual({ top: 10, bottom: 40 });
+  });
+
+  it("keeps a part a click does something with (data-click), found under the pointer inside its box", () => {
+    const paint = paintDrawing(
+      svgOf(`<g class="node" data-node-key="obj:1" data-x="0" data-y="0"><rect width="100" height="60"/>
+               <g class="graph-node graph-cluster" data-click="gcl:g|a"><rect x="10" y="10" width="30" height="20"/></g></g>`),
+      fakeStyles(),
+    );
+    const box = paint.root.children[0] as PaintGroup;
+    const cluster = box.children.find((c): c is PaintGroup => c.kind === "group")!;
+    expect(cluster.click).toBe("gcl:g|a");
+    const index = new HitIndex(paint.root, (g) => !!(g.nodeKey || g.click));
+    expect(index.at(20, 20, (g) => !!g.click)?.click).toBe("gcl:g|a");
+    expect(index.at(80, 50, (g) => !!g.click)).toBeNull();
+    expect(index.at(80, 50)?.nodeKey).toBe("obj:1");
   });
 
   it("gives keyed groups their opacity, and passes other groups' opacity down", () => {

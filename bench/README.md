@@ -7,8 +7,8 @@ passes or fails.
 
 ## The programs
 
-`programs/` has each program in JavaScript and Python (the last one only in
-Python):
+`programs/` has each program in JavaScript and Python (`6-everything` only in
+Python, `7-friend-groups` only in JavaScript):
 
 | Program | What it stresses |
 | --- | --- |
@@ -18,6 +18,7 @@ Python):
 | `4-dense-graph` | 400 nodes with about 2,400 edges, then a breadth-first search: graph layout and edges |
 | `5-deep-recursion` | Recursion 400 calls deep, each call making a list the next points to: a deep call stack |
 | `6-everything` | 300 records with orders, a second index into the same records, and a 40 × 40 shortest-path grid: everything at once |
+| `7-friend-groups` | 300 node objects in 12 friend groups, then a breadth-first search: a graph big enough to be drawn as clusters (JavaScript only) |
 
 ## Outside the browser
 

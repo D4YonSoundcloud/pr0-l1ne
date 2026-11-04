@@ -96,16 +96,17 @@ class HookTests(unittest.TestCase):
         self.assertEqual(tracer.counts, {"steps": 2, "calls": {"f": 1}, "depth": {"f": 3}})
 
     def test_the_clock_is_checked_every_so_often(self):
+        (frame,) = capture("capture()\n")
         tracer = tracer_for("", 100)
         tracer.deadline = 0  # long past
         tracer.tick = 2
-        tracer.check_clock()  # not yet
+        tracer.check_clock(frame)  # not yet
         with self.assertRaises(T.StepLimitExceeded):
-            tracer.check_clock()
+            tracer.check_clock(frame)
         self.assertEqual(tracer.stopped_by, "time")
         tracer.deadline = None
         tracer.tick = 1
-        tracer.check_clock()  # no deadline: never stops
+        tracer.check_clock(frame)  # no deadline: never stops
 
     def test_a_step_is_the_stack_the_heap_and_the_output_so_far(self):
         (frame,) = capture("nums = [1, 2]\nprint('hi')\ncapture()\n", print=lambda *a: None)

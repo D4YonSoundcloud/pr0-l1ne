@@ -43,7 +43,8 @@ import {
   type Trace,
   type Value,
 } from "../trace/types";
-import { type Fold, foldRows, type LoopDetail } from "./loopSummaries";
+import { clusterGraph, clusterOverlay, drawnGraph } from "./graphClusters";
+import { type Fold, foldRows, type LoopDetail, loopGraphBudget } from "./loopSummaries";
 import { type Pointer, pointersFor } from "./pointers";
 import { type CompareSpan, comparesFor, hasRegionLabels, type WindowSpan, windowsFor } from "./windows";
 
@@ -100,14 +101,22 @@ export function signature(row: LoopRow, name: string): string {
   return `${obj.id}|${cellsOf(obj)
     .map((c) => {
       const inner = c.value.kind === "ref" ? row.heap[c.value.id] : undefined;
-      const deep = isContainer(inner)
-        ? `[${cellsOf(inner)
-            .map((ic) => valueKey(ic.value))
-            .join(",")}]`
-        : "";
-      return `${c.key}=${valueKey(c.value)}${deep}`;
+      return `${c.key}=${valueKey(c.value)}${isContainer(inner) ? innerSignature(inner) : ""}`;
     })
     .join(",")}`;
+}
+
+/** A container's cells inside another's (a grid's row), kept with it: passes share the rows that didn't change. */
+const innerSignatures = new WeakMap<ContainerObject, string>();
+function innerSignature(inner: ContainerObject): string {
+  let sig = innerSignatures.get(inner);
+  if (sig === undefined) {
+    sig = `[${cellsOf(inner)
+      .map((ic) => valueKey(ic.value))
+      .join(",")}]`;
+    innerSignatures.set(inner, sig);
+  }
+  return sig;
 }
 
 export type Sequence = SequenceObject;
@@ -328,6 +337,28 @@ export interface LoopGraph {
   overlays: GraphOverlay[];
   /** Each row's graph and overlay (null where it isn't there), lined up with `all`. */
   rows: ({ graph: GraphData; overlay: GraphOverlay } | null)[];
+}
+
+/**
+ * The graph drawn in every row: as it is, or past the detail budget as
+ * clusters (graphClusters.ts), the same in every row, the ones the person
+ * opened (by clicking one, in any row) as their nodes.
+ */
+function loopGraph(
+  trace: Trace,
+  first: GraphData,
+  rows: ({ graph: GraphData; overlay: GraphOverlay } | null)[],
+  detail: LoopDetail | undefined,
+): LoopGraph {
+  const legend = [...rows.flatMap((r) => (r ? [r.overlay] : [])), ...legendOverlaysFor(trace, first)];
+  const view = clusterGraph(trace, first, loopGraphBudget(detail?.cells), detail?.expanded ?? new Set());
+  if (!view) return { first, layout: layoutFor(trace, first), overlays: legend, rows };
+  return {
+    first: view.graph,
+    layout: view.layout,
+    overlays: legend,
+    rows: rows.map((r) => r && { graph: drawnGraph(view, r.graph), overlay: clusterOverlay(view, r.overlay) }),
+  };
 }
 
 /** A linked list or binary tree in view, drawn in every row. */
@@ -688,14 +719,7 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
     containers,
     grids,
     scalars,
-    graph: firstGraph
-      ? {
-          first: firstGraph,
-          layout: layoutFor(trace, firstGraph),
-          overlays: [...graphRows.flatMap((r) => (r ? [r.overlay] : [])), ...legendOverlaysFor(trace, firstGraph)],
-          rows: graphRows,
-        }
-      : null,
+    graph: firstGraph ? loopGraph(trace, firstGraph, graphRows, options.detail) : null,
     track: tracked
       ? {
           track: tracked,

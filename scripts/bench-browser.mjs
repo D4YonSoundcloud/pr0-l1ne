@@ -252,7 +252,12 @@ for (const file of files) {
         const run = await page.evaluate(() => {
           const p = window.__pr0l1nePerf;
           const s = p.summary();
-          return { trace: p.lastTrace, run: s["run.trace"]?.max, hints: s["run.hints"]?.max, show: s["run.show"]?.max };
+          return {
+            trace: p.lastTrace,
+            run: s["run.trace"]?.max,
+            prepare: s["run.prepare"]?.max,
+            show: s["run.show"]?.max,
+          };
         });
         result.run = { ...run, loadMs };
       }

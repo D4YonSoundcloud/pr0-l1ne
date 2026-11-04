@@ -32,7 +32,8 @@ describe("traceProblem", () => {
     const trace = (await real()) as unknown as Loose;
     const last = trace.steps.length - 1;
     const id = Object.keys(trace.steps[last].heap)[0];
-    trace.steps[last].heap[id] = { kind: "list" };
+    // A step whose heap didn't change shares the step before's: change this step's own copy.
+    trace.steps[last].heap = { ...trace.steps[last].heap, [id]: { kind: "list" } };
     expect(traceProblem(trace)).toMatch(new RegExp(`^steps\\[${last}\\]\\.heap\\.${id}: `));
     trace.steps[last].heap[id] = "not an object" as unknown as Record<string, unknown>;
     expect(traceProblem(trace)).toMatch(/heap/);

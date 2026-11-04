@@ -85,13 +85,33 @@ export class Runtime {
 
   private readonly sampler: Sampler;
 
+  /** How often a runtime says how far it's got (`onProgress`), in milliseconds (tests make it 0). */
+  static reportEveryMs = 250;
+  /** When the run started, and when to report how far it's got next (`onProgress`). */
+  private readonly started: number;
+  private nextReport = 0;
+  /**
+   * Called every quarter second or so while the program runs (js/serve.ts
+   * sends it to the page: progress, and the trace a piece at a time). From
+   * a clock check: every thousand events, or a recorded step.
+   */
+  onProgress: ((elapsedMs: number, line: number) => void) | null = null;
+
   constructor(
     private readonly maxSteps: number,
     maxSeconds: number,
     sampling: SamplingPolicy,
   ) {
     this.sampler = new Sampler(maxSteps, sampling, (step) => this.commit(step));
-    this.deadline = (typeof performance !== "undefined" ? performance.now() : Date.now()) + maxSeconds * 1000;
+    this.started = typeof performance !== "undefined" ? performance.now() : Date.now();
+    this.deadline = this.started + maxSeconds * 1000;
+    this.nextReport = this.started + Runtime.reportEveryMs;
+  }
+
+  private report(now: number): void {
+    if (!this.onProgress || now < this.nextReport) return;
+    this.nextReport = now + Runtime.reportEveryMs;
+    this.onProgress(now - this.started, this.frames[this.frames.length - 1]?.line ?? 0);
   }
 
   /** Steps not recorded after the last one (a sampled loop at the very end). */
@@ -443,6 +463,9 @@ export class Runtime {
 
   /** Every object's last version in a committed step, to share unchanged objects with. */
   private known = new Map<string, HeapObject>();
+  /** The last committed step's heap, and how many objects are in it. */
+  private lastHeap: Record<string, HeapObject> | null = null;
+  private lastHeapIds: string[] = [];
 
   private commit(step: Step): void {
     if (this.sampler.skipped) {
@@ -454,10 +477,24 @@ export class Runtime {
     // on the page. See trace/delta.ts.
     // (Its last version from any step before: an object out of reach for a while is shared when it's back.)
     const known = this.known;
+    const last = this.lastHeap;
+    const lastIds = this.lastHeapIds;
+    let same = !!last;
+    let count = 0;
     for (const id in step.heap) {
       const before = known.get(id);
       if (before && before !== step.heap[id] && sameData(before, step.heap[id])) step.heap[id] = before;
       else known.set(id, step.heap[id]);
+      // The same objects in the same order (the order is what the layout places them by).
+      if (same && (lastIds[count] !== id || last![id] !== step.heap[id])) same = false;
+      count++;
+    }
+    // Nothing in the heap changed: the step before's heap itself (most steps change only variables), so
+    // what's worked out about a heap can be kept by the heap (trace/graph.ts sameHeap).
+    if (same && last && count === lastIds.length) step.heap = last;
+    else {
+      this.lastHeap = step.heap;
+      this.lastHeapIds = Object.keys(step.heap);
     }
     this.steps.push(step);
   }
@@ -486,22 +523,26 @@ export class Runtime {
     this.counts.steps++;
     if (--this.tick <= 0) {
       this.tick = 1000;
-      if ((typeof performance !== "undefined" ? performance.now() : Date.now()) > this.deadline) {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (now > this.deadline) {
         this.aborted = true;
         this.stoppedBy = "time";
         throw this.ABORT;
       }
+      this.report(now);
     }
     // Sampling: is this step in a pass of a long loop that isn't recorded?
     const into = this.sampler.sampled ? this.sampler.place(this.activeStates()) : RECORD;
     if (into === null) return;
     // A recorded step can take milliseconds (a big heap): check the clock each
     // time, not only every thousand events, or a run can go far past its time.
-    if ((typeof performance !== "undefined" ? performance.now() : Date.now()) > this.deadline) {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now > this.deadline) {
       this.aborted = true;
       this.stoppedBy = "time";
       throw this.ABORT;
     }
+    this.report(now);
     this.recording = true;
     try {
       const serializer = new Serializer(

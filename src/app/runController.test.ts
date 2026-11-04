@@ -4,10 +4,13 @@ import type { LanguageId } from "../languages";
 import { ProgramStore } from "../programs";
 import { createSettings } from "../settings";
 import { POLICY } from "../trace/policy";
+import type { RunProgress } from "../trace/stream";
 import type { Trace } from "../trace/types";
+import type { Progress } from "../trace/work";
 import type { RunnerStatus, RunOutcome } from "../worker/runner";
 import type { BannerTone } from "./banner";
 import { LIVE_DELAY_MS, RunController, type RunnerLike, reportLink, type TracerCrash } from "./runController";
+import type { ProgressView } from "./runProgress";
 import { AppStore } from "./state";
 
 /** A trace of `steps` empty steps (enough for the controller). */
@@ -35,10 +38,29 @@ function makeTrace(steps: number, extra: Partial<Trace> = {}): Trace {
 /** A runner whose runs finish when the test says so. */
 class FakeRunner implements RunnerLike {
   status: RunnerStatus = { kind: "ready", label: "JavaScript" };
-  calls: { code: string; steps: number; seconds: number; sampling: unknown; finish(outcome: RunOutcome): void }[] = [];
+  calls: {
+    code: string;
+    steps: number;
+    seconds: number;
+    sampling: unknown;
+    finish(outcome: RunOutcome): void;
+    progress?: (p: RunProgress) => void;
+  }[] = [];
+  stops = 0;
   constructor(readonly onStatus: (status: RunnerStatus) => void) {}
-  run(code: string, steps: number, seconds: number, sampling: unknown): Promise<RunOutcome> {
-    return new Promise((resolve) => this.calls.push({ code, steps, seconds, sampling, finish: resolve }));
+  run(
+    code: string,
+    steps: number,
+    seconds: number,
+    sampling: unknown,
+    progress?: (p: RunProgress) => void,
+  ): Promise<RunOutcome> {
+    return new Promise((resolve) =>
+      this.calls.push({ code, steps, seconds, sampling, finish: resolve, ...(progress ? { progress } : {}) }),
+    );
+  }
+  stop(): void {
+    this.stops++;
   }
   measure(): never {
     throw new Error("not used");
@@ -50,9 +72,38 @@ class FakeRunner implements RunnerLike {
   }
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-function setup() {
+/** A progress view that says what it was told. */
+class FakeProgress implements ProgressView {
+  told: string[] = [];
+  showing = false;
+  start(run: { budget: string; maxSteps: number; maxSeconds: number }) {
+    this.told.push(`start ${run.budget} ${run.maxSeconds}`);
+  }
+  update(p: RunProgress) {
+    this.showing = true;
+    this.told.push(`update ${p.steps}`);
+  }
+  preparing() {
+    this.told.push("preparing");
+    return this.showing;
+  }
+  prepare(p: Progress) {
+    this.showing = true;
+    this.told.push(`prepare ${p.label} ${p.done}/${p.total}`);
+  }
+  drawing() {
+    this.told.push("drawing");
+    return this.showing;
+  }
+  done() {
+    this.showing = false;
+    this.told.push("done");
+  }
+}
+
+function setup(options: { sliceMs?: number } = {}) {
   document.body.innerHTML = `<span id="status"></span>`;
   const settings = createSettings(null);
   const app = new AppStore(settings, new ProgramStore(null));
@@ -64,8 +115,17 @@ function setup() {
   const crashes: TracerCrash[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
+  const progress = new FakeProgress();
+  let frames = 0;
   const runs = new RunController({
     app,
+    progress,
+    ...options,
+    pauseForFrame: flush,
+    nextFrame: () => {
+      frames++;
+      return Promise.resolve();
+    },
     status: document.getElementById("status")!,
     editor: { setMarks: (m) => marks.push(m), setHintWarnings: () => {} },
     setBanner: (html, tone) => {
@@ -104,10 +164,81 @@ function setup() {
     timers,
     status: document.getElementById("status")!,
     setBusy: (on: boolean) => app.setMeasuring(on),
+    progress,
+    frames: () => frames,
   };
 }
 
 describe("RunController", () => {
+  it("shows how a run is going, lets it paint 'preparing' before drawing, and Stop stops the runner", async () => {
+    const { runs, runners, progress, frames, app } = setup();
+    runs.runNow("let a = 1;");
+    const call = runners.get("javascript")!.calls[0];
+    expect(progress.told).toEqual([`start run ${POLICY.runSeconds}`]);
+    call.progress!({ steps: 120, seconds: 0.5, line: 3 });
+    runs.stop();
+    expect(runners.get("javascript")!.stops).toBe(1);
+    const stopped = { ...makeTrace(4), truncated: true, stoppedBy: "person" as const };
+    call.finish({ kind: "trace", trace: stopped, elapsedMs: 1 });
+    await flush();
+    expect(progress.told).toEqual([`start run ${POLICY.runSeconds}`, "update 120", "preparing", "drawing", "done"]);
+    expect(frames()).toBe(2); // "preparing", then "drawing", each painted before the work
+
+    expect(app.get().trace?.steps).toHaveLength(4);
+    runs.stop(); // nothing running: nothing to stop
+    expect(runners.get("javascript")!.stops).toBe(1);
+  });
+
+  it("draws at once when the progress never showed (a quick run)", async () => {
+    const { runs, runners, progress, frames } = setup();
+    runs.runNow("let a = 1;");
+    runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: makeTrace(2), elapsedMs: 1 });
+    await flush();
+    expect(progress.told).toEqual([`start run ${POLICY.runSeconds}`, "preparing", "drawing", "done"]);
+    expect(frames()).toBe(0);
+  });
+
+  it("prepares a trace a slice at a time, showing how far it's got, then draws it", async () => {
+    const { runs, runners, progress, frames, app } = setup({ sliceMs: 0 });
+    runs.runNow("let a = 1;");
+    runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: makeTrace(3), elapsedMs: 1 });
+    for (let i = 0; i < 10; i++) await flush();
+    expect(progress.told).toEqual([
+      `start run ${POLICY.runSeconds}`,
+      "preparing",
+      "prepare Finding graphs 1/3",
+      "prepare Finding graphs 2/3",
+      "drawing",
+      "done",
+    ]);
+    expect(frames()).toBe(1); // "drawing" painted (the view showed, once preparing took a while)
+    expect(app.get().trace?.steps).toHaveLength(3);
+  });
+
+  it("drops a prepared trace if the language changed meanwhile", async () => {
+    const { runs, runners, app, results } = setup({ sliceMs: 0 });
+    runs.runNow("let a = 1;");
+    runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: makeTrace(3), elapsedMs: 1 });
+    await flush();
+    app.setLanguage("python"); // part way through preparing it
+    for (let i = 0; i < 10; i++) await flush();
+    expect(app.get().trace).toBeNull();
+    expect(results).toEqual([]);
+  });
+
+  it("says what the person stopped: the steps recorded, or that nothing was", async () => {
+    const { runs, runners, banners } = setup();
+    runs.runNow("let a = 1;");
+    const stopped = { ...makeTrace(4), truncated: true, stoppedBy: "person" as const };
+    runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: stopped, elapsedMs: 1 });
+    await flush();
+    expect(banners.at(-1)).toContain("You stopped the run: here are the 4 steps recorded");
+    runs.runNow("let a = 2;");
+    runners.get("javascript")!.calls[1].finish({ kind: "stopped" });
+    await flush();
+    expect(banners.at(-1)).toContain("before anything was recorded");
+  });
+
   it("runs with Run's budget and shows the trace at its last step", async () => {
     const { runs, runners, app, results, banners } = setup();
     runs.runNow("let a = 1;");
@@ -152,6 +283,11 @@ describe("RunController", () => {
     expect(runners.get("javascript")?.calls ?? []).toHaveLength(0);
     runners.get("python")!.setStatus({ kind: "loading" });
     expect(status.textContent).toBe("Downloading Python (6 MB)…");
+    // Once the worker counts the bytes: how much, then starting up.
+    runners.get("python")!.setStatus({ kind: "loading", download: { loaded: 4_200_000, total: 10_000_000 } });
+    expect(status.textContent).toBe("Downloading Python… 42%");
+    runners.get("python")!.setStatus({ kind: "loading", download: { loaded: 10_000_000, total: 10_000_000 } });
+    expect(status.textContent).toBe("Starting Python…");
   });
 
   it("queues only the newest run while one is going", async () => {

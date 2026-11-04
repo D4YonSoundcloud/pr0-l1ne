@@ -149,7 +149,7 @@ export class LoopController {
       controls: settings.controlsCollapsed("loop"),
       // The zoom settled where the cell budget differs: fold the history again.
       onLayoutChange: () => this.render(),
-      // A fold clicked: its rows, drawn in full from now on (until Fold again, or another program).
+      // A fold (or a graph's cluster) clicked: drawn in full from now on (until Fold again, or another program).
       onExpand: (key) => {
         this.expanded.add(key);
         this.render();
@@ -158,7 +158,7 @@ export class LoopController {
     });
     this.foldButton = this.renderer.addControl(
       "Fold again",
-      "Fold the passes you opened, far from the one running, again",
+      "Fold the passes you opened, far from the one running, and the graph clusters you opened, again",
       () => {
         this.expanded.clear();
         this.render();

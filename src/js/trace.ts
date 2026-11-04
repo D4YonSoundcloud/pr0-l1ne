@@ -3,7 +3,7 @@
  * Trace, the same format tracer.py produces. Pure functions only, so it works in the worker and in tests.
  */
 import { POLICY, type SamplingPolicy } from "../trace/policy";
-import type { Trace } from "../trace/types";
+import type { Step, Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrument, RUNTIME } from "./instrument";
 import { Runtime } from "./runtime";
 
@@ -13,8 +13,24 @@ export function traceJavaScript(
   maxSteps = 2000,
   maxSeconds = POLICY.runSeconds,
   sampling: SamplingPolicy = POLICY.sampling,
+  onProgress?: (state: TraceSoFar) => void,
 ): Promise<Trace> {
-  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds, sampling);
+  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds, sampling, onProgress);
+}
+
+/**
+ * A run so far, every quarter second or so while it runs (traceProgram's
+ * `onProgress`; js/serve.ts sends it to the page). `header` is the trace
+ * being made (its steps aren't filled in yet); `steps` the steps recorded
+ * so far, growing.
+ */
+export interface TraceSoFar {
+  header: Trace;
+  steps: Step[];
+  stdout: string;
+  counts: NonNullable<Trace["counts"]>;
+  elapsedMs: number;
+  line: number;
 }
 
 /** Most turns of the event loop to run before giving up (setInterval forever). */
@@ -77,6 +93,7 @@ export async function traceProgram(
   instrumenter: (source: string) => Instrumented,
   maxSeconds: number,
   sampling: SamplingPolicy,
+  onProgress?: (state: TraceSoFar) => void,
 ): Promise<Trace> {
   const trace: Trace = {
     version: 1,
@@ -105,6 +122,16 @@ export async function traceProgram(
 
   const runtime = new Runtime(maxSteps, maxSeconds, sampling);
   runtime.indexNames = withPointerHints(program.indexNames, program.hints);
+  if (onProgress)
+    runtime.onProgress = (elapsedMs, line) =>
+      onProgress({
+        header: trace,
+        steps: runtime.steps,
+        stdout: runtime.stdout,
+        counts: runtime.counts,
+        elapsedMs,
+        line,
+      });
   let stopped = false;
   const fail = (error: unknown) => {
     if (stopped) return;

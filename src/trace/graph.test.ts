@@ -2,7 +2,18 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { expandHeaps } from "./delta";
-import { computeLayout, findGraphs, graphOverlay, layoutFor, primNodeKey, stepScopes } from "./graph";
+import {
+  computeLayout,
+  findGraphs,
+  graphOverlay,
+  graphSignature,
+  graphUnionsWork,
+  layoutFor,
+  legendOverlaysFor,
+  primNodeKey,
+  stepScopes,
+  unionFor,
+} from "./graph";
 import { applyHints, parseHints } from "./hints";
 import type { Trace } from "./types";
 
@@ -221,6 +232,56 @@ for (const [a, b] of [["A", "B"], ["B", "C"], ["C", "A"]]) {
     const early = t.steps.map((step) => findGraphs(t, stepScopes(step), step.heap)[0]).find(Boolean)!;
     const final = graphsAtEnd(t)[0];
     expect(layoutFor(t, early)).toBe(layoutFor(t, final));
+  });
+});
+
+describe("a graph over the whole run, found a step at a time", () => {
+  const BFS = `
+const graph = { A: ["B", "C"], B: ["D"], C: ["D"], D: [] };
+const seen = new Set(["A"]);
+const queue = ["A"];
+while (queue.length) {
+  const node = queue.shift();
+  for (const next of graph[node]) if (!seen.has(next)) { seen.add(next); queue.push(next); }
+}`;
+
+  it("finds the same union and legend as asking for them at once, and keeps them for the trace", async () => {
+    const sliced = await js(BFS);
+    const atOnce = await js(BFS);
+    const work = graphUnionsWork(sliced);
+    const steps: number[] = [];
+    for (let next = work.next(); !next.done; next = work.next()) steps.push(next.value.done);
+    expect(steps).toEqual(Array.from({ length: sliced.steps.length - 1 }, (_, i) => i + 1));
+    const [g] = graphsAtEnd(sliced);
+    const [h] = graphsAtEnd(atOnce);
+    expect(unionFor(sliced, g)).toEqual(unionFor(atOnce, h));
+    expect(legendOverlaysFor(sliced, g)).toEqual(legendOverlaysFor(atOnce, h));
+    // Found already: nothing more to do.
+    expect(graphUnionsWork(sliced).next().done).toBe(true);
+  });
+
+  it("work stopped part way leaves nothing half found", async () => {
+    const t = await js(BFS);
+    const work = graphUnionsWork(t);
+    work.next();
+    work.next();
+    work.return(new Map()); // a newer run came along
+    const [g] = graphsAtEnd(t);
+    expect(unionFor(t, g).nodes.sort()).toEqual(["s:A", "s:B", "s:C", "s:D"]); // found in full, when asked
+  });
+
+  it("a graph's signature changes with what's drawn on it, and only then", async () => {
+    const t = await js(BFS);
+    const at = (i: number) => {
+      const step = t.steps[i];
+      const g = findGraphs(t, stepScopes(step), step.heap)[0];
+      return g ? graphSignature(g, graphOverlay(t, g, stepScopes(step), step.heap)) : null;
+    };
+    const sigs = t.steps.map((_, i) => at(i)).filter((s): s is string => s !== null);
+    // The search marks nodes as it goes: some steps differ, and steps that mark nothing new match.
+    expect(new Set(sigs).size).toBeGreaterThan(2);
+    expect(new Set(sigs).size).toBeLessThan(sigs.length);
+    expect(graphSignature(undefined, undefined)).toBe("");
   });
 });
 

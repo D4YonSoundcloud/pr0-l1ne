@@ -222,10 +222,17 @@ export function graphPicture(
     centers.set(key, { x: half(offsetX + padX + (p.x - minX) * unitX), y: half(padTop + (p.y - minY) * unitY) });
   }
 
+  // Arrows to a node drawn inside a cluster end at the cluster.
+  const reached = new Map(centers);
+  for (const [key, cluster] of graph.clusters ?? []) {
+    const c = centers.get(key);
+    if (c) for (const member of cluster.members) reached.set(member, c);
+  }
+
   return {
     w,
     h,
-    centers,
+    centers: reached,
     draw(x, y, layer) {
       const g = s("g", { class: ["graph", graph.directed && "is-directed"].filter(Boolean).join(" ") });
       const at = (key: string) => {
@@ -434,8 +441,10 @@ export function graphPicture(
         const size = sizes.get(key) ?? nodeSize(label, graph.objectNodes);
         const isNew = !!prevGraph && !prevGraph.nodes.has(key);
         const changed = !isNew && !!prevOverlay && nodeSignature(prevOverlay, key) !== nodeSignature(overlay, key);
+        const cluster = graph.clusters?.get(key);
         const cls = [
           "graph-node",
+          cluster && "graph-cluster",
           overlay.visited.has(key) && "is-visited",
           overlay.frontier.has(key) && "is-frontier",
           overlay.pathNodes.has(key) && "is-path",
@@ -444,7 +453,12 @@ export function graphPicture(
         ]
           .filter(Boolean)
           .join(" ");
-        const ng = s("g", { class: cls });
+        // A cluster (scene/graphClusters.ts) opens when clicked: the window reads data-click.
+        const ng = s("g", cluster ? { class: cls, "data-click": cluster.key } : { class: cls });
+        if (cluster)
+          ng.append(
+            s("title", {}, `${cluster.members.length} nodes linked closely, drawn as one. Click to show them.`),
+          );
         const left = c.x - size.w / 2;
         const top = c.y - size.h / 2;
         if (changed)
@@ -456,6 +470,18 @@ export function graphPicture(
               width: size.w + 8,
               height: size.h + 8,
               rx: size.h / 2 + 4,
+            }),
+          );
+        // A cluster: a stack of two, the one behind showing at its corner.
+        if (cluster)
+          ng.append(
+            s("rect", {
+              class: "cluster-back",
+              x: left + 4,
+              y: top - 4,
+              width: size.w,
+              height: size.h,
+              rx: size.h / 2,
             }),
           );
         ng.append(s("rect", { class: "node-body", x: left, y: top, width: size.w, height: size.h, rx: size.h / 2 }));

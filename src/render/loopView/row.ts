@@ -3,6 +3,7 @@
  * graph and linked track in the plan's columns, its variables, and change
  * arrows from the row drawn above it.
  */
+import { realNodes } from "../../scene/graphClusters";
 import { type Cell, cellsOf, containerIn, type LoopScene, scalarIn } from "../../scene/loopScene";
 import { valueKey } from "../../trace/diff";
 import type { LoopRow } from "../../trace/loopHistory";
@@ -328,7 +329,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
     if (sizes && graphRow) {
       graphSize = graphRow.graph.objectNodes
         ? formatBytes(
-            sizes.of([...graphRow.graph.nodes.keys()].map((id) => ({ kind: "ref" as const, id }))),
+            sizes.of(realNodes(graphRow.graph).map((id) => ({ kind: "ref" as const, id }))),
             sizes.approximate,
           )
         : totalOf(graphRow.graph.hostId);

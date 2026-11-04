@@ -16,6 +16,7 @@ import type { WorkerLike } from "../sandbox/sandboxWorker";
 import { dataLimitProblem, MESSAGE_LIMITS, traceProblem } from "../trace/checkTrace";
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
+import { type RunProgress, TraceFormatError, TraceStream } from "../trace/stream";
 import type { Trace } from "../trace/types";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
 
@@ -47,6 +48,8 @@ export type Unavailable = {
 
 export type RunOutcome =
   | { kind: "trace"; trace: Trace; elapsedMs: number }
+  /** The person stopped it before anything had been recorded (with something recorded, it's a trace: stoppedBy "person"). */
+  | { kind: "stopped" }
   | { kind: "timeout"; seconds: number }
   | { kind: "crash"; message: string }
   | Unavailable;
@@ -81,8 +84,16 @@ function wellFormed(message: unknown): message is FromWorker {
       return text(m.label);
     case "loadError":
       return text(m.message);
+    case "loadProgress": {
+      const bytes = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+      return bytes(m.loaded) && bytes(m.total);
+    }
     case "result":
       return id(m.runId) && id(m.elapsedMs) && typeof m.trace === "object" && m.trace !== null;
+    case "progress":
+      return id(m.runId) && typeof m.json === "string";
+    case "streamed":
+      return id(m.runId) && id(m.elapsedMs) && typeof m.json === "string";
     case "crash":
       return id(m.runId) && text(m.message);
     case "measureProgress":
@@ -98,7 +109,8 @@ function wellFormed(message: unknown): message is FromWorker {
 const MEASURE_GRACE_MS = 15_000;
 
 export type RunnerStatus =
-  | { kind: "loading" }
+  /** `download`: how much of the runtime has downloaded, in bytes, once the worker says. */
+  | { kind: "loading"; download?: { loaded: number; total: number } }
   | { kind: "ready"; label: string }
   | { kind: "running" }
   | { kind: "failed"; message: string };
@@ -107,6 +119,9 @@ interface Pending {
   runId: number;
   resolve: (outcome: RunOutcome) => void;
   timer: number;
+  /** The trace as it arrives (trace/stream.ts). */
+  stream: TraceStream;
+  progress?: (progress: RunProgress) => void;
 }
 
 interface PendingMeasure {
@@ -199,9 +214,44 @@ export class Runner {
       case "loadError":
         this.fail("load", `Couldn't load the language runtime: ${message.message}`, message.message);
         break;
+      case "loadProgress":
+        // Only while it's loading: a late one never turns a ready runner back.
+        if (!this.isReady && this.status.kind === "loading")
+          this.setStatus({
+            kind: "loading",
+            download: { loaded: Math.min(message.loaded, message.total), total: message.total },
+          });
+        break;
       case "result":
         this.settleChecked(message.runId, message.trace, message.elapsedMs);
         break;
+      case "progress": {
+        const pending = this.pending;
+        if (pending?.runId !== message.runId) break;
+        let progress: RunProgress;
+        try {
+          progress = pending.stream.add(message.json);
+        } catch (error) {
+          this.settleBroken(message.runId, error, "a piece of the trace isn't one the app can use");
+          break;
+        }
+        pending.progress?.(progress);
+        break;
+      }
+      case "streamed": {
+        const pending = this.pending;
+        if (pending?.runId !== message.runId) break;
+        let trace: Trace;
+        try {
+          trace = pending.stream.finish(message.json);
+        } catch (error) {
+          this.settleBroken(message.runId, error, "the trace isn't one the app can use");
+          break;
+        }
+        // Checked as it arrived (trace/stream.ts).
+        this.settle(message.runId, { kind: "trace", trace, elapsedMs: message.elapsedMs });
+        break;
+      }
       case "crash":
         if (this.measuring?.runId === message.runId) this.settleMeasure({ kind: "crash", message: message.message });
         else this.settle(message.runId, { kind: "crash", message: message.message });
@@ -239,6 +289,17 @@ export class Runner {
    * program that tampers with its trace, then fails here, naming the field,
    * rather than somewhere deep in the renderer.
    */
+  /** A streamed trace that couldn't be used: a crash, saying why (as settleChecked does, when it's the format). */
+  private settleBroken(runId: number, error: unknown, what: string): void {
+    const message =
+      error instanceof TraceFormatError
+        ? `the trace doesn't match the trace format: ${error.message}`
+        : `${what}: ${errorText(error)}`;
+    if (import.meta.env.DEV && error instanceof TraceFormatError)
+      console.error("Trace doesn't match the trace format (schema/trace.schema.json):", error.message);
+    this.settle(runId, { kind: "crash", message });
+  }
+
   private settleChecked(runId: number, trace: Trace, elapsedMs: number): void {
     if (!this.pending || this.pending.runId !== runId) return;
     const problem = traceProblem(trace);
@@ -308,8 +369,37 @@ export class Runner {
     return null;
   }
 
-  /** Run code. Only one run is in flight at a time; callers should await. */
-  run(source: string, maxSteps: number, maxSeconds: number, sampling: SamplingPolicy): Promise<RunOutcome> {
+  /**
+   * Stop the run going now (the person pressed Stop). The worker is busy
+   * running the program, so it's ended and a fresh one started; the run
+   * ends with what had arrived (a trace stopped by the person), or
+   * "stopped" when nothing had yet.
+   */
+  stop(): void {
+    const pending = this.pending;
+    if (!pending) return;
+    this.worker?.terminate();
+    try {
+      const trace = pending.stream.partial();
+      this.settle(pending.runId, trace ? { kind: "trace", trace, elapsedMs: 0 } : { kind: "stopped" });
+    } catch (error) {
+      this.settleBroken(pending.runId, error, "the trace isn't one the app can use");
+    }
+    this.start();
+  }
+
+  /**
+   * Run code. Only one run is in flight at a time; callers should await.
+   * `progress`: how far it's got, every quarter second or so (Python,
+   * JavaScript, TypeScript).
+   */
+  run(
+    source: string,
+    maxSteps: number,
+    maxSeconds: number,
+    sampling: SamplingPolicy,
+    progress?: (progress: RunProgress) => void,
+  ): Promise<RunOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
     const failure = this.unavailable();
     if (failure) return Promise.resolve(failure);
@@ -324,10 +414,12 @@ export class Runner {
         resolve({ kind: "timeout", seconds: Math.round(this.timeoutMs / 1000) });
         this.start();
       }, limit);
-      this.pending = { runId, resolve, timer };
+      this.pending = { runId, resolve, timer, stream: new TraceStream(), ...(progress ? { progress } : {}) };
       if (this.isReady) this.setStatus({ kind: "running" });
       const message: ToWorker = { type: "run", runId, source, maxSteps, maxSeconds, sampling };
       this.worker?.postMessage(message);
     });
   }
 }
+
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
