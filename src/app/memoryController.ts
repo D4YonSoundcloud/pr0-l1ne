@@ -8,12 +8,12 @@
  */
 
 import type { LanguageId } from "../languages";
+import { currentLook, type MemoryShow } from "../layout/requests";
+import { type LayoutService, LocalLayout } from "../layout/service";
 import { timed } from "../perf";
-import { type MemoryMode, memoryScene } from "../scene/memoryScene";
-import type { MemoryRenderer, MemoryWindowScene, RendererFactory } from "../scene/renderer";
-import { sqlTableScene } from "../scene/sqlScene";
+import type { MemoryMode } from "../scene/memoryScene";
+import type { MemoryRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
-import { diffSteps } from "../trace/diff";
 import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
 import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
@@ -43,6 +43,8 @@ export interface MemoryOptions {
   redraw(): void;
   /** What draws the window (main.ts picks: SVG today). */
   renderers: Pick<RendererFactory, "memory">;
+  /** Where the step is laid out (the layout worker); absent, on the page, from the page's trace (tests). */
+  layout?: LayoutService;
 }
 
 /** Python has its own real sizes; JavaScript and TypeScript share theirs. */
@@ -50,8 +52,13 @@ const sizeFamily = (id: LanguageId) => (id === "python" ? "python" : "javascript
 
 export class MemoryController {
   readonly renderer: MemoryRenderer;
-  /** The scene last drawn, for the renderer to animate from. */
-  private drawn: MemoryWindowScene | null = null;
+  private readonly layout: LayoutService;
+  /** The window's channel to the layout: its kept boxes. */
+  private readonly channel: number;
+  /** What the window last asked to show (to lay it out again in full, to save it). */
+  private shown: MemoryShow | null = null;
+  /** The step asked for last, drawn (or not, when another replaced it). */
+  private drawing: Promise<void> = Promise.resolve();
   /** Arrows, or objects drawn inside the thing that refers to them. */
   private mode: MemoryMode;
   private sizesOn: boolean;
@@ -70,7 +77,16 @@ export class MemoryController {
     this.outputOn = settings.showOutput.get();
     this.dimForOutput = settings.dimOutput.get();
 
+    this.layout = options.layout ?? new LocalLayout({}, () => options.app.get().trace);
+    this.channel = this.layout.channel();
     this.renderer = options.renderers.memory(els.memory, {
+      fullDrawing: () => {
+        const shown = this.shown;
+        if (!shown) return Promise.resolve(null);
+        return this.layout
+          .memory(this.channel, shown, { ...this.renderer.layoutView(), full: true })
+          .then((laidOut) => laidOut?.drawing ?? null);
+      },
       onLayoutChange: () => {
         this.render();
         this.updateResetButton();
@@ -198,40 +214,53 @@ export class MemoryController {
 
   /** Nothing to show yet. */
   showEmpty(): void {
-    this.drawn = null;
+    this.shown = null;
+    this.drawing = Promise.resolve();
     this.renderer.showMessage("Write some code and press Run. Variables, objects and scopes appear here.");
     this.updateTotal();
   }
 
-  /** Draw the step on screen. */
+  /** Draw the step on screen: laid out by the layout (the layout worker), then shown. */
   render(): void {
     const { trace, stepIndex } = this.options.app.get();
     if (!trace?.steps.length) return;
-    // SQL: the tables at this stage of the query.
-    if (trace.sql) {
-      const scene = sqlTableScene(trace, stepIndex);
-      if (!scene) return;
-      this.renderer.setAppearance({ step: this.options.animation() });
-      this.renderer.render(scene, this.drawn);
-      this.drawn = scene;
-      this.updateTotal();
-      return;
-    }
-    const diff = diffSteps(trace.steps[stepIndex - 1], trace.steps[stepIndex]);
-    const scene = timed("memory.scene", () =>
-      memoryScene(trace, stepIndex, diff, {
-        mode: this.mode,
-        sizes: this.sizes(),
-        output: this.outputOn,
-        dimForOutput: this.dimForOutput,
-        tall: isTall(this.options.els.memory),
-        detail: { budget: this.renderer.detailBudget(), expanded: this.expanded },
-      }),
-    );
-    this.renderer.setAppearance({ step: this.options.animation() });
-    timed("memory.render", () => this.renderer.render(scene, this.drawn));
-    this.drawn = scene;
-    this.updateTotal();
+    const show: MemoryShow = {
+      look: currentLook(),
+      step: stepIndex,
+      mode: this.mode,
+      sizes: this.sizes(),
+      output: this.outputOn,
+      dimForOutput: this.dimForOutput,
+      tall: isTall(this.options.els.memory),
+      expanded: [...this.expanded],
+    };
+    this.shown = show;
+    // How this step animates in, as it is now (the next may be asked for before this one's back).
+    const animation = this.options.animation();
+    const asked = ++this.asked;
+    this.options.els.memory.dataset.drawing = "pending";
+    this.drawing = this.layout
+      .memory(this.channel, show, this.renderer.layoutView())
+      .then((laidOut) => {
+        // Replaced by a newer step, or the trace changed meanwhile.
+        if (!laidOut || this.options.app.get().trace !== trace) return;
+        this.renderer.setAppearance({ step: animation });
+        timed("memory.render", () => this.renderer.show(laidOut));
+        this.updateTotal();
+      })
+      .catch((error: unknown) => console.error("Memory window:", error))
+      .finally(() => {
+        // Caught up: what's on screen is the last step asked for (tests wait for it).
+        if (asked === this.asked) this.options.els.memory.dataset.drawing = "done";
+      });
+  }
+
+  /** Requests made, to tell the last one. */
+  private asked = 0;
+
+  /** Resolves once the step asked for last is drawn (or replaced). */
+  drawn(): Promise<void> {
+    return this.drawing;
   }
 
   /** "Program: 1.4 KB" in the memory header, for the step on screen. */

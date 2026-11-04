@@ -41,8 +41,10 @@ export default defineConfig(({ command }) => ({
     include: ["ajv"],
   },
   worker: {
-    // Monaco's editor worker.
+    // Monaco's editor worker, and the layout worker (src/layout/layout.worker.ts),
+    // which checks the trace's pieces as the page does: the schema's functions too.
     format: "es",
+    plugins: () => [traceValidators()],
   },
   test: {
     coverage: {

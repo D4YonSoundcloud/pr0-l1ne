@@ -36,12 +36,16 @@ async function open(page: Page, renderer: "svg" | "canvas") {
   await page.keyboard.press("End");
   for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft"); // in the second loop's last pass
   const loop = page.locator("#loop");
+  // That step drawn (it brings the running row into view) before zooming, so both pages start alike.
+  await expect(loop).toHaveAttribute("data-drawing", "done", { timeout: 10_000 });
   await loop.focus();
   await page.keyboard.press("0"); // 100%, Auto-fit off
   for (let i = 0; i < 7; i++) await page.keyboard.press("-"); // 21%: blocks
   await expect(loop).toHaveAttribute("data-lod", "2");
-  // The step is folded for that zoom once it settles.
-  await page.waitForTimeout(600);
+  // The step is folded for that zoom once it settles: laid out again in the layout worker, then drawn.
+  await expect(loop).toHaveAttribute("data-built-lod", "2", { timeout: 10_000 });
+  await page.waitForTimeout(300);
+  await expect(loop).toHaveAttribute("data-drawing", "done", { timeout: 10_000 });
 }
 
 /**
@@ -72,6 +76,8 @@ async function scrollBy(page: Page, scrolls: number[]) {
     await page.waitForTimeout(30);
   }
   await page.waitForTimeout(300);
+  // The rows now in view, laid out in the layout worker, drawn.
+  await expect(page.locator("#loop")).toHaveAttribute("data-drawing", "done", { timeout: 10_000 });
 }
 
 /** Where the band is on a canvas, near `y`: the point whose tooltip names it. */

@@ -52,6 +52,7 @@ describe("MemoryController", () => {
     expect($("memory").textContent).toContain("Write some code and press Run");
     await showJavaScript(app, CODE);
     memory.render();
+    await memory.drawn();
     expect($("memory").querySelector(".memory-svg")).not.toBeNull();
     expect($("memory").querySelectorAll(".node").length).toBeGreaterThan(0);
   });
@@ -77,9 +78,11 @@ describe("MemoryController", () => {
     const { app, memory, $, pressed, redraws } = setup();
     await showJavaScript(app, CODE);
     memory.render();
+    await memory.drawn();
     expect($("memory-total").hidden).toBe(true);
     expect($<HTMLSelectElement>("size-model").hidden).toBe(true);
     $("sizes").click();
+    await memory.drawn();
     expect(pressed("sizes")).toBe("true");
     expect(redraws()).toBe(1);
     expect(memory.sizes()).toBe("textbook");

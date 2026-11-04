@@ -19,6 +19,17 @@
  *   canvas.paint    turning a drawing into the canvas's shapes (paint.ts)
  *   canvas.build    turning those into PixiJS objects (pixiScene.ts)
  *   canvas.draw     PixiJS drawing the window
+ *
+ * Laid out in the layout worker (src/layout/), the worker's own times come
+ * back with each drawing and are recorded here with the page's:
+ *
+ *   layout.memory   the memory window's scene and layout, in the worker
+ *   layout.loop     the loop window's history, scene and layout, in the worker
+ *   wire.encode     the drawing made into a patch to send (render/wire.ts)
+ *   wire.full       marks sent in full (a count, not a time)
+ *   wire.kept       marks sent by number: kept from the drawing before (a count)
+ *   wire.decode     the patch made into marks on the page
+ *   layout.roundtrip  from asking the worker to its answer, waiting included
  */
 export const perf = {
   on: false,
@@ -30,6 +41,12 @@ export const perf = {
   noCells: false,
   /** On WebGL, no box or row body is a render group of its own (?nogroups): to measure what they save. */
   noGroups: false,
+  /**
+   * Resolves once both windows have drawn the step asked for last (they're
+   * laid out in the layout worker, so a step is drawn a little after it's
+   * asked for): the browser benchmark waits for it.
+   */
+  whenDrawn: null as (() => Promise<void>) | null,
   /** The last trace the page showed, in numbers (the browser benchmark reads it). */
   lastTrace: null as TraceStats | null,
   /** Every time recorded, by stage, in milliseconds. */

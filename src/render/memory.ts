@@ -39,11 +39,26 @@
  * renderer paints memoryDrawing() directly.
  */
 import type { MemoryScene } from "../scene/memoryScene";
-import { toSvg } from "./drawing";
+import { type Mark, toSvg } from "./drawing";
 import { memoryDrawing } from "./memoryView/layout";
 import type { MemoryLayout } from "./memoryView/shapes";
 
 export { applyFocus } from "./memoryView/focus";
+
+/**
+ * Move a box in a drawing to where it's being dragged (its group's
+ * translate from where it was laid out), until the drawing laid out for
+ * that place arrives (the layout worker): the box follows the pointer at
+ * once, its arrows a moment later. False when there's no such box.
+ */
+export function nudgeBox(drawing: Mark, key: string, position: { x: number; y: number }): boolean {
+  const node = drawing.querySelectorAll(".node").find((n) => n.getAttribute("data-node-key") === key);
+  if (!node) return false;
+  const dx = position.x - Number(node.getAttribute("data-x"));
+  const dy = position.y - Number(node.getAttribute("data-y"));
+  node.setAttribute("transform", `translate(${dx} ${dy})`);
+  return true;
+}
 export { memoryDrawing } from "./memoryView/layout";
 export type { MemoryLayout, Point } from "./memoryView/shapes";
 

@@ -11,6 +11,7 @@
  * keeping the running row in view by its data-top / data-bottom.
  */
 
+import type { LoopLaidOut, LoopView, MemoryLaidOut, MemoryView } from "../layout/requests";
 import { timed } from "../perf";
 import { CLUSTER_PREFIX } from "../scene/graphClusters";
 import { FOLD_PREFIX, loopDetailBudget } from "../scene/loopSummaries";
@@ -36,7 +37,7 @@ import { standaloneSvg } from "./export";
 import { atLevel, builtAt, type Lod, landmarksIn, SIMPLE_ARROWS_FROM, setLodClass } from "./lod";
 import { loopDrawing } from "./loopView";
 import { RowCache, RowsInView } from "./loopView/rowCache";
-import { applyFocus, memoryDrawing } from "./memory";
+import { applyFocus, memoryDrawing, nudgeBox } from "./memory";
 import { BoxCache } from "./memoryView/boxCache";
 import { SvgPatcher } from "./patch";
 import { sqlPipelineDrawing, sqlTableDrawing } from "./sqlView";
@@ -56,7 +57,7 @@ abstract class SvgWindow {
   constructor(
     protected readonly el: HTMLElement,
     label: string,
-    events: RendererEvents,
+    protected readonly events: RendererEvents,
     onNodeMove?: (key: string, position: Point, done: boolean) => void,
   ) {
     this.view = new Viewport(el, {
@@ -183,6 +184,8 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
     super(el, "Memory diagram", events, (key, position, done) => {
       this.positions.set(key, position);
       this.dragging = done ? null : key;
+      // Laid out elsewhere: the box goes where it's dragged now, its arrows when the layout comes back.
+      if (this.laidElsewhere) this.nudge(key, position);
       events.onLayoutChange?.();
     });
     this.onLayoutChange = events.onLayoutChange;
@@ -229,22 +232,57 @@ export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
     this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
-    this.budgetDrawn = "kind" in scene ? undefined : scene.detailBudget;
-    this.summaryKeys = "kind" in scene ? new Map() : summaryBoxes(scene);
+    const sql = "kind" in scene;
+    const drawing = sql
+      ? sqlTableDrawing(scene)
+      : memoryDrawing(scene, {
+          positions: this.positions,
+          raise: this.dragging,
+          boxes: this.boxes,
+          simpleArrows: this.simpleArrows,
+          level: this.view.lod,
+        });
+    this.laidElsewhere = false;
+    this.display({
+      drawing,
+      sql,
+      detailBudget: sql ? undefined : scene.detailBudget,
+      summaryKeys: sql ? [] : [...summaryBoxes(scene)],
+    });
+  }
+
+  layoutView(): Omit<MemoryView, "full"> {
+    this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
+    return {
+      positions: [...this.positions].map(([key, at]) => [key, { ...at }]),
+      raise: this.dragging,
+      simpleArrows: this.simpleArrows,
+      level: this.view.lod,
+      budget: this.detailBudget(),
+    };
+  }
+
+  show(laidOut: MemoryLaidOut<Mark>): void {
+    this.laidElsewhere = true;
+    this.display(laidOut);
+  }
+
+  /** Was the drawing on screen laid out elsewhere (the layout worker), not here from a scene? */
+  private laidElsewhere = false;
+
+  private display(laidOut: MemoryLaidOut<Mark>): void {
+    this.budgetDrawn = laidOut.detailBudget;
+    this.summaryKeys = new Map(laidOut.summaryKeys);
     const { duration, easing, enter } = this.step;
-    const drawing =
-      "kind" in scene
-        ? sqlTableDrawing(scene)
-        : memoryDrawing(scene, {
-            positions: this.positions,
-            raise: this.dragging,
-            boxes: this.boxes,
-            simpleArrows: this.simpleArrows,
-            level: this.view.lod,
-          });
     // The focus is part of the drawing, so the patch carries it over.
-    applyFocus(drawing, this.dragging ?? this.hovered);
-    this.showDrawing(drawing, duration, easing, enter);
+    applyFocus(laidOut.drawing, this.dragging ?? this.hovered);
+    this.showDrawing(laidOut.drawing, duration, easing, enter);
+  }
+
+  /** Put a dragged box where it's dragged to now, before the layout with its arrows comes back. */
+  private nudge(key: string, position: Point): void {
+    if (!this.full || !nudgeBox(this.full, key, position)) return;
+    this.view.updateContent(() => this.patcher.show(atLevel(this.full!, this.view.lod)), 0);
   }
 
   /**
@@ -311,7 +349,11 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
     super(el, "Loop history", events);
     this.onLayoutChange = events.onLayoutChange;
     this.onExpand = events.onExpand;
+    this.onRedraw = events.onRedraw;
   }
+  private readonly onRedraw?: () => void;
+  /** A step laid out elsewhere is on screen (show), not one from a scene here. */
+  private laidElsewhere = false;
   private readonly onLayoutChange?: () => void;
   private readonly onExpand?: (key: string) => void;
   /** The cell budget the scene on screen was folded with (scene/loopSummaries.ts). */
@@ -333,8 +375,51 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
 
   render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
     this.scene = scene;
+    this.laidElsewhere = false;
     this.budgetDrawn = "kind" in scene ? undefined : scene.cellBudget;
     this.draw(scene, true);
+  }
+
+  layoutView(): Omit<LoopView, "full"> {
+    return {
+      vertical: this.vertical,
+      visible: this.inView.next({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) }),
+      fit: this.view.fitParams(),
+      // Drawn again for the view: folded as last asked (a new fold is a new step: onLayoutChange).
+      budget: this.askBudget(),
+    };
+  }
+
+  /** The budget to ask for: for the view, the one asked last; for a step, the zoom's now. */
+  private askBudget(): number {
+    const budget = (this.forView && this.budgetAsked) || this.detailBudget();
+    this.budgetAsked = budget;
+    return budget;
+  }
+  private budgetAsked: number | undefined;
+
+  /** Asking for the step on screen again, for the view (redrawForView), not a new step. */
+  private forView = false;
+
+  show(laidOut: LoopLaidOut<Mark>, step: boolean): void {
+    this.scene = null;
+    this.laidElsewhere = true;
+    this.budgetDrawn = laidOut.cellBudget;
+    if (!laidOut.drawing) {
+      this.showMessage(laidOut.message);
+      return;
+    }
+    const { duration, easing, enter } = this.step;
+    // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
+    this.showDrawing(laidOut.drawing, step && laidOut.live ? duration : 0, easing, enter);
+    if (step) this.revealCurrent();
+  }
+
+  /** Keep the iteration that's running in view, as you step. */
+  private revealCurrent(): void {
+    const current = this.el.querySelector(".loop-row.is-current");
+    if (current)
+      this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   }
 
   private draw(scene: LoopWindowScene, step: boolean): void {
@@ -351,11 +436,7 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
         });
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
     this.showDrawing(drawing, step && !sql && scene.live ? duration : 0, easing, enter);
-    if (!step) return;
-    // As you step, keep the iteration that's running in view.
-    const current = this.el.querySelector(".loop-row.is-current");
-    if (current)
-      this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
+    if (step) this.revealCurrent();
   }
 
   /**
@@ -366,10 +447,10 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
     this.relayoutTimer = window.setTimeout(() => {
-      if (!this.scene) return;
+      if (!this.scene && !this.laidElsewhere) return;
       if (this.budgetDrawn !== undefined && this.detailBudget() !== this.budgetDrawn && this.onLayoutChange)
         this.onLayoutChange();
-      else if (this.needsDetail) this.draw(this.scene, false);
+      else if (this.needsDetail) this.redrawForView();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
@@ -377,15 +458,28 @@ export class SvgLoopRenderer extends SvgWindow implements LoopRenderer {
   /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
   protected override viewMoved(): void {
     if (
-      !this.scene ||
+      (!this.scene && !this.laidElsewhere) ||
       this.redraw ||
       !this.inView.stale({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) })
     )
       return;
     this.redraw = requestAnimationFrame(() => {
       this.redraw = 0;
-      if (this.scene) this.draw(this.scene, false);
+      this.redrawForView();
     });
+  }
+
+  /** The same step again, for the view now: here from the scene, or asked of where it was laid out. */
+  private redrawForView(): void {
+    if (this.scene) this.draw(this.scene, false);
+    else if (this.laidElsewhere) {
+      this.forView = true;
+      try {
+        this.onRedraw?.();
+      } finally {
+        this.forView = false;
+      }
+    }
   }
 
   override dispose(): void {

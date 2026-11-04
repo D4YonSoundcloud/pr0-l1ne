@@ -12,12 +12,13 @@
 
 import { type HintContext, hintContext } from "../hintAssist";
 import { LANGUAGES, type LanguageId } from "../languages";
+import type { LayoutService } from "../layout/service";
 import { perf, timed, traceStats } from "../perf";
+import { applyHintsWork } from "../trace/hints";
 import { POLICY } from "../trace/policy";
-import { prepareTrace } from "../trace/prepare";
 import type { Trace } from "../trace/types";
 import { finishInSlices } from "../trace/work";
-import { Runner, type RunnerStatus, type RunOutcome } from "../worker/runner";
+import { Runner, type RunnerStatus, type RunOutcome, type TracePart } from "../worker/runner";
 import type { BannerTone } from "./banner";
 import { escapeHtml } from "./html";
 import { firstStepFor } from "./playbackController";
@@ -91,6 +92,14 @@ export interface RunOptions {
   pauseForFrame?(): Promise<void>;
   /** Work per slice of preparing, in milliseconds (trace/work.ts; tests pass 0, to pause after every step). */
   sliceMs?: number;
+  /**
+   * The layout (layout/service.ts): it's given each run's trace as it
+   * arrives, prepares it and draws the windows from it. Absent: the trace
+   * is only the page's (tests that draw nothing).
+   */
+  layout?: LayoutService;
+  /** Resolves once the windows have drawn the step a new trace opened on (the card says "Drawing" until then). */
+  drawn?(): Promise<void>;
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;
 }
@@ -234,8 +243,24 @@ export class RunController {
     const started = perf.on ? performance.now() : 0;
     const view = this.options.progress;
     view?.start({ budget, maxSteps: POLICY.maxSteps, maxSeconds: seconds });
-    const outcome = await this.runnerFor(language).run(code, POLICY.maxSteps, seconds, POLICY.sampling, (progress) =>
-      view?.update(progress),
+    // The layout builds its own copy of the trace from the pieces, as they arrive.
+    const layout = this.options.layout;
+    let fed = false;
+    layout?.begin();
+    this.stopped = false;
+    const feed = layout
+      ? (part: TracePart) => {
+          fed = true;
+          layout.feed(part);
+        }
+      : undefined;
+    const outcome = await this.runnerFor(language).run(
+      code,
+      POLICY.maxSteps,
+      seconds,
+      POLICY.sampling,
+      (progress) => view?.update(progress),
+      feed,
     );
     if (perf.on) perf.record("run.trace", performance.now() - started);
     this.lastBudget = budget;
@@ -244,20 +269,44 @@ export class RunController {
     if (outcome.kind === "crash") this.options.reportCrash?.({ language, message: outcome.message });
     if (language === this.language) {
       let prepared: Trace | null = null;
-      if (outcome.kind === "trace" && !(outcome.trace.error && outcome.trace.steps.length === 0)) {
+      let failed: string | null = null;
+      const drawable = outcome.kind === "trace" && !(outcome.trace.error && outcome.trace.steps.length === 0);
+      if (drawable) {
         // The progress showing: say the drawing's being prepared, and let that paint.
         if (view?.preparing()) await this.nextFrame();
         const started = perf.on ? performance.now() : 0;
-        prepared = await finishInSlices(prepareTrace(outcome.trace), (p) => view?.prepare(p), {
-          ...(this.options.pauseForFrame ? { pause: this.options.pauseForFrame } : {}),
-          ...(this.options.sliceMs !== undefined ? { sliceMs: this.options.sliceMs } : {}),
-        });
+        const how = this.stopped ? "stopped" : fed ? "streamed" : "whole";
+        // The page's own copy, with its hints (for the step label, the editor, the estimate), a slice at a
+        // time; and the layout's, prepared in full (its graphs too), with its progress shown.
+        const [own, ready] = await Promise.all([
+          finishInSlices(applyHintsWork(outcome.trace), () => {}, {
+            ...(this.options.pauseForFrame ? { pause: this.options.pauseForFrame } : {}),
+            ...(this.options.sliceMs !== undefined ? { sliceMs: this.options.sliceMs } : {}),
+          }),
+          layout
+            ? layout
+                .load(outcome.trace, how, (p) => view?.prepare(p))
+                .catch((error: unknown) => {
+                  failed = error instanceof Error ? error.message : String(error);
+                  return false;
+                })
+            : true,
+        ]);
         if (perf.on) perf.record("run.prepare", performance.now() - started);
-        // Then the first drawing, which blocks the page: let "Drawing" paint first.
-        if (view?.drawing()) await this.nextFrame();
+        // Not ready: a newer trace for the layout came along, and this one isn't shown.
+        if (ready) prepared = own;
+        view?.drawing();
       }
-      // Still the language on screen (it can change while a big trace is prepared)?
-      if (language === this.language) this.apply(outcome, code, language, prepared);
+      if (failed !== null) {
+        const message = `the layout failed: ${failed}`;
+        this.options.reportCrash?.({ language, message });
+        this.apply({ kind: "crash", message }, code, language, null);
+      } else if (language === this.language && (!drawable || prepared)) {
+        // Still the language on screen (it can change while a big trace is prepared).
+        this.apply(outcome, code, language, prepared);
+        // The card stays, saying "Drawing", until the windows have drawn it.
+        if (prepared) await this.options.drawn?.();
+      }
     }
     view?.done();
     this.inFlight = false;
@@ -272,8 +321,13 @@ export class RunController {
    * what had been recorded, drawn like any trace that stopped early.
    */
   stop(): void {
-    if (this.running) this.runnerFor(this.running).stop();
+    if (!this.running) return;
+    this.stopped = true;
+    this.runnerFor(this.running).stop();
   }
+
+  /** The person pressed Stop during the run going now (the layout keeps what had arrived too). */
+  private stopped = false;
 
   private nextFrame(): Promise<void> {
     if (this.options.nextFrame) return this.options.nextFrame();

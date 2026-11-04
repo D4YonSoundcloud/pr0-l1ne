@@ -40,6 +40,8 @@ import { StepView } from "./app/stepView";
 import { StyleController } from "./app/styleController";
 import { createEditor } from "./editor";
 import { isLanguageId, LANGUAGES, type LanguageId } from "./languages";
+import { WorkerLayout } from "./layout/client";
+import { type LayoutService, LocalLayout } from "./layout/service";
 import { ProgramStore } from "./programs";
 import { createSettings, type RendererKind } from "./settings";
 
@@ -172,12 +174,25 @@ const runProgress = new RunProgressView(
   },
   () => runs.stop(),
 );
+// The trace's preparation and every window's layout, off the page's thread (src/layout/): in the layout
+// worker, or on the page where a worker can't start.
+const drawings: LayoutService = (() => {
+  try {
+    return new WorkerLayout();
+  } catch (error) {
+    console.error("The layout worker couldn't start; laying out on the page:", error);
+    return new LocalLayout();
+  }
+})();
+
 const runs = new RunController({
   app,
   status: els.status,
   editor,
   setBanner,
   progress: runProgress,
+  layout: drawings,
+  drawn: () => Promise.all([memory.drawn(), loop.drawn()]).then(() => {}),
   onResult: (updateMarks) => view.render(updateMarks),
   onStatus: (status, download) => loadingCard.show(status, download),
 });
@@ -194,6 +209,7 @@ const memory: MemoryController = new MemoryController({
   els,
   animation: () => style.animationFor("memory"),
   redraw: () => view.render(false),
+  layout: drawings,
 });
 const loop: LoopController = new LoopController({
   app,
@@ -203,7 +219,9 @@ const loop: LoopController = new LoopController({
   sizes: () => memory.sizes(),
   animation: () => style.animationFor("loop"),
   redraw: (updateMarks) => view.render(updateMarks),
+  layout: drawings,
 });
+perf.whenDrawn = () => Promise.all([memory.drawn(), loop.drawn()]).then(() => {});
 const view = new StepView({ app, els, memory, loop, editor, updateControls: () => playback.updateControls() });
 for (const [pane, renderer] of [
   ["memory", memory.renderer],

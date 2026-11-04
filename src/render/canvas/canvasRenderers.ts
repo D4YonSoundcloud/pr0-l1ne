@@ -27,6 +27,7 @@
  */
 
 import { autoDetectRenderer, type Container, Container as PixiContainer, type Renderer as PixiRenderer } from "pixi.js";
+import type { LoopLaidOut, LoopView, MemoryLaidOut, MemoryView } from "../../layout/requests";
 import { perf, timed } from "../../perf";
 import { CLUSTER_PREFIX } from "../../scene/graphClusters";
 import { FOLD_PREFIX, loopDetailBudget } from "../../scene/loopSummaries";
@@ -59,7 +60,7 @@ import { type Mark, toSvg } from "../drawing";
 import { standaloneSvg } from "../export";
 import { loopDrawing } from "../loopView";
 import { RowCache, RowsInView } from "../loopView/rowCache";
-import { applyFocus, memoryDrawing } from "../memory";
+import { applyFocus, memoryDrawing, nudgeBox } from "../memory";
 import { BoxCache } from "../memoryView/boxCache";
 import { sqlPipelineDrawing, sqlTableDrawing } from "../sqlView";
 import { type View, Viewport } from "../viewport";
@@ -158,7 +159,7 @@ abstract class CanvasWindow {
   constructor(
     protected readonly el: HTMLElement,
     label: string,
-    events: RendererEvents,
+    protected readonly events: RendererEvents,
     options: CanvasOptions,
     onNodeMove?: (key: string, position: Point, done: boolean) => void,
   ) {
@@ -404,7 +405,7 @@ abstract class CanvasWindow {
    * Draw an SVG drawing. `motion`: animate from the drawing before (the
    * step changed); null: just show it (a hover, a redraw for new styles).
    */
-  protected show(drawing: Mark, motion: StepStyle | null): void {
+  protected showDrawing(drawing: Mark, motion: StepStyle | null): void {
     const before = motion && motion.duration > 0 && this.drawing ? snapshot(this.drawing) : null;
     this.checkLooks();
     this.drawing = drawing;
@@ -654,9 +655,15 @@ abstract class CanvasWindow {
     return this.drawing && builtAt(this.drawing) === 0 ? this.drawing : null;
   }
 
-  toSVG(): string | null {
+  toSVG(): string | null | Promise<string | null> {
     const drawing = this.fullDrawing();
-    if (!drawing) return null;
+    if (drawing) return this.svgOf(drawing);
+    // Laid out elsewhere, with less detail than full: laid out again there.
+    if (!this.drawing || !this.events.fullDrawing) return null;
+    return this.events.fullDrawing().then((full) => (full ? this.svgOf(full) : null));
+  }
+
+  private svgOf(drawing: Mark): string {
     // Saved in full, whatever the zoom: styles read at full detail.
     const full = this.level === 0 ? this.styles : new ProbeStyles(this.view.contentLayer);
     try {
@@ -706,6 +713,8 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
     super(el, "Memory diagram", events, options, (key, position, done) => {
       this.positions.set(key, position);
       this.dragging = done ? null : key;
+      // Laid out elsewhere: the box goes where it's dragged now, its arrows when the layout comes back.
+      if (!this.scene && this.drawing && nudgeBox(this.drawing, key, position)) this.repaint();
       events.onLayoutChange?.();
     });
     this.onLayoutChange = events.onLayoutChange;
@@ -756,21 +765,46 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
 
   render(scene: MemoryWindowScene, _previous: MemoryWindowScene | null): void {
     this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
-    this.budgetDrawn = "kind" in scene ? undefined : scene.detailBudget;
-    this.summaryKeys = "kind" in scene ? new Map() : summaryBoxes(scene);
+    const sql = "kind" in scene;
+    const drawing = sql
+      ? sqlTableDrawing(scene)
+      : memoryDrawing(scene, {
+          positions: this.positions,
+          raise: this.dragging,
+          boxes: this.boxes,
+          simpleArrows: this.simpleArrows,
+          level: this.view.lod,
+        });
+    this.display({
+      drawing,
+      sql,
+      detailBudget: sql ? undefined : scene.detailBudget,
+      summaryKeys: sql ? [] : [...summaryBoxes(scene)],
+    });
     this.scene = scene;
-    const drawing =
-      "kind" in scene
-        ? sqlTableDrawing(scene)
-        : memoryDrawing(scene, {
-            positions: this.positions,
-            raise: this.dragging,
-            boxes: this.boxes,
-            simpleArrows: this.simpleArrows,
-            level: this.view.lod,
-          });
-    this.refreshFocus(false, drawing);
-    this.show(drawing, this.step);
+  }
+
+  layoutView(): Omit<MemoryView, "full"> {
+    this.simpleArrows = this.view.lod >= SIMPLE_ARROWS_FROM;
+    return {
+      positions: [...this.positions].map(([key, at]) => [key, { ...at }]),
+      raise: this.dragging,
+      simpleArrows: this.simpleArrows,
+      level: this.view.lod,
+      budget: this.detailBudget(),
+    };
+  }
+
+  show(laidOut: MemoryLaidOut<Mark>): void {
+    this.scene = null;
+    this.display(laidOut);
+  }
+
+  private display(laidOut: MemoryLaidOut<Mark>): void {
+    this.budgetDrawn = laidOut.detailBudget;
+    this.summaryKeys = new Map(laidOut.summaryKeys);
+    this.refreshFocus(false, laidOut.drawing);
+    this.showDrawing(laidOut.drawing, this.step);
   }
 
   /**
@@ -788,7 +822,7 @@ export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
-  /** The scene on screen (to lay it out again in full, for saving). */
+  /** The scene on screen (to lay it out again in full, for saving); null when it was laid out elsewhere. */
   private scene: MemoryWindowScene | null = null;
 
   protected override fullDrawing(): Mark | null {
@@ -897,7 +931,11 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
     super(el, "Loop history", events, options);
     this.onLayoutChange = events.onLayoutChange;
     this.onExpand = events.onExpand;
+    this.onRedraw = events.onRedraw;
   }
+  private readonly onRedraw?: () => void;
+  /** A step laid out elsewhere is on screen (show), not one from a scene here. */
+  private laidElsewhere = false;
   private readonly onLayoutChange?: () => void;
   private readonly onExpand?: (key: string) => void;
   /** The cell budget the scene on screen was folded with (scene/loopSummaries.ts). */
@@ -919,14 +957,57 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
 
   render(scene: LoopWindowScene, _previous: LoopWindowScene | null): void {
     this.scene = scene;
+    this.laidElsewhere = false;
     this.budgetDrawn = "kind" in scene ? undefined : scene.cellBudget;
     this.draw(scene, true);
+  }
+
+  layoutView(): Omit<LoopView, "full"> {
+    return {
+      vertical: this.vertical,
+      visible: this.inView.next({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) }),
+      fit: this.view.fitParams(),
+      // Drawn again for the view: folded as last asked (a new fold is a new step: onLayoutChange).
+      budget: this.askBudget(),
+    };
+  }
+
+  /** The budget to ask for: for the view, the one asked last; for a step, the zoom's now. */
+  private askBudget(): number {
+    const budget = (this.forView && this.budgetAsked) || this.detailBudget();
+    this.budgetAsked = budget;
+    return budget;
+  }
+  private budgetAsked: number | undefined;
+
+  /** Asking for the step on screen again, for the view (redrawForView), not a new step. */
+  private forView = false;
+
+  show(laidOut: LoopLaidOut<Mark>, step: boolean): void {
+    this.scene = null;
+    this.laidElsewhere = true;
+    this.budgetDrawn = laidOut.cellBudget;
+    this.visible = laidOut.visible;
+    if (!laidOut.drawing) {
+      this.showMessage(laidOut.message);
+      return;
+    }
+    // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
+    this.showDrawing(laidOut.drawing, step && laidOut.live ? this.step : { ...this.step, duration: 0 });
+    if (step) this.revealCurrent();
+  }
+
+  /** Keep the iteration that's running in view, as you step. */
+  private revealCurrent(): void {
+    const current = this.drawing?.querySelector(".loop-row.is-current");
+    if (current)
+      this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
   }
 
   private draw(scene: LoopWindowScene, step: boolean): void {
     // Only animated mode (one live row) animates; stacked rows (and a SQL statement's stages) just appear.
     if ("kind" in scene) {
-      this.show(sqlPipelineDrawing(scene), { ...this.step, duration: 0 });
+      this.showDrawing(sqlPipelineDrawing(scene), { ...this.step, duration: 0 });
     } else {
       const motion = step && scene.live ? this.step : { ...this.step, duration: 0 };
       const visible = this.inView.next({
@@ -935,14 +1016,10 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
       });
       // Built at the level it'll be drawn at: with Auto-fit, where the fit will put it.
       const level = (size: { width: number; height: number }) => this.view.levelFor(size);
-      this.show(loopDrawing(scene, { vertical: this.vertical, rows: this.rows, visible, level }), motion);
+      this.showDrawing(loopDrawing(scene, { vertical: this.vertical, rows: this.rows, visible, level }), motion);
       this.visible = visible;
     }
-    if (!step) return;
-    // As you step, keep the iteration that's running in view.
-    const current = this.drawing?.querySelector(".loop-row.is-current");
-    if (current)
-      this.view.reveal(Number(current.getAttribute("data-top")), Number(current.getAttribute("data-bottom")));
+    if (step) this.revealCurrent();
   }
 
   /** The rows drawn last (to lay them out again in full, for saving). */
@@ -962,10 +1039,10 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   protected override levelChanged(_lod: Lod): void {
     window.clearTimeout(this.relayoutTimer);
     this.relayoutTimer = window.setTimeout(() => {
-      if (!this.scene) return;
+      if (!this.scene && !this.laidElsewhere) return;
       if (this.budgetDrawn !== undefined && this.detailBudget() !== this.budgetDrawn && this.onLayoutChange)
         this.onLayoutChange();
-      else if (this.needsDetail) this.draw(this.scene, false);
+      else if (this.needsDetail) this.redrawForView();
     }, RELAYOUT_AFTER);
   }
   private relayoutTimer = 0;
@@ -973,15 +1050,28 @@ export class CanvasLoopRenderer extends CanvasWindow implements LoopRenderer {
   /** Panned or zoomed past the rows drawn: draw the rows now in view (once a frame at most). */
   protected override viewMoved(): void {
     if (
-      !this.scene ||
+      (!this.scene && !this.laidElsewhere) ||
       this.redraw ||
       !this.inView.stale({ autoFit: this.view.autoFitState.on, span: (m) => this.view.visibleSpan(m) })
     )
       return;
     this.redraw = requestAnimationFrame(() => {
       this.redraw = 0;
-      if (this.scene) this.draw(this.scene, false);
+      this.redrawForView();
     });
+  }
+
+  /** The same step again, for the view now: here from the scene, or asked of where it was laid out. */
+  private redrawForView(): void {
+    if (this.scene) this.draw(this.scene, false);
+    else if (this.laidElsewhere) {
+      this.forView = true;
+      try {
+        this.onRedraw?.();
+      } finally {
+        this.forView = false;
+      }
+    }
   }
 
   override dispose(): void {

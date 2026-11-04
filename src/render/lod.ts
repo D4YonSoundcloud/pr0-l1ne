@@ -226,6 +226,12 @@ export function buildAt(lod: Lod, build: () => Mark): Mark {
   return drawing;
 }
 
+/** Say what level a drawing was built at, for one built elsewhere (laid out in the layout worker, render/wire.ts). */
+export function markBuiltAt(drawing: Mark, lod: Lod): void {
+  if (lod) built.set(drawing, lod);
+  else built.delete(drawing);
+}
+
 /** The level a drawing was built at (buildAt): 0, full, unless it was built at another. */
 export function builtAt(drawing: Mark): Lod {
   return built.get(drawing) ?? 0;

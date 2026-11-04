@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { LanguageId } from "../languages";
+import { type LayoutService, LocalLayout } from "../layout/service";
 import { ProgramStore } from "../programs";
 import { createSettings } from "../settings";
 import { POLICY } from "../trace/policy";
@@ -103,7 +104,7 @@ class FakeProgress implements ProgressView {
   }
 }
 
-function setup(options: { sliceMs?: number } = {}) {
+function setup(options: { sliceMs?: number; layout?: LayoutService } = {}) {
   document.body.innerHTML = `<span id="status"></span>`;
   const settings = createSettings(null);
   const app = new AppStore(settings, new ProgramStore(null));
@@ -182,7 +183,7 @@ describe("RunController", () => {
     call.finish({ kind: "trace", trace: stopped, elapsedMs: 1 });
     await flush();
     expect(progress.told).toEqual([`start run ${POLICY.runSeconds}`, "update 120", "preparing", "drawing", "done"]);
-    expect(frames()).toBe(2); // "preparing", then "drawing", each painted before the work
+    expect(frames()).toBe(1); // "preparing" painted before the work (the drawing is laid out off the page)
 
     expect(app.get().trace?.steps).toHaveLength(4);
     runs.stop(); // nothing running: nothing to stop
@@ -199,7 +200,8 @@ describe("RunController", () => {
   });
 
   it("prepares a trace a slice at a time, showing how far it's got, then draws it", async () => {
-    const { runs, runners, progress, frames, app } = setup({ sliceMs: 0 });
+    const layout = new LocalLayout({ sliceMs: 0, pause: flush });
+    const { runs, runners, progress, frames, app } = setup({ layout });
     runs.runNow("let a = 1;");
     runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: makeTrace(3), elapsedMs: 1 });
     for (let i = 0; i < 10; i++) await flush();
@@ -211,12 +213,12 @@ describe("RunController", () => {
       "drawing",
       "done",
     ]);
-    expect(frames()).toBe(1); // "drawing" painted (the view showed, once preparing took a while)
+    expect(frames()).toBe(0); // nothing showed before preparing took a while
     expect(app.get().trace?.steps).toHaveLength(3);
   });
 
   it("drops a prepared trace if the language changed meanwhile", async () => {
-    const { runs, runners, app, results } = setup({ sliceMs: 0 });
+    const { runs, runners, app, results } = setup({ layout: new LocalLayout({ sliceMs: 0, pause: flush }) });
     runs.runNow("let a = 1;");
     runners.get("javascript")!.calls[0].finish({ kind: "trace", trace: makeTrace(3), elapsedMs: 1 });
     await flush();

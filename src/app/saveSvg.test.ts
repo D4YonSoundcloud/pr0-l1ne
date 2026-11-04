@@ -16,7 +16,7 @@ describe("svgFileName", () => {
 });
 
 describe("addSaveSvg", () => {
-  it("adds a button that saves the drawing on screen, under the name at that moment", () => {
+  it("adds a button that saves the drawing on screen, under the name at that moment", async () => {
     let onClick: () => void = () => {};
     const button = document.createElement("button");
     let drawing: string | null = "<svg/>";
@@ -33,9 +33,14 @@ describe("addSaveSvg", () => {
     expect(renderer.addControl.mock.calls[0][0]).toBe("Save SVG");
     step = 4;
     onClick();
+    step = 5; // the name is the one when it was clicked, however long the drawing takes
+    await Promise.resolve();
+    await Promise.resolve();
     expect(save).toHaveBeenCalledWith("step-4.svg", "<svg/>");
     drawing = null; // nothing drawn: nothing to save
     onClick();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(save).toHaveBeenCalledTimes(1);
   });
 });

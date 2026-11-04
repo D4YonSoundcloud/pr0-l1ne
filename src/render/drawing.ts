@@ -391,6 +391,31 @@ export class Mark {
     return this.value(2 * n + 1);
   }
 
+  /**
+   * The attributes as made, name, value, name, value..., numbers still
+   * numbers (render/wire.ts sends them to the page so). Not to change.
+   */
+  get rawAttributes(): readonly (string | number)[] {
+    return this.attrs;
+  }
+
+  /**
+   * A mark as it was sent (render/wire.ts): its attributes as made, its
+   * inline style properties, no children yet.
+   */
+  static restore(localName: string, attrs: (string | number)[], styleProps: [string, string][] | null): Mark {
+    const out = new Mark(localName);
+    out.attrs = attrs;
+    if (styleProps?.length) out.extra.styleProps = styleProps;
+    return out;
+  }
+
+  /** Add children as they were sent (render/wire.ts): made for this mark, nothing has asked about it yet. */
+  appendRestored(child: Mark | TextMark): void {
+    child.parentElement = this;
+    this.kids().push(child);
+  }
+
   /** The attributes as [name, value] pairs, in order. */
   *attributeEntries(): IterableIterator<[string, string]> {
     const attrs = this.attrs;

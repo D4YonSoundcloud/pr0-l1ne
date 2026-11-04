@@ -73,13 +73,13 @@ for (const [language, code] of Object.entries(PROGRAMS)) {
     expect(frames).toEqual([`${RUNNER}/runner.html`]);
     const worker = await runnerWorker(page, browserName);
     expect(await worker.evaluate(() => self.location.origin)).toBe(RUNNER);
-    // The app's own workers are only the editor's.
-    expect(
-      page
-        .workers()
-        .filter((w) => w.url().startsWith(APP))
-        .every((w) => w.url().includes("editor.worker")),
-    ).toBe(true);
+    // The app's own workers are only the editor's and the layout's (which draws the trace, and runs no program).
+    const own = page
+      .workers()
+      .filter((w) => w.url().startsWith(APP))
+      .map((w) => w.url());
+    expect(own.every((url) => url.includes("editor.worker") || url.includes("layout.worker"))).toBe(true);
+    expect(own.some((url) => url.includes("layout.worker"))).toBe(true);
   });
 }
 

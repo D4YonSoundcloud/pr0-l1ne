@@ -63,6 +63,7 @@ async function open(page, language, code, renderer, extra = "") {
   await page.locator("#step-label").filter({ hasText: " of " }).waitFor({ timeout: 180_000 });
   // The first trace (Python downloads its runtime first, the first time).
   await page.waitForFunction(() => window.__pr0l1nePerf?.lastTrace, null, { timeout: 180_000 });
+  await page.evaluate(() => window.__pr0l1nePerf.whenDrawn?.());
   return Date.now() - started;
 }
 
@@ -78,6 +79,8 @@ async function stepThrough(page) {
       const start = performance.now();
       scrubber.value = String(value);
       scrubber.dispatchEvent(new Event("input", { bubbles: true }));
+      // Laid out in the layout worker: wait for the drawing, then the frame it's on.
+      await window.__pr0l1nePerf.whenDrawn?.();
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       return performance.now() - start;
     }, step);
@@ -154,6 +157,7 @@ async function zoomSuite(browser, files) {
             await page.locator("#memory").focus();
             for (; pressed < presses; pressed++) await page.keyboard.press("-");
             await page.waitForTimeout(300);
+            await page.evaluate(() => window.__pr0l1nePerf.whenDrawn?.());
             const steps = await stepThrough(page);
             row.zooms[label] = {
               step: steps.frame,

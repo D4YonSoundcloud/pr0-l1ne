@@ -10,6 +10,9 @@
  * loop layout, and the last thing drawn. `use()` swaps the real renderers
  * underneath, so nothing else in the app has to know.
  */
+
+import type { LoopLaidOut, LoopView, MemoryLaidOut, MemoryView } from "../layout/requests";
+import type { Mark } from "../render/drawing";
 import type { LoopScene } from "../scene/loopScene";
 import type { MemoryScene } from "../scene/memoryScene";
 import type {
@@ -45,7 +48,8 @@ abstract class Switching<S, R extends Renderer<S>, E extends RendererEvents> imp
   private readonly controls: Control[] = [];
   private style: RendererStyle = {};
   private autoFit: AutoFit | null = null;
-  private last: { scene: S } | { message: string } | null = null;
+  /** What's on screen, to draw again in the new renderer: a scene, a step laid out elsewhere, or a message. */
+  protected last: { scene: S } | { laidOut: unknown } | { message: string } | null = null;
   private readonly events: E;
 
   constructor(
@@ -102,7 +106,7 @@ abstract class Switching<S, R extends Renderer<S>, E extends RendererEvents> imp
     return button;
   }
 
-  toSVG(): string | null {
+  toSVG(): string | null | Promise<string | null> {
     return this.inner.toSVG();
   }
 
@@ -112,6 +116,9 @@ abstract class Switching<S, R extends Renderer<S>, E extends RendererEvents> imp
 
   /** What only this kind of window has (dragged boxes, the loop layout), to carry over. */
   protected abstract carry(from: R, to: R): void;
+
+  /** Show a step laid out elsewhere in the new renderer, as it was in the old. */
+  protected abstract showAgain(next: R, laidOut: unknown): void;
 
   /** Replace the renderer with one from `make`, looking just as it did. */
   swap(make: (el: HTMLElement, events: E) => R): R {
@@ -133,6 +140,10 @@ abstract class Switching<S, R extends Renderer<S>, E extends RendererEvents> imp
     if (last && "scene" in last) {
       next.setAppearance({ step: STILL });
       next.render(last.scene, null);
+      next.setAppearance({ step: this.style.step ?? STILL });
+    } else if (last && "laidOut" in last) {
+      next.setAppearance({ step: STILL });
+      this.showAgain(next, last.laidOut);
       next.setAppearance({ step: this.style.step ?? STILL });
     } else if (last) next.showMessage(last.message);
     return next;
@@ -160,6 +171,19 @@ class SwitchingMemory extends Switching<MemoryScene, MemoryRenderer, MemoryRende
     return this.inner.detailBudget();
   }
 
+  layoutView(): Omit<MemoryView, "full"> {
+    return this.inner.layoutView();
+  }
+
+  show(laidOut: MemoryLaidOut<Mark>): void {
+    this.last = { laidOut };
+    this.inner.show(laidOut);
+  }
+
+  protected showAgain(next: MemoryRenderer, laidOut: unknown): void {
+    next.show(laidOut as MemoryLaidOut<Mark>);
+  }
+
   protected carry(from: MemoryRenderer, to: MemoryRenderer): void {
     to.moveBoxes(from.movedBoxes);
   }
@@ -175,6 +199,19 @@ class SwitchingLoop extends Switching<LoopScene, LoopRenderer, LoopRendererEvent
   setLayout(layout: { vertical: boolean }): void {
     this.layout = { ...layout };
     this.inner.setLayout(layout);
+  }
+
+  layoutView(): Omit<LoopView, "full"> {
+    return this.inner.layoutView();
+  }
+
+  show(laidOut: LoopLaidOut<Mark>, step: boolean): void {
+    this.last = { laidOut };
+    this.inner.show(laidOut, step);
+  }
+
+  protected showAgain(next: LoopRenderer, laidOut: unknown): void {
+    next.show(laidOut as LoopLaidOut<Mark>, false);
   }
 
   protected carry(_from: LoopRenderer, to: LoopRenderer): void {

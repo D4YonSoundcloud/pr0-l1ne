@@ -71,6 +71,7 @@ describe("LoopController", () => {
     const { app, loop, $ } = setup();
     await showJavaScript(app, NESTED, 2);
     loop.render();
+    await loop.drawn();
     expect($("loop").textContent).toContain("When your code enters a loop");
   });
 
@@ -78,6 +79,7 @@ describe("LoopController", () => {
     const { app, loop, tabs, selected, $ } = setup();
     await insideInnerLoop(app);
     loop.render();
+    await loop.drawn();
     expect(tabs().map((t) => t.textContent)).toEqual([
       "All loops",
       expect.stringMatching(/^for \(let r = 0.*\(line 3\)$/),
@@ -91,16 +93,21 @@ describe("LoopController", () => {
     const { app, loop, tabs, selected, redraws } = setup();
     await insideInnerLoop(app);
     loop.render();
+    await loop.drawn();
     tabs()[2].click();
+    await loop.drawn();
     expect(redraws).toEqual([true]);
     expect(selected()).toMatch(/^for \(let c/);
     loop.reset();
     loop.render();
+    await loop.drawn();
     expect(selected()).toBe("All loops");
     tabs()[1].click();
+    await loop.drawn();
     app.setLanguage("python"); // also resets
     await insideInnerLoop(app);
     loop.render();
+    await loop.drawn();
     expect(selected()).toBe("All loops");
   });
 
@@ -108,7 +115,9 @@ describe("LoopController", () => {
     const { app, loop, tabs, redraws, $, storage } = setup();
     await insideInnerLoop(app);
     loop.render();
+    await loop.drawn();
     $("loop-animated").click();
+    await loop.drawn();
     expect(redraws).toEqual([false]); // the editor's marks don't change
     expect($("loop-animated").getAttribute("aria-pressed")).toBe("true");
     expect(tabs().map((t) => t.textContent)).toContain("All loops");
@@ -127,6 +136,7 @@ describe("LoopController", () => {
     const { app, loop, tabs } = setup();
     await insideInnerLoop(app);
     loop.render();
+    await loop.drawn();
     loop.showEmpty();
     expect(tabs()).toEqual([]);
   });

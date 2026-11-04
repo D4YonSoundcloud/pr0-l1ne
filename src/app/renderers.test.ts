@@ -3,9 +3,13 @@
  * The controllers draw only through the renderer contract (scene/renderer.ts):
  * given renderers that just record what they're asked, everything still
  * works. This is what a canvas, WebGL or WebGPU renderer will be plugged
- * into.
+ * into. Each step is laid out for the view the renderer gives
+ * (layoutView) and handed back to it to show (show): here on the page,
+ * from the page's trace, as the controllers do without a layout worker.
  */
 import { describe, expect, it } from "vitest";
+import type { LoopLaidOut, MemoryLaidOut } from "../layout/requests";
+import { Mark } from "../render/drawing";
 import type { LoopScene } from "../scene/loopScene";
 import type { MemoryScene } from "../scene/memoryScene";
 import type {
@@ -58,6 +62,8 @@ function fakeRenderers() {
   const memory = recorder<MemoryScene>();
   const loop = recorder<LoopScene>();
   let moved = false;
+  const memoryShown: MemoryLaidOut<Mark>[] = [];
+  const loopShown: LoopLaidOut<Mark>[] = [];
   let memoryEvents: MemoryRendererEvents = {};
   let loopEvents: RendererEvents = {};
   const factory: RendererFactory = {
@@ -65,6 +71,11 @@ function fakeRenderers() {
       memoryEvents = events;
       const r: MemoryRenderer = {
         ...memory.renderer,
+        layoutView: () => ({ positions: [], raise: null, simpleArrows: false, level: 0, budget: 64 }),
+        show: (laidOut) => {
+          memoryShown.push(laidOut);
+          memory.calls.push({ method: "show", args: [] });
+        },
         detailBudget: () => 64,
         resetLayout: () => {
           moved = false;
@@ -82,6 +93,15 @@ function fakeRenderers() {
       loopEvents = events;
       const r: LoopRenderer = {
         ...loop.renderer,
+        layoutView: () => ({
+          vertical: false,
+          fit: { level: 0, fitting: false, keep: false, fitW: 0, fitH: 0, viewW: 0, viewH: 0 },
+          budget: 40_000,
+        }),
+        show: (laidOut, step) => {
+          loopShown.push(laidOut);
+          loop.calls.push({ method: "show", args: [step] });
+        },
         setLayout: (layout) => loop.calls.push({ method: "setLayout", args: [layout] }) && undefined,
         detailBudget: () => 40_000,
       };
@@ -92,6 +112,8 @@ function fakeRenderers() {
     factory,
     memory,
     loop,
+    memoryShown,
+    loopShown,
     drag: () => {
       moved = true;
       memoryEvents.onLayoutChange?.();
@@ -161,19 +183,34 @@ describe("the memory window, through its renderer", () => {
     expect(fakes.memory.called("addControl").map((c) => c.args[0])).toEqual(["Reset layout"]);
   });
 
-  it("hands over a scene per step, with the one before it, and its animation", async () => {
+  it("hands over a drawing per step, laid out for the renderer's view, and its animation", async () => {
     const { app, memory, fakes } = setup();
     memory.showEmpty();
     expect(fakes.memory.called("showMessage")[0].args[0]).toMatch(/press Run/);
     await showJavaScript(app, CODE, 2);
     memory.render();
+    await memory.drawn();
     app.setStep(3);
     memory.render();
-    const [first, second] = fakes.memory.scenes;
-    expect(first.previous).toBeNull();
-    expect(second.previous).toBe(first.scene);
-    expect(second.scene.stepIndex).toBe(3);
+    await memory.drawn();
+    const [first, second] = fakes.memoryShown;
+    expect(first.drawing).toBeInstanceOf(Mark);
+    expect(second.drawing.querySelector(".node")).not.toBeNull();
+    expect(second.drawing).not.toBe(first.drawing);
     expect(fakes.memory.called("setAppearance").at(-1)?.args[0]).toEqual({ step: STILL });
+  });
+
+  it("asked for two steps at once, shows only the last", async () => {
+    const { app, memory, fakes } = setup();
+    await showJavaScript(app, CODE, 2);
+    memory.render();
+    app.setStep(3);
+    memory.render();
+    app.setStep(4);
+    memory.render();
+    await memory.drawn();
+    // The first was being laid out; the second was replaced by the third before its turn.
+    expect(fakes.memoryShown).toHaveLength(2);
   });
 
   it("redraws when a box is dragged, and Reset layout puts it back", async () => {
@@ -182,9 +219,11 @@ describe("the memory window, through its renderer", () => {
     memory.render();
     const reset = [...$("memory").querySelectorAll("button")];
     expect(reset).toEqual([]); // the fake keeps its controls to itself
-    const before = fakes.memory.scenes.length;
+    await memory.drawn();
+    const before = fakes.memoryShown.length;
     fakes.drag();
-    expect(fakes.memory.scenes.length).toBe(before + 1);
+    await memory.drawn();
+    expect(fakes.memoryShown.length).toBe(before + 1);
     memory.reset();
     expect(fakes.memory.called("resetLayout")).toHaveLength(1);
     expect(fakes.memory.called("setViewport").at(-1)?.args[0]).toEqual({ refit: true });
@@ -204,10 +243,27 @@ describe("the loop window, through its renderer", () => {
     expect(fakes.loop.called("setLayout")[0].args[0]).toEqual({ vertical: false });
     await showJavaScript(app, CODE, 0);
     loop.render();
-    expect(fakes.loop.called("showMessage").at(-1)?.args[0]).toMatch(/enters a loop/);
+    await loop.drawn();
+    expect(fakes.loopShown.at(-1)?.drawing).toBeNull();
+    expect(fakes.loopShown.at(-1)?.message).toMatch(/enters a loop/);
     await showJavaScript(app, CODE, 6);
     loop.render();
-    expect(fakes.loop.scenes.at(-1)?.scene.containers).toEqual(["nums"]);
+    await loop.drawn();
+    expect(fakes.loopShown.at(-1)?.drawing?.textContent).toContain("nums");
+    expect(fakes.loop.called("show").at(-1)?.args[0]).toBe(true); // a step
+    // A new step waiting to be laid out, replaced by a redraw for the view: that one is shown as the step.
+    app.setStep(7);
+    loop.render(); // laid out at once
+    app.setStep(8);
+    loop.render(); // waits...
+    loop.render(false); // ...and is replaced by a redraw for the view
+    await loop.drawn();
+    expect(
+      fakes.loop
+        .called("show")
+        .slice(-2)
+        .map((c) => c.args[0]),
+    ).toEqual([true, true]);
     const vertical = $<HTMLInputElement>("loop-vertical");
     vertical.checked = true;
     vertical.dispatchEvent(new Event("change"));

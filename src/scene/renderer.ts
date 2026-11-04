@@ -8,6 +8,11 @@
  * animation, panning and zooming, boxes the person has dragged, and what
  * hovering shows. Nothing outside src/render/ touches the drawing itself.
  *
+ * The app has its scenes built and laid out in the layout worker
+ * (layout/session.ts): a renderer says how it's looking at its drawing
+ * (layoutView) and is given the drawing to show (show). Given a scene
+ * instead (render), it lays it out itself: the tests do that.
+ *
  * There are two: SVG (render/svgRenderers.ts) and the canvas through PixiJS
  * (render/canvas/canvasRenderers.ts), on WebGL or Canvas 2D. They share one
  * layout, and the person picks one in the Style panel (app/rendererSwitch.ts
@@ -16,6 +21,8 @@
  * renderers".
  */
 
+import type { LoopLaidOut, LoopView, MemoryLaidOut, MemoryView } from "../layout/requests";
+import type { Mark } from "../render/drawing";
 import type { LoopScene } from "./loopScene";
 import type { MemoryScene } from "./memoryScene";
 import type { SqlPipelineScene, SqlTableScene } from "./sqlScene";
@@ -92,8 +99,9 @@ export interface Renderer<S> {
   /**
    * The drawing on screen as a standalone SVG file (styles inlined), or
    * null when nothing is drawn. Every renderer can: they share the layout.
+   * Later, when it has to be laid out again in full (in the layout worker).
    */
-  toSVG(): string | null;
+  toSVG(): string | null | Promise<string | null>;
   /** Stop listening and let go of the window's element. */
   dispose(): void;
 }
@@ -102,6 +110,8 @@ export interface Renderer<S> {
 export interface RendererEvents {
   /** Auto-fit was turned on or off, or its mode changed (to remember it). */
   onAutoFitChange?(state: AutoFit): void;
+  /** The step on screen laid out again in full detail (to save it), when it was laid out elsewhere. */
+  fullDrawing?(): Promise<Mark | null>;
   /** Where the window remembers whether its floating controls are folded away. */
   controls?: { get(): boolean; set(collapsed: boolean): void };
 }
@@ -131,6 +141,10 @@ export interface MemoryRenderer extends Renderer<MemoryWindowScene> {
   moveBoxes(positions: ReadonlyMap<string, Point>): void;
   /** How many nodes of one run to draw before summarizing the rest, at the zoom now (scene/summaries.ts detailBudget). */
   detailBudget(): number;
+  /** How the window looks at its drawing, to lay the step out elsewhere (the layout worker). */
+  layoutView(): Omit<MemoryView, "full">;
+  /** Show a step laid out elsewhere, for the view layoutView gave. */
+  show(laidOut: MemoryLaidOut<Mark>): void;
 }
 
 /** The loop history window. */
@@ -139,9 +153,23 @@ export interface LoopRenderer extends Renderer<LoopWindowScene> {
   setLayout(layout: { vertical: boolean }): void;
   /** How many cells to draw before folding rows, at the zoom now (scene/loopSummaries.ts loopDetailBudget). */
   detailBudget(): number;
+  /** How the window looks at its drawing, to lay the step out elsewhere (the layout worker); it draws the rows in view from now. */
+  layoutView(): Omit<LoopView, "full">;
+  /**
+   * Show a step laid out elsewhere, for the view layoutView gave. `step`:
+   * a new step (it animates, and the running row is kept in view), not the
+   * same one again for the view (onRedraw).
+   */
+  show(laidOut: LoopLaidOut<Mark>, step: boolean): void;
 }
 
 export interface LoopRendererEvents extends RendererEvents {
+  /**
+   * The step on screen needs laying out again for the view (zoomed in past
+   * its detail, or scrolled past the rows drawn), when it was laid out
+   * elsewhere: ask for it, and show it with step false.
+   */
+  onRedraw?(): void;
   /** The zoom settled where the detail budget differs: the history needs folding again. */
   onLayoutChange?(): void;
   /** A fold was clicked (scene/loopSummaries.ts): show the rows it stands for, by its key. */

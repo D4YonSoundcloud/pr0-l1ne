@@ -113,6 +113,41 @@ export function gridStep(size: number, zoom: number): number {
   return step;
 }
 
+/** What a window's level for a new drawing goes by (Viewport.levelFor), as numbers. */
+export interface FitParams {
+  /** The level of detail now. */
+  level: Lod;
+  /** Auto-fit is on (and levels of detail aren't turned off): a new drawing is fitted. */
+  fitting: boolean;
+  /** "Zoom out only": the fit keeps the biggest drawing seen so far (fitW, fitH). */
+  keep: boolean;
+  fitW: number;
+  fitH: number;
+  /** The window's size, in pixels. */
+  viewW: number;
+  viewH: number;
+}
+
+/** The zoom that fits a drawing this size in a window this size (null when either is unknown). */
+export function fitZoomFor(w: number, h: number, viewW: number, viewH: number): number | null {
+  if (!w || !h || viewW < 40 || viewH < 40) return null;
+  return clamp(Math.min(viewW / w, (viewH - 8) / h, 1), MIN_ZOOM, 1);
+}
+
+/**
+ * The level a new drawing of this size will be drawn at: with Auto-fit
+ * on, the finest the level could be once it's fitted (lod.ts
+ * finestLodAt); otherwise the level now. What to build it at (buildAt).
+ */
+export function levelForFit(fit: FitParams, size: { width: number; height: number }): Lod {
+  if (!fit.fitting) return fit.level;
+  const w = fit.keep ? Math.max(fit.fitW, size.width) : size.width;
+  const h = fit.keep ? Math.max(fit.fitH, size.height) : size.height;
+  const z = fitZoomFor(w, h, fit.viewW, fit.viewH);
+  // Not laid out yet: the fit isn't known, so in full.
+  return z === null ? 0 : finestLodAt(z);
+}
+
 /** The zoom as the controls show it: "100%", "35%", and under 10% one decimal ("2.5%", "1%"). */
 export function zoomText(zoom: number): string {
   const percent = zoom * 100;
@@ -446,8 +481,7 @@ export class Viewport {
       this.viewW = view.width;
       this.viewH = view.height;
     }
-    if (!w || !h || this.viewW < 40 || this.viewH < 40) return null;
-    return clamp(Math.min(this.viewW / w, (this.viewH - 8) / h, 1), MIN_ZOOM, 1);
+    return fitZoomFor(w, h, this.viewW, this.viewH);
   }
 
   /** The level of detail now (lod.ts). */
@@ -461,14 +495,26 @@ export class Viewport {
    * finestLodAt); otherwise the level now. What to build it at (buildAt).
    */
   levelFor(size: { width: number; height: number }): Lod {
-    if (perf.noLod || !this.autoFit.on) return this.level;
-    // As refit() will fit it: "Zoom out only" fits the biggest seen so far.
-    const keep = this.autoFit.mode === "out" && !this.snugNext;
-    const w = keep ? Math.max(this.fitSize.w, size.width) : size.width;
-    const h = keep ? Math.max(this.fitSize.h, size.height) : size.height;
-    const z = this.fitZoom(w, h);
-    // Not laid out yet: the fit isn't known, so in full.
-    return z === null ? 0 : finestLodAt(z);
+    return levelForFit(this.fitParams(), size);
+  }
+
+  /** What levelFor goes by, as numbers: for laying out in the layout worker, which can't ask the window. */
+  fitParams(): FitParams {
+    if (!this.viewW || !this.viewH) {
+      const view = this.el.getBoundingClientRect();
+      this.viewW = view.width;
+      this.viewH = view.height;
+    }
+    return {
+      level: this.level,
+      fitting: !perf.noLod && this.autoFit.on,
+      // As refit() will fit it: "Zoom out only" fits the biggest seen so far.
+      keep: this.autoFit.mode === "out" && !this.snugNext,
+      fitW: this.fitSize.w,
+      fitH: this.fitSize.h,
+      viewW: this.viewW,
+      viewH: this.viewH,
+    };
   }
 
   /**

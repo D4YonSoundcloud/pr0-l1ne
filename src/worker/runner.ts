@@ -122,6 +122,13 @@ interface Pending {
   /** The trace as it arrives (trace/stream.ts). */
   stream: TraceStream;
   progress?: (progress: RunProgress) => void;
+  feed?: (part: TracePart) => void;
+}
+
+/** A piece of a streamed trace as it was sent (a progress report's JSON, or the end's), once it's checked. */
+export interface TracePart {
+  kind: "piece" | "end";
+  json: string;
 }
 
 interface PendingMeasure {
@@ -235,6 +242,7 @@ export class Runner {
           this.settleBroken(message.runId, error, "a piece of the trace isn't one the app can use");
           break;
         }
+        pending.feed?.({ kind: "piece", json: message.json });
         pending.progress?.(progress);
         break;
       }
@@ -248,6 +256,7 @@ export class Runner {
           this.settleBroken(message.runId, error, "the trace isn't one the app can use");
           break;
         }
+        pending.feed?.({ kind: "end", json: message.json });
         // Checked as it arrived (trace/stream.ts).
         this.settle(message.runId, { kind: "trace", trace, elapsedMs: message.elapsedMs });
         break;
@@ -391,7 +400,8 @@ export class Runner {
   /**
    * Run code. Only one run is in flight at a time; callers should await.
    * `progress`: how far it's got, every quarter second or so (Python,
-   * JavaScript, TypeScript).
+   * JavaScript, TypeScript). `feed`: each piece of the trace as it was
+   * sent, once it's checked (for the layout worker, which builds its own).
    */
   run(
     source: string,
@@ -399,6 +409,7 @@ export class Runner {
     maxSeconds: number,
     sampling: SamplingPolicy,
     progress?: (progress: RunProgress) => void,
+    feed?: (part: TracePart) => void,
   ): Promise<RunOutcome> {
     if (this.busy) throw new Error("A run is already in progress");
     const failure = this.unavailable();
@@ -414,7 +425,14 @@ export class Runner {
         resolve({ kind: "timeout", seconds: Math.round(this.timeoutMs / 1000) });
         this.start();
       }, limit);
-      this.pending = { runId, resolve, timer, stream: new TraceStream(), ...(progress ? { progress } : {}) };
+      this.pending = {
+        runId,
+        resolve,
+        timer,
+        stream: new TraceStream(),
+        ...(progress ? { progress } : {}),
+        ...(feed ? { feed } : {}),
+      };
       if (this.isReady) this.setStatus({ kind: "running" });
       const message: ToWorker = { type: "run", runId, source, maxSteps, maxSeconds, sampling };
       this.worker?.postMessage(message);

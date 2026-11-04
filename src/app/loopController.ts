@@ -7,23 +7,12 @@
  * Its toolbar picks stacked rows or one animated row, hiding variables that
  * don't change, and stacking containers vertically.
  */
+import { currentLook, type LoopShow, type LoopTab } from "../layout/requests";
+import { type LayoutService, LocalLayout } from "../layout/service";
 import { timed } from "../perf";
-import { type LiveRow, loopScene } from "../scene/loopScene";
-import type { LoopRenderer, LoopWindowScene, RendererFactory } from "../scene/renderer";
-import { sqlPipelineScene } from "../scene/sqlScene";
+import type { LoopRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
-import { focusedLoop } from "../trace/hints";
-import {
-  ALL_LOOPS,
-  availableLoops,
-  buildLoopHistory,
-  buildNestedHistory,
-  type LoopHistory,
-  type LoopRow,
-  nestedLoopsAt,
-} from "../trace/loopHistory";
 import type { SizeModel } from "../trace/memory";
-import { liveFrames, type Trace } from "../trace/types";
 import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
 import type { PaneAnimation } from "./styleController";
@@ -51,83 +40,23 @@ export interface LoopOptions {
   redraw(updateMarks: boolean): void;
   /** What draws the window (main.ts picks: SVG today). */
   renderers: Pick<RendererFactory, "loop">;
+  /** Where the step is laid out (the layout worker); absent, on the page, from the page's trace (tests). */
+  layout?: LayoutService;
 }
 
-/** The loop's live state at a step, and at the step before, for animated mode. */
-export function liveRows(t: Trace, index: number, history: LoopHistory): { prev: LoopRow; current: LoopRow } {
-  const { frame: frameId, loop, instance } = history.context;
-  const at = (i: number): LoopRow | null => {
-    const step = t.steps[i];
-    const context = step?.loops.find((c) => c.frame === frameId && c.loop === loop && c.instance === instance);
-    const frame = step && liveFrames(step).find((f) => f.id === frameId);
-    return context && frame ? { iteration: context.iteration, stepIndex: i, frame, heap: step.heap } : null;
-  };
-  const current = at(index) ?? history.rows[history.rows.length - 1];
-  return { prev: at(index - 1) ?? current, current };
-}
-
-/**
- * Animated mode with every loop together: a live row for each loop of the
- * nest, outermost first, so an inner loop runs under the loop around it
- * instead of replacing it. A loop that isn't running at this step (an inner
- * one between runs, or one that has finished) shows how it last was.
- */
-export function liveNestedRows(t: Trace, index: number, history: LoopHistory): LiveRow[] {
-  const frameId = history.context.frame;
-  // Each loop of the nest once, outermost first, in the order they first ran.
-  const levels: { loop: string; depth: number }[] = [];
-  for (const row of history.rows) {
-    if (row.loop !== undefined && !levels.some((l) => l.loop === row.loop))
-      levels.push({ loop: row.loop, depth: row.depth ?? 0 });
-  }
-  levels.sort((a, b) => a.depth - b.depth);
-  const step = t.steps[index];
-  const here = step?.loops.filter((c) => c.frame === frameId) ?? [];
-  const frameAt = (i: number) => {
-    const at = t.steps[i];
-    return at ? liveFrames(at).find((f) => f.id === frameId) : undefined;
-  };
-  const out: LiveRow[] = [];
-  for (const level of levels) {
-    const ctx = here.find((c) => c.loop === level.loop);
-    const frame = frameAt(index);
-    if (ctx && frame) {
-      const current: LoopRow = {
-        iteration: ctx.iteration,
-        stepIndex: index,
-        frame,
-        heap: step.heap,
-        loop: ctx.loop,
-        instance: ctx.instance,
-        depth: level.depth,
-      };
-      const before = t.steps[index - 1]?.loops.find(
-        (c) => c.frame === frameId && c.loop === ctx.loop && c.instance === ctx.instance,
-      );
-      const beforeFrame = frameAt(index - 1);
-      const prev: LoopRow =
-        before && beforeFrame
-          ? {
-              ...current,
-              iteration: before.iteration,
-              stepIndex: index - 1,
-              frame: beforeFrame,
-              heap: t.steps[index - 1].heap,
-            }
-          : current;
-      out.push({ prev, current });
-      continue;
-    }
-    const last = [...history.rows].reverse().find((row) => row.loop === level.loop);
-    if (last) out.push({ prev: last, current: last, done: true });
-  }
-  return out;
-}
+// Moved to scene/liveRows.ts (the layout worker uses them); here for what imported them from here.
+export { liveNestedRows, liveRows } from "../scene/liveRows";
 
 export class LoopController {
   readonly renderer: LoopRenderer;
-  /** The scene last drawn, for the renderer to animate from. */
-  private drawn: LoopWindowScene | null = null;
+  private readonly layout: LayoutService;
+  /** The window's channel to the layout: its kept rows. */
+  private readonly channel: number;
+  /** What the window last asked to show, and the rows it drew (to lay it out again in full, to save it). */
+  private shown: LoopShow | null = null;
+  private visible: { top: number; bottom: number } | undefined;
+  /** The step asked for last, drawn (or not, when another replaced it). */
+  private drawing: Promise<void> = Promise.resolve();
   /** The loop picked in the tabs (ALL_LOOPS: nested loops together), or null for the innermost running. */
   private selected: string | null = null;
   private hideQuiet: boolean;
@@ -144,7 +73,19 @@ export class LoopController {
     this.vertical = settings.loopVertical.get();
     this.mode = settings.loopMode.get();
 
+    this.layout = options.layout ?? new LocalLayout({}, () => options.app.get().trace);
+    this.channel = this.layout.channel();
     this.renderer = options.renderers.loop(els.loop, {
+      // The same step for the view now (zoomed in past its detail, scrolled past the rows drawn).
+      onRedraw: () => this.render(false),
+      fullDrawing: () => {
+        const shown = this.shown;
+        if (!shown) return Promise.resolve(null);
+        const view = this.renderer.layoutView();
+        return this.layout
+          .loop(this.channel, shown, { ...view, visible: this.visible, full: true })
+          .then((laidOut) => laidOut?.drawing ?? null);
+      },
       onAutoFitChange: (state) => settings.autoFit("loop").set(JSON.stringify(state)),
       controls: settings.controlsCollapsed("loop"),
       // The zoom settled where the cell budget differs: fold the history again.
@@ -216,102 +157,91 @@ export class LoopController {
 
   /** Nothing to show yet. */
   showEmpty(): void {
-    this.drawn = null;
+    this.shown = null;
+    this.drawing = Promise.resolve();
     this.renderer.showMessage("");
     this.options.els.loopTabs.replaceChildren();
   }
 
-  /** Draw the loop history and its tabs for the step on screen. */
-  render(): void {
+  /**
+   * Draw the loop history and its tabs for the step on screen, laid out by
+   * the layout (the layout worker). `step` false: the same step again, for
+   * the view now (nothing animates, the running row isn't brought into view).
+   */
+  render(step = true): void {
     const { trace, stepIndex } = this.options.app.get();
     if (!trace?.steps.length) return;
-    const { els } = this.options;
-    // SQL: the statement's stages, in the order they run.
-    if (trace.sql) {
-      els.loopTabs.replaceChildren();
-      const scene = sqlPipelineScene(trace, stepIndex);
-      if (!scene) return;
-      this.renderer.setAppearance({ step: this.options.animation() });
-      this.renderer.render(scene, this.drawn);
-      this.drawn = scene;
-      return;
-    }
-    // Nested loops are drawn together unless one loop is picked: stacked,
-    // each inner pass under the outer pass it's in; animated, each inner
-    // loop's live row under the loop around it.
-    const { contexts } = availableLoops(trace, stepIndex);
-    const together = nestedLoopsAt(trace, stepIndex).length > 0;
-    // Nothing picked in the tabs: a `viz: focus` hint's loop, when it's one of the loops here.
-    const focus = focusedLoop(trace);
-    const selected =
-      this.selected ??
-      (focus === "all" ? ALL_LOOPS : focus && contexts.some((ctx) => ctx.loop === focus) ? focus : null);
-    const wantsAll = together && (selected === null || selected === ALL_LOOPS);
-    const history = timed(
-      "loop.history",
-      () =>
-        (wantsAll ? buildNestedHistory(trace, stepIndex) : null) ??
-        buildLoopHistory(trace, stepIndex, selected === ALL_LOOPS ? null : selected),
-    );
-    const tab = (text: string, selected: boolean, pick: string, title = "") => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "loop-tab";
-      button.setAttribute("role", "tab");
-      button.setAttribute("aria-selected", String(selected));
-      button.textContent = text;
-      if (title) button.title = title;
-      button.addEventListener("click", () => {
-        this.selected = pick;
-        this.options.redraw(true);
-      });
-      return button;
+    const show: LoopShow = {
+      look: currentLook(),
+      step: stepIndex,
+      selected: this.selected,
+      mode: this.mode,
+      hideQuiet: this.hideQuiet,
+      sizes: this.options.sizes(),
+      tall: isTall(this.options.els.loop),
+      expanded: [...this.expanded],
     };
-    els.loopTabs.replaceChildren(
-      ...(together
-        ? [
-            tab(
-              "All loops",
-              !!history?.nested,
-              ALL_LOOPS,
-              this.mode === "animated"
-                ? "Every loop in this function, together: each inner loop running under the loop around it"
-                : "Every loop in this function, together: each pass of an inner loop under the pass of the loop around it",
-            ),
-          ]
-        : []),
-      ...contexts.map((ctx) => {
-        const info = trace.loops.find((loop) => loop.id === ctx.loop);
-        return tab(
-          `${info?.header ?? ctx.loop}  (line ${info?.line ?? "?"})`,
-          !history?.nested && history?.info.id === ctx.loop,
-          ctx.loop,
-        );
+    this.shown = show;
+    const animation = this.options.animation();
+    const asked = ++this.asked;
+    this.options.els.loop.dataset.drawing = "pending";
+    this.drawing = this.layout
+      .loop(this.channel, show, this.renderer.layoutView())
+      .then((laidOut) => {
+        // Replaced by a newer request: the one that replaced it is shown as a step, if this was.
+        if (!laidOut) {
+          if (step) this.stepReplaced = Math.max(this.stepReplaced, asked);
+          return;
+        }
+        // The trace changed meanwhile.
+        if (this.options.app.get().trace !== trace) return;
+        // A step replaced by this request (asked after it) is shown as one.
+        const replaced = this.stepReplaced > 0 && asked > this.stepReplaced;
+        const asStep = step || replaced;
+        if (replaced) this.stepReplaced = 0;
+        this.visible = laidOut.visible;
+        this.showTabs(laidOut.tabs);
+        this.renderer.setAppearance({ step: animation });
+        timed("loop.render", () => this.renderer.show(laidOut, asStep));
+      })
+      .catch((error: unknown) => console.error("Loop history:", error))
+      .finally(() => {
+        // Caught up: what's on screen is the last step asked for (tests wait for it).
+        if (asked === this.asked) this.options.els.loop.dataset.drawing = "done";
+      });
+  }
+
+  /** Requests made, to tell the last one. */
+  private asked = 0;
+
+  /** Resolves once the step asked for last is drawn (or replaced). */
+  drawn(): Promise<void> {
+    return this.drawing;
+  }
+
+  /**
+   * A step's request replaced before it was laid out (by a redraw for the
+   * view), by its number: the request that replaced it is shown as the step.
+   */
+  private stepReplaced = 0;
+
+  /** The tabs over the history: each loop running here, and all of them together. */
+  private showTabs(tabs: LoopTab[]): void {
+    this.options.els.loopTabs.replaceChildren(
+      ...tabs.map(({ text, selected, pick, title }) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "loop-tab";
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", String(selected));
+        button.textContent = text;
+        if (title) button.title = title;
+        button.addEventListener("click", () => {
+          this.selected = pick;
+          this.options.redraw(true);
+        });
+        return button;
       }),
     );
-    if (history?.rows.length) {
-      const live =
-        this.mode !== "animated"
-          ? undefined
-          : history.nested
-            ? liveNestedRows(trace, stepIndex, history)
-            : liveRows(trace, stepIndex, history);
-      const scene = loopScene(trace, history, {
-        hideQuiet: this.hideQuiet,
-        live,
-        sizes: this.options.sizes(),
-        tall: isTall(this.options.els.loop),
-        // Stacked: rows far from the running one fold past the budget the zoom allows.
-        detail: live ? undefined : { cells: this.renderer.detailBudget(), expanded: this.expanded },
-      });
-      this.renderer.setAppearance({ step: this.options.animation() });
-      timed("loop.render", () => this.renderer.render(scene, this.drawn));
-      this.drawn = scene;
-    } else {
-      this.drawn = null;
-      this.renderer.showMessage(
-        "When your code enters a loop, each iteration is stacked here so you can compare them.",
-      );
-    }
   }
 }

@@ -69,7 +69,7 @@ describe("SvgMemoryRenderer", () => {
     const r = SVG_RENDERERS.memory(el, {});
     expect(r.toSVG()).toBeNull();
     r.render(sceneAt(await traceJavaScript("const a = [1];\n")), null);
-    const file = r.toSVG()!;
+    const file = r.toSVG() as string;
     expect(file).toMatch(/^<\?xml/);
     expect(new DOMParser().parseFromString(file, "image/svg+xml").documentElement.localName).toBe("svg");
     expect(file).not.toContain("data-node-key");

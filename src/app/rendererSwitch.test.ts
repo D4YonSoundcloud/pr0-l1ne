@@ -14,6 +14,8 @@ import type {
 } from "../scene/renderer";
 import { RendererSwitch } from "./rendererSwitch";
 
+const FIT = { level: 0 as const, fitting: false, keep: false, fitW: 0, fitH: 0, viewW: 0, viewH: 0 };
+
 /** A renderer of a named kind that remembers what it's told. */
 class Fake implements MemoryRenderer, LoopRenderer {
   calls: [string, ...unknown[]][] = [];
@@ -33,6 +35,12 @@ class Fake implements MemoryRenderer, LoopRenderer {
   }
   render(scene: unknown, previous: unknown) {
     this.calls.push(["render", scene, previous]);
+  }
+  layoutView() {
+    return { positions: [], raise: null, simpleArrows: false, level: 0, budget: 64, vertical: false, fit: FIT };
+  }
+  show(laidOut: unknown, step?: boolean) {
+    this.calls.push(step === undefined ? ["show", laidOut] : ["show", laidOut, step]);
   }
   detailBudget() {
     return 64;

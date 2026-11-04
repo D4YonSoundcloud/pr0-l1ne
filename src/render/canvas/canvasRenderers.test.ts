@@ -504,7 +504,7 @@ describe("CanvasLoopRenderer", () => {
     r.render(scene, scene);
     expect(el.querySelector(".zoom-label")!.textContent).toBe(wide);
     // A loop header has a tooltip: find where it's drawn, and point there.
-    const svg = new DOMParser().parseFromString(r.toSVG()!, "image/svg+xml");
+    const svg = new DOMParser().parseFromString(r.toSVG() as string, "image/svg+xml");
     expect(svg.documentElement.localName).toBe("svg");
     r.dispose();
   });

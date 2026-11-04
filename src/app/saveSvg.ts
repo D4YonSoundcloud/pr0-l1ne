@@ -28,8 +28,11 @@ export function addSaveSvg(
     "Save SVG",
     "Save this diagram as an SVG file: a vector picture that stays sharp at any size and opens in drawing apps",
     () => {
-      const svg = renderer.toSVG();
-      if (svg) save(name(), svg);
+      // The file's name as it is when clicked (the drawing may be laid out again first).
+      const file = name();
+      void Promise.resolve(renderer.toSVG()).then((svg) => {
+        if (svg) save(file, svg);
+      });
     },
   );
 }
