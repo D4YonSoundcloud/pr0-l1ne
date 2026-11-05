@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { LineMarks } from "../editor";
+import { summarize } from "../trace/summary";
 import type { Step, Trace } from "../trace/types";
 import { describe as describeStep, StepView } from "./stepView";
 import { makeApp, showJavaScript } from "./testHelpers";
@@ -72,12 +73,11 @@ describe("StepView", () => {
 
   it("draws a step: label, both windows, output so far and the editor's marks", async () => {
     const { app, view, $, drawn, marks } = setup();
-    await showJavaScript(app, `console.log("hi");\nlet a = 1;\nlet b = 2;`);
-    const { trace } = app.get();
-    const index = trace!.steps.findIndex((s) => s.line === 3);
+    const trace = await showJavaScript(app, `console.log("hi");\nlet a = 1;\nlet b = 2;`);
+    const index = trace.lines.indexOf(3);
     app.setStep(index);
     view.render();
-    expect($("label").textContent).toBe(`Step ${index + 1} of ${trace!.steps.length}: Ran line 2, next is line 3`);
+    expect($("label").textContent).toBe(`Step ${index + 1} of ${trace.steps}: Ran line 2, next is line 3`);
     expect(drawn).toEqual(["memory", "loop"]);
     expect($("output").textContent).toBe("hi\n");
     expect(marks.at(-1)).toEqual({ next: 3, prev: 2, error: null });
@@ -101,7 +101,7 @@ describe("StepView", () => {
   it("dims a stale picture, and says when steps were skipped", () => {
     const { app, view, $ } = setup();
     const trace = { steps: [step("line", 1), step("line", 2, "Global", { skipped: 2500 })], stdout: "", error: null };
-    app.showTrace(trace as unknown as Trace, "", 1);
+    app.showTrace(summarize(trace as unknown as Trace, trace as unknown as Trace), "", 1);
     app.markStale();
     view.render();
     expect($("canvas").classList.contains("is-stale")).toBe(true);
@@ -125,7 +125,7 @@ describe("StepView", () => {
       error: null,
       sql: { statements: [], stages: [stage("FROM pets", 2), stage("WHERE age > 3", 3)] },
     };
-    app.showTrace(trace as unknown as Trace, "", 1);
+    app.showTrace(summarize(trace as unknown as Trace, trace as unknown as Trace), "", 1);
     view.render();
     expect($("label").textContent).toBe("Step 2 of 2: WHERE age > 3");
     expect(marks.at(-1)).toEqual({ next: null, prev: 3, error: null });

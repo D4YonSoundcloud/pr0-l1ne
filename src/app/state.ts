@@ -11,7 +11,7 @@
 import type { LanguageId } from "../languages";
 import type { Program, ProgramStore } from "../programs";
 import type { Settings } from "../settings";
-import type { Trace } from "../trace/types";
+import type { TraceInfo } from "../trace/summary";
 import { Store } from "./store";
 
 /** Playback speeds offered, in steps per second. */
@@ -29,8 +29,12 @@ export interface AppState {
   readonly playing: boolean;
   /** Playback speed, in steps per second (one of SPEEDS). */
   readonly speed: number;
-  /** The trace on screen (hints applied), or null before the first run. */
-  readonly trace: Trace | null;
+  /**
+   * What the page knows of the trace on screen (trace/summary.ts), or null
+   * before the first run. The trace itself is the layout worker's
+   * (src/layout/): it draws the windows from it.
+   */
+  readonly trace: TraceInfo | null;
   /** The code that trace ran, so Measure can tell whether it still matches. */
   readonly tracedCode: string | null;
   /**
@@ -109,7 +113,7 @@ export class AppStore extends Store<AppState> {
   }
 
   /** A run finished: show its trace, at `stepIndex`. */
-  showTrace(trace: Trace, code: string, stepIndex: number): void {
+  showTrace(trace: TraceInfo, code: string, stepIndex: number): void {
     this.update("showTrace", { trace, tracedCode: code, stale: false, stepIndex });
   }
 

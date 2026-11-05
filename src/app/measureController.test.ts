@@ -113,7 +113,8 @@ function setup(code = "let a = 1;\nfor (let i = 0; i < 100; i++) a++;", storage 
     },
     setBanner: (html) => banners.push(html),
     pause: () => events.push("pause"),
-    onMeasured: () => events.push("measured"),
+    onMeasured: () => void events.push("measured"),
+    estimate: () => null,
     onOpen: () => events.push("open"),
     now: () => 0,
     setInterval: (callback) => {

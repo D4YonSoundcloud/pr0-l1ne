@@ -8,13 +8,13 @@
  */
 
 import type { LanguageId } from "../languages";
-import { currentLook, type MemoryShow } from "../layout/requests";
-import { type LayoutService, LocalLayout } from "../layout/service";
+import { currentLook, type MemoryLaidOut, type MemoryShow } from "../layout/requests";
+import type { LayoutService } from "../layout/service";
 import { timed } from "../perf";
 import type { MemoryMode } from "../scene/memoryScene";
 import type { MemoryRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
-import { formatBytes, SIZE_MODELS, type SizeModel, stepSizes } from "../trace/memory";
+import { formatBytes, SIZE_MODELS, type SizeModel } from "../trace/memory";
 import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
 import type { PaneAnimation } from "./styleController";
@@ -43,8 +43,8 @@ export interface MemoryOptions {
   redraw(): void;
   /** What draws the window (main.ts picks: SVG today). */
   renderers: Pick<RendererFactory, "memory">;
-  /** Where the step is laid out (the layout worker); absent, on the page, from the page's trace (tests). */
-  layout?: LayoutService;
+  /** Where the step is laid out (the layout worker, which holds the trace). */
+  layout: LayoutService;
 }
 
 /** Python has its own real sizes; JavaScript and TypeScript share theirs. */
@@ -77,7 +77,7 @@ export class MemoryController {
     this.outputOn = settings.showOutput.get();
     this.dimForOutput = settings.dimOutput.get();
 
-    this.layout = options.layout ?? new LocalLayout({}, () => options.app.get().trace);
+    this.layout = options.layout;
     this.channel = this.layout.channel();
     this.renderer = options.renderers.memory(els.memory, {
       fullDrawing: () => {
@@ -217,13 +217,13 @@ export class MemoryController {
     this.shown = null;
     this.drawing = Promise.resolve();
     this.renderer.showMessage("Write some code and press Run. Variables, objects and scopes appear here.");
-    this.updateTotal();
+    this.updateTotal(undefined);
   }
 
   /** Draw the step on screen: laid out by the layout (the layout worker), then shown. */
   render(): void {
     const { trace, stepIndex } = this.options.app.get();
-    if (!trace?.steps.length) return;
+    if (!trace?.steps) return;
     const show: MemoryShow = {
       look: currentLook(),
       step: stepIndex,
@@ -246,7 +246,7 @@ export class MemoryController {
         if (!laidOut || this.options.app.get().trace !== trace) return;
         this.renderer.setAppearance({ step: animation });
         timed("memory.render", () => this.renderer.show(laidOut));
-        this.updateTotal();
+        this.updateTotal(laidOut.total);
       })
       .catch((error: unknown) => console.error("Memory window:", error))
       .finally(() => {
@@ -263,16 +263,12 @@ export class MemoryController {
     return this.drawing;
   }
 
-  /** "Program: 1.4 KB" in the memory header, for the step on screen. */
-  private updateTotal(): void {
+  /** "Program: 1.4 KB" in the memory header, for the step on screen (the layout counts it, when sizes are shown). */
+  private updateTotal(total: MemoryLaidOut<unknown>["total"]): void {
     const { memoryTotal } = this.options.els;
-    const { trace, stepIndex } = this.options.app.get();
-    const model = this.sizes();
-    const step = trace?.sql ? undefined : trace?.steps[stepIndex];
-    memoryTotal.hidden = !model || !step;
-    if (!model || !step) return;
-    const sizes = stepSizes(step, model);
-    memoryTotal.textContent = `Program: ${formatBytes(sizes.program, sizes.approximate)}`;
+    memoryTotal.hidden = !total;
+    if (!total) return;
+    memoryTotal.textContent = `Program: ${formatBytes(total.program, total.approximate)}`;
     memoryTotal.title = "Everything the program holds at this step, each object counted once";
   }
 }

@@ -16,7 +16,7 @@ import type { WorkerLike } from "../sandbox/sandboxWorker";
 import { dataLimitProblem, MESSAGE_LIMITS, traceProblem } from "../trace/checkTrace";
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
-import { type RunProgress, TraceFormatError, TraceStream } from "../trace/stream";
+import { MAX_TRACE_CHARS, progressOf, type RunProgress } from "../trace/stream";
 import type { Trace } from "../trace/types";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
 
@@ -47,9 +47,15 @@ export type Unavailable = {
 };
 
 export type RunOutcome =
+  /** The whole trace (SQL's, whose queries are quick). */
   | { kind: "trace"; trace: Trace; elapsedMs: number }
-  /** The person stopped it before anything had been recorded (with something recorded, it's a trace: stoppedBy "person"). */
-  | { kind: "stopped" }
+  /** The trace arrived a piece at a time, all of it: what `feed` was given is the trace. */
+  | { kind: "streamed"; elapsedMs: number }
+  /**
+   * The person stopped it: `arrived` says whether any piece had (then what
+   * `feed` was given, so far, is the trace: stoppedBy "person").
+   */
+  | { kind: "stopped"; arrived: boolean }
   | { kind: "timeout"; seconds: number }
   | { kind: "crash"; message: string }
   | Unavailable;
@@ -91,7 +97,7 @@ function wellFormed(message: unknown): message is FromWorker {
     case "result":
       return id(m.runId) && id(m.elapsedMs) && typeof m.trace === "object" && m.trace !== null;
     case "progress":
-      return id(m.runId) && typeof m.json === "string";
+      return id(m.runId) && progressOf(m.progress) !== null && (m.piece === undefined || typeof m.piece === "string");
     case "streamed":
       return id(m.runId) && id(m.elapsedMs) && typeof m.json === "string";
     case "crash":
@@ -119,13 +125,14 @@ interface Pending {
   runId: number;
   resolve: (outcome: RunOutcome) => void;
   timer: number;
-  /** The trace as it arrives (trace/stream.ts). */
-  stream: TraceStream;
+  /** Pieces passed on, and their text so far. */
+  pieces: number;
+  chars: number;
   progress?: (progress: RunProgress) => void;
   feed?: (part: TracePart) => void;
 }
 
-/** A piece of a streamed trace as it was sent (a progress report's JSON, or the end's), once it's checked. */
+/** A piece of a streamed trace as it was sent (a piece's JSON, or the end's), for the layout worker to read and check. */
 export interface TracePart {
   kind: "piece" | "end";
   json: string;
@@ -235,30 +242,17 @@ export class Runner {
       case "progress": {
         const pending = this.pending;
         if (pending?.runId !== message.runId) break;
-        let progress: RunProgress;
-        try {
-          progress = pending.stream.add(message.json);
-        } catch (error) {
-          this.settleBroken(message.runId, error, "a piece of the trace isn't one the app can use");
-          break;
-        }
-        pending.feed?.({ kind: "piece", json: message.json });
-        pending.progress?.(progress);
+        // The piece goes on to the layout worker unread, which builds and checks the trace
+        // (trace/stream.ts). Here, only how much has come: no more than a whole trace may be.
+        if (message.piece !== undefined && !this.passOn(pending, { kind: "piece", json: message.piece })) break;
+        pending.progress?.(progressOf(message.progress)!);
         break;
       }
       case "streamed": {
         const pending = this.pending;
         if (pending?.runId !== message.runId) break;
-        let trace: Trace;
-        try {
-          trace = pending.stream.finish(message.json);
-        } catch (error) {
-          this.settleBroken(message.runId, error, "the trace isn't one the app can use");
-          break;
-        }
-        pending.feed?.({ kind: "end", json: message.json });
-        // Checked as it arrived (trace/stream.ts).
-        this.settle(message.runId, { kind: "trace", trace, elapsedMs: message.elapsedMs });
+        if (!this.passOn(pending, { kind: "end", json: message.json })) break;
+        this.settle(message.runId, { kind: "streamed", elapsedMs: message.elapsedMs });
         break;
       }
       case "crash":
@@ -298,17 +292,6 @@ export class Runner {
    * program that tampers with its trace, then fails here, naming the field,
    * rather than somewhere deep in the renderer.
    */
-  /** A streamed trace that couldn't be used: a crash, saying why (as settleChecked does, when it's the format). */
-  private settleBroken(runId: number, error: unknown, what: string): void {
-    const message =
-      error instanceof TraceFormatError
-        ? `the trace doesn't match the trace format: ${error.message}`
-        : `${what}: ${errorText(error)}`;
-    if (import.meta.env.DEV && error instanceof TraceFormatError)
-      console.error("Trace doesn't match the trace format (schema/trace.schema.json):", error.message);
-    this.settle(runId, { kind: "crash", message });
-  }
-
   private settleChecked(runId: number, trace: Trace, elapsedMs: number): void {
     if (!this.pending || this.pending.runId !== runId) return;
     const problem = traceProblem(trace);
@@ -388,20 +371,30 @@ export class Runner {
     const pending = this.pending;
     if (!pending) return;
     this.worker?.terminate();
-    try {
-      const trace = pending.stream.partial();
-      this.settle(pending.runId, trace ? { kind: "trace", trace, elapsedMs: 0 } : { kind: "stopped" });
-    } catch (error) {
-      this.settleBroken(pending.runId, error, "the trace isn't one the app can use");
-    }
+    this.settle(pending.runId, { kind: "stopped", arrived: pending.pieces > 0 });
     this.start();
+  }
+
+  /** Pass a piece of the trace on (feed); false (the run ended as a crash) once the pieces are more than a trace may be. */
+  private passOn(pending: Pending, part: TracePart): boolean {
+    pending.chars += part.json.length;
+    if (pending.chars > MAX_TRACE_CHARS) {
+      this.settle(pending.runId, {
+        kind: "crash",
+        message: "the trace isn't one the app can use: the trace is too big",
+      });
+      return false;
+    }
+    if (part.kind === "piece") pending.pieces++;
+    pending.feed?.(part);
+    return true;
   }
 
   /**
    * Run code. Only one run is in flight at a time; callers should await.
    * `progress`: how far it's got, every quarter second or so (Python,
-   * JavaScript, TypeScript). `feed`: each piece of the trace as it was
-   * sent, once it's checked (for the layout worker, which builds its own).
+   * JavaScript, TypeScript). `feed`: each piece of the trace, as sent and unread, for
+   * the layout worker (layout/), which builds the trace and checks it.
    */
   run(
     source: string,
@@ -429,7 +422,8 @@ export class Runner {
         runId,
         resolve,
         timer,
-        stream: new TraceStream(),
+        pieces: 0,
+        chars: 0,
         ...(progress ? { progress } : {}),
         ...(feed ? { feed } : {}),
       };
@@ -439,5 +433,3 @@ export class Runner {
     });
   }
 }
-
-const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));

@@ -8,7 +8,7 @@
  * don't change, and stacking containers vertically.
  */
 import { currentLook, type LoopShow, type LoopTab } from "../layout/requests";
-import { type LayoutService, LocalLayout } from "../layout/service";
+import type { LayoutService } from "../layout/service";
 import { timed } from "../perf";
 import type { LoopRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
@@ -40,8 +40,8 @@ export interface LoopOptions {
   redraw(updateMarks: boolean): void;
   /** What draws the window (main.ts picks: SVG today). */
   renderers: Pick<RendererFactory, "loop">;
-  /** Where the step is laid out (the layout worker); absent, on the page, from the page's trace (tests). */
-  layout?: LayoutService;
+  /** Where the step is laid out (the layout worker, which holds the trace). */
+  layout: LayoutService;
 }
 
 // Moved to scene/liveRows.ts (the layout worker uses them); here for what imported them from here.
@@ -73,7 +73,7 @@ export class LoopController {
     this.vertical = settings.loopVertical.get();
     this.mode = settings.loopMode.get();
 
-    this.layout = options.layout ?? new LocalLayout({}, () => options.app.get().trace);
+    this.layout = options.layout;
     this.channel = this.layout.channel();
     this.renderer = options.renderers.loop(els.loop, {
       // The same step for the view now (zoomed in past its detail, scrolled past the rows drawn).
@@ -170,7 +170,7 @@ export class LoopController {
    */
   render(step = true): void {
     const { trace, stepIndex } = this.options.app.get();
-    if (!trace?.steps.length) return;
+    if (!trace?.steps) return;
     const show: LoopShow = {
       look: currentLook(),
       step: stepIndex,

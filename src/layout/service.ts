@@ -1,8 +1,10 @@
 /**
- * What the page asks of the layout: take a trace (and prepare it), and draw
- * a window's step. Two kinds do it: the layout worker (layout/client.ts),
- * which the app uses, so preparing and laying out never hold up the page;
- * and the page itself (LocalLayout here), for the tests, and if the worker
+ * What the page asks of the layout: take a trace (built from the run's
+ * pieces, and prepared), say what the page should know of it (TraceInfo),
+ * and draw a window's step. The trace is the layout's: the page never holds
+ * it. Two kinds do it: the layout worker (layout/client.ts), which the app
+ * uses, so building, preparing and laying out never hold up the page; and
+ * the page itself (LocalLayout here), for the tests, and if the worker
  * can't start.
  *
  * Draws are latest-wins, a window at a time: while one is being laid out,
@@ -11,9 +13,13 @@
  * steps it can keep up with, and always the last).
  */
 import type { Mark } from "../render/drawing";
+import type { Estimate } from "../trace/complexity";
+import type { Measurement } from "../trace/measurement";
+import type { TraceInfo } from "../trace/summary";
 import type { Trace } from "../trace/types";
-import { finishInSlices, type Progress, type SliceOptions } from "../trace/work";
+import { finishInSlices, type Progress, type SliceOptions, type Work } from "../trace/work";
 import type { TracePart } from "../worker/runner";
+import { TraceIntake } from "./intake";
 import type { LoopLaidOut, LoopShow, LoopView, MemoryLaidOut, MemoryShow, MemoryView } from "./requests";
 import { LayoutSession } from "./session";
 
@@ -24,18 +30,27 @@ export interface LayoutService {
   release(channel: number): void;
   /** A run starts: what it streams comes next (feed). */
   begin(): void;
-  /** A piece of the running trace, as the runner checked it (worker/runner.ts feed). */
+  /** A piece of the running trace, as the tracer sent it (worker/runner.ts feed): read and checked here. */
   feed(part: TracePart): void;
   /**
    * The trace to draw from now: what was fed (`how` "streamed": the run's
-   * pieces, or what had arrived when it was stopped: "stopped"), or this
-   * one (`how` "whole"). Prepared with its progress reported; resolves true
-   * once it's ready to draw, false if another came along meanwhile.
+   * pieces, or what had arrived when it was stopped: "stopped"), or `trace`
+   * (`how` "whole"). Built, checked and prepared with its progress
+   * reported. Rejects, saying why, when the trace can't be used.
    */
-  load(trace: Trace, how: "whole" | "streamed" | "stopped", report: (progress: Progress) => void): Promise<boolean>;
+  load(
+    how: "whole" | "streamed" | "stopped",
+    trace: Trace | null,
+    report: (progress: Progress) => void,
+  ): Promise<Loaded>;
+  /** The complexity estimate for the trace drawn, with Measure's counts for the same code. */
+  estimate(measurement: Measurement | null): Promise<Estimate | null>;
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null>;
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null>;
 }
+
+/** A trace taken: ready (what the page knows of it), replaced by a newer one while it was prepared, or nothing had arrived. */
+export type Loaded = { kind: "ready"; info: TraceInfo } | { kind: "replaced" } | { kind: "empty" };
 
 /**
  * Latest-wins requests for one window: at most one being answered, and the
@@ -78,23 +93,9 @@ export class LocalLayout implements LayoutService {
   private nextChannel = 1;
   private loading = 0;
   private readonly lanes = new Map<number, LatestWins<unknown>>();
+  private readonly intake = new TraceIntake();
 
-  /**
-   * `follow`: draw from the page's own trace (prepared on the page) rather
-   * than one loaded here, as the controllers do when they're given no
-   * layout (their tests).
-   */
-  constructor(
-    private readonly slices: SliceOptions = {},
-    private readonly follow?: () => Trace | null,
-  ) {}
-
-  /** The page's trace, when following it. */
-  private followed(): void {
-    if (!this.follow) return;
-    const trace = this.follow();
-    if (trace && trace !== this.session.current) this.session.use(trace);
-  }
+  constructor(private readonly slices: SliceOptions = {}) {}
 
   channel(): number {
     return this.nextChannel++;
@@ -105,22 +106,38 @@ export class LocalLayout implements LayoutService {
     this.lanes.delete(channel);
   }
 
-  begin(): void {}
-  feed(): void {}
+  begin(): void {
+    this.intake.begin();
+  }
 
-  async load(trace: Trace, _how: string, report: (progress: Progress) => void): Promise<boolean> {
+  feed(part: TracePart): void {
+    this.intake.feed(part);
+  }
+
+  async load(
+    how: "whole" | "streamed" | "stopped",
+    trace: Trace | null,
+    report: (progress: Progress) => void,
+  ): Promise<Loaded> {
     const mine = ++this.loading;
-    const work = this.session.load(trace);
+    const raw = this.intake.take(how, trace);
+    if (!raw) return { kind: "empty" };
+    const work = this.session.load(raw);
     // A newer trace while this one is prepared: stop preparing it.
-    const sliced = function* (this: LocalLayout) {
+    const sliced = function* (this: LocalLayout): Work<TraceInfo | null> {
       for (;;) {
-        if (this.loading !== mine) return false;
+        if (this.loading !== mine) return null;
         const next = work.next();
-        if (next.done) return true;
+        if (next.done) return next.value;
         yield next.value;
       }
     }.call(this);
-    return (await finishInSlices(sliced, report, this.slices)) && this.loading === mine;
+    const info = await finishInSlices(sliced, report, this.slices);
+    return info && this.loading === mine ? { kind: "ready", info } : { kind: "replaced" };
+  }
+
+  async estimate(measurement: Measurement | null): Promise<Estimate | null> {
+    return this.session.estimate(measurement);
   }
 
   private lane<R>(channel: number): LatestWins<R> {
@@ -133,16 +150,10 @@ export class LocalLayout implements LayoutService {
   }
 
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null> {
-    return this.lane<MemoryLaidOut<Mark>>(channel).ask(async () => {
-      this.followed();
-      return this.session.memory(channel, show, view);
-    });
+    return this.lane<MemoryLaidOut<Mark>>(channel).ask(async () => this.session.memory(channel, show, view));
   }
 
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null> {
-    return this.lane<LoopLaidOut<Mark>>(channel).ask(async () => {
-      this.followed();
-      return this.session.loop(channel, show, view);
-    });
+    return this.lane<LoopLaidOut<Mark>>(channel).ask(async () => this.session.loop(channel, show, view));
   }
 }

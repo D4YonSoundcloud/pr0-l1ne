@@ -54,7 +54,7 @@ describe("streaming a JavaScript trace", () => {
     const progress = sent.filter((m) => m.type === "progress");
     expect(progress.length).toBeGreaterThan(5);
     const stream = new TraceStream();
-    for (const m of progress) stream.add(m.json);
+    for (const m of progress) if (m.piece) stream.add(m.piece);
     expect(stream.received).toBeGreaterThan(0);
     const end = sent.at(-1)!;
     expect(end.type).toBe("streamed");
@@ -69,9 +69,7 @@ describe("streaming a JavaScript trace", () => {
   });
 
   it("says how far it's got: steps recorded, seconds, the line running", async () => {
-    const reports = (await messages(CODE))
-      .filter((m) => m.type === "progress")
-      .map((m) => JSON.parse(m.json).progress as { steps: number; seconds: number; line: number });
+    const reports = (await messages(CODE)).filter((m) => m.type === "progress").map((m) => m.progress);
     const steps = reports.map((r) => r.steps);
     expect(steps).toEqual([...steps].sort((x, y) => x - y));
     for (const r of reports) {
@@ -84,7 +82,7 @@ describe("streaming a JavaScript trace", () => {
   it("stopped part way, is the steps that had arrived, as a trace the person stopped", async () => {
     const sent = (await messages(CODE)).filter((m) => m.type === "progress");
     const stream = new TraceStream();
-    for (const m of sent.slice(0, Math.floor(sent.length / 2))) stream.add(m.json);
+    for (const m of sent.slice(0, Math.floor(sent.length / 2))) if (m.piece) stream.add(m.piece);
     const partial = stream.partial()!;
     expect(partial.truncated).toBe(true);
     expect(partial.stoppedBy).toBe("person");
@@ -101,11 +99,10 @@ describe("streaming a JavaScript trace", () => {
   it("refuses a piece that isn't one", () => {
     const stream = new TraceStream();
     expect(() => stream.add("{}")).toThrow();
-    expect(() => stream.add('{"progress":{"steps":1,"seconds":0,"line":1},"chunk":{"steps":5,"stdout":""}}')).toThrow();
+    expect(() => stream.add("null")).toThrow();
+    expect(() => stream.add('{"steps":5,"stdout":""}')).toThrow();
     expect(() =>
-      stream.add(
-        '{"progress":{"steps":1,"seconds":0,"line":1},"chunk":{"steps":[{"heap":{"__proto__":{}},"stack":[],"heapIds":["__proto__"]}],"stdout":""}}',
-      ),
+      stream.add('{"steps":[{"heap":{"__proto__":{}},"stack":[],"heapIds":["__proto__"]}],"stdout":""}'),
     ).toThrow();
   });
 });

@@ -7,9 +7,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { traceJavaScript } from "../js/trace";
 import { HeapEncoder } from "../trace/delta";
 import { POLICY } from "../trace/policy";
+import { MAX_TRACE_CHARS } from "../trace/stream";
 import type { Trace } from "../trace/types";
 import { type FromWorker, PROTOCOL_VERSION, type ToWorker } from "./protocol";
-import { OUTDATED_MESSAGE, Runner, type RunnerStatus } from "./runner";
+import { OUTDATED_MESSAGE, Runner, type RunnerStatus, type TracePart } from "./runner";
 
 /** A worker the test drives: it records what it's sent and says what the test tells it to. */
 class FakeWorker {
@@ -197,7 +198,7 @@ describe("a run", () => {
   });
 });
 
-/** A trace sent the way the tracers send it: progress reports, the first `sentSteps` steps in one piece (with the header), then the rest. */
+/** A trace sent the way the tracers send it: a progress report, the first `sentSteps` steps in one piece (with the header), then the rest. */
 function streamed(whole: Trace, runId: number, sentSteps: number) {
   const encoder = new HeapEncoder();
   const { steps, stdout, counts, ...header } = whole;
@@ -205,11 +206,12 @@ function streamed(whole: Trace, runId: number, sentSteps: number) {
   const rest = steps.slice(sentSteps).map((s) => encoder.encode(s));
   const progress = (n: number) => ({ steps: n, seconds: n / 10, line: 1 });
   return {
-    report: { type: "progress" as const, runId, json: JSON.stringify({ progress: progress(0) }) },
+    report: { type: "progress" as const, runId, progress: progress(0) },
     piece: {
       type: "progress" as const,
       runId,
-      json: JSON.stringify({ progress: progress(sentSteps), chunk: { header, steps: sent, stdout, counts } }),
+      progress: progress(sentSteps),
+      piece: JSON.stringify({ header, steps: sent, stdout, counts }),
     },
     end: {
       type: "streamed" as const,
@@ -228,85 +230,78 @@ describe("a trace that arrives while it runs", () => {
     );
   });
 
-  it("passes on the progress and is put back together as the whole trace", async () => {
+  it("passes on the progress, and each piece unread, for the layout to put back together", async () => {
     const { runner, worker } = setup();
     worker().ready();
     const seen: number[] = [];
-    const done = runner.run("code", 100, 1, POLICY.sampling, (p) => seen.push(p.steps));
+    const parts: TracePart[] = [];
+    const done = runner.run(
+      "code",
+      100,
+      1,
+      POLICY.sampling,
+      (p) => seen.push(p.steps),
+      (part) => parts.push(part),
+    );
     const { report, piece, end } = streamed(long, 1, 3);
     worker().say(report);
     worker().say(piece);
     worker().say(end);
     await settle();
-    const outcome = await done;
+    expect(await done).toEqual({ kind: "streamed", elapsedMs: 30 });
     expect(seen).toEqual([0, 3]);
-    expect(outcome).toMatchObject({ kind: "trace", elapsedMs: 30 });
-    if (outcome.kind !== "trace") throw new Error("no trace");
-    expect(outcome.trace.steps).toEqual(long.steps);
-    expect(outcome.trace.stdout).toBe(long.stdout);
-    expect(outcome.trace.heapDelta).toBeUndefined();
+    expect(parts).toEqual([
+      { kind: "piece", json: piece.piece },
+      { kind: "end", json: end.json },
+    ]);
   });
 
-  it("Stop ends the worker and keeps the steps that had arrived, as a trace the person stopped", async () => {
+  it("Stop ends the worker; what had arrived is the trace (the layout has it)", async () => {
     const { runner, workers, worker } = setup();
     worker().ready();
-    const done = runner.run("code", 100, 1, POLICY.sampling);
+    const parts: TracePart[] = [];
+    const done = runner.run("code", 100, 1, POLICY.sampling, undefined, (part) => parts.push(part));
     worker().say(streamed(long, 1, 2).piece);
     runner.stop();
     await settle();
-    const outcome = await done;
-    if (outcome.kind !== "trace") throw new Error(`not a trace: ${JSON.stringify(outcome)}`);
-    expect(outcome.trace.steps).toEqual(long.steps.slice(0, 2));
-    expect(outcome.trace).toMatchObject({ truncated: true, stoppedBy: "person", error: null });
+    expect(await done).toEqual({ kind: "stopped", arrived: true });
+    expect(parts).toHaveLength(1);
     expect(workers[0].terminated).toBe(true);
     expect(workers).toHaveLength(2); // a fresh worker for the next run
     expect(runner.busy).toBe(false);
   });
 
-  it("Stop before anything arrived ends the run as stopped", async () => {
+  it("Stop before anything arrived: stopped, with nothing", async () => {
     const { runner, worker } = setup();
     worker().ready();
     const done = runner.run("code", 100, 1, POLICY.sampling);
     worker().say(streamed(long, 1, 2).report); // progress, but no steps yet
     runner.stop();
-    expect(await done).toEqual({ kind: "stopped" });
+    expect(await done).toEqual({ kind: "stopped", arrived: false });
     runner.stop(); // nothing running: nothing happens
   });
 
-  it("each piece is checked as it arrives: a heap object that doesn't fit the format ends the run there", async () => {
+  it("a trace too big to keep ends the run there", async () => {
     const { runner, worker } = setup();
     worker().ready();
-    const done = runner.run("code", 100, 1, POLICY.sampling);
-    const { piece } = streamed(long, 1, long.steps.length - 1);
-    const bad = JSON.parse(piece.json);
-    const sent = bad.chunk.steps.find((s: { heap: Record<string, { kind: string }> }) => Object.keys(s.heap).length);
-    sent.heap[Object.keys(sent.heap)[0]].kind = "surprise";
-    worker().say({ ...piece, json: JSON.stringify(bad) });
-    const outcome = await done;
-    expect(outcome.kind).toBe("crash");
-    if (outcome.kind === "crash") expect(outcome.message).toMatch(/doesn't match the trace format/);
-  });
-
-  it("so is the trace around the steps, at the end", async () => {
-    const { runner, worker } = setup();
-    worker().ready();
-    const done = runner.run("code", 100, 1, POLICY.sampling);
-    const { piece, end } = streamed(long, 1, 2);
-    worker().say(piece);
-    const tampered = JSON.parse(end.json);
-    tampered.trace.surprise = true;
-    worker().say({ ...end, json: JSON.stringify(tampered) });
+    const done = runner.run("code", 100, 1, POLICY.sampling, undefined, () => {});
+    const huge = "x".repeat(MAX_TRACE_CHARS / 2 + 1);
+    worker().say({ type: "progress", runId: 1, progress: { steps: 1, seconds: 0, line: 1 }, piece: huge });
+    worker().say({ type: "progress", runId: 1, progress: { steps: 2, seconds: 0, line: 1 }, piece: huge });
     const outcome = await done;
     if (outcome.kind !== "crash") throw new Error(`not a crash: ${outcome.kind}`);
-    expect(outcome.message).toMatch(/doesn't match the trace format.*surprise/);
+    expect(outcome.message).toMatch(/too big/);
   });
 
-  it("a report that isn't one is a crash", async () => {
+  it("a report that isn't one is ignored: the run goes on", async () => {
     const { runner, worker } = setup();
     worker().ready();
-    const done = runner.run("code", 100, 1, POLICY.sampling);
-    worker().say({ type: "progress", runId: 1, json: '{"progress":{"steps":"many"}}' });
-    expect((await done).kind).toBe("crash");
+    const seen: unknown[] = [];
+    const done = runner.run("code", 100, 1, POLICY.sampling, (p) => seen.push(p));
+    worker().say({ type: "progress", runId: 1, progress: { steps: "many" } } as never);
+    worker().say(streamed(long, 1, 0).end);
+    expect(await done).toEqual({ kind: "streamed", elapsedMs: 30 });
+    expect(seen).toEqual([]);
   });
 });
 

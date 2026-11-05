@@ -1,5 +1,6 @@
 import type { Measurement, MeasureProgress } from "../trace/measurement";
 import type { SamplingPolicy } from "../trace/policy";
+import type { RunProgress } from "../trace/stream";
 import type { Trace } from "../trace/types";
 
 /**
@@ -8,7 +9,7 @@ import type { Trace } from "../trace/types";
  * talking to a newer page), rather than misreading its messages. Raise it
  * whenever a message changes shape.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Messages the main thread sends to the worker. */
 export type ToWorker =
@@ -32,10 +33,11 @@ export type FromWorker =
   | { type: "result"; runId: number; trace: Trace; elapsedMs: number }
   /**
    * While a run goes (Python, JavaScript, TypeScript): how far it's got,
-   * and now and then the steps since the last report, as JSON (a
-   * ProgressReport, trace/stream.ts), read and rebuilt on the page.
+   * and now and then the steps since the last report (`piece`: JSON of a
+   * TracePiece, trace/stream.ts), which the page passes on to the layout
+   * worker without reading it.
    */
-  | { type: "progress"; runId: number; json: string }
+  | { type: "progress"; runId: number; progress: RunProgress; piece?: string }
   /**
    * A run that sent progress is done: JSON of `{ trace, skippedAfter? }`,
    * the trace's steps the ones no report sent yet (as deltas), and

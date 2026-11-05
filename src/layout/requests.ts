@@ -98,6 +98,8 @@ export interface MemoryLaidOut<D> {
   detailBudget?: number;
   /** Each summary's box (by key) and the structure it opens. */
   summaryKeys: [string, string][];
+  /** Everything the program holds at this step, each object counted once, when sizes are shown (trace/memory.ts). */
+  total?: { program: number; approximate: boolean };
 }
 
 /** A loop drawing laid out (or why there's none), and the window's tabs. */

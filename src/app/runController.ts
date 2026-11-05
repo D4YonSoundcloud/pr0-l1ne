@@ -10,15 +10,13 @@
  * (`resumeQueued`).
  */
 
-import { type HintContext, hintContext } from "../hintAssist";
+import type { HintContext } from "../hintAssist";
 import { LANGUAGES, type LanguageId } from "../languages";
-import type { LayoutService } from "../layout/service";
-import { perf, timed, traceStats } from "../perf";
-import { applyHintsWork } from "../trace/hints";
+import type { LayoutService, Loaded } from "../layout/service";
+import { perf, timed } from "../perf";
 import { POLICY } from "../trace/policy";
-import type { Trace } from "../trace/types";
-import { finishInSlices } from "../trace/work";
-import { Runner, type RunnerStatus, type RunOutcome, type TracePart } from "../worker/runner";
+import type { TraceInfo } from "../trace/summary";
+import { Runner, type RunnerStatus, type RunOutcome } from "../worker/runner";
 import type { BannerTone } from "./banner";
 import { escapeHtml } from "./html";
 import { firstStepFor } from "./playbackController";
@@ -88,16 +86,12 @@ export interface RunOptions {
   progress?: ProgressView;
   /** Resolves once the page has painted (so "Preparing the drawing" shows before the work that blocks it). */
   nextFrame?(): Promise<void>;
-  /** Between slices of preparing a trace, a frame for the page (trace/work.ts pauseForFrame; tests pass their own). */
-  pauseForFrame?(): Promise<void>;
-  /** Work per slice of preparing, in milliseconds (trace/work.ts; tests pass 0, to pause after every step). */
-  sliceMs?: number;
   /**
    * The layout (layout/service.ts): it's given each run's trace as it
-   * arrives, prepares it and draws the windows from it. Absent: the trace
-   * is only the page's (tests that draw nothing).
+   * arrives, builds it, prepares it and draws the windows from it. The page
+   * keeps only what it says of the trace (trace/summary.ts).
    */
-  layout?: LayoutService;
+  layout: LayoutService;
   /** Resolves once the windows have drawn the step a new trace opened on (the card says "Drawing" until then). */
   drawn?(): Promise<void>;
   setTimeout?(callback: () => void, ms: number): number;
@@ -118,6 +112,9 @@ export function reportLink(crash: TracerCrash): string {
   const body = `**Language:** ${LANGUAGES[crash.language].label}\n**Error:** ${crash.message}\n\n**The program** (or a smaller one that fails the same way):\n\n\`\`\`\n\n\`\`\`\n`;
   return `${ISSUES_URL}?${new URLSearchParams({ title, body })}`;
 }
+
+/** A run that produced nothing to draw. */
+export type Failure = Exclude<RunOutcome, { kind: "trace" } | { kind: "streamed" }>;
 
 interface Queued {
   code: string;
@@ -243,69 +240,56 @@ export class RunController {
     const started = perf.on ? performance.now() : 0;
     const view = this.options.progress;
     view?.start({ budget, maxSteps: POLICY.maxSteps, maxSeconds: seconds });
-    // The layout builds its own copy of the trace from the pieces, as they arrive.
+    // The trace goes to the layout as it arrives (its pieces unread here): it builds it, checks it,
+    // prepares it and draws from it, and says what the page should know of it.
     const layout = this.options.layout;
-    let fed = false;
-    layout?.begin();
-    this.stopped = false;
-    const feed = layout
-      ? (part: TracePart) => {
-          fed = true;
-          layout.feed(part);
-        }
-      : undefined;
+    layout.begin();
     const outcome = await this.runnerFor(language).run(
       code,
       POLICY.maxSteps,
       seconds,
       POLICY.sampling,
       (progress) => view?.update(progress),
-      feed,
+      (part) => layout.feed(part),
     );
     if (perf.on) perf.record("run.trace", performance.now() - started);
     this.lastBudget = budget;
     this.running = null;
     // Report a crash whatever the language now; show results only for the language on screen.
     if (outcome.kind === "crash") this.options.reportCrash?.({ language, message: outcome.message });
-    if (language === this.language) {
-      let prepared: Trace | null = null;
-      let failed: string | null = null;
-      const drawable = outcome.kind === "trace" && !(outcome.trace.error && outcome.trace.steps.length === 0);
-      if (drawable) {
-        // The progress showing: say the drawing's being prepared, and let that paint.
-        if (view?.preparing()) await this.nextFrame();
-        const started = perf.on ? performance.now() : 0;
-        const how = this.stopped ? "stopped" : fed ? "streamed" : "whole";
-        // The page's own copy, with its hints (for the step label, the editor, the estimate), a slice at a
-        // time; and the layout's, prepared in full (its graphs too), with its progress shown.
-        const [own, ready] = await Promise.all([
-          finishInSlices(applyHintsWork(outcome.trace), () => {}, {
-            ...(this.options.pauseForFrame ? { pause: this.options.pauseForFrame } : {}),
-            ...(this.options.sliceMs !== undefined ? { sliceMs: this.options.sliceMs } : {}),
-          }),
-          layout
-            ? layout
-                .load(outcome.trace, how, (p) => view?.prepare(p))
-                .catch((error: unknown) => {
-                  failed = error instanceof Error ? error.message : String(error);
-                  return false;
-                })
-            : true,
-        ]);
-        if (perf.on) perf.record("run.prepare", performance.now() - started);
-        // Not ready: a newer trace for the layout came along, and this one isn't shown.
-        if (ready) prepared = own;
-        view?.drawing();
-      }
-      if (failed !== null) {
-        const message = `the layout failed: ${failed}`;
+    // What reaches the layout: the whole trace (SQL's), all its pieces, or what had arrived when stopped.
+    const how =
+      outcome.kind === "trace"
+        ? "whole"
+        : outcome.kind === "streamed"
+          ? "streamed"
+          : outcome.kind === "stopped" && outcome.arrived
+            ? "stopped"
+            : null;
+    if (language === this.language && !how) this.applyFailure(outcome as Failure, language);
+    else if (language === this.language && how) {
+      // The progress showing: say the drawing's being prepared, and let that paint.
+      if (view?.preparing()) await this.nextFrame();
+      const started = perf.on ? performance.now() : 0;
+      let loaded: Loaded;
+      try {
+        loaded = await layout.load(how, outcome.kind === "trace" ? outcome.trace : null, (p) => view?.prepare(p));
+      } catch (error) {
+        // The trace couldn't be used (a tracer bug, or a program tampering with its trace).
+        const message = error instanceof Error ? error.message : String(error);
         this.options.reportCrash?.({ language, message });
-        this.apply({ kind: "crash", message }, code, language, null);
-      } else if (language === this.language && (!drawable || prepared)) {
-        // Still the language on screen (it can change while a big trace is prepared).
-        this.apply(outcome, code, language, prepared);
-        // The card stays, saying "Drawing", until the windows have drawn it.
-        if (prepared) await this.options.drawn?.();
+        loaded = { kind: "replaced" };
+        if (language === this.language) this.applyFailure({ kind: "crash", message }, language);
+      }
+      if (perf.on) perf.record("run.prepare", performance.now() - started);
+      // Still the language on screen (it can change while a big trace is prepared)?
+      if (language === this.language) {
+        if (loaded.kind === "empty") this.applyFailure({ kind: "stopped", arrived: false }, language);
+        else if (loaded.kind === "ready" && this.applyTrace(loaded.info, code)) {
+          // The card says "Drawing" until the windows have drawn it.
+          view?.drawing();
+          await this.options.drawn?.();
+        }
       }
     }
     view?.done();
@@ -321,13 +305,8 @@ export class RunController {
    * what had been recorded, drawn like any trace that stopped early.
    */
   stop(): void {
-    if (!this.running) return;
-    this.stopped = true;
-    this.runnerFor(this.running).stop();
+    if (this.running) this.runnerFor(this.running).stop();
   }
-
-  /** The person pressed Stop during the run going now (the layout keeps what had arrived too). */
-  private stopped = false;
 
   private nextFrame(): Promise<void> {
     if (this.options.nextFrame) return this.options.nextFrame();
@@ -349,48 +328,47 @@ export class RunController {
     while (this.inFlight) await new Promise((resolve) => this.setTimer(() => resolve(undefined), 30));
   }
 
-  /** Show a run's outcome: `prepared` is its trace, ready to draw (prepareTrace). */
-  private apply(outcome: RunOutcome, code: string, language: LanguageId, prepared: Trace | null): void {
-    const { app, setBanner, editor, onResult } = this.options;
-    if (outcome.kind !== "trace") {
-      // Nothing new to show: keep the last picture, dimmed, and say why.
-      app.markStale();
-      const [html, tone] = failureBanner(outcome, language);
-      setBanner(html, tone);
-      onResult(true);
-      return;
-    }
+  /** Show a run that produced no trace: keep the last picture, dimmed, and say why. */
+  private applyFailure(outcome: Failure, language: LanguageId): void {
+    const { app, setBanner, onResult } = this.options;
+    app.markStale();
+    const [html, tone] = failureBanner(outcome, language);
+    setBanner(html, tone);
+    onResult(true);
+  }
 
-    const next = outcome.trace;
-    if (next.error && next.steps.length === 0) {
+  /** Show a run's trace (what the page knows of it); false when there's nothing to draw (it never started). */
+  private applyTrace(trace: TraceInfo, code: string): boolean {
+    const { app, setBanner, editor, onResult } = this.options;
+    if (trace.error && trace.steps === 0) {
       // Couldn't even start (usually a syntax error mid-typing). Keep the last
       // good picture on screen, dimmed, and point at the problem.
       app.markStale();
-      const where = next.error.line ? ` on line ${next.error.line}` : "";
+      const error = trace.error;
+      const where = error.line ? ` on line ${error.line}` : "";
       setBanner(
-        `<strong>${escapeHtml(next.error.type)}</strong>${where}: ${escapeHtml(next.error.message)}. Showing the last version that ran.`,
+        `<strong>${escapeHtml(error.type)}</strong>${where}: ${escapeHtml(error.message)}. Showing the last version that ran.`,
         "program",
       );
       editor.setMarks({
         next: null,
         prev: null,
-        error: { line: next.error.line, message: `${next.error.type}: ${next.error.message}` },
+        error: { line: error.line, message: `${error.type}: ${error.message}` },
       });
       onResult(false);
-      return;
+      return false;
     }
 
     // Stay on the last step if we were there, so live edits show the result.
     const { trace: before, stepIndex } = app.get();
-    const wasAtEnd = !before || stepIndex >= before.steps.length - 1;
-    const trace = prepared ?? next;
-    if (perf.on) perf.lastTrace = traceStats(trace);
-    const warnings = trace.viz?.warnings ?? [];
+    const wasAtEnd = !before || stepIndex >= before.steps - 1;
+    if (perf.on) perf.lastTrace = trace.stats;
+    const warnings = trace.warnings;
     editor.setHintWarnings(warnings);
-    // Before hints are applied, so hidden variables still count as the program's.
-    if (!next.sql) editor.setHintContext?.(hintContext(next));
-    const last = trace.steps.length - 1;
-    const first = trace.sql ? 0 : firstStepFor(trace.steps.length);
+    // From the trace before its hints, so hidden variables still count as the program's.
+    if (!trace.sql) editor.setHintContext?.(trace.hintContext);
+    const last = trace.steps - 1;
+    const first = trace.sql ? 0 : firstStepFor(trace.steps);
     timed("run.show", () => app.showTrace(trace, code, wasAtEnd ? last : Math.max(first, Math.min(stepIndex, last))));
 
     if (trace.truncated) {
@@ -408,14 +386,15 @@ export class RunController {
       setBanner(null);
     }
     onResult(true);
+    return true;
   }
 
   /** Why a trace stopped early, and what to do about it. */
-  private truncationBanner(t: Trace): string {
+  private truncationBanner(t: TraceInfo): string {
     const ran = t.counts ? ` (${t.counts.steps.toLocaleString()} steps ran)` : "";
     const measure = `<button type="button" class="banner-link" data-action="measure">Measure</button> runs it all at full size, counting instead of tracing.`;
     if (t.stoppedBy === "person") {
-      const steps = t.steps.length.toLocaleString();
+      const steps = t.steps.toLocaleString();
       return `You stopped the run: here are the ${steps} steps recorded up to then${ran}, with long loops sampled. <button type="button" class="banner-link" data-action="run">Run</button> to trace it again. ${measure}`;
     }
     if (t.stoppedBy === "time") {
@@ -431,10 +410,7 @@ export class RunController {
 }
 
 /** The banner for a run that produced no trace, and its tone: each kind of failure says something different. */
-export function failureBanner(
-  outcome: Exclude<RunOutcome, { kind: "trace" }>,
-  language: LanguageId,
-): [string, BannerTone] {
+export function failureBanner(outcome: Failure, language: LanguageId): [string, BannerTone] {
   const name = LANGUAGES[language].label;
   switch (outcome.kind) {
     case "stopped":

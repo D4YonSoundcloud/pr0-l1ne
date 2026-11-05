@@ -9,8 +9,8 @@
 import { perf, timed } from "../perf";
 import type { Mark } from "../render/drawing";
 import { MarkEncoder, type WireDrawing } from "../render/wire";
-import { TraceStream } from "../trace/stream";
 import type { Trace } from "../trace/types";
+import { TraceIntake } from "./intake";
 import type { FromLayout, PerfTimes, ToLayout } from "./protocol";
 import { LayoutSession } from "./session";
 
@@ -25,9 +25,7 @@ export function layoutHost(post: (message: FromLayout) => void): (message: ToLay
   /** Each window's encoder: what the page has of its last drawing. */
   const encoders = new Map<number, MarkEncoder>();
   /** The trace a run is sending, piece by piece. */
-  let stream: TraceStream | null = null;
-  /** The streamed trace, once it's all arrived. */
-  let finished: Trace | null = null;
+  const intake = new TraceIntake();
 
   /** The times recorded for this request, when asked for: sent back, and forgotten here. */
   function times(): { perf?: PerfTimes } {
@@ -58,54 +56,44 @@ export function layoutHost(post: (message: FromLayout) => void): (message: ToLay
   }
 
   function load(message: Extract<ToLayout, { type: "load" }>): void {
-    let raw: Trace | null = null;
+    let raw: Trace | null;
     try {
-      raw =
-        message.how === "whole"
-          ? (message.trace ?? null)
-          : message.how === "stopped"
-            ? (stream?.partial() ?? null)
-            : finished;
+      raw = intake.take(message.how, message.trace ?? null);
     } catch (error) {
-      post({ type: "loaded", load: message.load, ok: false, error: errorText(error) });
+      post({ type: "loaded", load: message.load, info: null, error: errorText(error) });
       return;
     }
-    stream = null;
-    finished = null;
+    // Stopped before anything arrived.
     if (!raw) {
-      post({ type: "loaded", load: message.load, ok: false, error: "the trace didn't arrive" });
+      post({ type: "loaded", load: message.load, info: null });
       return;
     }
     try {
       const work = session.load(raw);
       let next = performance.now() + REPORT_EVERY_MS;
-      for (let step = work.next(); !step.done; step = work.next()) {
+      let step = work.next();
+      for (; !step.done; step = work.next()) {
         const now = performance.now();
         if (now < next) continue;
         next = now + REPORT_EVERY_MS;
         post({ type: "progress", load: message.load, progress: step.value });
       }
-      post({ type: "loaded", load: message.load, ok: true });
+      post({ type: "loaded", load: message.load, info: step.value });
     } catch (error) {
-      post({ type: "loaded", load: message.load, ok: false, error: errorText(error) });
+      post({ type: "loaded", load: message.load, info: null, error: `the layout failed: ${errorText(error)}` });
     }
   }
 
   function handle(message: ToLayout): void {
     switch (message.type) {
       case "begin":
-        stream = new TraceStream();
-        finished = null;
+        intake.begin();
         return;
       case "feed":
-        if (!stream) return;
-        try {
-          if (message.part.kind === "piece") stream.add(message.part.json);
-          else finished = stream.finish(message.part.json);
-        } catch {
-          // The page checked the same piece first, and ends the run if it's wrong.
-          stream = null;
-        }
+        intake.feed(message.part);
+        return;
+      case "estimate":
+        post({ type: "estimate", id: message.id, estimate: session.estimate(message.measurement) });
         return;
       case "load":
         load(message);

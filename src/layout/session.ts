@@ -26,10 +26,14 @@ import { loopScene } from "../scene/loopScene";
 import { memoryScene } from "../scene/memoryScene";
 import { sqlPipelineScene, sqlTableScene } from "../scene/sqlScene";
 import { summaryBoxes } from "../scene/summaries";
+import { type Estimate, estimateComplexity } from "../trace/complexity";
 import { diffSteps } from "../trace/diff";
 import { focusedLoop } from "../trace/hints";
 import { ALL_LOOPS, availableLoops, buildLoopHistory, buildNestedHistory, nestedLoopsAt } from "../trace/loopHistory";
+import type { Measurement } from "../trace/measurement";
+import { stepSizes } from "../trace/memory";
 import { prepareTrace } from "../trace/prepare";
+import { summarize, type TraceInfo } from "../trace/summary";
 import type { Trace } from "../trace/types";
 import type { Work } from "../trace/work";
 import type { Look, LoopLaidOut, LoopShow, LoopTab, LoopView, MemoryLaidOut, MemoryShow, MemoryView } from "./requests";
@@ -58,16 +62,26 @@ export class LayoutSession {
     return this.trace;
   }
 
-  /** Prepare a trace (a slice at a time: trace/work.ts), then draw from it. */
-  *load(raw: Trace): Work<Trace> {
+  /**
+   * Prepare a trace (a slice at a time: trace/work.ts), draw from it from
+   * now, and say what the page should know of it. One that never started
+   * (no steps: a syntax error) isn't drawn: the windows keep the last
+   * picture, dimmed, and lay it out as before.
+   */
+  *load(raw: Trace): Work<TraceInfo> {
     const prepared = yield* prepareTrace(raw);
-    this.trace = prepared;
-    return prepared;
+    if (prepared.steps.length) this.trace = prepared;
+    return summarize(raw, prepared);
   }
 
-  /** Draw from a trace prepared already (the page's own, when it's laid out on the page). */
-  use(prepared: Trace): void {
-    this.trace = prepared;
+  /** The complexity estimate, with Measure's counts for the same code (trace/complexity.ts); null if it can't be made. */
+  estimate(measurement: Measurement | null): Estimate | null {
+    if (!this.trace || this.trace.sql) return null;
+    try {
+      return estimateComplexity(this.trace, measurement);
+    } catch {
+      return null;
+    }
   }
 
   /** A window gone (its renderer replaced): let its kept boxes and rows go. */
@@ -109,7 +123,14 @@ export class LayoutSession {
           simpleArrows: view.simpleArrows,
           level: view.level as Lod,
         });
-    return { drawing, sql: false, detailBudget: scene.detailBudget, summaryKeys: [...summaryBoxes(scene)] };
+    const sizes = show.sizes ? stepSizes(step, show.sizes) : null;
+    return {
+      drawing,
+      sql: false,
+      detailBudget: scene.detailBudget,
+      summaryKeys: [...summaryBoxes(scene)],
+      ...(sizes ? { total: { program: sizes.program, approximate: sizes.approximate } } : {}),
+    };
   }
 
   /** The loop window's drawing (or why there's none) and its tabs, for a step; null when there's no such step. */

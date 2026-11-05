@@ -4,11 +4,12 @@ import type { LanguageId } from "../languages";
 import { type LayoutService, LocalLayout } from "../layout/service";
 import { ProgramStore } from "../programs";
 import { createSettings } from "../settings";
+import { HeapEncoder } from "../trace/delta";
 import { POLICY } from "../trace/policy";
 import type { RunProgress } from "../trace/stream";
 import type { Trace } from "../trace/types";
 import type { Progress } from "../trace/work";
-import type { RunnerStatus, RunOutcome } from "../worker/runner";
+import type { RunnerStatus, RunOutcome, TracePart } from "../worker/runner";
 import type { BannerTone } from "./banner";
 import { LIVE_DELAY_MS, RunController, type RunnerLike, reportLink, type TracerCrash } from "./runController";
 import type { ProgressView } from "./runProgress";
@@ -46,6 +47,7 @@ class FakeRunner implements RunnerLike {
     sampling: unknown;
     finish(outcome: RunOutcome): void;
     progress?: (p: RunProgress) => void;
+    feed?: (part: TracePart) => void;
   }[] = [];
   stops = 0;
   constructor(readonly onStatus: (status: RunnerStatus) => void) {}
@@ -55,9 +57,18 @@ class FakeRunner implements RunnerLike {
     seconds: number,
     sampling: unknown,
     progress?: (p: RunProgress) => void,
+    feed?: (part: TracePart) => void,
   ): Promise<RunOutcome> {
     return new Promise((resolve) =>
-      this.calls.push({ code, steps, seconds, sampling, finish: resolve, ...(progress ? { progress } : {}) }),
+      this.calls.push({
+        code,
+        steps,
+        seconds,
+        sampling,
+        finish: resolve,
+        ...(progress ? { progress } : {}),
+        ...(feed ? { feed } : {}),
+      }),
     );
   }
   stop(): void {
@@ -71,6 +82,26 @@ class FakeRunner implements RunnerLike {
     this.status = status;
     this.onStatus(status);
   }
+}
+
+/** A trace's parts as a tracer streams them: pieces of `per` steps (as deltas), then the end. */
+function parts(whole: Trace, per = 2): TracePart[] {
+  const encoder = new HeapEncoder();
+  const { steps, stdout, counts, ...header } = whole;
+  const out: TracePart[] = [];
+  let sent = 0;
+  for (; sent + per < steps.length; sent += per) {
+    const chunk = {
+      ...(sent === 0 ? { header } : {}),
+      steps: steps.slice(sent, sent + per).map((s) => encoder.encode(s)),
+      stdout: "",
+      counts,
+    };
+    out.push({ kind: "piece", json: JSON.stringify(chunk) });
+  }
+  const rest = { ...header, steps: steps.slice(sent).map((s) => encoder.encode(s)), stdout, counts, heapDelta: true };
+  out.push({ kind: "end", json: JSON.stringify({ trace: rest }) });
+  return out;
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -104,7 +135,7 @@ class FakeProgress implements ProgressView {
   }
 }
 
-function setup(options: { sliceMs?: number; layout?: LayoutService } = {}) {
+function setup(options: { layout?: LayoutService } = {}) {
   document.body.innerHTML = `<span id="status"></span>`;
   const settings = createSettings(null);
   const app = new AppStore(settings, new ProgramStore(null));
@@ -121,8 +152,7 @@ function setup(options: { sliceMs?: number; layout?: LayoutService } = {}) {
   const runs = new RunController({
     app,
     progress,
-    ...options,
-    pauseForFrame: flush,
+    layout: options.layout ?? new LocalLayout(),
     nextFrame: () => {
       frames++;
       return Promise.resolve();
@@ -185,7 +215,7 @@ describe("RunController", () => {
     expect(progress.told).toEqual([`start run ${POLICY.runSeconds}`, "update 120", "preparing", "drawing", "done"]);
     expect(frames()).toBe(1); // "preparing" painted before the work (the drawing is laid out off the page)
 
-    expect(app.get().trace?.steps).toHaveLength(4);
+    expect(app.get().trace?.steps).toBe(4);
     runs.stop(); // nothing running: nothing to stop
     expect(runners.get("javascript")!.stops).toBe(1);
   });
@@ -214,7 +244,7 @@ describe("RunController", () => {
       "done",
     ]);
     expect(frames()).toBe(0); // nothing showed before preparing took a while
-    expect(app.get().trace?.steps).toHaveLength(3);
+    expect(app.get().trace?.steps).toBe(3);
   });
 
   it("drops a prepared trace if the language changed meanwhile", async () => {
@@ -236,9 +266,39 @@ describe("RunController", () => {
     await flush();
     expect(banners.at(-1)).toContain("You stopped the run: here are the 4 steps recorded");
     runs.runNow("let a = 2;");
-    runners.get("javascript")!.calls[1].finish({ kind: "stopped" });
+    runners.get("javascript")!.calls[1].finish({ kind: "stopped", arrived: false });
     await flush();
     expect(banners.at(-1)).toContain("before anything was recorded");
+  });
+
+  it("passes a streamed trace to the layout as it arrives, and draws what had arrived when stopped", async () => {
+    const { runs, runners, app, banners } = setup();
+    runs.runNow("let a = 1;");
+    const first = runners.get("javascript")!.calls[0];
+    for (const part of parts(makeTrace(5))) first.feed!(part);
+    first.finish({ kind: "streamed", elapsedMs: 1 });
+    await flush();
+    expect(app.get().trace?.steps).toBe(5);
+    runs.runNow("let a = 2;");
+    const second = runners.get("javascript")!.calls[1];
+    // Two pieces (four steps) arrived, then the person stopped it.
+    for (const part of parts(makeTrace(9)).slice(0, 2)) second.feed!(part);
+    second.finish({ kind: "stopped", arrived: true });
+    await flush();
+    expect(app.get().trace?.steps).toBe(4);
+    expect(banners.at(-1)).toContain("You stopped the run: here are the 4 steps recorded");
+  });
+
+  it("a piece that isn't one is said as a crash, and reported", async () => {
+    const { runs, runners, app, banners, crashes } = setup();
+    runs.runNow("let a = 1;");
+    const call = runners.get("javascript")!.calls[0];
+    call.feed!({ kind: "piece", json: JSON.stringify({ steps: "nope" }) });
+    call.finish({ kind: "streamed", elapsedMs: 1 });
+    await flush();
+    expect(app.get().trace).toBeNull();
+    expect(crashes).toEqual([{ language: "javascript", message: expect.stringMatching(/isn't one the app can use/) }]);
+    expect(banners.at(-1)).toContain("a bug in PR0L1NE");
   });
 
   it("runs with Run's budget and shows the trace at its last step", async () => {
@@ -250,7 +310,7 @@ describe("RunController", () => {
     expect(call.sampling).toBe(POLICY.sampling); // sent with every run, so both tracers sample alike
     call.finish({ kind: "trace", trace: makeTrace(5), elapsedMs: 1 });
     await flush();
-    expect(app.get().trace?.steps).toHaveLength(5);
+    expect(app.get().trace?.steps).toBe(5);
     expect(app.get().stepIndex).toBe(4);
     expect(app.get().tracedCode).toBe("let a = 1;");
     expect(app.get().stale).toBe(false);
@@ -351,7 +411,7 @@ describe("RunController", () => {
     runners.get("javascript")!.calls[1].finish({ kind: "trace", trace: makeTrace(0, { error }), elapsedMs: 1 });
     await flush();
     expect(app.get().stale).toBe(true);
-    expect(app.get().trace?.steps).toHaveLength(4); // the old one
+    expect(app.get().trace?.steps).toBe(4); // the old one
     expect(app.get().tracedCode).toBe("good");
     expect(banners.at(-1)).toContain("Showing the last version that ran");
     expect(marks.at(-1)).toMatchObject({ error: { line: 1, message: "SyntaxError: Unexpected end of input" } });

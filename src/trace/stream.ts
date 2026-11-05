@@ -1,14 +1,16 @@
 /**
  * A trace that arrives while it runs. The tracers (worker/tracer.py,
- * js/serve.ts) report every quarter second how far they've got, with the
- * steps recorded since the last report (a piece), as deltas
- * (trace/delta.ts), with what the program printed since and its counts.
- * The first piece also carries the trace's header: everything worked out
- * before the program ran (its loops, index names, hints, cost).
+ * js/serve.ts) report every quarter second how far they've got
+ * (RunProgress, which the page reads), with the steps recorded since the
+ * last report (a piece, JSON the page passes on to the layout worker
+ * unread), as deltas (trace/delta.ts), with what the program printed since
+ * and its counts. The first piece also carries the trace's header:
+ * everything worked out before the program ran (its loops, index names,
+ * hints, cost).
  *
- * Pieces are rebuilt into full steps as they arrive, while the page waits,
- * so the end of a long run costs little; and when the person presses Stop,
- * the worker is ended and the trace is what had arrived (`partial`), its
+ * The layout worker rebuilds the pieces into full steps as they arrive, so
+ * the end of a long run costs little; and when the person presses Stop,
+ * the runner is ended and the trace is what had arrived (`partial`), its
  * last quarter second or so of steps lost.
  *
  * Everything here comes from the program's side, so it's checked: each
@@ -31,22 +33,19 @@ export interface RunProgress {
   line: number;
 }
 
-/** What a tracer reports, as JSON: how far it's got, and now and then the steps since the last piece. */
-export interface ProgressReport {
-  progress: RunProgress;
-  chunk?: {
-    /** The trace without its steps, stdout or counts: sent once, in the first piece. */
-    header?: Omit<Trace, "steps" | "stdout" | "counts">;
-    /** Steps recorded since the last piece, as deltas. */
-    steps: Step[];
-    /** What the program printed since the last piece. */
-    stdout: string;
-    counts?: Trace["counts"];
-  };
+/** A piece of the trace, as a tracer sends it (as JSON): the steps since the last piece. */
+export interface TracePiece {
+  /** The trace without its steps, stdout or counts: sent once, in the first piece. */
+  header?: Omit<Trace, "steps" | "stdout" | "counts">;
+  /** Steps recorded since the last piece, as deltas. */
+  steps: Step[];
+  /** What the program printed since the last piece. */
+  stdout: string;
+  counts?: Trace["counts"];
 }
 
 /** Text a run's pieces may add up to, at most (as much as a whole trace may be: checkTrace.ts's message limit). */
-const MAX_CHARS = 50_000_000;
+export const MAX_TRACE_CHARS = 50_000_000;
 
 /** A trace (or piece of one) that doesn't match the trace format: a crash, saying why. */
 export class TraceFormatError extends Error {}
@@ -54,7 +53,7 @@ export class TraceFormatError extends Error {}
 const isNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 
 /** A report's progress, if it's of the right shape. */
-function progressOf(value: unknown): RunProgress | null {
+export function progressOf(value: unknown): RunProgress | null {
   if (typeof value !== "object" || value === null) return null;
   const p = value as Record<string, unknown>;
   return isNumber(p.steps) && isNumber(p.seconds) && isNumber(p.line)
@@ -91,34 +90,20 @@ export class TraceStream {
     return this.steps.length;
   }
 
-  /**
-   * Take a report (JSON from the worker): its piece's steps rebuilt and
-   * kept, and how far the run has got. Throws on one that isn't a report.
-   */
-  add(json: string): RunProgress {
+  /** Take a piece (JSON from the tracer, TracePiece): its steps rebuilt, checked and kept. Throws on one that isn't a piece. */
+  add(json: string): void {
     this.chars += json.length;
-    if (this.chars > MAX_CHARS) throw new Error("the trace is too big");
-    const report = JSON.parse(json) as ProgressReport;
-    const progress = progressOf(report?.progress);
-    if (!progress) throw new Error("a progress report isn't one");
-    const chunk = report.chunk;
-    if (chunk !== undefined) {
-      if (
-        typeof chunk !== "object" ||
-        chunk === null ||
-        !Array.isArray(chunk.steps) ||
-        typeof chunk.stdout !== "string"
-      )
-        throw new Error("a piece of the trace isn't one");
-      if (chunk.header !== undefined) {
-        if (typeof chunk.header !== "object" || chunk.header === null) throw new Error("the trace's header isn't one");
-        this.header = chunk.header;
-      }
-      for (const step of chunk.steps) this.keep(step);
-      this.stdout += chunk.stdout;
-      if (chunk.counts !== undefined) this.counts = chunk.counts;
+    if (this.chars > MAX_TRACE_CHARS) throw new Error("the trace is too big");
+    const piece = JSON.parse(json) as TracePiece;
+    if (typeof piece !== "object" || piece === null || !Array.isArray(piece.steps) || typeof piece.stdout !== "string")
+      throw new Error("a piece of the trace isn't one");
+    if (piece.header !== undefined) {
+      if (typeof piece.header !== "object" || piece.header === null) throw new Error("the trace's header isn't one");
+      this.header = piece.header;
     }
-    return progress;
+    for (const step of piece.steps) this.keep(step);
+    this.stdout += piece.stdout;
+    if (piece.counts !== undefined) this.counts = piece.counts;
   }
 
   /**
@@ -129,7 +114,7 @@ export class TraceStream {
    */
   finish(json: string): Trace {
     this.chars += json.length;
-    if (this.chars > MAX_CHARS) throw new Error("the trace is too big");
+    if (this.chars > MAX_TRACE_CHARS) throw new Error("the trace is too big");
     const end = JSON.parse(json) as { trace: Trace; skippedAfter?: number };
     const rest = end?.trace;
     const skippedAfter = end?.skippedAfter;

@@ -16,7 +16,7 @@ import type { LanguageId } from "../languages";
 import type { MeasureLabel } from "../measurePanel";
 import { MEASURE_LIMITS, MeasurePanel, measureLabels } from "../measurePanel";
 import type { Settings } from "../settings";
-import { estimateComplexity } from "../trace/complexity";
+import type { Estimate } from "../trace/complexity";
 import { findSizes, type GrowthPoint, ladder, pointFrom, staticGrowth } from "../trace/growth";
 import { duration, type Measurement } from "../trace/measurement";
 import { POLICY } from "../trace/policy";
@@ -56,8 +56,10 @@ export interface MeasureOptions {
   reportCrash?(crash: TracerCrash): void;
   /** Stop playback (measuring starts from a still picture). */
   pause(): void;
-  /** A new measurement for the code on screen: the complexity estimate can use its counts. */
-  onMeasured(): void;
+  /** A new measurement for the code on screen: the complexity estimate can use its counts (resolves once it has). */
+  onMeasured(): Promise<void> | void;
+  /** The complexity estimate shown now (ComplexityController.latest), for the panel's "Estimated". */
+  estimate(): Estimate | null;
   /** The Measure panel opened: close the other panels. */
   onOpen(): void;
   /** Timers and the clock, replaceable in tests. */
@@ -143,14 +145,7 @@ export class MeasureController {
         settings.measureLimit.set(ms);
       },
       measureAgain: () => void this.measure(),
-      estimate: () => {
-        try {
-          const { trace, stale } = app.get();
-          return trace ? (estimateComplexity(trace, stale ? null : this.current())?.time ?? null) : null;
-        } catch {
-          return null;
-        }
-      },
+      estimate: () => options.estimate()?.time ?? null,
       onOpen: () => {
         options.onOpen();
         els.measureResults.setAttribute("aria-expanded", "true");
@@ -274,7 +269,7 @@ export class MeasureController {
     if (lang === this.language) {
       if (outcome.kind === "measured") {
         this.measured = { result: outcome.result, code, language: lang };
-        this.options.onMeasured();
+        await this.options.onMeasured();
         els.measureResults.hidden = false;
         this.panel.show(outcome.result, code);
         this.updateLabels();
@@ -361,7 +356,7 @@ export class MeasureController {
     let expected = null;
     try {
       const { trace, stale, tracedCode } = app.get();
-      const estimate = trace && !stale && tracedCode === code ? estimateComplexity(trace) : null;
+      const estimate = trace && !stale && tracedCode === code ? trace.estimate : null;
       expected = estimate ? staticGrowth(estimate, vars, grow) : null;
     } catch {
       expected = null;

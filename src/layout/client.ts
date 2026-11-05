@@ -8,12 +8,14 @@
 import { perf, timed } from "../perf";
 import type { Mark } from "../render/drawing";
 import { MarkMirror, type WireDrawing, WireError } from "../render/wire";
+import type { Estimate } from "../trace/complexity";
+import type { Measurement } from "../trace/measurement";
 import type { Trace } from "../trace/types";
 import type { Progress } from "../trace/work";
 import type { TracePart } from "../worker/runner";
 import type { FromLayout, ToLayout } from "./protocol";
 import type { LoopLaidOut, LoopShow, LoopView, MemoryLaidOut, MemoryShow, MemoryView } from "./requests";
-import { LatestWins, type LayoutService } from "./service";
+import { LatestWins, type LayoutService, type Loaded } from "./service";
 
 /** What the client needs of a worker (tests pass a fake). */
 export interface LayoutWorkerLike {
@@ -46,7 +48,7 @@ export class WorkerLayout implements LayoutService {
   private loading: {
     load: number;
     report: (progress: Progress) => void;
-    resolve: (ok: boolean) => void;
+    resolve: (loaded: Loaded) => void;
     reject: (error: Error) => void;
   } | null = null;
 
@@ -64,6 +66,8 @@ export class WorkerLayout implements LayoutService {
       this.loading = null;
       for (const resolve of this.replies.values()) resolve({ type: "memory", id: 0, laidOut: null, error: message });
       this.replies.clear();
+      for (const resolve of this.estimates.values()) resolve(null);
+      this.estimates.clear();
     };
   }
 
@@ -84,12 +88,29 @@ export class WorkerLayout implements LayoutService {
     this.worker.postMessage({ type: "feed", part });
   }
 
-  load(trace: Trace, how: "whole" | "streamed" | "stopped", report: (progress: Progress) => void): Promise<boolean> {
+  load(
+    how: "whole" | "streamed" | "stopped",
+    trace: Trace | null,
+    report: (progress: Progress) => void,
+  ): Promise<Loaded> {
     const load = ++this.loads;
-    this.loading?.resolve(false);
+    this.loading?.resolve({ kind: "replaced" });
     return new Promise((resolve, reject) => {
       this.loading = { load, report, resolve, reject };
-      this.worker.postMessage(how === "whole" ? { type: "load", load, how, trace } : { type: "load", load, how });
+      this.worker.postMessage(
+        how === "whole" && trace ? { type: "load", load, how, trace } : { type: "load", load, how },
+      );
+    });
+  }
+
+  /** Estimates asked for, by request. */
+  private readonly estimates = new Map<number, (estimate: Estimate | null) => void>();
+
+  estimate(measurement: Measurement | null): Promise<Estimate | null> {
+    return new Promise((resolve) => {
+      const id = this.nextId++;
+      this.estimates.set(id, resolve);
+      this.worker.postMessage({ type: "estimate", id, measurement });
     });
   }
 
@@ -179,8 +200,14 @@ export class WorkerLayout implements LayoutService {
         const loading = this.loading;
         if (loading?.load !== message.load) return;
         this.loading = null;
-        if (message.ok) loading.resolve(true);
-        else loading.reject(new Error(message.error ?? "the trace couldn't be prepared"));
+        if (message.error) loading.reject(new Error(message.error));
+        else loading.resolve(message.info ? { kind: "ready", info: message.info } : { kind: "empty" });
+        return;
+      }
+      case "estimate": {
+        const resolve = this.estimates.get(message.id);
+        this.estimates.delete(message.id);
+        resolve?.(message.estimate);
         return;
       }
       case "memory":

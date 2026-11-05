@@ -20,13 +20,16 @@ export interface PyodideFiles {
 export interface PythonTracer {
   /** samplingJson: the run's SamplingPolicy (trace/policy.ts), as JSON. */
   runTrace(source: string, maxSteps: number, maxSeconds: number, samplingJson: string): string;
-  /** A run the page watches: progress and the trace's pieces to `report`, the rest returned (tracer.py run_trace_streaming). */
+  /**
+   * A run the page watches: progress, and the trace's pieces ("" between
+   * pieces), to `report` as JSON; the rest returned (tracer.py run_trace_streaming).
+   */
   runTraceStreaming(
     source: string,
     maxSteps: number,
     maxSeconds: number,
     samplingJson: string,
-    report: (json: string) => void,
+    report: (progressJson: string, pieceJson: string) => void,
   ): string;
   runMeasure(source: string, limitMs: number, report: (json: string) => void, overridesJson?: string): string;
 }

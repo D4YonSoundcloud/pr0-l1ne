@@ -136,10 +136,11 @@ function setup() {
     <input id="hide-quiet" type="checkbox"><input id="loop-vertical" type="checkbox">
     <button id="loop-stacked"></button><button id="loop-animated"></button>`;
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-  const { app, settings } = makeApp();
+  const { app, settings, layout } = makeApp();
   const fakes = fakeRenderers();
-  const memory = new MemoryController({
+  const memory: MemoryController = new MemoryController({
     app,
+    layout,
     settings,
     renderers: fakes.factory,
     els: {
@@ -155,8 +156,9 @@ function setup() {
     animation: () => STILL,
     redraw: () => memory.render(),
   });
-  const loop = new LoopController({
+  const loop: LoopController = new LoopController({
     app,
+    layout,
     settings,
     renderers: fakes.factory,
     els: {

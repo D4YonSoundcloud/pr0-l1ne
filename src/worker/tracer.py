@@ -89,7 +89,7 @@ class Tracer:
         max_steps: int,
         max_seconds: float,
         sampling: SamplingPolicy,
-        report: Callable[[str], None] | None = None,
+        report: Callable[[str, str], None] | None = None,
     ) -> None:
         self.source = source
         # Progress, and the trace a piece at a time, to the page (see `report_progress`).
@@ -242,21 +242,22 @@ class Tracer:
         self.report_progress(now, frame.f_lineno)
 
     def report_progress(self, now: float, line: int) -> None:
-        """Every quarter second, how far the run has got, with the steps
-        recorded since the last piece (as deltas), what the program printed
-        since, and its counts. The first piece carries the trace's header. The page
-        rebuilds the trace as it arrives (src/trace/stream.ts), and keeps what had
-        arrived if the person stops the run."""
+        """Every quarter second, how far the run has got (JSON, for the page),
+        and the steps recorded since the last piece (as deltas), what the program
+        printed since, and its counts (JSON, or "" between pieces: the page passes
+        it on to the layout worker unread). The first piece carries the trace's
+        header. The layout worker rebuilds the trace as it arrives
+        (src/trace/stream.ts), and keeps what had arrived if the person stops the
+        run."""
         if self.report is None or now < self.next_report:
             return
         self.next_report = now + REPORT_EVERY
-        message: dict[str, Any] = {
-            "progress": {"steps": len(self.log.steps), "seconds": now - self.started, "line": line}
-        }
+        progress = {"steps": len(self.log.steps), "seconds": now - self.started, "line": line}
+        piece = ""
         if now >= self.next_piece:
             self.next_piece = now + PIECE_EVERY
-            message["chunk"] = self.piece()
-        self.report(json.dumps(message))
+            piece = json.dumps(self.piece())
+        self.report(json.dumps(progress), piece)
 
     def piece(self) -> dict[str, Any]:
         """The steps and output since the last piece (the header with the first)."""
@@ -548,11 +549,11 @@ def run_trace_streaming(
     max_steps: int,
     max_seconds: float,
     sampling: str,
-    report: Callable[[str], None],
+    report: Callable[[str, str], None],
 ) -> str:
     """Entry point for a run the page watches: like run_trace, but `report` is
-    given progress as JSON every quarter second, with the trace's steps a piece
-    at a time (see Tracer.report_progress). Returns the rest as JSON: the trace
+    given progress as JSON every quarter second, and the trace's steps a piece
+    at a time, as JSON of their own (see Tracer.report_progress). Returns the rest as JSON: the trace
     with the steps no piece sent, and `skippedAfter` when the last step had been
     sent before events after it were counted."""
     rules: SamplingPolicy = json.loads(sampling)

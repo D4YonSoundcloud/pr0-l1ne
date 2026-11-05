@@ -313,6 +313,9 @@ pr0-l1ne/
     │   ├── growth.ts           Growth runs: size hints, the ladder, fitting, the code's estimate
     │   ├── growth.test.ts      Growth tests
     │   ├── delta.ts            Rebuilding heaps sent as deltas; deep equality
+    │   ├── stream.ts           A streamed trace put back together from its pieces, and checked as they arrive
+    │   ├── summary.ts          What the page knows of a trace (TraceInfo): lines, labels, output, banners, estimate
+    │   ├── describe.ts         A step's label: "Ran line 2, next is line 3"
     │   ├── memory.ts           Memory sizes: the Python, textbook and V8 models
     │   ├── memory.test.ts      Memory size tests
     │   ├── bigO.ts             Big-O expressions: add, multiply, simplify, format
@@ -321,6 +324,14 @@ pr0-l1ne/
     │   ├── schemaErrors.ts     Schema errors as readable lines naming the field
     │   ├── complexity.ts       Time and space estimates: the code's shape plus the run
     │   └── complexity.test.ts  Every example's complexity, in all three languages
+    ├── layout/                 The layout worker: it keeps the trace and lays out each window's step
+    │   ├── layout.worker.ts    The worker's entry point
+    │   ├── host.ts             Its messages answered (protocol.ts: the messages)
+    │   ├── intake.ts           A run's trace as it arrives, put together and checked
+    │   ├── session.ts          The trace prepared, each window's scene and layout, its kept boxes and rows
+    │   ├── service.ts          What the page asks of it (LayoutService), and LocalLayout on the page
+    │   ├── client.ts           The page's side of the worker (WorkerLayout)
+    │   └── requests.ts         What a window asks to be drawn, and what comes back
     ├── scene/                  What a step shows, worked out from the trace (no positions, no DOM)
     │   ├── memoryScene.ts      The memory view's scene: boxes, nesting, graphs, trees, links, output
     │   ├── memoryScene.test.ts Scene tests (valid for any renderer)

@@ -6,40 +6,10 @@
  */
 import type { LineMarks } from "../editor";
 import { compact } from "../trace/measurement";
-import type { Step } from "../trace/types";
 import type { AppStore } from "./state";
 
-/** What a step did, in words, for the step label. */
-export function describe(step: Step, prev: Step | undefined): string {
-  const frame = step.stack[step.stack.length - 1];
-  const func = frame?.func ?? "Global";
-  switch (step.event) {
-    case "call":
-      return func === "Global" ? "Program starts" : `Called ${func}()`;
-    case "line":
-      // Matches the editor: yellow is the line that ran, blue is next.
-      return prev && prev.line >= 1 && prev.event === "line"
-        ? `Ran line ${prev.line}, next is line ${step.line}`
-        : `Next is line ${step.line}`;
-    case "return": {
-      if (func === "Global") return "Program finished";
-      const value = step.returnValue;
-      const shown = value?.kind === "prim" ? value.repr : "an object";
-      return `${func}() returns ${shown}`;
-    }
-    case "exception":
-      return `${step.exception?.type ?? "Error"} raised on line ${step.line}`;
-    case "yield": {
-      const value = step.returnValue;
-      if (!value) return `${func}() hands over to another generator`;
-      return `${func}() yields ${value.kind === "prim" ? value.repr : "an object"} and pauses`;
-    }
-    case "await":
-      return `${func}() waits at line ${step.line} and pauses`;
-    case "resume":
-      return `${func}() resumes at line ${step.line}`;
-  }
-}
+// The step label's words are worked out with the trace (trace/summary.ts); here for its tests.
+export { describe } from "../trace/describe";
 
 /** A window on the canvas (MemoryController, LoopController). */
 export interface CanvasPane {
@@ -65,7 +35,7 @@ export class StepView {
     const { app, els, memory, loop, editor } = this.options;
     const { trace, stale, stepIndex } = app.get();
     els.canvas.classList.toggle("is-stale", stale);
-    const total = trace?.steps.length ?? 0;
+    const total = trace?.steps ?? 0;
     this.options.updateControls();
 
     if (!trace || !total) {
@@ -78,26 +48,27 @@ export class StepView {
       return;
     }
 
-    const step = trace.steps[stepIndex];
-    const prev = trace.steps[stepIndex - 1];
+    const line = trace.lines[stepIndex];
+    const prevLine = stepIndex > 0 ? trace.lines[stepIndex - 1] : undefined;
     // The label has a fixed width (so the scrubber never resizes); the full
     // text is in its tooltip when it doesn't fit.
     // SQL: the stage's clause (its step shows what the clause did).
-    const stage = trace.sql?.stages[stepIndex];
-    els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${stage ? stage.clause : describe(step, prev)}`;
+    const stage = trace.stages?.[stepIndex];
+    els.stepLabel.textContent = `Step ${stepIndex + 1} of ${total}: ${stage ? stage.clause : trace.labels[stepIndex]}`;
     els.stepLabel.title = els.stepLabel.textContent;
-    const skipped = (step.skipped ?? 0) + (stepIndex === trace.steps.length - 1 ? (step.skippedAfter ?? 0) : 0);
+    const before = trace.skipped[stepIndex];
+    const skipped = before + (stepIndex === total - 1 ? trace.skippedAfter : 0);
     if (skipped) {
       // Passes in the middle of a long loop ran here without being recorded.
       els.stepLabel.textContent += ` (${compact(skipped)} steps skipped)`;
-      els.stepLabel.title += `\n${skipped.toLocaleString()} steps ran ${step.skipped ? "just before this one" : "after this one"} without being recorded: the middle of a long, sampled loop.`;
+      els.stepLabel.title += `\n${skipped.toLocaleString()} steps ran ${before ? "just before this one" : "after this one"} without being recorded: the middle of a long, sampled loop.`;
     }
 
     memory.render();
     loop.render();
 
     // Output printed so far, plus the error once we reach the end.
-    els.output.textContent = trace.stdout.slice(0, step.stdoutLength);
+    els.output.textContent = trace.stdout.slice(0, trace.stdoutLengths[stepIndex]);
     const atEnd = stepIndex === total - 1;
     if (atEnd && trace.error) {
       const span = document.createElement("span");
@@ -105,27 +76,15 @@ export class StepView {
       span.textContent = `${trace.error.type}: ${trace.error.message}\n`;
       els.output.append(span);
     }
+    const error =
+      atEnd && trace.error ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` } : null;
 
     if (updateMarks && stage) {
       // A SQL step shows what its clause did: that line is the one that ran.
-      editor.setMarks({
-        next: null,
-        prev: stage.line,
-        error:
-          atEnd && trace.error
-            ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` }
-            : null,
-      });
+      editor.setMarks({ next: null, prev: stage.line, error });
     } else if (updateMarks) {
-      const nextLine = step.event === "call" && step.line < 1 ? null : step.line;
-      editor.setMarks({
-        next: nextLine,
-        prev: prev && prev.line >= 1 ? prev.line : null,
-        error:
-          atEnd && trace.error
-            ? { line: trace.error.line, message: `${trace.error.type}: ${trace.error.message}` }
-            : null,
-      });
+      const nextLine = trace.events[stepIndex] === "call" && line < 1 ? null : line;
+      editor.setMarks({ next: nextLine, prev: prevLine !== undefined && prevLine >= 1 ? prevLine : null, error });
     }
   }
 }

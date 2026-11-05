@@ -3,13 +3,15 @@
  * quarter second how far it's got, with the steps recorded
  * since the last piece (as deltas, trace/delta.ts HeapEncoder), what the
  * program printed since and its counts; the first piece with the trace's
- * header; and at the end the rest. The page rebuilds the trace as it
- * arrives (trace/stream.ts), and keeps what had come if the person stops
- * the run. Python's tracer does the same (worker/tracer.py report_progress).
+ * header; and at the end the rest. Progress and pieces go separately: the
+ * page reads the progress, and passes the pieces on to the layout worker,
+ * which rebuilds the trace as it arrives (trace/stream.ts) and keeps what
+ * had come if the person stops the run. Python's tracer does the same
+ * (worker/tracer.py report_progress).
  */
 import { HeapEncoder } from "../trace/delta";
 import type { SamplingPolicy } from "../trace/policy";
-import type { ProgressReport } from "../trace/stream";
+import type { TracePiece } from "../trace/stream";
 import type { Trace } from "../trace/types";
 import type { FromWorker } from "../worker/protocol";
 import type { TraceSoFar } from "./trace";
@@ -29,8 +31,6 @@ export type TraceFn = (
  */
 export const PIECE_EVERY_MS = 250;
 
-type Chunk = NonNullable<ProgressReport["chunk"]>;
-
 /** Run `trace` on a run message, sending progress, the pieces and the rest with `post`. */
 export async function streamTrace(
   trace: TraceFn,
@@ -45,8 +45,8 @@ export async function streamTrace(
   let sentStdout = 0;
   let headerSent = false;
   let nextPiece = pieceEveryMs;
-  const piece = (state: TraceSoFar): Chunk => {
-    const chunk: Chunk = {
+  const piece = (state: TraceSoFar): TracePiece => {
+    const chunk: TracePiece = {
       steps: state.steps.slice(sent).map((step) => encoder.encode(step)),
       stdout: state.stdout.slice(sentStdout),
       counts: state.counts,
@@ -61,14 +61,11 @@ export async function streamTrace(
     return chunk;
   };
   const done = await trace(source, maxSteps, maxSeconds, sampling, (state) => {
-    const report: ProgressReport = {
-      progress: { steps: state.steps.length, seconds: state.elapsedMs / 1000, line: state.line },
-    };
+    const progress = { steps: state.steps.length, seconds: state.elapsedMs / 1000, line: state.line };
     if (state.elapsedMs >= nextPiece) {
       nextPiece = state.elapsedMs + pieceEveryMs;
-      report.chunk = piece(state);
-    }
-    post({ type: "progress", runId, json: JSON.stringify(report) });
+      post({ type: "progress", runId, progress, piece: JSON.stringify(piece(state)) });
+    } else post({ type: "progress", runId, progress });
   });
   // The rest: the steps no piece sent, as deltas following on from them.
   const steps = done.steps;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Trace } from "../trace/types";
+import type { TraceInfo } from "../trace/summary";
 import { makeApp } from "./testHelpers";
 
-const trace = { steps: [{}, {}, {}] } as unknown as Trace;
+const trace = { steps: 3 } as unknown as TraceInfo;
 
 describe("AppStore", () => {
   it("shows a run's trace at a step, and keeps the old one dimmed when a run fails", () => {

@@ -1,10 +1,14 @@
 /**
  * Messages between the page (layout/client.ts) and the layout worker
  * (layout/layout.worker.ts). Both are the app's own code, on the app's own
- * site; what the trace says came from the program and is checked as it
- * arrives (trace/stream.ts), on the page and again in the worker.
+ * site; what the trace says came from the program, and the page passes
+ * its pieces on unread: they're checked here as they arrive
+ * (layout/intake.ts, trace/stream.ts).
  */
 import type { WireDrawing } from "../render/wire";
+import type { Estimate } from "../trace/complexity";
+import type { Measurement } from "../trace/measurement";
+import type { TraceInfo } from "../trace/summary";
 import type { Trace } from "../trace/types";
 import type { Progress } from "../trace/work";
 import type { TracePart } from "../worker/runner";
@@ -21,12 +25,19 @@ export type ToLayout =
   | { type: "loop"; id: number; channel: number; show: LoopShow; view: LoopView; perf?: boolean }
   /** The page lost track of a window's marks (render/wire.ts): send them all afresh. */
   | { type: "reset"; channel: number }
+  /** The complexity estimate, with Measure's counts for the same code. */
+  | { type: "estimate"; id: number; measurement: Measurement | null }
   | { type: "release"; channel: number };
 
 export type FromLayout =
   | { type: "progress"; load: number; progress: Progress }
-  /** Prepared (ok), or it couldn't be (error: a bug, said as a crash). */
-  | { type: "loaded"; load: number; ok: boolean; error?: string }
+  /**
+   * Prepared: what the page knows of it (`info`); or nothing had arrived
+   * when the run was stopped (`info` null); or it couldn't be used
+   * (`error`: said as a crash).
+   */
+  | { type: "loaded"; load: number; info: TraceInfo | null; error?: string }
+  | { type: "estimate"; id: number; estimate: Estimate | null }
   | { type: "memory"; id: number; laidOut: MemoryLaidOut<WireDrawing> | null; error?: string; perf?: PerfTimes }
   | { type: "loop"; id: number; laidOut: LoopLaidOut<WireDrawing> | null; error?: string; perf?: PerfTimes };
 

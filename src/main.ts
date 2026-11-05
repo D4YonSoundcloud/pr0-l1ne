@@ -156,7 +156,7 @@ const editor = createEditor(
 const playback = new PlaybackController({
   app,
   els,
-  stepCount: () => app.get().trace?.steps.length ?? 0,
+  stepCount: () => app.get().trace?.steps ?? 0,
   show: () => view.render(),
   ownsKeys: (target) => !!target.closest(".style-panel"),
   reducedMotion: prefersReducedMotion,
@@ -254,15 +254,16 @@ const spacing = new SpacingController({
   redraw: () => view.render(false),
   onOpen: () => closePanelsBut("spacing"),
 });
-const complexity = new ComplexityController({
+const complexity: ComplexityController = new ComplexityController({
   app,
   settings,
   els,
   editor,
   measurement: () => measure.current(),
+  estimate: (measurement) => drawings.estimate(measurement),
   onOpen: () => closePanelsBut("complexity"),
 });
-const measure = new MeasureController({
+const measure: MeasureController = new MeasureController({
   app,
   settings,
   runs,
@@ -271,6 +272,7 @@ const measure = new MeasureController({
   setBanner,
   pause: () => playback.setPlaying(false),
   onMeasured: () => complexity.update(),
+  estimate: () => complexity.latest,
   onOpen: () => closePanelsBut("measure"),
 });
 

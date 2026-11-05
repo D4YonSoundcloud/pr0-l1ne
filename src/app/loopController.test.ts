@@ -22,9 +22,8 @@ const lastIndex = <T>(items: T[], test: (item: T) => boolean) => items.map(test)
 
 /** The step inside the inner loop on its last pass. */
 async function insideInnerLoop(app: ReturnType<typeof makeApp>["app"]) {
-  await showJavaScript(app, NESTED);
-  const { trace } = app.get();
-  const index = lastIndex(trace!.steps, (s) => s.line === 5);
+  const trace = await showJavaScript(app, NESTED);
+  const index = lastIndex(trace.lines, (line) => line === 5);
   app.setStep(index);
 }
 
@@ -34,12 +33,13 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     <input id="hide-quiet" type="checkbox" checked /><input id="loop-vertical" type="checkbox" />
     <button id="loop-stacked"></button><button id="loop-animated"></button>`;
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-  const { app, settings, storage: store } = makeApp(storage);
+  const { app, settings, storage: store, layout } = makeApp(storage);
   // These tests start from stacked rows (a first visit starts animated: see its own test).
   if (!storage) settings.loopMode.set("stacked");
   const redraws: boolean[] = [];
   const loop = new LoopController({
     app,
+    layout,
     renderers: SVG_RENDERERS,
     settings,
     els: {

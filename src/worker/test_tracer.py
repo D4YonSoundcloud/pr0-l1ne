@@ -586,8 +586,12 @@ class StreamingTests(unittest.TestCase):
     def stream(self, source, max_steps=2000):
         reports = []
         policy = json.dumps(json.load(open("fixtures/policy.json"))["sampling"])
-        rest = json.loads(self.T.run_trace_streaming(source, max_steps, 6.0, policy, reports.append))
-        return [json.loads(r) for r in reports], rest
+
+        def report(progress, piece):
+            reports.append({"progress": json.loads(progress), **({"chunk": json.loads(piece)} if piece else {})})
+
+        rest = json.loads(self.T.run_trace_streaming(source, max_steps, 6.0, policy, report))
+        return reports, rest
 
     def test_the_pieces_and_the_rest_are_the_whole_trace(self):
         reports, rest = self.stream(self.SOURCE)

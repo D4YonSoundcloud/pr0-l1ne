@@ -16,7 +16,7 @@ pairs([1, 2, 3, 4]);`;
 function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
   document.body.innerHTML = `<section id="editor-pane"></section><button id="complexity"></button>`;
   const $ = (id: string) => document.getElementById(id)!;
-  const { app, settings, storage: store } = makeApp(storage);
+  const { app, settings, storage: store, layout } = makeApp(storage);
   const labels: CostLabel[][] = [];
   const opened: string[] = [];
   const timers = manualTimers();
@@ -26,6 +26,7 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     els: { editorPane: $("editor-pane"), complexity: $("complexity") as HTMLButtonElement },
     editor: { revealLine: () => {}, setCostLabels: (l) => labels.push(l) },
     measurement: () => null,
+    estimate: (m) => layout.estimate(m),
     onOpen: () => opened.push("complexity"),
     ...timers,
   });

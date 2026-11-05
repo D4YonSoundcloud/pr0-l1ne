@@ -37,7 +37,7 @@ type RunTrace = (
   maxSteps: number,
   maxSeconds: number,
   samplingJson: string,
-  report: (json: string) => void,
+  report: (progressJson: string, pieceJson: string) => void,
 ) => string;
 type RunMeasure = (source: string, limitMs: number, report: (json: string) => void, overridesJson?: string) => string;
 
@@ -95,13 +95,15 @@ function handle(message: ToWorker): void {
   const runId = message.runId;
   try {
     // Progress and the trace a piece at a time as it runs, the rest at the end: the page reads the
-    // JSON and rebuilds the heaps as it arrives (trace/stream.ts), and keeps what had come if stopped.
+    // progress, and passes the pieces on to the layout worker, which rebuilds the trace as it
+    // arrives (trace/stream.ts) and keeps what had come if stopped.
     const json = runTrace(
       message.source,
       message.maxSteps,
       message.maxSeconds,
       JSON.stringify(message.sampling),
-      (report) => post({ type: "progress", runId, json: report }),
+      (progress, piece) =>
+        post({ type: "progress", runId, progress: JSON.parse(progress), ...(piece ? { piece } : {}) }),
     );
     post({ type: "streamed", runId, json, elapsedMs: performance.now() - started });
   } catch (error) {

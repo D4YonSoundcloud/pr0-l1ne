@@ -1,12 +1,13 @@
 /**
  * The complexity estimate (trace/complexity.ts): the chip and panel
  * (complexityPanel.ts), and the cost labels beside loops and functions in
- * the editor. The estimate is worked out once per run (it's cached on the
- * trace), after the step is drawn so it never delays the canvas.
+ * the editor. The layout works out the estimate with each trace
+ * (trace/summary.ts); with Measure's counts for the same code, it's asked
+ * again (the layout holds the trace).
  */
 import { ComplexityPanel, type CostLabel, costLabels } from "../complexityPanel";
 import type { Settings } from "../settings";
-import { estimateComplexity } from "../trace/complexity";
+import type { Estimate } from "../trace/complexity";
 import type { Measurement } from "../trace/measurement";
 import type { AppStore } from "./state";
 
@@ -18,6 +19,8 @@ export interface ComplexityOptions {
   editor: { revealLine(line: number): void; setCostLabels(labels: CostLabel[]): void };
   /** Measure's counts for the code on screen, if any: a trace cut short uses them. */
   measurement(): Measurement | null;
+  /** The estimate for the trace on screen with Measure's counts (LayoutService.estimate). */
+  estimate(measurement: Measurement): Promise<Estimate | null>;
   /** The panel opened: close the other panels. */
   onOpen(): void;
   setTimeout?(callback: () => void, ms: number): number;
@@ -28,6 +31,10 @@ export class ComplexityController {
   readonly panel: ComplexityPanel;
   private labelsOn: boolean;
   private timer = 0;
+  /** The estimate shown now (Measure's panel shows it too). */
+  latest: Estimate | null = null;
+  /** Updates asked for, to drop an answer a newer one replaced. */
+  private asked = 0;
   private readonly setTimer: (callback: () => void, ms: number) => number;
   private readonly clearTimer: (id: number) => void;
 
@@ -62,21 +69,34 @@ export class ComplexityController {
     this.panel.toggle(false);
   }
 
-  /** Work out the estimate for the trace on screen, once the current step has been drawn (Measure calls this with new counts). */
-  update(): void {
+  /**
+   * Show the estimate for the trace on screen (Measure calls this with new
+   * counts); resolves once it's shown.
+   */
+  update(): Promise<void> {
     this.clearTimer(this.timer);
-    this.timer = this.setTimer(() => {
-      const { trace, stale } = this.options.app.get();
-      let estimate = null;
+    const asked = ++this.asked;
+    return new Promise((resolve) => {
+      this.timer = this.setTimer(() => void this.show(asked).finally(resolve), 0);
+    });
+  }
+
+  private async show(asked: number): Promise<void> {
+    const { trace, stale } = this.options.app.get();
+    // A trace cut short uses Measure's full counts for the same code, if there are any.
+    const measurement = trace && !stale ? this.options.measurement() : null;
+    let estimate: Estimate | null = trace?.estimate ?? null;
+    if (trace && measurement) {
       try {
-        // A trace cut short uses Measure's full counts for the same code, if there are any.
-        estimate = trace ? estimateComplexity(trace, stale ? null : this.options.measurement()) : null;
+        estimate = await this.options.estimate(measurement);
       } catch (error) {
         console.warn("Complexity estimate failed", error);
       }
-      this.panel.show(estimate, stale);
-      // Labels sit on lines; once the code has changed under an error, they'd be on the wrong ones.
-      this.options.editor.setCostLabels(this.labelsOn && !stale ? costLabels(estimate) : []);
-    }, 0);
+    }
+    if (asked !== this.asked) return;
+    this.latest = estimate;
+    this.panel.show(estimate, stale);
+    // Labels sit on lines; once the code has changed under an error, they'd be on the wrong ones.
+    this.options.editor.setCostLabels(this.labelsOn && !stale ? costLabels(estimate) : []);
   }
 }

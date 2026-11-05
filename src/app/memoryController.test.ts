@@ -17,12 +17,13 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     <button id="show-output"></button><button id="dim-output"></button>
     <span id="memory-total"></span>`;
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-  const { app, settings, storage: store } = makeApp(storage);
+  const { app, settings, storage: store, layout } = makeApp(storage);
   // These tests start from arrows (a first visit starts nested: see its own test).
   if (!storage) settings.memoryMode.set("arrows");
   let redraws = 0;
   const memory = new MemoryController({
     app,
+    layout,
     renderers: SVG_RENDERERS,
     settings,
     els: {

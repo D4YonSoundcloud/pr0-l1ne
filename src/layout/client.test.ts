@@ -93,7 +93,7 @@ function pieces(whole: Trace, per = 3): { kind: "piece" | "end"; json: string }[
       stdout: "",
       counts,
     };
-    out.push({ kind: "piece", json: JSON.stringify({ progress: { steps: sent + per, seconds: 0, line: 1 }, chunk }) });
+    out.push({ kind: "piece", json: JSON.stringify(chunk) });
   }
   const rest = { ...header, steps: steps.slice(sent).map((s) => encoder.encode(s)), stdout, counts, heapDelta: true };
   out.push({ kind: "end", json: JSON.stringify({ trace: rest }) });
@@ -129,9 +129,12 @@ describe("the layout worker, from the page", () => {
     layout.begin();
     for (const part of pieces(raw)) layout.feed(part);
     const seen: Progress[] = [];
-    const ready = layout.load(raw, "streamed", (p) => seen.push(p));
+    const ready = layout.load("streamed", null, (p) => seen.push(p));
     await settle();
-    expect(await ready).toBe(true);
+    const loaded = await ready;
+    expect(loaded.kind).toBe("ready");
+    // What the page knows of it: a summary, not the steps.
+    expect(loaded.kind === "ready" && loaded.info.steps).toBe(raw.steps.length);
     const page = onThePage(raw);
     const channel = layout.channel();
     for (const step of [0, 3, 4, 5, raw.steps.length - 1]) {
@@ -147,7 +150,7 @@ describe("the layout worker, from the page", () => {
   it("keeps a window's kept marks the same objects on the page, from step to step", async () => {
     const raw = await traceJavaScript(CODE);
     const { layout } = setup();
-    const ready = layout.load(raw, "whole", () => {});
+    const ready = layout.load("whole", raw, () => {});
     await settle();
     await ready;
     const channel = layout.channel();
@@ -177,7 +180,7 @@ describe("the layout worker, from the page", () => {
   it("draws the loop history and its tabs; laid out in full to save, the window's drawing goes on as before", async () => {
     const raw = await traceJavaScript(CODE);
     const { layout } = setup();
-    const ready = layout.load(raw, "whole", () => {});
+    const ready = layout.load("whole", raw, () => {});
     await settle();
     await ready;
     const channel = layout.channel();
@@ -199,7 +202,7 @@ describe("the layout worker, from the page", () => {
   it("asked for steps faster than it draws: each finished one, and the last", async () => {
     const raw = await traceJavaScript(CODE);
     const { layout, worker } = setup();
-    const ready = layout.load(raw, "whole", () => {});
+    const ready = layout.load("whole", raw, () => {});
     await settle();
     await ready;
     const channel = layout.channel();
@@ -221,9 +224,9 @@ describe("the layout worker, from the page", () => {
     layout.begin();
     const parts = pieces(raw);
     for (const part of parts.slice(0, 2)) layout.feed(part);
-    const ready = layout.load(raw, "stopped", () => {});
+    const ready = layout.load("stopped", null, () => {});
     await settle();
-    expect(await ready).toBe(true);
+    expect(await ready).toMatchObject({ kind: "ready", info: { steps: 6 } });
     const channel = layout.channel();
     const past = layout.memory(channel, show(5), VIEW); // the pieces sent had 6 steps
     const beyond = layout.memory(channel, show(20), VIEW);
@@ -235,20 +238,20 @@ describe("the layout worker, from the page", () => {
   it("a newer trace while one is prepared: the first says it isn't shown", async () => {
     const raw = await traceJavaScript(CODE);
     const { layout } = setup();
-    const first = layout.load(raw, "whole", () => {});
-    const second = layout.load(raw, "whole", () => {});
+    const first = layout.load("whole", raw, () => {});
+    const second = layout.load("whole", raw, () => {});
     await settle();
-    expect(await first).toBe(false);
-    expect(await second).toBe(true);
+    expect(await first).toEqual({ kind: "replaced" });
+    expect((await second).kind).toBe("ready");
   });
 
   it("a trace that never arrived, or a worker that fails, is an error, not a blank window", async () => {
     const raw = await traceJavaScript(CODE);
     const { layout, worker, errors } = setup();
-    const nothing = expect(layout.load(raw, "streamed", () => {})).rejects.toThrow(/didn't arrive/); // no pieces were sent
+    const nothing = expect(layout.load("streamed", null, () => {})).rejects.toThrow(/didn't arrive/); // no pieces were sent
     await settle();
     await nothing;
-    const ready = layout.load(raw, "whole", () => {});
+    const ready = layout.load("whole", raw, () => {});
     worker().onerror?.({ message: "out of memory" });
     await expect(ready).rejects.toThrow(/out of memory/);
     expect(errors).toEqual(["out of memory"]);
