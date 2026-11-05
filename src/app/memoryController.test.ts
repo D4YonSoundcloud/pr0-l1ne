@@ -43,7 +43,7 @@ function setup(storage?: ReturnType<typeof makeApp>["storage"]) {
     },
   });
   const pressed = (id: string) => $(id).getAttribute("aria-pressed");
-  return { app, settings, storage: store, memory, $, pressed, redraws: () => redraws };
+  return { app, settings, storage: store, layout, memory, $, pressed, redraws: () => redraws };
 }
 
 describe("MemoryController", () => {
@@ -56,6 +56,21 @@ describe("MemoryController", () => {
     await memory.drawn();
     expect($("memory").querySelector(".memory-svg")).not.toBeNull();
     expect($("memory").querySelectorAll(".node").length).toBeGreaterThan(0);
+  });
+
+  it("while playing, asks for the next step ahead once a step is drawn", async () => {
+    const { app, memory, layout } = setup();
+    const asked: number[] = [];
+    layout.ahead = (_channel, ahead) => void asked.push(ahead.show.step);
+    await showJavaScript(app, CODE, 1);
+    memory.render();
+    await memory.drawn();
+    expect(asked).toEqual([]); // not playing
+    app.setPlaying(true);
+    app.setStep(2);
+    memory.render();
+    await memory.drawn();
+    expect(asked).toEqual([3]);
   });
 
   it("starts nested on a first visit", () => {

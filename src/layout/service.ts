@@ -11,6 +11,10 @@
  * a newer request for the same window replaces any waiting one, and a
  * request that's replaced resolves with null (scrubbing fast draws the
  * steps it can keep up with, and always the last).
+ *
+ * While playing, a window asks for the next step ahead (`ahead`), so it's
+ * laid out while the step before is on screen: when playback gets to it,
+ * it's ready, or on its way.
  */
 import type { Mark } from "../render/drawing";
 import type { Estimate } from "../trace/complexity";
@@ -47,7 +51,22 @@ export interface LayoutService {
   estimate(measurement: Measurement | null): Promise<Estimate | null>;
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null>;
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null>;
+  /**
+   * The step a window will most likely ask for next (playing: the next
+   * step), laid out now if the window has nothing else waiting; asked for
+   * the same (memory or loop, with the same show and view), it's the answer.
+   */
+  ahead(channel: number, ask: Ahead): void;
 }
+
+/** A request laid out ahead (LayoutService.ahead). */
+export type Ahead =
+  | { kind: "memory"; show: MemoryShow; view: MemoryView }
+  | { kind: "loop"; show: LoopShow; view: LoopView };
+
+/** What a request asks for, as one string: two the same are answered the same. */
+export const requestKey = (kind: "memory" | "loop", show: object, view: object): string =>
+  `${kind}:${JSON.stringify(show)}:${JSON.stringify(view)}`;
 
 /** A trace taken: ready (what the page knows of it), replaced by a newer one while it was prepared, or nothing had arrived. */
 export type Loaded = { kind: "ready"; info: TraceInfo } | { kind: "replaced" } | { kind: "empty" };
@@ -59,6 +78,11 @@ export type Loaded = { kind: "ready"; info: TraceInfo } | { kind: "replaced" } |
 export class LatestWins<R> {
   private busy = false;
   private waiting: { run: () => Promise<R | null>; resolve: (r: R | null) => void } | null = null;
+
+  /** Nothing being answered, nothing waiting. */
+  get idle(): boolean {
+    return !this.busy && !this.waiting;
+  }
 
   ask(run: () => Promise<R | null>): Promise<R | null> {
     return new Promise((resolve) => {
@@ -156,4 +180,7 @@ export class LocalLayout implements LayoutService {
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null> {
     return this.lane<LoopLaidOut<Mark>>(channel).ask(async () => this.session.loop(channel, show, view));
   }
+
+  /** On the page, laying out ahead would only take the page's time sooner: nothing's done until it's asked for. */
+  ahead(_channel: number, _ask: Ahead): void {}
 }

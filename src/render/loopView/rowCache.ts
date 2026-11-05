@@ -30,6 +30,7 @@ import { containerIn, type LoopScene } from "../../scene/loopScene";
 import type { LoopRow } from "../../trace/loopHistory";
 import type { Mark } from "../drawing";
 import { legendItems } from "../graphView";
+import { CellCache } from "../memoryView/cellCache";
 import type { LoopPlan } from "./plan";
 import type { DrawnRow } from "./row";
 
@@ -156,10 +157,11 @@ export function rowKey(
   ].join("|");
 }
 
-/** A row as drawn: its group, and the change arrows it added above every row. */
+/** A row as drawn: its group, the change arrows it added above every row, and the cells it drew (cells). */
 interface Kept {
   row: Mark;
   arrows: Mark[];
+  cells: string[];
 }
 
 /** Rows kept from one drawing of a loop view to the next. Give the same one to each drawing of a window. */
@@ -170,6 +172,14 @@ export class RowCache {
   /** The least detail any kept row was built with. */
   private level = 0;
   stats = { drawn: 0, kept: 0 };
+  /**
+   * Cells kept inside rows drawn again (memoryView/cellCache.ts). The
+   * running row is drawn again at every step (its pass is a step further
+   * on), though most of its cells look as they did: a 60 × 60 grid's row
+   * is 3,600 cells, one of them changed. Kept, they're the same marks, so
+   * the layout worker sends them to the page as numbers (render/wire.ts).
+   */
+  readonly cells = new CellCache();
 
   /**
    * A drawing begins, of a scene with this key (sceneKey), built at this
@@ -179,16 +189,19 @@ export class RowCache {
   begin(key: string | null, level = 0): void {
     if (key !== this.scene || level < this.level) {
       this.kept.clear();
+      this.cells.clear();
       this.level = level;
     } else this.level = Math.max(this.level, level);
     this.scene = key;
     this.next = new Map();
     this.stats = { drawn: 0, kept: 0 };
+    this.cells.begin();
   }
 
   end(): void {
     this.kept = this.next;
     this.next = new Map();
+    this.cells.end();
   }
 
   /** Can rows be kept in this drawing? */
@@ -201,6 +214,8 @@ export class RowCache {
     if (kept) {
       this.next.set(key, kept);
       this.stats.kept++;
+      // Its cells too, so they're still kept when the row is next drawn again.
+      this.cells.touch(kept.cells);
     }
     return kept;
   }

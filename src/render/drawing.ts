@@ -48,6 +48,8 @@ type Child = Mark | string | null | undefined | false;
 /** Mark.flags: something worked out from the mark is kept; it's shared between two drawings. (Bits 0–4: levels.) */
 const CACHED = 1 << 5;
 const SHARED = 1 << 6;
+/** Changed on the page in a way the layout worker doesn't know of (a box nudged while dragged): never copied (render/wire.ts). */
+const NO_COPY = 1 << 7;
 
 /** What few marks need, kept apart so the many that don't are smaller. */
 interface MarkMore {
@@ -170,6 +172,22 @@ export class Mark {
     return 1;
   }
 
+  /**
+   * Changed on the page in a way the layout worker doesn't know of (a box
+   * nudged while it's dragged, memory.ts nudgeBox), so the page can't
+   * make a copy of it for the worker (render/wire.ts). A hover's classes
+   * don't count: the renderers put the focus on every drawing they show
+   * again (applyFocus), copies included.
+   */
+  get copyable(): boolean {
+    return (this.flags & NO_COPY) === 0;
+  }
+
+  /** Changed on the page as the worker doesn't know (see copyable). */
+  keepFromCopies(): void {
+    this.flags |= NO_COPY;
+  }
+
   /** Put in a drawing by appendShared (in two drawings at once): the SVG patcher keeps its own element. */
   get isShared(): boolean {
     return (this.flags & SHARED) !== 0;
@@ -232,7 +250,9 @@ export class Mark {
     let key = this.localName;
     const attrs = this.attrs;
     for (let i = 0; i < attrs.length; i += 2) {
-      const v = this.value(i + 1);
+      // Read as text without keeping it so: numbers stay numbers, as sent to the page (render/wire.ts).
+      const raw = attrs[i + 1];
+      const v = typeof raw === "string" ? raw : String(raw);
       key += ` ${attrs[i]}=${v.length}:${v}`;
     }
     key += ">";
@@ -282,7 +302,7 @@ export class Mark {
   changed(): void {
     // A mark keeping nothing has nothing kept above it either (what a mark keeps is made from its children's).
     for (let m: Mark | null = this; m && m.flags & CACHED; m = m.parentElement) {
-      m.flags &= SHARED;
+      m.flags &= SHARED | NO_COPY;
       m.sid = 0;
       const more = m.more;
       if (more) {

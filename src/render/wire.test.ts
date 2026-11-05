@@ -109,11 +109,11 @@ describe("drawings sent to the page", () => {
     const kept = mark("g", { class: "row" }, mark("rect", { x: 1 }));
     const first = mark("svg", {}, kept);
     const one = mirror.decode(posted(encoder.encode(first)));
-    expect(encoder.lastSent).toEqual({ full: 3, kept: 0 });
+    expect(encoder.lastSent).toMatchObject({ full: 3, kept: 0 });
     const second = mark("svg", {});
     second.appendShared(kept);
     const two = mirror.decode(posted(encoder.encode(second)));
-    expect(encoder.lastSent).toEqual({ full: 1, kept: 1 });
+    expect(encoder.lastSent).toMatchObject({ full: 1, kept: 1 });
     expect(two.childNodes[0]).toBe(one.childNodes[0]);
     expect((two.childNodes[0] as Mark).isShared).toBe(true);
     // A mark from two drawings back may be gone from the page: sent in full again.
@@ -122,7 +122,7 @@ describe("drawings sent to the page", () => {
     const fourth = mark("svg", {});
     fourth.appendShared(kept);
     mirror.decode(posted(encoder.encode(fourth)));
-    expect(encoder.lastSent).toEqual({ full: 3, kept: 0 });
+    expect(encoder.lastSent).toMatchObject({ full: 3, kept: 0 });
   });
 
   it("a kept mark inside one kept whole the step before still goes by number", () => {
@@ -139,8 +139,58 @@ describe("drawings sent to the page", () => {
     const fresh = mark("g", { class: "node-body changed" });
     fresh.appendShared(cell);
     const three = mirror.decode(posted(encoder.encode(mark("svg", {}, fresh))));
-    expect(encoder.lastSent).toEqual({ full: 2, kept: 1 });
+    expect(encoder.lastSent).toMatchObject({ full: 2, kept: 1 });
     expect((three.childNodes[0] as Mark).childNodes[0]).toBe((one.childNodes[0] as Mark).childNodes[0]);
+  });
+
+  it("a new mark drawn exactly like one the page has goes as a copy of it, numbered so it can be kept after", () => {
+    const encoder = new MarkEncoder();
+    const mirror = new MarkMirror();
+    const row = () => mark("g", { class: "row" }, mark("rect", { x: 1, width: 30 }), mark("text", { x: 4 }, "7"));
+    const above = row();
+    const one = mirror.decode(posted(encoder.encode(mark("svg", {}, above))));
+    // A new row under it, drawn the same: the row above stays.
+    const below = row();
+    const second = mark("svg", {});
+    second.appendShared(above);
+    second.append(below);
+    const sent = posted(encoder.encode(second));
+    expect(encoder.lastSent).toEqual({ full: 1, kept: 1, copied: 3 });
+    expect(JSON.stringify(sent).length).toBeLessThan(50);
+    const two = mirror.decode(sent);
+    expect(two.signature()).toBe(second.signature());
+    expect(two.childNodes[0]).toBe(one.childNodes[0]);
+    expect(two.childNodes[1]).not.toBe(one.childNodes[0]);
+    // The copy is the page's mark for the new row: kept by number next step.
+    const third = mark("svg", {});
+    third.appendShared(above);
+    third.appendShared(below);
+    const three = mirror.decode(posted(encoder.encode(third)));
+    expect(encoder.lastSent).toMatchObject({ kept: 2 });
+    expect(three.childNodes[1]).toBe(two.childNodes[1]);
+  });
+
+  it("a mark kept from the drawing before is never copied over; one changed on the page isn't copied", () => {
+    const encoder = new MarkEncoder();
+    const mirror = new MarkMirror();
+    const cell = mark("g", { class: "cell" }, "7");
+    const first = mirror.decode(posted(encoder.encode(mark("svg", {}, mark("g", { class: "layer" }, cell)))));
+    // A new layer holding the same cell, kept: the layer is sent in full and the cell by number.
+    const layer = mark("g", { class: "layer" });
+    layer.appendShared(cell);
+    const two = mirror.decode(posted(encoder.encode(mark("svg", {}, layer))));
+    expect(encoder.lastSent).toMatchObject({ copied: 0, kept: 1 });
+    expect((two.childNodes[0] as Mark).childNodes[0]).toBe((first.childNodes[0] as Mark).childNodes[0]);
+    // A box nudged on the page while it's dragged: a copy of it would be wrong, so the window starts again.
+    const shown = (two.childNodes[0] as Mark).childNodes[0] as Mark;
+    shown.setAttribute("transform", "translate(4 0)");
+    shown.keepFromCopies();
+    const twin = mark("g", { class: "layer" });
+    twin.appendShared(cell);
+    const next = mark("svg", {});
+    next.appendShared(layer);
+    next.append(mark("g", { class: "cell" }, "7"));
+    expect(() => mirror.decode(posted(encoder.encode(next)))).toThrow(WireError);
   });
 
   it("a number the page hasn't got is an error, not a wrong picture", () => {

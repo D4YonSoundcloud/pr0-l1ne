@@ -4,6 +4,7 @@ import { valueKey } from "../../trace/diff";
 import type { LoopRow } from "../../trace/loopHistory";
 import { CELL_H, heatCell, pointerMarkers, rowPointerMarkers, s, valueCell } from "../draw";
 import type { Mark } from "../drawing";
+import { type CellCache, heatKey } from "../memoryView/cellCache";
 import { type ContainerColumn, markCell } from "./shared";
 
 /** One row's list of lists, as a grid, with i/j pointers and changes. */
@@ -16,6 +17,10 @@ export function drawGrid(
   labelsY: number,
   scene: LoopScene,
   changedNames: Set<string>,
+  /** Where the row is (row.ts: each row's kept cells are its own). */
+  place = "",
+  /** Cells kept from the window's last drawing (rowCache.ts cells), when the row is one that's kept. */
+  cells?: CellCache,
 ): void {
   const grid = gridIn(row, column.name);
   const before = prevRow ? gridIn(prevRow, column.name) : null;
@@ -49,10 +54,21 @@ export function drawGrid(
     r.items.forEach((item, ci) => {
       const old = before?.[ri]?.items[ci];
       const changed = !!before && (!old || valueKey(old) !== valueKey(item));
-      const { el } = valueCell(item, { x: column.x + ci * cellW, y: ry, w: cellW, changed });
-      markCell(el, `${column.name}#${ri}`, String(ci), item, ci * cellW);
-      heatCell(el, item, heat);
-      containerG.append(el);
+      const draw = () => {
+        const { el } = valueCell(item, { x: column.x + ci * cellW, y: ry, w: cellW, changed });
+        markCell(el, `${column.name}#${ri}`, String(ci), item, ci * cellW);
+        heatCell(el, item, heat);
+        containerG.append(el);
+      };
+      // Kept from the window's last drawing when it's the same cell of the same row, drawn the same.
+      if (cells)
+        cells.cell(
+          `lg|${place}|${column.name}|${ri}|${ci}|${valueKey(item)}|${column.x}|${ry}|${cellW}|${changed ? 1 : 0}|${heatKey(heat)}`,
+          containerG,
+          [],
+          draw,
+        );
+      else draw();
     });
   });
   // grid[i][j]: i marks a row (right side), j a column (underneath), and

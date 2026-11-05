@@ -57,6 +57,8 @@ export function nudgeBox(drawing: Mark, key: string, position: { x: number; y: n
   const dx = position.x - Number(node.getAttribute("data-x"));
   const dy = position.y - Number(node.getAttribute("data-y"));
   node.setAttribute("transform", `translate(${dx} ${dy})`);
+  // Not what the layout worker has any more: it mustn't be copied from (render/wire.ts).
+  node.keepFromCopies();
   return true;
 }
 export { memoryDrawing } from "./memoryView/layout";

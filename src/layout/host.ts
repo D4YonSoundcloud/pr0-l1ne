@@ -51,6 +51,7 @@ export function layoutHost(post: (message: FromLayout) => void): (message: ToLay
     if (perf.on) {
       perf.record("wire.full", encoder.lastSent.full);
       perf.record("wire.kept", encoder.lastSent.kept);
+      perf.record("wire.copied", encoder.lastSent.copied);
     }
     return out;
   }

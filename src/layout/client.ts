@@ -15,7 +15,7 @@ import type { Progress } from "../trace/work";
 import type { TracePart } from "../worker/runner";
 import type { FromLayout, ToLayout } from "./protocol";
 import type { LoopLaidOut, LoopShow, LoopView, MemoryLaidOut, MemoryShow, MemoryView } from "./requests";
-import { LatestWins, type LayoutService, type Loaded } from "./service";
+import { type Ahead, LatestWins, type LayoutService, type Loaded, requestKey } from "./service";
 
 /** What the client needs of a worker (tests pass a fake). */
 export interface LayoutWorkerLike {
@@ -34,6 +34,8 @@ interface Window {
   /** The last drawing made from what it sent: held, so the marks the next one keeps are still here. */
   last: Mark | null;
   lane: LatestWins<unknown>;
+  /** A request laid out ahead (LayoutService.ahead), by what it asks for: answered or on its way. */
+  ahead: { key: string; answer: Promise<unknown> } | null;
 }
 
 type Reply = Extract<FromLayout, { type: "memory" | "loop" }>;
@@ -95,6 +97,8 @@ export class WorkerLayout implements LayoutService {
   ): Promise<Loaded> {
     const load = ++this.loads;
     this.loading?.resolve({ kind: "replaced" });
+    // Laid out ahead from the trace before: not what will be asked for.
+    for (const w of this.windows.values()) w.ahead = null;
     return new Promise((resolve, reject) => {
       this.loading = { load, report, resolve, reject };
       this.worker.postMessage(
@@ -115,7 +119,7 @@ export class WorkerLayout implements LayoutService {
   }
 
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null> {
-    return this.ask(channel, view.full, (id) => ({
+    return this.ask(channel, view.full, requestKey("memory", show, view), (id) => ({
       type: "memory",
       id,
       channel,
@@ -126,7 +130,7 @@ export class WorkerLayout implements LayoutService {
   }
 
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null> {
-    return this.ask(channel, view.full, (id) => ({
+    return this.ask(channel, view.full, requestKey("loop", show, view), (id) => ({
       type: "loop",
       id,
       channel,
@@ -136,10 +140,23 @@ export class WorkerLayout implements LayoutService {
     })) as Promise<LoopLaidOut<Mark> | null>;
   }
 
+  ahead(channel: number, ask: Ahead): void {
+    const w = this.window(channel);
+    const key = requestKey(ask.kind, ask.show, ask.view);
+    // Only when the window has nothing else to do: never in the way of a step asked for.
+    if (ask.view.full || w.ahead?.key === key || !w.lane.idle) return;
+    const message = (id: number): Extract<ToLayout, { type: "memory" | "loop" }> =>
+      ask.kind === "memory"
+        ? { type: "memory", id, channel, show: ask.show, view: ask.view, perf: perf.on }
+        : { type: "loop", id, channel, show: ask.show, view: ask.view, perf: perf.on };
+    w.ahead = { key, answer: w.lane.ask(() => this.send(channel, w, false, message, true)) };
+    if (perf.on) perf.record("layout.ahead", 1);
+  }
+
   private window(channel: number): Window {
     let w = this.windows.get(channel);
     if (!w) {
-      w = { mirror: new MarkMirror(), last: null, lane: new LatestWins() };
+      w = { mirror: new MarkMirror(), last: null, lane: new LatestWins(), ahead: null };
       this.windows.set(channel, w);
     }
     return w;
@@ -148,47 +165,66 @@ export class WorkerLayout implements LayoutService {
   private ask(
     channel: number,
     full: boolean | undefined,
+    key: string,
     message: (id: number) => Extract<ToLayout, { type: "memory" | "loop" }>,
   ): Promise<unknown> {
     const w = this.window(channel);
-    const send = (retry: boolean): Promise<unknown> =>
-      new Promise<Reply>((resolve) => {
-        const id = this.nextId++;
-        const sent = perf.on ? performance.now() : 0;
-        this.replies.set(id, (reply) => {
-          if (perf.on) perf.record("layout.roundtrip", performance.now() - sent);
-          resolve(reply);
-        });
-        this.worker.postMessage(message(id));
-      }).then((reply) => {
-        // The worker's times, with the page's own (the benchmarks read them together).
-        for (const [stage, list] of reply.perf ?? []) for (const ms of list) perf.record(stage, ms);
-        if (reply.error) {
-          this.onError(reply.error);
-          return null;
-        }
-        const laidOut = reply.laidOut;
-        if (!laidOut?.drawing) return laidOut;
-        try {
-          // Every drawing sent is read, in order, so the numbers stay in step; saved ones on their own.
-          const drawing = timed("wire.decode", () =>
-            full
-              ? new MarkMirror().decode(laidOut.drawing as WireDrawing)
-              : w.mirror.decode(laidOut.drawing as WireDrawing),
-          );
-          if (!full) w.last = drawing;
-          return { ...laidOut, drawing };
-        } catch (error) {
-          if (!(error instanceof WireError) || !retry) throw error;
-          // Out of step (a bug): start the window afresh, and ask again.
-          w.mirror = new MarkMirror();
-          w.last = null;
-          this.worker.postMessage({ type: "reset", channel });
-          return send(false);
-        }
-      });
     // Saving lays out on the side: not in the window's line of draws.
-    return full ? send(true) : w.lane.ask(() => send(true));
+    if (full) return this.send(channel, w, true, message, true);
+    // Laid out ahead: that's the answer (already here, or on its way). Anything else: not needed now.
+    const ahead = w.ahead;
+    w.ahead = null;
+    if (ahead?.key === key) {
+      if (perf.on) perf.record("layout.ahead.used", 1);
+      return ahead.answer;
+    }
+    return w.lane.ask(() => this.send(channel, w, false, message, true));
+  }
+
+  /** Send a request, and make what comes back into marks (every drawing sent is read, in order, so the numbers stay in step). */
+  private send(
+    channel: number,
+    w: Window,
+    full: boolean,
+    message: (id: number) => Extract<ToLayout, { type: "memory" | "loop" }>,
+    retry: boolean,
+  ): Promise<unknown> {
+    return new Promise<Reply>((resolve) => {
+      const id = this.nextId++;
+      const sent = perf.on ? performance.now() : 0;
+      this.replies.set(id, (reply) => {
+        if (perf.on) perf.record("layout.roundtrip", performance.now() - sent);
+        resolve(reply);
+      });
+      this.worker.postMessage(message(id));
+    }).then((reply) => {
+      // The worker's times, with the page's own (the benchmarks read them together).
+      for (const [stage, list] of reply.perf ?? []) for (const ms of list) perf.record(stage, ms);
+      if (reply.error) {
+        this.onError(reply.error);
+        return null;
+      }
+      const laidOut = reply.laidOut;
+      if (!laidOut?.drawing) return laidOut;
+      try {
+        // Saved ones on their own.
+        const drawing = timed("wire.decode", () =>
+          full
+            ? new MarkMirror().decode(laidOut.drawing as WireDrawing)
+            : w.mirror.decode(laidOut.drawing as WireDrawing),
+        );
+        if (!full) w.last = drawing;
+        return { ...laidOut, drawing };
+      } catch (error) {
+        if (!(error instanceof WireError) || !retry) throw error;
+        // Out of step (a bug, or a copy of a mark changed on the page): start the window afresh, and ask again.
+        if (perf.on) perf.record("wire.reset", 1);
+        w.mirror = new MarkMirror();
+        w.last = null;
+        this.worker.postMessage({ type: "reset", channel });
+        return this.send(channel, w, full, message, false);
+      }
+    });
   }
 
   private receive(message: FromLayout): void {

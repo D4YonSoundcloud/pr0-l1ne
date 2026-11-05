@@ -10,6 +10,9 @@
  * only the few boxes and the arrows a hover touches.
  */
 
+/** The classes focus puts on (and takes off again): never part of a drawing as laid out. */
+export const FOCUS_CLASSES: ReadonlySet<string> = new Set(["is-focus", "is-related", "has-focus"]);
+
 /** A drawing focus can be shown on: the SVG on screen, or a drawing (a Mark). */
 export interface Focusable {
   readonly classList: {

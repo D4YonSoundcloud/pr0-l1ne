@@ -28,8 +28,11 @@
  *   wire.encode     the drawing made into a patch to send (render/wire.ts)
  *   wire.full       marks sent in full (a count, not a time)
  *   wire.kept       marks sent by number: kept from the drawing before (a count)
+ *   wire.copied     marks sent as copies of ones the page has, with the marks in them (a count)
  *   wire.decode     the patch made into marks on the page
+ *   wire.reset      the page and the worker out of step: the window sent afresh (a count)
  *   layout.roundtrip  from asking the worker to its answer, waiting included
+ *   layout.ahead    a step asked for ahead while playing (a count); layout.ahead.used, one that was the answer
  */
 export const perf = {
   on: false,

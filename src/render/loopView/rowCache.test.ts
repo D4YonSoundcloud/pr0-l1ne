@@ -4,7 +4,8 @@
  * anything a fresh drawing wouldn't: for every example, every step, in each
  * mode, a drawing that keeps rows is the fresh one mark for mark, and one
  * drawn for a part of the view is the fresh one without the rows outside
- * it. And rows must actually be kept.
+ * it. And rows must actually be kept, and the cells of rows drawn again
+ * (rowCache.ts cells), stacked and animated.
  */
 import { describe, expect, it } from "vitest";
 import { liveRows } from "../../app/loopController";
@@ -28,12 +29,16 @@ function visits(n: number): number[] {
 
 const rowsOf = (drawing: Mark) => drawing.querySelectorAll(".loop-row");
 
+/** Cells kept in rows drawn again: stacked, and in animated mode's live rows. */
+const cellsKept = { stacked: 0, live: 0 };
+
 function check(trace: Trace, label: string): number {
   let kept = 0;
   for (const hideQuiet of [true, false])
     for (const vertical of [false, true]) {
       const rows = new RowCache();
       const liveCache = new RowCache();
+      const livePatcher = new SvgPatcher();
       const patcher = new SvgPatcher();
       // Scrolling as it steps: a window that moves each step, with rows kept, patched onto one SVG.
       const scrolled = new RowCache();
@@ -48,6 +53,7 @@ function check(trace: Trace, label: string): number {
         expect(drawing.signature() === fresh.signature(), where).toBe(true);
         expect(patcher.show(drawing).outerHTML, `${where}, patched`).toBe((toSvg(drawing) as Element).outerHTML);
         kept += rows.stats.kept;
+        cellsKept.stacked += rows.cells.stats.kept;
 
         // Only part of it in view: the fresh drawing's rows that reach it, as they are.
         const height = Number(fresh.getAttribute("height"));
@@ -70,11 +76,16 @@ function check(trace: Trace, label: string): number {
         const moving = loopDrawing(scene, { vertical, rows: scrolled, visible: { top, bottom: top + 3 * window } });
         expect(scrolling.show(moving).outerHTML, `${where}, scrolling`).toBe((toSvg(moving) as Element).outerHTML);
 
-        // Animated mode: never kept (one live row), and the same as fresh.
+        // Animated mode: rows never kept (one live row), its cells are; the same as fresh.
         const live = loopScene(trace, history, { hideQuiet: false, live: liveRows(trace, i, history) });
-        expect(
-          loopDrawing(live, { vertical, rows: liveCache }).signature() === loopDrawing(live, { vertical }).signature(),
-        ).toBe(true);
+        const liveDrawing = loopDrawing(live, { vertical, rows: liveCache });
+        cellsKept.live += liveCache.cells.stats.kept;
+        expect(liveDrawing.signature() === loopDrawing(live, { vertical }).signature(), `${where}, animated`).toBe(
+          true,
+        );
+        expect(livePatcher.show(liveDrawing).outerHTML, `${where}, animated, patched`).toBe(
+          (toSvg(liveDrawing) as Element).outerHTML,
+        );
       }
     }
   return kept;
@@ -95,8 +106,10 @@ describe("kept loop rows on the examples", () => {
     },
     120_000,
   );
-  it("keeps rows across steps", () => {
+  it("keeps rows across steps, and the cells of rows drawn again", () => {
     expect(total).toBeGreaterThan(500);
+    expect(cellsKept.stacked).toBeGreaterThan(500);
+    expect(cellsKept.live).toBeGreaterThan(500);
   });
 });
 

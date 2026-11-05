@@ -247,6 +247,7 @@ export class MemoryController {
         this.renderer.setAppearance({ step: animation });
         timed("memory.render", () => this.renderer.show(laidOut));
         this.updateTotal(laidOut.total);
+        if (asked === this.asked) this.layAhead(show, trace.steps);
       })
       .catch((error: unknown) => console.error("Memory window:", error))
       .finally(() => {
@@ -257,6 +258,17 @@ export class MemoryController {
 
   /** Requests made, to tell the last one. */
   private asked = 0;
+
+  /** Playing: the next step, laid out while this one's on screen (LayoutService.ahead). */
+  private layAhead(show: MemoryShow, steps: number): void {
+    const { playing, stepIndex } = this.options.app.get();
+    if (!playing || show.step !== stepIndex || stepIndex + 1 >= steps) return;
+    this.layout.ahead(this.channel, {
+      kind: "memory",
+      show: { ...show, step: stepIndex + 1 },
+      view: this.renderer.layoutView(),
+    });
+  }
 
   /** Resolves once the step asked for last is drawn (or replaced). */
   drawn(): Promise<void> {

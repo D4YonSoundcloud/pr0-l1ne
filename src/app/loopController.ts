@@ -203,6 +203,7 @@ export class LoopController {
         this.showTabs(laidOut.tabs);
         this.renderer.setAppearance({ step: animation });
         timed("loop.render", () => this.renderer.show(laidOut, asStep));
+        if (asked === this.asked) this.layAhead(show, trace.steps);
       })
       .catch((error: unknown) => console.error("Loop history:", error))
       .finally(() => {
@@ -213,6 +214,17 @@ export class LoopController {
 
   /** Requests made, to tell the last one. */
   private asked = 0;
+
+  /** Playing: the next step, laid out while this one's on screen (LayoutService.ahead). */
+  private layAhead(show: LoopShow, steps: number): void {
+    const { playing, stepIndex } = this.options.app.get();
+    if (!playing || show.step !== stepIndex || stepIndex + 1 >= steps) return;
+    this.layout.ahead(this.channel, {
+      kind: "loop",
+      show: { ...show, step: stepIndex + 1 },
+      view: this.renderer.layoutView(),
+    });
+  }
 
   /** Resolves once the step asked for last is drawn (or replaced). */
   drawn(): Promise<void> {

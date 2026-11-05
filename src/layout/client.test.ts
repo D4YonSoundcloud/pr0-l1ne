@@ -218,6 +218,40 @@ describe("the layout worker, from the page", () => {
     ).toEqual([3, 6]);
   });
 
+  it("laid out ahead while playing: asked for the same, that's the answer; asked for another, laid out as asked", async () => {
+    const raw = await traceJavaScript(CODE);
+    const { layout, worker } = setup();
+    const ready = layout.load("whole", raw, () => {});
+    await settle();
+    await ready;
+    const channel = layout.channel();
+    const page = onThePage(raw);
+    const sent = () =>
+      worker()
+        .sent.filter((m) => m.type === "memory")
+        .map((m) => (m as { show: MemoryShow }).show.step);
+    const first = layout.memory(channel, show(4), VIEW);
+    // Not while the window has a step being laid out: never in the way of one asked for.
+    layout.ahead(channel, { kind: "memory", show: show(5), view: VIEW });
+    await settle();
+    await first;
+    expect(sent()).toEqual([4]);
+    layout.ahead(channel, { kind: "memory", show: show(5), view: VIEW });
+    layout.ahead(channel, { kind: "memory", show: show(5), view: VIEW }); // the same again: asked once
+    await settle();
+    expect(sent()).toEqual([4, 5]);
+    const fifth = await layout.memory(channel, show(5), VIEW);
+    expect(sent()).toEqual([4, 5]); // answered by the one laid out ahead
+    expect(fifth!.drawing.signature()).toBe(page.memory(99, show(5), VIEW)!.drawing.signature());
+    // Laid out ahead, then something else asked for: that's laid out, and still draws right after.
+    layout.ahead(channel, { kind: "memory", show: show(6), view: VIEW });
+    await settle();
+    const other = layout.memory(channel, show(9), VIEW);
+    await settle();
+    expect(sent()).toEqual([4, 5, 6, 9]);
+    expect((await other)!.drawing.signature()).toBe(page.memory(98, show(9), VIEW)!.drawing.signature());
+  });
+
   it("stopped: draws what had arrived", async () => {
     const raw = applyHints(await traceJavaScript(CODE));
     const { layout } = setup();

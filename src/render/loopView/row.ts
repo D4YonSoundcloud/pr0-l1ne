@@ -25,6 +25,7 @@ import {
 } from "../draw";
 import type { Mark } from "../drawing";
 import { graphPicture } from "../graphView";
+import { type CellCache, heatKey } from "../memoryView/cellCache";
 import { drawGrid } from "./grid";
 import { drawTrack, drawTree } from "./linked";
 import type { LoopPlan } from "./plan";
@@ -46,6 +47,8 @@ export interface RowContext {
   prevDrawn: DrawnRow | null;
   /** The row follows unrecorded passes: no change arrows across them. */
   afterGap: boolean;
+  /** Cells kept from the window's last drawing (rowCache.ts cells), when the row is one that's kept. */
+  cells?: CellCache;
 }
 
 /**
@@ -57,6 +60,9 @@ export interface RowContext {
 export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext): Mark {
   const { plan, scene, arrowLayer, prevDrawn, afterGap } = ctx;
   const { all, live, scalars, history } = scene;
+  // Where a kept cell is from (rowCache.ts cells): its row; animated, each loop's one live row,
+  // whichever pass it shows, by the loop its keys are scoped to (layout.ts scopeToLoop).
+  const place = live ? `live:${row.loop ?? history.info.id}` : String(index);
   const { columns, vertical, rowH, rowTop, contentW, scalarsX, cellsTop, isTree, indentOf, labelOf } = plan;
   const trackLayout = plan.track;
   const graphLayout = plan.graph;
@@ -172,7 +178,7 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
     nameLabel(g, nameX, cellsY + CELL_H / 2, column.name, obj ? totalOf(obj.id) : null);
     if (!obj) continue;
     if (column.grid) {
-      drawGrid(g, column, row, prevDrawn?.row ?? null, cellsY, labelsY, scene, changedNames);
+      drawGrid(g, column, row, prevDrawn?.row ?? null, cellsY, labelsY, scene, changedNames, place, ctx.cells);
       continue;
     }
     const cells = cellsOf(obj);
@@ -239,10 +245,22 @@ export function drawRow(row: LoopRow, index: number, y: number, ctx: RowContext)
         containerG.append(
           s("text", { class: "index", x: cx + column.cellW / 2, y: labelsY + 9, "text-anchor": "middle" }, cell.label),
         );
-      const { el } = valueCell(cell.value, { x: cx, y: cellsY, w: column.cellW, changed: changedKeys.has(cell.key) });
-      markCell(el, column.name, cell.key, cell.value, cx);
-      if (obj.kind !== "dict") heatCell(el, cell.value, heat);
-      containerG.append(el);
+      const changed = changedKeys.has(cell.key);
+      const draw = () => {
+        const { el } = valueCell(cell.value, { x: cx, y: cellsY, w: column.cellW, changed });
+        markCell(el, column.name, cell.key, cell.value, cx);
+        if (obj.kind !== "dict") heatCell(el, cell.value, heat);
+        containerG.append(el);
+      };
+      // Kept from the window's last drawing when it's the same cell of the same row, drawn the same.
+      if (ctx.cells)
+        ctx.cells.cell(
+          `l|${place}|${column.name}|${cell.key}|${valueKey(cell.value)}|${cx}|${cellsY}|${column.cellW}|${changed ? 1 : 0}|${obj.kind === "dict" ? "-" : heatKey(heat)}`,
+          containerG,
+          [],
+          draw,
+        );
+      else draw();
     });
     if (obj.kind !== "dict" && obj.kind !== "set") {
       const pointers = scene.pointers(row, column.name, changedNames);

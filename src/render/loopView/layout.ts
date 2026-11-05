@@ -100,10 +100,18 @@ function drawRows(scene: LoopScene, options: LoopViewOptions, plan: LoopPlan): M
         shell.appendShared(kept.row);
         arrows.appendShared(...kept.arrows);
       } else {
-        const drawn = drawRow(row, index, 0, { plan, scene, arrowLayer: arrows, prevDrawn: above, afterGap });
+        const ctx = { plan, scene, arrowLayer: arrows, prevDrawn: above, afterGap };
+        let drawn!: Mark;
+        // Cells drawn the same as last time are kept (rowCache.ts cells), live rows' too; a row that's kept keeps its cells.
+        const cells = key
+          ? cache!.cells.record(() => {
+              drawn = drawRow(row, index, 0, { ...ctx, cells: cache!.cells });
+            })
+          : [];
+        if (!key) drawn = drawRow(row, index, 0, cache ? { ...ctx, cells: cache.cells } : ctx);
         if (live) scopeToLoop(drawn, row.loop ?? scene.history.info.id);
         shell.append(drawn);
-        if (key) cache!.set(key, { row: drawn, arrows: [...arrows.childNodes] as Mark[] });
+        if (key) cache!.set(key, { row: drawn, arrows: [...arrows.childNodes] as Mark[], cells });
       }
       if (!arrows.childNodes.length) arrows.remove();
     }
@@ -148,8 +156,11 @@ function rowShell(scene: LoopScene, row: LoopScene["rows"][number], index: numbe
  * inner loop's, and slide in from the inner row on every step it runs.
  */
 export function scopeToLoop(row: Mark, loop: string): void {
-  for (const el of row.querySelectorAll("[data-flip]"))
-    el.setAttribute("data-flip", `${loop}/${el.getAttribute("data-flip")}`);
-  for (const el of row.querySelectorAll("[data-cell]"))
-    el.setAttribute("data-cell", `${loop}/${el.getAttribute("data-cell")}`);
+  // Cells kept from the last drawing (rowCache.ts cells) have their loop's name already, and stay as they are.
+  const prefix = `${loop}/`;
+  for (const name of ["data-flip", "data-cell"])
+    for (const el of row.querySelectorAll(`[${name}]`)) {
+      const value = el.getAttribute(name)!;
+      if (!value.startsWith(prefix)) el.setAttribute(name, prefix + value);
+    }
 }
