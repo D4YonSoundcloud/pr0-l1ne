@@ -25,6 +25,8 @@ export interface StepViewOptions {
   /** Update the timeline's buttons and scrubber (PlaybackController.updateControls). */
   updateControls(): void;
   editor: { setMarks(marks: LineMarks): void };
+  /** What changed at the step, under the code (changesView.ts). */
+  changes?: { render(): void };
 }
 
 export class StepView {
@@ -45,6 +47,7 @@ export class StepView {
       els.stepLabel.title = "";
       els.output.textContent = "";
       if (updateMarks) editor.setMarks({ next: null, prev: null, error: null });
+      this.options.changes?.render();
       return;
     }
 
@@ -66,6 +69,7 @@ export class StepView {
 
     memory.render();
     loop.render();
+    this.options.changes?.render();
 
     // Output printed so far, plus the error once we reach the end.
     els.output.textContent = trace.stdout.slice(0, trace.stdoutLengths[stepIndex]);

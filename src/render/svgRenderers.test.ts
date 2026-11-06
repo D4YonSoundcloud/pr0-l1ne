@@ -113,6 +113,28 @@ describe("SvgMemoryRenderer", () => {
     expect(r.hitTest(5, 5)).toBeNull();
   });
 
+  it("says which value's under a point: a list's cell, a variable, and a variable between its name's letters", async () => {
+    const el = windowEl();
+    const r = SVG_RENDERERS.memory(el, {});
+    const scene = sceneAt(await traceJavaScript("const nums = [4, 7];\nlet n = 1;\n"));
+    r.render(scene, null);
+    const at = vi.fn<(x: number, y: number) => Element | null>();
+    document.elementFromPoint = at;
+    const cell = el.querySelector<SVGElement>('[data-cell$="|1"]')!;
+    const object = cell.getAttribute("data-cell")!.split("|")[0];
+    at.mockReturnValue(cell.querySelector("rect"));
+    expect(r.hitTest(5, 5)).toMatchObject({ kind: "box", value: { kind: "slot", object, slot: "1" } });
+    const row = el.querySelector<SVGElement>('[data-var$="|n"]')!;
+    const frame = row.getAttribute("data-var")!.split("|")[0];
+    at.mockReturnValue(row.querySelector(".row-label"));
+    expect(r.hitTest(5, 5)).toMatchObject({ value: { kind: "var", frame, name: "n" } });
+    // The box behind the name: the row whose bounds the point's in.
+    at.mockReturnValue(row.closest(".node")!.querySelector(".box-body"));
+    row.getBoundingClientRect = () => ({ left: 0, right: 100, top: 40, bottom: 60 }) as DOMRect;
+    expect(r.hitTest(50, 50)).toMatchObject({ value: { kind: "var", frame, name: "n" } });
+    expect(r.hitTest(50, 80)).not.toHaveProperty("value");
+  });
+
   it("moves, zooms and styles the window, and lets go of it", () => {
     const el = windowEl();
     const r = SVG_RENDERERS.memory(el, {});

@@ -23,6 +23,7 @@
 
 import type { LoopLaidOut, LoopView, MemoryLaidOut, MemoryView } from "../layout/requests";
 import type { Mark } from "../render/drawing";
+import type { ValueTarget } from "../trace/history";
 import type { LoopScene } from "./loopScene";
 import type { MemoryScene } from "./memoryScene";
 import type { SqlPipelineScene, SqlTableScene } from "./sqlScene";
@@ -72,7 +73,12 @@ export interface RendererStyle {
 }
 
 /** What's at a point in the window: a box (by its scene key), or the paper. */
-export type Hit = { kind: "box"; key: string } | { kind: "background" };
+/**
+ * What's under a point: a box (by key), with the value under the point in
+ * it when there is one (a cell, a frame's variable: the memory window,
+ * for its history, app/historyController.ts); or the background.
+ */
+export type Hit = { kind: "box"; key: string; value?: ValueTarget } | { kind: "background" };
 
 export interface Renderer<S> {
   /**

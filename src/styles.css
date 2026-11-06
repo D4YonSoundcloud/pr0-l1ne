@@ -1029,10 +1029,84 @@ select {
 
 .console {
   grid-row: 3;
+  position: relative;
   border-top: 1px solid #2c344b;
-  max-height: 28vh;
+  /* As tall as it's dragged (app/consoleSize.ts): what's longer scrolls. */
+  height: var(--console-height, 132px);
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* The tabs and the find box share the top row; the tab open fills the rest. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.console > .output,
+.console > .changes {
+  grid-column: 1 / -1;
+}
+/* Find a step where something's true (app/findController.ts). */
+.find {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  min-width: 0;
+  padding: 4px 10px 0 8px;
+}
+.find-input {
+  flex: 1 1 120px;
+  max-width: 220px;
+  min-width: 80px;
+  padding: 2px 6px;
+  border: 1px solid #343c55;
+  border-radius: 5px;
+  background: #171c2b;
+  color: var(--editor-text);
+  font-family: var(--font-code);
+  font-size: 12px;
+}
+.find-input:focus {
+  outline: 1px solid #f6d74380;
+  border-color: #f6d74380;
+}
+.find-go {
+  padding: 1px 5px;
+  border: 1px solid #343c55;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 10px;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+.find-go:hover {
+  color: #fff;
+}
+.find-note {
+  flex-basis: 100%;
+  text-align: right;
+  font-size: 11px;
+  color: var(--chrome-muted);
+}
+.find-note:empty {
+  display: none;
+}
+.find-note.is-error {
+  color: #ff8f86;
+}
+/* Its top edge: drag it up or down. */
+.console-grip {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: row-resize;
+  z-index: 2;
+}
+.console-grip:hover,
+.console-grip:focus-visible,
+.console-grip.is-dragging {
+  background: linear-gradient(transparent 3px, #f6d74380 3px, #f6d74380 5px, transparent 5px);
+  outline: none;
 }
 .pane-title {
   padding: 6px 14px 0;
@@ -1042,7 +1116,7 @@ select {
 .output {
   margin: 0;
   padding: 4px 14px 10px;
-  min-height: 3.2em;
+  min-height: 0;
   overflow: auto;
   font-family: var(--font-code);
   font-size: 13px;
@@ -1051,6 +1125,77 @@ select {
 }
 .output .error {
   color: #ff8f86;
+}
+
+/* Under the code: what was printed, or what changed at the step (app/changesView.ts). */
+.console-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 10px 0;
+}
+.console-tab {
+  padding: 2px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+.console-tab:hover {
+  color: var(--chrome-text);
+}
+.console-tab[aria-selected="true"] {
+  color: var(--chrome-text);
+  border-bottom-color: var(--highlight);
+}
+.console-tab:focus-visible {
+  outline: 2px solid #f6d74380;
+  outline-offset: -2px;
+}
+.changes {
+  padding: 4px 14px 10px;
+  min-height: 0;
+  overflow: auto;
+  font-size: 13px;
+  color: var(--editor-text);
+}
+.changes-note {
+  margin: 0;
+  color: var(--chrome-muted);
+}
+.changes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-code);
+}
+.changes-list li {
+  padding: 1px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.change-name {
+  color: #9fb4ff;
+}
+.change-before {
+  color: var(--chrome-muted);
+  text-decoration: line-through;
+  text-decoration-color: #7f8aa380;
+}
+.change-arrow,
+.change-frame {
+  color: var(--chrome-muted);
+}
+.change-after {
+  color: var(--highlight);
+}
+.change-tag {
+  margin-left: 2px;
+  font-family: var(--font-ui, inherit);
+  font-size: 11px;
+  color: var(--chrome-muted);
 }
 
 .banner {
@@ -1215,6 +1360,32 @@ select {
 }
 .monaco-editor .exec-bar-error {
   background: #ff6b61;
+}
+/* Run to a line (app/seekController.ts): ◀ and ▶ beside the line the pointer's over, in the column the
+   execution bars are in (editor.ts BACK_ARROW / NEXT_ARROW: where each is clicked). Dim when there's no step that way. */
+.monaco-editor .run-to::before,
+.monaco-editor .run-to::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  margin-top: -5px;
+  border-style: solid;
+  opacity: 0.3;
+}
+.monaco-editor .run-to::before {
+  left: 9px;
+  border-width: 5px 5px 5px 0;
+  border-color: transparent #8fa9dc transparent transparent;
+}
+.monaco-editor .run-to::after {
+  left: 16px;
+  border-width: 5px 0 5px 5px;
+  border-color: transparent transparent transparent #8fa9dc;
+}
+.monaco-editor .run-to.has-back::before,
+.monaco-editor .run-to.has-next::after {
+  opacity: 1;
+  cursor: pointer;
 }
 
 /* ------------------------------------------------------------ diagrams */
@@ -2498,6 +2669,41 @@ select {
 .editor-head .window-button {
   color: var(--chrome-muted);
 }
+/* An option in the code window's header (Run to line). */
+.pane-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid #343c55;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+.pane-toggle svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pane-toggle:hover {
+  color: #fff;
+}
+.pane-toggle[aria-pressed="true"] {
+  color: #fff;
+  background: #2b3550;
+  border-color: #46506c;
+}
+.pane-toggle:focus-visible {
+  outline: 2px solid #f6d74380;
+  outline-offset: 1px;
+}
 .editor-head .window-button:hover,
 .editor-head .window-button:focus-visible {
   color: #fff;
@@ -3210,7 +3416,7 @@ select {
 
   /* Printed output stays inside the editor, and small. */
   .console {
-    max-height: 22dvh;
+    max-height: 40dvh;
   }
 
   /* The Style, Layout, Complexity and Measure panels cover the screen. */
@@ -4447,4 +4653,206 @@ select {
   color: var(--chrome-text);
   background: var(--chrome);
   pointer-events: none;
+}
+
+/* ------------------------------------------------------------ a value's history (app/historyController.ts) */
+
+.history-card {
+  position: fixed;
+  z-index: 60;
+  width: 272px;
+  padding: 8px 10px 10px;
+  border: 1px solid #343c55;
+  border-radius: 8px;
+  background: #1b2133;
+  color: var(--chrome-text);
+  font-size: 12px;
+  box-shadow: 0 8px 24px #0008;
+}
+.history-card.is-pinned {
+  border-color: #5a6a9a;
+}
+.history-card.is-dragging {
+  opacity: 0.92;
+  box-shadow: 0 12px 32px #000a;
+}
+/* Shown again from the drawing or the Changes list while it's pinned: a flash where it is. */
+.history-card.is-pointed-out {
+  animation: history-flash 600ms ease-out;
+}
+@keyframes history-flash {
+  0%,
+  40% {
+    border-color: var(--highlight);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--highlight) 40%, transparent),
+      0 8px 24px #0008;
+  }
+}
+/* The head: dragged to move the card; its tools on the right. */
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -8px -10px 0;
+  padding: 6px 6px 2px 10px;
+  border-radius: 8px 8px 0 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.history-card.is-dragging .history-head {
+  cursor: grabbing;
+}
+.history-head:focus-visible {
+  outline: 2px solid #8fa9dc;
+  outline-offset: -2px;
+}
+.history-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.history-tools {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  flex: none;
+}
+.history-tool {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+.history-tool:hover:not(:disabled),
+.history-tool:focus-visible {
+  background: #2b3550;
+  color: #fff;
+}
+.history-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.history-tool svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.history-pin[aria-pressed="true"] {
+  color: var(--highlight);
+}
+.history-close {
+  font-size: 16px;
+}
+.history-name {
+  font-family: var(--font-code);
+  font-size: 13px;
+  color: #9fb4ff;
+  overflow-wrap: anywhere;
+}
+.history-count {
+  color: var(--chrome-muted);
+}
+.history-now {
+  margin: 4px 0 6px;
+  font-family: var(--font-code);
+  color: var(--highlight);
+  overflow-wrap: anywhere;
+}
+.history-spark {
+  display: block;
+  cursor: pointer;
+}
+.history-line {
+  fill: none;
+  stroke: #8fa9dc;
+  stroke-width: 1.5;
+}
+.history-at {
+  stroke: var(--highlight);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.history-dot {
+  fill: #8fa9dc;
+}
+.history-dot.is-now {
+  fill: var(--highlight);
+}
+.history-range {
+  margin-top: 2px;
+  color: var(--chrome-muted);
+  font-family: var(--font-code);
+}
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 210px;
+  overflow: auto;
+}
+.history-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--chrome-text);
+  cursor: pointer;
+}
+.history-row:hover,
+.history-row:focus-visible {
+  background: #2b3550;
+}
+.history-row.is-now {
+  color: var(--highlight);
+}
+.history-step {
+  flex: none;
+  min-width: 70px;
+  color: var(--chrome-muted);
+}
+.history-value {
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+.history-more {
+  padding: 2px 4px;
+  color: var(--chrome-muted);
+}
+/* The memory window: a cell or variable that has a history to show. */
+.viewport.is-over-value {
+  cursor: help;
+}
+/* A change's name in the Changes list: opens its history. */
+.change-name-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #9fb4ff;
+  cursor: pointer;
+  text-decoration: underline dotted #9fb4ff80;
+  text-underline-offset: 3px;
+}
+.change-name-button:hover,
+.change-name-button:focus-visible {
+  color: #c3d2ff;
 }

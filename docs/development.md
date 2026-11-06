@@ -108,6 +108,11 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/runController.ts` | Running code: one runner per language, started when first needed; the time budgets for Live and Run; queuing edits that arrive mid-run; the status text; and turning each result into the state, the banner and the editor's error marks |
 | `src/app/measureController.ts` | Measure and growth runs: the Measure and results buttons, the Measure panel and its growth section, the time limit, the editor's count labels, and the last measurement (shown only in its language, and only while the code still matches) |
 | `src/app/stepView.ts` | Drawing the step on screen: the step label, both canvas windows, the output so far and the editor's line marks |
+| `src/app/changesView.ts` | The Output and Changes tabs under the code: what changed at the step, in words |
+| `src/app/seek.ts`, `src/app/seekController.ts` | Running to a line: the next (or previous) step at a line, from the gutter's ◀ ▶ or Ctrl/Cmd + F10, and the switch that turns the arrows off |
+| `src/app/consoleSize.ts` | The Output / Changes panel's height: dragged by its top edge, keys, double-click for the default, remembered |
+| `src/app/findController.ts` | The find box: the next (or previous) step where a condition is true |
+| `src/app/historyController.ts` | A value's history: the card on hover (a sparkline or a list), click to go to its next change, and the names in the Changes tab |
 | `src/app/memoryController.ts` | The memory view: builds the step's scene (arrows or nested, memory sizes and their model, output on the canvas) and hands it to the window's renderer; Reset layout |
 | `src/app/loopController.ts` | Loop history: the loop tabs, stacked or animated, collapsing passes with no changes, and stacking vertically; builds the loop's scene and hands it to the window's renderer |
 | `src/app/styleController.ts` | The Style panel and the appearance it edits (applied to each window's renderer with `setAppearance`), and how long each window's step animation runs |
@@ -297,6 +302,8 @@ pr0-l1ne/
     │   ├── types.ts            The trace format (the tracer/renderer contract)
     │   ├── policy.ts           The step budget, time limits and sampling rules, for both tracers
     │   ├── diff.ts             What changed between two steps
+    │   ├── changes.ts          The same, in words, named as code reaches it: nums[2]: 5 → 3
+    │   ├── history.ts          A value over the run (its changes), and finding a step by a condition
     │   ├── loopHistory.ts      Group steps into loop iterations: each trace's loop runs found once, a step's history by binary search
     │   ├── loopHistory.incremental.test.ts  The history held to the scanning one (testing/loopHistoryReference.ts) at every step
     │   ├── hints.ts            Parse and apply viz: comment hints

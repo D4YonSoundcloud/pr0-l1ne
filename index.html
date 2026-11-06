@@ -103,6 +103,7 @@
           <div class="pane-head editor-head" data-dock="editor">
             <button type="button" class="window-grip" aria-label="Move the code window" title="Drag the header to move this window anywhere. Or press an arrow key here to move it to that edge of the page."><svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg></button>
             <span class="pane-name" data-dock-name>Code</span>
+            <button type="button" id="run-to-toggle" class="pane-toggle" aria-pressed="true" title="Run to a line: hover beside a line that ran for ◀ and ▶, the step before or after this one at that line (Ctrl + F10, Ctrl + Shift + F10 at the cursor)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 4.5 3 8l3.5 3.5M9.5 4.5 13 8l-3.5 3.5" /></svg>Run to line</button>
             <div class="window-controls" role="group" aria-label="Window size">
               <button type="button" class="window-button" data-window="editor" data-action="minimize" aria-label="Minimize this window" title="Minimize: fold this window to a bar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9" /></svg></button>
               <button type="button" class="window-button" data-window="editor" data-action="maximize" aria-pressed="false" aria-label="Maximize this window" title="Maximize: fold the other windows to bars"><svg class="icon-max" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" /></svg><svg class="icon-restore" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><path d="M5.5 5.5v-2.5h8v8h-2.5" /></svg></button>
@@ -121,9 +122,20 @@
             <span style="--w: 30%"></span>
           </div>
           <noscript><p class="boot-noscript">PR0L1NE runs your code in the browser, so it needs JavaScript turned on.</p></noscript>
-          <div class="console" role="region" aria-label="Program output">
-            <div class="pane-title">Output</div>
-            <pre id="output" class="output"></pre>
+          <div class="console" role="region" aria-label="Output and changes">
+            <div id="console-grip" class="console-grip" role="separator" aria-orientation="horizontal" aria-label="Resize the output and changes" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" title="Drag to make this taller or shorter (or ↑ ↓ here). Double-click to reset."></div>
+            <div class="console-tabs" role="tablist" aria-label="Under the code">
+              <button type="button" role="tab" id="output-tab" class="console-tab" aria-selected="true" aria-controls="output" title="What the program printed, up to this step">Output</button>
+              <button type="button" role="tab" id="changes-tab" class="console-tab" aria-selected="false" aria-controls="changes" tabindex="-1" title="What changed at this step: each variable and each list, dict or object's slot, before and after">Changes</button>
+            </div>
+            <form id="find" class="find" role="search" aria-label="Find a step">
+              <input id="find-input" class="find-input" type="text" autocomplete="off" spellcheck="false" placeholder="Find a step where… best > 10" aria-label="Find the next step where this is true" title="A step where this is true, worked out with that step's variables (as a viz: check is). Enter: the next one after this step. Shift + Enter: the one before." />
+              <button type="button" id="find-prev" class="find-go" aria-label="The step before this one where it's true" title="The step before this one where it's true (Shift + Enter)">◀</button>
+              <button type="submit" id="find-next" class="find-go" aria-label="The next step where it's true" title="The next step where it's true (Enter)">▶</button>
+              <span id="find-note" class="find-note" role="status"></span>
+            </form>
+            <pre id="output" class="output" role="tabpanel" aria-labelledby="output-tab"></pre>
+            <div id="changes" class="changes" role="tabpanel" aria-labelledby="changes-tab" hidden></div>
           </div>
         </section>
 

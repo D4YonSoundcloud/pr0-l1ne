@@ -100,6 +100,8 @@ export interface PaintGroup {
   at?: { x: number; y: number };
   /** Animation identity (data-flip), and where it is (see render/animate.ts). */
   flip?: string;
+  /** A frame's variable (data-var: `${frameId}|${name}`), for its history. */
+  variable?: string;
   /** A value in a container's slot (data-cell), for a swap's slide. */
   cell?: { key: string; value: string; cx: number; cy: number };
   /** Don't fade in when new (data-no-fade). */
@@ -515,6 +517,8 @@ export function paintDrawing(svg: DrawingNode, source: StyleSource, cache?: Pain
         cx: num(el, "data-cx"),
         cy: num(el, "data-cy"),
       };
+    const variable = el.getAttribute("data-var");
+    if (variable) out.variable = variable;
     if (el.hasAttribute("data-no-fade")) out.noFade = true;
     if (el.hasAttribute("data-top")) out.current = { top: num(el, "data-top"), bottom: num(el, "data-bottom") };
     const offset = translateOf(el.getAttribute("transform"));

@@ -31,6 +31,8 @@ export interface EditorCommands {
   playOrRewind(): void;
   measure(): void;
   measureGrowth(): void;
+  /** Go to the next step at the cursor's line (`back`: the step before this one that's at it). */
+  runToCursor(back: boolean): void;
 }
 
 export interface EditorHandle {
@@ -51,7 +53,41 @@ export interface EditorHandle {
   revealLine(line: number): void;
   /** Measure's heat map: a tint and a count on each line that ran (empty to clear). */
   setMeasureLabels(labels: { line: number; text: string; hover: string; heat: number }[]): void;
+  /**
+   * Run to a line (app/seekController.ts): on, the gutter beside each line
+   * has room for ◀ and ▶, shown on the line the pointer's over when a step
+   * is at it; off, the gutter is as narrow as before.
+   */
+  setRunToLine(on: boolean): void;
+  /**
+   * The lines a step can be run to, each with whether there's a step at it
+   * before this one (◀) and after (▶), and how many steps are at it. Null
+   * when there are none (no trace, or the code changed since it ran).
+   */
+  setRunnable(lines: Map<number, RunnableLine> | null): void;
+  /** Called when a line's ◀ (`back`) or ▶ is clicked. */
+  onGutterClick(handler: (line: number, back: boolean) => void): void;
+  /** A short message at a line, as VS Code says "Cannot edit in read-only editor". */
+  showMessage(line: number, text: string): void;
 }
+
+/** A line a step can be run to: is there a step at it before this one, and after; how many steps are at it. */
+export interface RunnableLine {
+  back: boolean;
+  next: boolean;
+  steps: number;
+}
+
+/**
+ * The gutter column beside the line numbers (Monaco's line decorations),
+ * in pixels: the execution bars, then, with Run to line on, ◀ and ▶
+ * (styles.css .run-to). Folding's arrows come after it.
+ */
+const DECORATIONS_WIDTH = 10;
+const RUN_TO_WIDTH = 22;
+/** Where ◀ and ▶ are clickable in that column. */
+const BACK_ARROW = [8, 15];
+const NEXT_ARROW = [15, 22];
 
 const MARKER_OWNER = "algoviz";
 const HINT_OWNER = "algoviz-hints";
@@ -127,7 +163,7 @@ export function createEditor(
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     padding: { top: 12, bottom: 12 },
-    lineDecorationsWidth: 10, // room for the execution bars
+    lineDecorationsWidth: DECORATIONS_WIDTH, // room for the execution bars (and ◀ ▶ with Run to line on)
     renderLineHighlight: "line",
     fixedOverflowWidgets: true, // let hovers and suggestions escape the pane
   });
@@ -170,6 +206,19 @@ export function createEditor(
     ["algoviz.swapPanels", "AlgoViz: Swap Editor and Canvas", [], callbacks.commands.swapPanels],
     ["algoviz.toggleNested", "AlgoViz: Toggle Nested Memory View", [], callbacks.commands.toggleNested],
     ["algoviz.togglePlay", "AlgoViz: Play / Pause", [], callbacks.commands.togglePlay],
+    // As VS Code's Run to Cursor (Ctrl + F10), and back again.
+    [
+      "algoviz.runToCursor",
+      "AlgoViz: Run to the Cursor's Line (the Next Step There)",
+      [KeyMod.CtrlCmd | KeyCode.F10],
+      () => callbacks.commands.runToCursor(false),
+    ],
+    [
+      "algoviz.runBackToCursor",
+      "AlgoViz: Back to the Cursor's Line (the Step Before This One There)",
+      [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.F10],
+      () => callbacks.commands.runToCursor(true),
+    ],
   ];
   for (const [id, label, keybindings, run] of actions) {
     editor.addAction({ id, label, keybindings, run: () => run() });
@@ -184,6 +233,63 @@ export function createEditor(
   const costStyle = document.createElement("style");
   document.head.append(costStyle);
   const measureDecorations = editor.createDecorationsCollection();
+  // Run to a line: ◀ ▶ beside the line the pointer's over, in the gutter's decorations column.
+  const runToDecoration = editor.createDecorationsCollection();
+  const gutterHandlers: ((line: number, back: boolean) => void)[] = [];
+  let runToOn = false;
+  let runnable: Map<number, RunnableLine> | null = null;
+  let hoveredLine: number | null = null;
+  /** Where a mouse event is in the gutter's decorations column, in pixels from its left, if it's there. */
+  const inDecorations = (target: monaco.editor.IMouseTarget): number | null => {
+    if (target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) return null;
+    const detail = target.detail as { offsetX?: number } | undefined;
+    if (detail?.offsetX === undefined) return null;
+    return detail.offsetX - editor.getLayoutInfo().decorationsLeft;
+  };
+  const showArrows = () => {
+    const line = hoveredLine;
+    const at = line !== null ? runnable?.get(line) : undefined;
+    if (!runToOn || line === null || !at) {
+      runToDecoration.clear();
+      return;
+    }
+    runToDecoration.set([
+      {
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+          linesDecorationsClassName: ["run-to", at.back && "has-back", at.next && "has-next"].filter(Boolean).join(" "),
+          linesDecorationsTooltip: `◀ the step before this one at line ${line} · ▶ the next step at it (${at.steps.toLocaleString()} recorded ${at.steps === 1 ? "step is" : "steps are"} at this line)`,
+        },
+      },
+    ]);
+  };
+  editor.onMouseMove((event) => {
+    const line = event.target.position?.lineNumber ?? null;
+    const inGutter =
+      event.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS ||
+      event.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS;
+    const next = runToOn && inGutter ? line : null;
+    if (next === hoveredLine) return;
+    hoveredLine = next;
+    showArrows();
+  });
+  editor.onMouseLeave(() => {
+    hoveredLine = null;
+    showArrows();
+  });
+  // Only a click on ◀ or ▶ itself: not elsewhere in the gutter (folding's arrows, the line numbers).
+  editor.onMouseDown((event) => {
+    const x = inDecorations(event.target);
+    const line = event.target.position?.lineNumber;
+    if (!runToOn || x === null || !line || !event.event.leftButton) return;
+    const at = runnable?.get(line);
+    const back = x >= BACK_ARROW[0] && x < BACK_ARROW[1];
+    const next = x >= NEXT_ARROW[0] && x < NEXT_ARROW[1];
+    if (!at || !(back || next)) return;
+    event.event.preventDefault();
+    if (back ? !at.back : !at.next) return;
+    for (const handler of gutterHandlers) handler(line, back);
+  });
   const measureStyle = document.createElement("style");
   document.head.append(measureStyle);
 
@@ -291,6 +397,28 @@ export function createEditor(
           ];
         }),
       );
+    },
+    setRunToLine(on) {
+      runToOn = on;
+      editor.updateOptions({ lineDecorationsWidth: on ? RUN_TO_WIDTH : DECORATIONS_WIDTH });
+      showArrows();
+    },
+    setRunnable(lines) {
+      runnable = lines;
+      showArrows();
+    },
+    onGutterClick(handler) {
+      gutterHandlers.push(handler);
+    },
+    showMessage(line, text) {
+      const model = editor.getModel();
+      if (!model || line < 1 || line > model.getLineCount()) return;
+      const position = { lineNumber: line, column: model.getLineFirstNonWhitespaceColumn(line) || 1 };
+      // Monaco's own inline message (MessageController), as for a read-only editor.
+      const messages = editor.getContribution("editor.contrib.messageController") as {
+        showMessage(message: string, position: { lineNumber: number; column: number }): void;
+      } | null;
+      if (messages) messages.showMessage(text, position);
     },
     revealLine(line) {
       editor.revealLineInCenter(line);

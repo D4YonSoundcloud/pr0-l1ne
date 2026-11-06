@@ -6,7 +6,9 @@
  * (layout/intake.ts, trace/stream.ts).
  */
 import type { WireDrawing } from "../render/wire";
+import type { StepChanges } from "../trace/changes";
 import type { Estimate } from "../trace/complexity";
+import type { Found, ValueHistory, ValueTarget } from "../trace/history";
 import type { Measurement } from "../trace/measurement";
 import type { TraceInfo } from "../trace/summary";
 import type { Trace } from "../trace/types";
@@ -25,8 +27,7 @@ export type ToLayout =
   | { type: "loop"; id: number; channel: number; show: LoopShow; view: LoopView; perf?: boolean }
   /** The page lost track of a window's marks (render/wire.ts): send them all afresh. */
   | { type: "reset"; channel: number }
-  /** The complexity estimate, with Measure's counts for the same code. */
-  | { type: "estimate"; id: number; measurement: Measurement | null }
+  | Question
   | { type: "release"; channel: number };
 
 export type FromLayout =
@@ -37,9 +38,23 @@ export type FromLayout =
    * (`error`: said as a crash).
    */
   | { type: "loaded"; load: number; info: TraceInfo | null; error?: string }
-  | { type: "estimate"; id: number; estimate: Estimate | null }
+  | { type: "estimate"; id: number; answer: Estimate | null }
+  | { type: "changes"; id: number; answer: StepChanges }
+  | { type: "history"; id: number; answer: ValueHistory }
+  | { type: "find"; id: number; answer: Found }
   | { type: "memory"; id: number; laidOut: MemoryLaidOut<WireDrawing> | null; error?: string; perf?: PerfTimes }
   | { type: "loop"; id: number; laidOut: LoopLaidOut<WireDrawing> | null; error?: string; perf?: PerfTimes };
+
+/** Questions about the trace, each answered with a message of the same type and id (`answer`). */
+export type Question =
+  /** The complexity estimate, with Measure's counts for the same code. */
+  | { type: "estimate"; id: number; measurement: Measurement | null }
+  /** What changed at a step, in words. */
+  | { type: "changes"; id: number; step: number }
+  /** A value's history over the run (trace/history.ts), named at step `at`. */
+  | { type: "history"; id: number; target: ValueTarget; at: number }
+  /** The next step after `from` (or the one before) where a condition is true, no earlier than `first`. */
+  | { type: "find"; id: number; text: string; from: number; back: boolean; first: number };
 
 /** Times recorded in the worker, by stage (src/perf.ts), for the page's own record. */
 export type PerfTimes = [stage: string, ms: number[]][];

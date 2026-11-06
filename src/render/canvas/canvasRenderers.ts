@@ -55,6 +55,7 @@ import type {
   StepStyle,
   ViewportChange,
 } from "../../scene/renderer";
+import { targetOf } from "../../trace/history";
 import { type Animatable, DEFAULT_EASING, ENTER_SLIDE, plan, type Snapshot, snapshot } from "../animate";
 import { type Mark, toSvg } from "../drawing";
 import { standaloneSvg } from "../export";
@@ -602,7 +603,7 @@ abstract class CanvasWindow {
     if (this.hits?.paint !== this.paint)
       this.hits = {
         paint: this.paint,
-        index: new HitIndex(this.paint.root, (g) => !!(g.nodeKey || g.title || g.click)),
+        index: new HitIndex(this.paint.root, (g) => !!(g.nodeKey || g.title || g.click || g.cell || g.variable)),
       };
     return this.hits.index;
   }
@@ -677,7 +678,22 @@ abstract class CanvasWindow {
     const rect = this.el.getBoundingClientRect();
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return null;
     const node = this.nodeAt(x, y);
-    return node?.nodeKey ? { kind: "box", key: node.nodeKey } : { kind: "background" };
+    if (!node?.nodeKey) return { kind: "background" };
+    // The memory window: the cell or variable under the point, for its history.
+    const place = this.valuesHit ? this.valuePlaceAt(x, y) : null;
+    const value = place ? targetOf(place.cell?.key, place.variable) : null;
+    return value ? { kind: "box", key: node.nodeKey, value } : { kind: "box", key: node.nodeKey };
+  }
+
+  /** Does hitTest say which value's under the point (the memory window's cells and variables)? */
+  protected valuesHit = false;
+
+  /** The innermost cell or variable row under a point. */
+  private valuePlaceAt(clientX: number, clientY: number): PaintGroup | null {
+    const index = this.hitIndex();
+    if (!index) return null;
+    const { x, y } = this.toDiagram(clientX, clientY);
+    return index.at(x, y, (g) => !!(g.cell || g.variable));
   }
 
   setAppearance(style: RendererStyle): void {
@@ -745,6 +761,7 @@ abstract class CanvasWindow {
 const classSet = (classes: string) => new Set(classes.split(/\s+/).filter(Boolean));
 
 export class CanvasMemoryRenderer extends CanvasWindow implements MemoryRenderer {
+  protected override valuesHit = true;
   private readonly positions = new Map<string, Point>();
   /** Boxes kept from step to step, drawn again only when they change (memoryView/boxCache.ts). */
   private readonly boxes = new BoxCache();

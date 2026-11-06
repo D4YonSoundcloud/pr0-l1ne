@@ -14,6 +14,7 @@ import { timed } from "../perf";
 import type { MemoryMode } from "../scene/memoryScene";
 import type { MemoryRenderer, RendererFactory } from "../scene/renderer";
 import type { Settings } from "../settings";
+import type { ValueTarget } from "../trace/history";
 import { formatBytes, SIZE_MODELS, type SizeModel } from "../trace/memory";
 import { isTall, storedAutoFit } from "./autoFit";
 import type { AppStore } from "./state";
@@ -45,6 +46,14 @@ export interface MemoryOptions {
   renderers: Pick<RendererFactory, "memory">;
   /** Where the step is laid out (the layout worker, which holds the trace). */
   layout: LayoutService;
+  /**
+   * A value's history (app/historyController.ts): hovering a variable or a
+   * cell shows it; clicking one goes to its next change (Shift: the one before).
+   */
+  history?: {
+    hover(target: ValueTarget | null, clientX: number, clientY: number): void;
+    jump(target: ValueTarget, back: boolean): void;
+  };
 }
 
 /** Python has its own real sizes; JavaScript and TypeScript share theirs. */
@@ -79,6 +88,7 @@ export class MemoryController {
 
     this.layout = options.layout;
     this.channel = this.layout.channel();
+    if (options.history) this.followValues(els.memory, options.history);
     this.renderer = options.renderers.memory(els.memory, {
       fullDrawing: () => {
         const shown = this.shown;
@@ -258,6 +268,46 @@ export class MemoryController {
 
   /** Requests made, to tell the last one. */
   private asked = 0;
+
+  /**
+   * Hovering a variable or a cell shows its history; a click on one (a
+   * press that doesn't move: a drag still drags its box, a pan still pans)
+   * goes to its next change, with Shift the one before.
+   */
+  private followValues(el: HTMLElement, history: NonNullable<MemoryOptions["history"]>): void {
+    let frame = 0;
+    let press: { x: number; y: number } | null = null;
+    const valueAt = (x: number, y: number) => {
+      const hit = this.renderer.hitTest(x, y);
+      return hit?.kind === "box" ? (hit.value ?? null) : null;
+    };
+    el.addEventListener("pointermove", (event) => {
+      if (event.buttons || event.pointerType === "touch") return;
+      const { clientX, clientY } = event;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const target = this.options.app.get().trace ? valueAt(clientX, clientY) : null;
+        el.classList.toggle("is-over-value", target !== null);
+        history.hover(target, clientX, clientY);
+      });
+    });
+    el.addEventListener("pointerleave", () => {
+      cancelAnimationFrame(frame);
+      el.classList.remove("is-over-value");
+      history.hover(null, 0, 0);
+    });
+    el.addEventListener("pointerdown", (event) => {
+      press = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+    });
+    el.addEventListener("pointerup", (event) => {
+      const start = press;
+      press = null;
+      if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) return;
+      if (!this.options.app.get().trace || this.options.app.get().stale) return;
+      const target = valueAt(event.clientX, event.clientY);
+      if (target) history.jump(target, event.shiftKey);
+    });
+  }
 
   /** Playing: the next step, laid out while this one's on screen (LayoutService.ahead). */
   private layAhead(show: MemoryShow, steps: number): void {

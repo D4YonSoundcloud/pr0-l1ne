@@ -17,7 +17,9 @@
  * it's ready, or on its way.
  */
 import type { Mark } from "../render/drawing";
+import type { StepChanges } from "../trace/changes";
 import type { Estimate } from "../trace/complexity";
+import type { Found, ValueHistory, ValueTarget } from "../trace/history";
 import type { Measurement } from "../trace/measurement";
 import type { TraceInfo } from "../trace/summary";
 import type { Trace } from "../trace/types";
@@ -49,6 +51,12 @@ export interface LayoutService {
   ): Promise<Loaded>;
   /** The complexity estimate for the trace drawn, with Measure's counts for the same code. */
   estimate(measurement: Measurement | null): Promise<Estimate | null>;
+  /** What changed at a step of the trace drawn, in words (trace/changes.ts). */
+  changes(step: number): Promise<StepChanges>;
+  /** A value's history over the run (trace/history.ts), named at step `at`. */
+  history(target: ValueTarget, at: number): Promise<ValueHistory>;
+  /** The next step after `from` (`back`: the one before) where a condition is true (trace/history.ts findWhere). */
+  find(text: string, from: number, back: boolean, first: number): Promise<Found>;
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null>;
   loop(channel: number, show: LoopShow, view: LoopView): Promise<LoopLaidOut<Mark> | null>;
   /**
@@ -162,6 +170,18 @@ export class LocalLayout implements LayoutService {
 
   async estimate(measurement: Measurement | null): Promise<Estimate | null> {
     return this.session.estimate(measurement);
+  }
+
+  async changes(step: number): Promise<StepChanges> {
+    return this.session.changes(step);
+  }
+
+  async history(target: ValueTarget, at: number): Promise<ValueHistory> {
+    return this.session.history(target, at);
+  }
+
+  async find(text: string, from: number, back: boolean, first: number): Promise<Found> {
+    return this.session.find(text, from, back, first);
   }
 
   private lane<R>(channel: number): LatestWins<R> {

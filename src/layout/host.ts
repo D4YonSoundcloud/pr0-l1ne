@@ -56,6 +56,22 @@ export function layoutHost(post: (message: FromLayout) => void): (message: ToLay
     return out;
   }
 
+  /** A question about the trace, answered. */
+  function answer(message: Extract<ToLayout, { type: "changes" | "history" | "find" }>): FromLayout {
+    switch (message.type) {
+      case "changes":
+        return { type: "changes", id: message.id, answer: session.changes(message.step) };
+      case "history":
+        return { type: "history", id: message.id, answer: session.history(message.target, message.at) };
+      case "find":
+        return {
+          type: "find",
+          id: message.id,
+          answer: session.find(message.text, message.from, message.back, message.first),
+        };
+    }
+  }
+
   function load(message: Extract<ToLayout, { type: "load" }>): void {
     let raw: Trace | null;
     try {
@@ -94,7 +110,23 @@ export function layoutHost(post: (message: FromLayout) => void): (message: ToLay
         intake.feed(message.part);
         return;
       case "estimate":
-        post({ type: "estimate", id: message.id, estimate: session.estimate(message.measurement) });
+        post({ type: "estimate", id: message.id, answer: session.estimate(message.measurement) });
+        return;
+      case "changes":
+      case "history":
+      case "find":
+        try {
+          post(answer(message));
+        } catch (error) {
+          console.error(`The layout worker (${message.type}):`, error);
+          post(
+            message.type === "changes"
+              ? { type: "changes", id: message.id, answer: { changes: [], more: 0 } }
+              : message.type === "history"
+                ? { type: "history", id: message.id, answer: { name: "", points: [], truncated: false } }
+                : { type: "find", id: message.id, answer: { step: null } },
+          );
+        }
         return;
       case "load":
         load(message);

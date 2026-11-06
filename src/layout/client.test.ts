@@ -252,6 +252,35 @@ describe("the layout worker, from the page", () => {
     expect((await other)!.drawing.signature()).toBe(page.memory(98, show(9), VIEW)!.drawing.signature());
   });
 
+  it("says what changed at a step, a value's history and where a condition holds, from the trace it holds", async () => {
+    const raw = await traceJavaScript(CODE);
+    const { layout } = setup();
+    const ready = layout.load("whole", raw, () => {});
+    await settle();
+    await ready;
+    const at = raw.steps.findIndex((s, i) => i > 0 && raw.steps[i - 1].line === 4 && s.line !== 4);
+    const changes = layout.changes(at);
+    await settle();
+    const [change] = (await changes).changes;
+    expect(change).toEqual({
+      name: "nums[0]",
+      before: "5",
+      after: "10",
+      target: { kind: "slot", object: expect.any(String), slot: "0" },
+    });
+    const history = layout.history(change.target!, at);
+    await settle();
+    expect((await history).points.map((p) => p.value)).toEqual(["5", "10"]);
+    expect((await history).name).toBe("nums[0]");
+    const found = layout.find("nums[1] == 6", 0, false, 0);
+    await settle();
+    const step = (await found).step!;
+    expect(raw.steps[step - 1].line).toBe(4); // just after nums[1] doubled
+    const bad = layout.find("nums[", 0, false, 0);
+    await settle();
+    expect((await bad).error).toBeTruthy();
+  });
+
   it("stopped: draws what had arrived", async () => {
     const raw = applyHints(await traceJavaScript(CODE));
     const { layout } = setup();

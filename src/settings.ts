@@ -170,6 +170,8 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     /** Nested by default: objects only one thing refers to are drawn inside it (see scene/nesting.ts). */
     memoryMode: choice("memory-mode", ["arrows", "nested"] as const, "nested"),
     showOutput: flag("show-output", true),
+    /** The ◀ ▶ arrows beside each line that ran, to the step before or after at it (app/seekController.ts). */
+    runToLine: flag("run-to-line", true),
     dimOutput: flag("dim-output", false),
     sizes: flag("sizes", false),
     /** Which memory-size model, per language family; null for the first choice. */
@@ -216,6 +218,10 @@ export function createSettings(storage: KeyValueStorage | null = browserStorage(
     columnSplit: number("column-split"),
     /** On a wide screen: memory over loop history beside the code, or all three side by side (see app/layout.ts). */
     layoutMode: choice("layout-mode", ["stacked", "columns"] as const, "stacked"),
+    /** What's shown under the code: what the program printed, or what changed at the step (app/changesView.ts). */
+    consoleTab: choice("console-tab", ["output", "changes"] as const, "output"),
+    /** How tall the Output and Changes panel is, in pixels; null for the default (app/consoleSize.ts). */
+    consoleHeight: number("console-height"),
     /** Where the windows go and their sizes, as JSON (see app/arrangement.ts); null until anything changes. */
     arrangement: text("arrangement"),
     /** The windows folded to bars, as "memory,loop" (see app/layout.ts); null or "" for none. */

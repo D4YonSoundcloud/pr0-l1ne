@@ -11,10 +11,14 @@ import { SVG_RENDERERS } from "./render/svgRenderers";
 import "./styles.css";
 import { isTall } from "./app/autoFit";
 import { Banner, type BannerTone } from "./app/banner";
+import { ChangesView } from "./app/changesView";
 import { ComplexityController } from "./app/complexityController";
+import { ConsoleSize } from "./app/consoleSize";
 import { CsvImportController } from "./app/csvImport";
 import { WindowDocking } from "./app/docking";
 import { findElements } from "./app/elements";
+import { FindController } from "./app/findController";
+import { HistoryController } from "./app/historyController";
 import { escapeHtml } from "./app/html";
 import { showLanguageKind } from "./app/languageKind";
 import { LayoutController } from "./app/layout";
@@ -32,6 +36,7 @@ import { RunController } from "./app/runController";
 import { RunProgressView } from "./app/runProgress";
 import { addSaveSvg, svgFileName } from "./app/saveSvg";
 import { toolsMenu } from "./app/sectionTools";
+import { SeekController } from "./app/seekController";
 import { ShareController } from "./app/shareController";
 import { installShortcuts } from "./app/shortcuts";
 import { SpacingController } from "./app/spacingController";
@@ -148,6 +153,7 @@ const editor = createEditor(
         if (measurable()) void measure.measureGrowth();
       },
       toggleNested: () => memory.toggleNested(),
+      runToCursor: (back) => seek.runToCursor(back),
     },
   },
 );
@@ -211,6 +217,10 @@ const memory: MemoryController = new MemoryController({
   animation: () => style.animationFor("memory"),
   redraw: () => view.render(false),
   layout: drawings,
+  history: {
+    hover: (target, x, y) => valueHistory.hover(target, x, y),
+    jump: (target, back) => void valueHistory.jump(target, back),
+  },
 });
 const loop: LoopController = new LoopController({
   app,
@@ -223,7 +233,54 @@ const loop: LoopController = new LoopController({
   layout: drawings,
 });
 perf.whenDrawn = () => Promise.all([memory.drawn(), loop.drawn()]).then(() => {});
-const view = new StepView({ app, els, memory, loop, editor, updateControls: () => playback.updateControls() });
+// A value's history: hover a variable or a cell (or a change's name in the Changes list); click one for its next change.
+const valueHistory: HistoryController = new HistoryController({
+  app,
+  layout: drawings,
+  goTo: (step) => playback.goTo(step),
+  firstStep: () => playback.firstStep(),
+  host: document.body,
+});
+// Under the code: what was printed, or what changed at the step, as tall as it's dragged; and finding a step.
+const changes = new ChangesView({
+  app,
+  settings,
+  layout: drawings,
+  els,
+  history: { show: (target, at) => void valueHistory.show(target, at) },
+});
+new FindController({
+  app,
+  layout: drawings,
+  els,
+  goTo: (step) => playback.goTo(step),
+  firstStep: () => playback.firstStep(),
+});
+new ConsoleSize({ settings, els });
+const view = new StepView({
+  app,
+  els,
+  memory,
+  loop,
+  editor,
+  changes,
+  updateControls: () => playback.updateControls(),
+});
+// Run to a line: the gutter beside it, or Ctrl + F10 at the cursor.
+const seek: SeekController = new SeekController({
+  app,
+  settings,
+  toggle: els.runToToggle,
+  editor: {
+    setRunToLine: (on) => editor.setRunToLine(on),
+    setRunnable: (lines) => editor.setRunnable(lines),
+    onGutterClick: (handler) => editor.onGutterClick(handler),
+    showMessage: (line, text) => editor.showMessage(line, text),
+    cursorLine: () => editor.editor.getPosition()?.lineNumber ?? null,
+  },
+  goTo: (step) => playback.goTo(step),
+  firstStep: () => playback.firstStep(),
+});
 for (const [pane, renderer] of [
   ["memory", memory.renderer],
   ["loop", loop.renderer],

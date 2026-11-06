@@ -31,6 +31,7 @@ import type {
   ViewportChange,
 } from "../scene/renderer";
 import { detailBudget, summaryBoxes } from "../scene/summaries";
+import { targetOf } from "../trace/history";
 import { ProbeStyles } from "./canvas/styles";
 import type { Mark } from "./drawing";
 import { standaloneSvg } from "./export";
@@ -128,11 +129,27 @@ abstract class SvgWindow {
     if (change.pan || change.zoom !== undefined) this.view.moveTo(change.pan, change.zoom);
   }
 
+  /** Does hitTest say which value's under the point (the memory window's cells and variables)? */
+  protected valuesHit = false;
+
   hitTest(x: number, y: number): Hit | null {
     const at = typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null;
     if (!at || !this.el.contains(at)) return null;
-    const key = at.closest<SVGGElement>(".node")?.dataset.nodeKey;
-    return key ? { kind: "box", key } : { kind: "background" };
+    const node = at.closest<SVGGElement>(".node");
+    const key = node?.dataset.nodeKey;
+    if (!node || !key) return { kind: "background" };
+    // The memory window: the cell or variable under the point, for its history. Between a name's
+    // letters is the box behind it: a variable's row is anywhere in its bounds (as the canvas has it).
+    const place = this.valuesHit
+      ? (at.closest<SVGElement>("[data-cell], [data-var]") ??
+        [...node.querySelectorAll<SVGElement>("[data-var]")].find((row) => {
+          const box = row.getBoundingClientRect();
+          return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+        }) ??
+        null)
+      : null;
+    const value = place ? targetOf(place.getAttribute("data-cell"), place.getAttribute("data-var")) : null;
+    return value ? { kind: "box", key, value } : { kind: "box", key };
   }
 
   setAppearance(style: RendererStyle): void {
@@ -168,6 +185,7 @@ abstract class SvgWindow {
 }
 
 export class SvgMemoryRenderer extends SvgWindow implements MemoryRenderer {
+  protected override valuesHit = true;
   /** Where the person has dragged boxes, by scene key. */
   private readonly positions = new Map<string, Point>();
   /** Boxes kept from step to step, drawn again only when they change (memoryView/boxCache.ts). */

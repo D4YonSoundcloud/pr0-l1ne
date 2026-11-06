@@ -26,9 +26,11 @@ import { loopScene } from "../scene/loopScene";
 import { memoryScene } from "../scene/memoryScene";
 import { sqlPipelineScene, sqlTableScene } from "../scene/sqlScene";
 import { summaryBoxes } from "../scene/summaries";
+import { type StepChanges, stepChanges } from "../trace/changes";
 import { type Estimate, estimateComplexity } from "../trace/complexity";
 import { diffSteps } from "../trace/diff";
 import { focusedLoop } from "../trace/hints";
+import { type Found, findWhere, type ValueHistory, type ValueTarget, valueHistory } from "../trace/history";
 import { ALL_LOOPS, availableLoops, buildLoopHistory, buildNestedHistory, nestedLoopsAt } from "../trace/loopHistory";
 import type { Measurement } from "../trace/measurement";
 import { stepSizes } from "../trace/memory";
@@ -72,6 +74,27 @@ export class LayoutSession {
     const prepared = yield* prepareTrace(raw);
     if (prepared.steps.length) this.trace = prepared;
     return summarize(raw, prepared);
+  }
+
+  /** What changed at a step, in words (trace/changes.ts): nothing for SQL, whose steps are tables. */
+  changes(step: number): StepChanges {
+    const trace = this.trace;
+    const at = trace?.steps[step];
+    if (!trace || !at || trace.sql) return { changes: [], more: 0 };
+    return stepChanges(trace.steps[step - 1], at);
+  }
+
+  /** A value's history over the run (trace/history.ts), named at step `at`. */
+  history(target: ValueTarget, at: number): ValueHistory {
+    if (!this.trace || this.trace.sql) return { name: "", points: [], truncated: false };
+    return valueHistory(this.trace, target, at);
+  }
+
+  /** The next step after `from` (`back`: the one before) where a condition is true, no earlier than `first`. */
+  find(text: string, from: number, back: boolean, first: number): Found {
+    if (!this.trace) return { step: null };
+    if (this.trace.sql) return { step: null, error: "SQL steps are tables: there are no variables to test" };
+    return findWhere(this.trace, text, from, back, first);
   }
 
   /** The complexity estimate, with Measure's counts for the same code (trace/complexity.ts); null if it can't be made. */

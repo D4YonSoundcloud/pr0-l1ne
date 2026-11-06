@@ -14,6 +14,8 @@ export interface TableRow {
   value: Value;
   changed: boolean;
   variant?: string;
+  /** A frame's variable: `${frameId}|${name}` (data-var), for its history (app/historyController.ts). */
+  variable?: string;
 }
 
 function labelWidth(label: string | Value): number {
@@ -89,6 +91,7 @@ export function tableShape(
         // Labels sit level with the first line, even beside a tall nested box.
         const labelY = view.nested ? rowY + NEST_PAD + HEADER_H / 2 : rowY + rowH / 2;
         const rowG = s("g", { class: ["row", row.variant, row.changed && "is-changed"].filter(Boolean).join(" ") });
+        if (row.variable) rowG.setAttribute("data-var", row.variable);
         if (typeof row.label === "string") {
           rowG.append(
             s("text", { class: "row-label", x: x + 10, y: labelY, "dominant-baseline": "central" }, row.label),
@@ -134,6 +137,7 @@ export function frameShape(frame: Frame, ctx: Ctx, isActive: boolean): Shape {
     label: name,
     value,
     changed: diff.changedLocals.has(localKey(frame.id, name)),
+    variable: `${frame.id}|${name}`,
   }));
   if (isActive && step.event === "return" && step.returnValue && frame.func !== "Global") {
     rows.push({ label: "returns", value: step.returnValue, changed: true, variant: "return-row" });

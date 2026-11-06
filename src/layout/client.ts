@@ -8,12 +8,14 @@
 import { perf, timed } from "../perf";
 import type { Mark } from "../render/drawing";
 import { MarkMirror, type WireDrawing, WireError } from "../render/wire";
+import type { StepChanges } from "../trace/changes";
 import type { Estimate } from "../trace/complexity";
+import type { Found, ValueHistory, ValueTarget } from "../trace/history";
 import type { Measurement } from "../trace/measurement";
 import type { Trace } from "../trace/types";
 import type { Progress } from "../trace/work";
 import type { TracePart } from "../worker/runner";
-import type { FromLayout, ToLayout } from "./protocol";
+import type { FromLayout, Question, ToLayout } from "./protocol";
 import type { LoopLaidOut, LoopShow, LoopView, MemoryLaidOut, MemoryShow, MemoryView } from "./requests";
 import { type Ahead, LatestWins, type LayoutService, type Loaded, requestKey } from "./service";
 
@@ -68,8 +70,9 @@ export class WorkerLayout implements LayoutService {
       this.loading = null;
       for (const resolve of this.replies.values()) resolve({ type: "memory", id: 0, laidOut: null, error: message });
       this.replies.clear();
-      for (const resolve of this.estimates.values()) resolve(null);
-      this.estimates.clear();
+      // Questions about the trace: each answered with what it says when there's no answer.
+      for (const { resolve, fallback } of this.questions.values()) resolve(fallback);
+      this.questions.clear();
     };
   }
 
@@ -107,15 +110,32 @@ export class WorkerLayout implements LayoutService {
     });
   }
 
-  /** Estimates asked for, by request. */
-  private readonly estimates = new Map<number, (estimate: Estimate | null) => void>();
+  /** Questions about the trace asked (the estimate, a step's changes, a value's history, a step found), by request. */
+  private readonly questions = new Map<number, { resolve: (answer: unknown) => void; fallback: unknown }>();
 
-  estimate(measurement: Measurement | null): Promise<Estimate | null> {
+  /** Ask the worker something about the trace; `fallback` if it fails. */
+  private question<T>(message: (id: number) => Question, fallback: T): Promise<T> {
     return new Promise((resolve) => {
       const id = this.nextId++;
-      this.estimates.set(id, resolve);
-      this.worker.postMessage({ type: "estimate", id, measurement });
+      this.questions.set(id, { resolve: resolve as (answer: unknown) => void, fallback });
+      this.worker.postMessage(message(id));
     });
+  }
+
+  changes(step: number): Promise<StepChanges> {
+    return this.question((id) => ({ type: "changes", id, step }), { changes: [], more: 0 });
+  }
+
+  estimate(measurement: Measurement | null): Promise<Estimate | null> {
+    return this.question((id) => ({ type: "estimate", id, measurement }), null);
+  }
+
+  history(target: ValueTarget, at: number): Promise<ValueHistory> {
+    return this.question((id) => ({ type: "history", id, target, at }), { name: "", points: [], truncated: false });
+  }
+
+  find(text: string, from: number, back: boolean, first: number): Promise<Found> {
+    return this.question((id) => ({ type: "find", id, text, from, back, first }), { step: null });
   }
 
   memory(channel: number, show: MemoryShow, view: MemoryView): Promise<MemoryLaidOut<Mark> | null> {
@@ -240,10 +260,13 @@ export class WorkerLayout implements LayoutService {
         else loading.resolve(message.info ? { kind: "ready", info: message.info } : { kind: "empty" });
         return;
       }
-      case "estimate": {
-        const resolve = this.estimates.get(message.id);
-        this.estimates.delete(message.id);
-        resolve?.(message.estimate);
+      case "changes":
+      case "estimate":
+      case "history":
+      case "find": {
+        const question = this.questions.get(message.id);
+        this.questions.delete(message.id);
+        question?.resolve(message.answer);
         return;
       }
       case "memory":

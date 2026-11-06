@@ -92,6 +92,9 @@ PR0L1NE adds a few commands of its own, borrowing VS Code's debugger keys for st
 | `Ctrl/Cmd + Shift + S` | Save as a new program |
 | `F10` | Next step |
 | `Shift + F10` | Previous step |
+| `Ctrl/Cmd + F10` | [Run to the cursor's line](#running-to-a-line): the next step there |
+| `Ctrl/Cmd + Shift + F10` | Back to the cursor's line: the step before this one there |
+| `Enter` / `Shift + Enter` in the find box | [The next step where a condition is true](#finding-a-step), or the one before |
 | `F1`, then type "AlgoViz" | All of PR0L1NE's commands (their palette names still start with "AlgoViz:"), including first and last step, play/pause, and swapping the panels |
 
 Hint comments that PR0L1NE can't understand get a yellow warning squiggle; hover it to see what was expected (see [Hints](hints.md#hints-viz-comments)).
@@ -105,6 +108,12 @@ If the same line ran and runs next (a loop around a single statement), it's yell
 - **Red**: where an error happened (shown once you reach the last step). The error is also a real diagnostic with a squiggle, so hovering shows the message and `F8` jumps to it.
 
 If you're mid-edit and the code has a syntax error, the canvas keeps showing the last version that ran (dimmed), a banner explains what's wrong, and the line is marked in the editor.
+
+### What changed
+
+Under the code, next to **Output**, the **Changes** tab lists what changed at the step on screen, in words: each variable that changed or appeared (`i: from 1 to 2`), and each slot inside a list, dict or object (`nums[2]`, `counts['a']`, `node.next`), named the way the code reaches it from a variable. New ones are marked **new**, ones that went (a list that got shorter, a variable whose function returned) **gone**. Values are shown briefly: a list by its first few items (and its length when it's long), an object by its class and first fields. A variable that isn't the running function's says whose it is (`n in fact()`). A long list drawn as a window around its index variables isn't a change when the window moves along, only when a value in it does. At most 40 changes are listed for a step, then "and N more". Click a name to see [its history](#a-values-history). SQL steps are tables, so there's nothing to list for them. The list is read out by screen readers as each step is shown, except while playing. The tab you chose is remembered.
+
+The panel stays the height you give it whatever the tab shows, and a long list scrolls. Drag its top edge up or down to make it taller or shorter (or focus the edge and use `↑` / `↓`, `Home` and `End`); double-click the edge for the default height. The height is remembered.
 
 ## Layout
 
@@ -284,6 +293,22 @@ A step is one of:
 - **Error raised on line N**: an exception is propagating.
 
 When you edit code while sitting on the last step, the view stays on the last step of the new run, so you always see the end result of what you just typed.
+
+### Running to a line
+
+To get to the moment a line runs without stepping there, hover the gutter beside it (between its number and the code): a **◀ ▶** pair appears. Click **▶** for the next step at that line, again for the time after that, and **◀** for the time before. An arrow is dimmed when there's no step that way, and lines that never ran (a closing brace, a blank line, code the run didn't reach) get no arrows at all; hover the arrows to see how many recorded steps are at the line. **`Ctrl/Cmd + F10`** does the same for the line the cursor's on, and **`Ctrl/Cmd + Shift + F10`** goes back; with nowhere to go, a short message by the cursor says why. A step is "at" a line when that line is the one about to run (the blue mark), so a loop's body line is reached once a pass; a function's `def` line is reached each time the function is called. For SQL, a step is at its clause's line. Once you've edited the code, run it again first.
+
+The **Run to line** switch in the code window's header turns the arrows off, and the gutter gets narrower; `Ctrl/Cmd + F10` still works. Your choice is remembered.
+
+### Finding a step
+
+The box beside the **Output** and **Changes** tabs finds a step by what's true at it. Type a condition, such as `best > 10`, `i == j` or `len(stack) == 0`, and press `Enter` (or **▶**) for the next step after this one where it's true; `Shift + Enter` (or **◀**) finds the one before. It's the same kind of expression [hints](hints.md) use, read with the running function's variables and then the program's globals; a step where it can't be worked out (a name that isn't set yet) doesn't count. If it doesn't read, or it's never true that way, a note beside the box says so.
+
+### A value's history
+
+**Hover a variable or a list, dict or object's cell** in the memory view to see its value over the whole run: a small chart for numbers, each change as a step on the line and where you are marked, or a list of what it was, step by step, for anything else. The card says how many times it changed and what it is now. Click a point on the chart (or a row of the list) to go there, or use the card's **◀** and **▶** for the change before and the next one. **Click** a variable or cell to go straight to the next step where it changes, and **Shift + click** for the step before where it did. A variable is followed in the one call it's in: a recursive function's `n` in this call, not another. The names in the **Changes** tab open the same card. `Esc` or **×** closes it.
+
+To keep a card, **pin** it (the pin beside **×**), or just drag it by its top to where you want it: dragging pins it there. A pinned card stays as you step and play, and through a new run that still has its value, until you close it; hover other values and they get cards of their own, so you can keep several side by side. With its top focused, the arrow keys move it.
 
 ### Playing a program
 
