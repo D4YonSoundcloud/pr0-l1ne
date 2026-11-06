@@ -29,6 +29,15 @@ export class Container {
     },
   };
 
+  /** Painted once as a bitmap (cacheAsTexture), and the resolution asked for: what the tests check. */
+  cachedAs: { resolution?: number; antialias?: boolean } | null = null;
+  get isCachedAsTexture(): boolean {
+    return this.cachedAs !== null;
+  }
+  cacheAsTexture(options: boolean | { resolution?: number; antialias?: boolean }): void {
+    this.cachedAs = options === false ? null : options === true ? {} : options;
+  }
+
   addChild<T extends Container>(child: T): T {
     // As in PixiJS: a child added elsewhere moves.
     if (child.parent) child.parent.children = child.parent.children.filter((c) => c !== child);

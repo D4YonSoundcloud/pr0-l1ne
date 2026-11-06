@@ -53,6 +53,7 @@ perf.noLod = query.has("nolod");
 perf.noShare = query.has("noshare");
 perf.noCells = query.has("nocells");
 perf.noGroups = query.has("nogroups");
+perf.noFreeze = query.has("nofreeze");
 if (query.has("perf")) {
   perf.on = true;
   (window as unknown as { __pr0l1nePerf: typeof perf }).__pr0l1nePerf = perf;

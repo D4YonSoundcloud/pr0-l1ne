@@ -178,6 +178,7 @@ abstract class CanvasWindow {
           this.at = view;
           this.requestDraw();
           this.settleText();
+          this.settleRows();
           this.viewMoved();
         },
         nodeAt: (x, y) => {
@@ -464,9 +465,11 @@ abstract class CanvasWindow {
         flash: flash && !!parseAnimation(this.styles.variable("--flash")),
         ...(this.cellMesh ? { cells: this.cellMesh } : {}),
         renderGroups: this.pixi?.name === "webgl" && !perf.noGroups,
+        ...(this.pixi?.name === "canvas" && !perf.noFreeze ? { freezeRows: flash ? "kept" : "all" } : {}),
       },
       this.kept,
     );
+    this.paintRowsOnce();
     this.stage.removeChildren();
     this.stage.addChild(this.built.root);
     old?.root.destroy({ children: true });
@@ -475,6 +478,50 @@ abstract class CanvasWindow {
       if ((group.nodeKey || group.current) && group.bounds) this.cullable.push({ layer, bounds: group.bounds });
     }
   }
+
+  /**
+   * On Canvas 2D, every shape and text of every row is drawn each frame:
+   * a stacked history of a 60 × 60 grid is tens of thousands of each. So a
+   * loop row kept from the last drawing (pixiScene.ts freezeRows: nothing
+   * in it moves or changes) is painted once, into a bitmap (PixiJS
+   * cacheAsTexture), and each frame after draws that. Its bitmap is drawn
+   * at the zoom, a power of two from it, up to the text's own resolution,
+   * so it's sharp without being bigger than it's shown; it's painted
+   * again once zooming settles at another (settleRows). WebGL keeps its
+   * rows on the graphics card anyway (render groups).
+   */
+  private paintRowsOnce(): void {
+    if (!this.built) return;
+    const resolution = this.rowResolution();
+    for (const body of this.built.frozen) {
+      if (body.isCachedAsTexture && this.cachedAt.get(body) === resolution) continue;
+      if (body.isCachedAsTexture) body.cacheAsTexture(false);
+      body.cacheAsTexture({ resolution, antialias: true });
+      this.cachedAt.set(body, resolution);
+    }
+  }
+  /** The resolution each row's bitmap was painted at. */
+  private readonly cachedAt = new WeakMap<Container, number>();
+
+  /** A frozen row's bitmap resolution for the zoom now (paintRowsOnce). */
+  private rowResolution(): number {
+    const dpr = window.devicePixelRatio || 1;
+    const z = Math.max(1 / 16, this.at.z);
+    return dpr * Math.min(this.textScale, 2 ** Math.ceil(Math.log2(z)));
+  }
+
+  /** Once zooming settles at another resolution for the rows' bitmaps, paint them again at it. */
+  private settleRows(): void {
+    window.clearTimeout(this.rowTimer);
+    if (!this.built?.frozen.length) return;
+    this.rowTimer = window.setTimeout(() => {
+      const resolution = this.rowResolution();
+      if (this.built?.frozen.every((body) => this.cachedAt.get(body) === resolution)) return;
+      this.paintRowsOnce();
+      this.drawNow();
+    }, TEXT_SETTLE_MS);
+  }
+  private rowTimer = 0;
 
   /** Has the Style panel (or anything) changed the inline styles the drawing's CSS reads? */
   private checkLooks(): boolean {

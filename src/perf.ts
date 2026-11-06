@@ -44,6 +44,8 @@ export const perf = {
   noCells: false,
   /** On WebGL, no box or row body is a render group of its own (?nogroups): to measure what they save. */
   noGroups: false,
+  /** On Canvas 2D, draw every loop row each frame, none painted once as a bitmap (?nofreeze): to measure what that saves. */
+  noFreeze: false,
   /**
    * Resolves once both windows have drawn the step asked for last (they're
    * laid out in the layout worker, so a step is drawn a little after it's

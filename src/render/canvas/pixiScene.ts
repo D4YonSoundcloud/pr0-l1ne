@@ -43,6 +43,8 @@ export interface BuiltScene {
   flashes: Container[];
   /** Cells drawn as one (BuildOptions.cells), kept bodies' too: synced with their layers before each frame. */
   batches: CellBatch[];
+  /** Loop rows kept whole from the last build, left as they are (BuildOptions.freezeRows): their bodies. */
+  frozen: Container[];
 }
 
 export interface BuildOptions {
@@ -64,6 +66,16 @@ export interface BuildOptions {
    * one transform, and nothing in it is batched or uploaded again.
    */
   renderGroups?: boolean;
+  /**
+   * Leave the loop rows kept whole from the last build as they are (the
+   * canvas renderer paints each once, as a bitmap: Canvas 2D draws every
+   * shape and text of every row each frame otherwise). Nothing in a frozen
+   * row is animated or flashes again, as in SVG, where a kept row's
+   * elements are left alone; its keyed groups get no layers of their own.
+   * "all": rows built afresh too, for a build that animates nothing (a
+   * jump, a repaint): they're painted once as well.
+   */
+  freezeRows?: "kept" | "all";
 }
 
 /** A cell's rectangle, drawn with many others (BuildOptions.cells): where it is in its body, and its paint. */
@@ -430,6 +442,8 @@ interface Entry {
   contexts: string[];
   /** Its own cell batches (not its keyed groups'): BuildOptions.cells. */
   batches: CellBatch[];
+  /** Frozen (BuildOptions.freezeRows): it and every entry in it, and every context they draw, gathered once. */
+  all?: { entries: Entry[]; contexts: string[] };
 }
 
 /**
@@ -608,6 +622,7 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
   const layers = new Map<PaintGroup, Container>();
   const flashes: Container[] = [];
   const batches: CellBatch[] = [];
+  const frozen: Container[] = [];
   const root = new Container();
   // Text is drawn at a resolution: kept text at another one won't do.
   if (cache.resolution !== options.resolution) cache.clear();
@@ -685,6 +700,39 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
       layers.set(inner, layer);
       adopt(inner, e);
     });
+  };
+
+  /**
+   * A kept row left as it is (BuildOptions.freezeRows): it and everything
+   * in it are kept for the next build, with the contexts they draw, but
+   * nothing in it gets a layer, and its flashes stay where they ended.
+   */
+  const freeze = (group: PaintGroup, entry: Entry) => {
+    if (!entry.all) {
+      // Where the step animation left what's in it (it may have been cut short): where it ends.
+      const settle = (g: PaintGroup, e: Entry) =>
+        keyedChildren(g).forEach((inner, i) => {
+          const n = e.nested[i];
+          n.layer.position.set(0, 0);
+          n.layer.alpha = inner.alpha;
+          n.layer.visible = true;
+          settle(inner, n);
+        });
+      settle(group, entry);
+      const entries: Entry[] = [];
+      const contexts: string[] = [];
+      const gather = (e: Entry) => {
+        entries.push(e);
+        contexts.push(...e.contexts);
+        for (const overlay of e.overlays) overlay.alpha = 0;
+        for (const inner of e.nested) gather(inner);
+      };
+      gather(entry);
+      entry.all = { entries, contexts };
+    }
+    for (const e of entry.all.entries) keep(e);
+    cache.stillUsed(entry.all.contexts);
+    frozen.push(entry.body);
   };
 
   /**
@@ -809,7 +857,8 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
       layer.addChild(reused.body);
       reused.body.position.set(ox + at.x - reused.built.x, oy + at.y - reused.built.y);
       reused.layer = layer;
-      adopt(group, reused);
+      if (options.freezeRows && group.current && !reused.batches.length) freeze(group, reused);
+      else adopt(group, reused);
       return reused;
     }
     const body = new Container();
@@ -831,6 +880,8 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
     } else add(group, body, entry, gx, gy);
     if (options.renderGroups && (group.nodeKey || group.current) && drawsAtLeast(body, RENDER_GROUP_MIN))
       body.isRenderGroup = true;
+    // Nothing animates in this build: a new row is painted once too.
+    if (options.freezeRows === "all" && group.current && !entry.batches.length) frozen.push(body);
     keep(entry);
     return entry;
   };
@@ -867,5 +918,5 @@ export function buildScene(paint: Paint, options: BuildOptions, cache: SceneCach
   // them one by one when the scene is replaced costs more than drawing it
   // (it's a search through every listener, each time). Drop the listeners.
   for (const style of styles.values()) style.removeAllListeners("update");
-  return { root, layers, flashes, batches };
+  return { root, layers, flashes, batches, frozen };
 }

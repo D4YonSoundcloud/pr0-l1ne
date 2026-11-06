@@ -413,3 +413,67 @@ describe("buildScene: cells as one draw, and render groups (WebGL)", () => {
     expect(body(scene(box(0, 0, 250))).isRenderGroup).toBeFalsy();
   });
 });
+
+describe("buildScene: frozen loop rows (freezeRows)", () => {
+  const row = (top: number, value: string, changed = false) =>
+    `<g class="loop-row" data-key="row:${top}" data-top="${top}" data-bottom="${top + 30}" transform="translate(0 ${top})"><g class="row-body"><g class="cell${changed ? " is-changed" : ""}" data-cell="nums|0"><rect width="20" height="20"/><text x="10" y="10">${value}</text></g><g class="cell" data-cell="nums|1"><rect x="20" width="20" height="20"/><text x="30" y="10">${value}</text></g></g></g>`;
+  const build = (markup: string, cache: SceneCache, freezeRows?: "kept" | "all", flash = false) =>
+    buildScene(
+      paintDrawing(svgOf(markup), fakeStyles(ink, { "--flash": "mark 450ms" })),
+      { resolution: 1, flash, ...(freezeRows ? { freezeRows } : {}) },
+      cache,
+    ) as unknown as { root: Container; layers: Map<PaintGroup, Container>; flashes: Container[]; frozen: Container[] };
+
+  it("leaves a row kept from the last build as it is: no layers in it, its flash where it ended", () => {
+    const cache = new SceneCache();
+    const first = build(row(0, "1", true) + row(40, "2"), cache, "kept", true);
+    expect(first.frozen).toEqual([]); // built afresh: they animate
+    expect(first.flashes).toHaveLength(1);
+    const layersBefore = first.layers.size;
+    // The second row changes; the first is kept whole.
+    const second = build(row(0, "1", true) + row(40, "3"), cache, "kept", true);
+    expect(second.frozen).toHaveLength(1);
+    const [frozen] = second.frozen;
+    // The kept row's layer is there (it can still slide as a row); the cells inside it get none.
+    expect(second.layers.size).toBe(layersBefore - 2);
+    // Its flash overlay doesn't play again: as in SVG, a kept row is left alone.
+    expect(second.flashes).toEqual([]);
+    const overlays: Container[] = [];
+    const walk = (c: Container) => {
+      for (const child of c.children) {
+        if (
+          child instanceof Graphics &&
+          child.calls.some((call) => call[0] === "fill" && (call[1] as { alpha?: number })?.alpha === 0.55)
+        )
+          overlays.push(child);
+        walk(child);
+      }
+    };
+    walk(frozen);
+    expect(overlays.map((o) => o.alpha)).toEqual([0]);
+    // And it's kept again the build after, and so are its cells for when it changes.
+    const third = build(row(0, "1", true) + row(40, "3"), cache, "kept", true);
+    expect(third.frozen).toContain(frozen);
+    expect(third.frozen).toHaveLength(2);
+  });
+
+  it('"all": a build that animates nothing freezes rows built afresh too; without it, nothing is frozen', () => {
+    expect(build(row(0, "1") + row(40, "2"), new SceneCache(), "all").frozen).toHaveLength(2);
+    const cache = new SceneCache();
+    build(row(0, "1") + row(40, "2"), cache);
+    expect(build(row(0, "1") + row(40, "2"), cache).frozen).toEqual([]);
+  });
+
+  it("keeps the contexts a frozen row draws", () => {
+    const cache = new SceneCache();
+    const first = build(row(0, "1") + row(40, "2"), cache, "kept");
+    const second = build(row(0, "1") + row(40, "3"), cache, "kept");
+    first.root.destroy({ children: true });
+    const third = build(row(0, "1") + row(40, "4"), cache, "kept");
+    second.root.destroy({ children: true });
+    expect(third.frozen).toHaveLength(1);
+    const contexts = [...cache.contexts.values()] as unknown as GraphicsContext[];
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts.every((c) => !c.destroyed)).toBe(true);
+  });
+});

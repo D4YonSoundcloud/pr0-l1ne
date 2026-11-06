@@ -533,6 +533,45 @@ describe("CanvasLoopRenderer", () => {
     r.dispose();
   });
 
+  it("on Canvas 2D, paints rows kept from the step before once, as bitmaps at the zoom; not on WebGL", async () => {
+    const cached = () => all(stage()).filter((c) => c.isCachedAsTexture);
+    const t = await traceJavaScript(code);
+    const at = (step: number) => loopScene(t, buildLoopHistory(t, step, null)!, { hideQuiet: false });
+    const el = windowEl();
+    const r = new CanvasLoopRenderer(el, {}, { styles: () => probe() });
+    await r.ready;
+    r.setAppearance({ step: MOVING });
+    r.render(at(6), null);
+    expect(cached()).toEqual([]); // drawn afresh, animating: as they are
+    r.render(at(t.steps.length - 2), at(6));
+    const kept = cached();
+    expect(kept.length).toBeGreaterThan(0);
+    for (const body of kept) {
+      const resolution = body.cachedAs!.resolution!;
+      expect(Math.log2(resolution) % 1).toBe(0); // a power of two
+      expect(resolution).toBeLessThanOrEqual(1); // at most the text's own (1 at this zoom)
+    }
+    // Zoomed out, once it settles: painted again at the zoom (no bigger than shown).
+    r.setViewport({ zoom: 0.3 });
+    vi.advanceTimersByTime(200);
+    expect(cached().map((body) => body.cachedAs!.resolution)).toEqual(kept.map(() => 0.5));
+    // Zoomed in past 2×: the text is drawn sharper, and the rows with it.
+    r.setViewport({ zoom: 2.5 });
+    vi.advanceTimersByTime(200);
+    expect(cached().length).toBeGreaterThan(0);
+    expect(new Set(cached().map((body) => body.cachedAs!.resolution))).toEqual(new Set([3]));
+    r.dispose();
+
+    const gl = windowEl();
+    const webgl = new CanvasLoopRenderer(gl, {}, { styles: () => probe(), backend: "webgl" });
+    await webgl.ready;
+    webgl.setAppearance({ step: MOVING });
+    webgl.render(at(6), null);
+    webgl.render(at(t.steps.length - 2), at(6));
+    expect(cached()).toEqual([]);
+    webgl.dispose();
+  });
+
   it("animates only the live row", async () => {
     const el = windowEl();
     const r = new CanvasLoopRenderer(el, {}, { styles: () => probe() });
