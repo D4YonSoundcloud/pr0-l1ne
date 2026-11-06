@@ -13,7 +13,8 @@ export const PYTHON_EXAMPLES: Example[] = [
   {
     group: SORTING,
     name: "Bubble sort",
-    code: `arr = [5, 2, 9, 1, 6]
+    code: `# viz: input
+arr = [5, 2, 9, 1, 6]
 n = len(arr)
 
 for i in range(n):

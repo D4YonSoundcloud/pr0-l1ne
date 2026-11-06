@@ -110,6 +110,7 @@ The JavaScript tracer has no such blind spot, so its modules are tested both end
 | `src/app/stepView.ts` | Drawing the step on screen: the step label, both canvas windows, the output so far and the editor's line marks |
 | `src/app/changesView.ts` | The Output and Changes tabs under the code: what changed at the step, in words |
 | `src/app/seek.ts`, `src/app/seekController.ts` | Running to a line: the next (or previous) step at a line, from the gutter's ◀ ▶ or Ctrl/Cmd + F10, and the switch that turns the arrows off |
+| `src/app/inputController.ts` | Inputs you can switch between: the code window's Input button and menu, the note beside the line, and the code that's run (`prepare`) |
 | `src/app/consoleSize.ts` | The Output / Changes panel's height: dragged by its top edge, keys, double-click for the default, remembered |
 | `src/app/findController.ts` | The find box: the next (or previous) step where a condition is true |
 | `src/app/historyController.ts` | A value's history: the card on hover (a sparkline or a list), click to go to its next change, and the names in the Changes tab |
@@ -304,6 +305,7 @@ pr0-l1ne/
     │   ├── diff.ts             What changed between two steps
     │   ├── changes.ts          The same, in words, named as code reaches it: nums[2]: 5 → 3
     │   ├── history.ts          A value over the run (its changes), and finding a step by a condition
+    │   ├── inputs.ts           viz: input: the value written, its variants, and the code run with one swapped in
     │   ├── loopHistory.ts      Group steps into loop iterations: each trace's loop runs found once, a step's history by binary search
     │   ├── loopHistory.incremental.test.ts  The history held to the scanning one (testing/loopHistoryReference.ts) at every step
     │   ├── hints.ts            Parse and apply viz: comment hints

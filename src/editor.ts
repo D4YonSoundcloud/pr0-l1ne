@@ -69,6 +69,12 @@ export interface EditorHandle {
   onGutterClick(handler: (line: number, back: boolean) => void): void;
   /** A short message at a line, as VS Code says "Cannot edit in read-only editor". */
   showMessage(line: number, text: string): void;
+  /**
+   * Inputs run with another value (app/inputController.ts): the value as
+   * written is dimmed (lines `from` to `to`), and a note after its first
+   * line says what's run instead. Empty to clear.
+   */
+  setInputNotes(notes: { from: number; to: number; text: string; hover: string }[]): void;
 }
 
 /** A line a step can be run to: is there a step at it before this one, and after; how many steps are at it. */
@@ -233,6 +239,9 @@ export function createEditor(
   const costStyle = document.createElement("style");
   document.head.append(costStyle);
   const measureDecorations = editor.createDecorationsCollection();
+  const inputDecorations = editor.createDecorationsCollection();
+  const inputStyle = document.createElement("style");
+  document.head.append(inputStyle);
   // Run to a line: ◀ ▶ beside the line the pointer's over, in the gutter's decorations column.
   const runToDecoration = editor.createDecorationsCollection();
   const gutterHandlers: ((line: number, back: boolean) => void)[] = [];
@@ -367,6 +376,34 @@ export function createEditor(
               stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
             },
           };
+        }),
+      );
+    },
+    setInputNotes(notes) {
+      const model = editor.getModel();
+      if (!model) return;
+      const lines = model.getLineCount();
+      const shown = notes.filter((n) => n.from >= 1 && n.to <= lines && n.from <= n.to);
+      inputStyle.textContent = shown
+        .map((n, i) => `.monaco-editor .input-note-${i}::after { content: ${cssString(`  ${n.text}`)}; }`)
+        .join("\n");
+      inputDecorations.set(
+        shown.flatMap((n, i) => {
+          const end = model.getLineMaxColumn(n.from);
+          return [
+            {
+              range: new monaco.Range(n.from, 1, n.to, model.getLineMaxColumn(n.to)),
+              options: { className: "input-replaced", isWholeLine: true, hoverMessage: { value: n.hover } },
+            },
+            {
+              range: new monaco.Range(n.from, Math.max(1, end - 1), n.from, end),
+              options: {
+                afterContentClassName: `input-note input-note-${i}`,
+                hoverMessage: { value: n.hover },
+                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+              },
+            },
+          ];
         }),
       );
     },

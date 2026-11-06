@@ -20,6 +20,7 @@ import { findElements } from "./app/elements";
 import { FindController } from "./app/findController";
 import { HistoryController } from "./app/historyController";
 import { escapeHtml } from "./app/html";
+import { InputController } from "./app/inputController";
 import { showLanguageKind } from "./app/languageKind";
 import { LayoutController } from "./app/layout";
 import { LoadingCard } from "./app/loadingCard";
@@ -130,6 +131,7 @@ const editor = createEditor(
       }
       settings.code(currentLanguage()).set(code);
       programsController.updateUI();
+      inputs.codeChanged();
       if (els.live.checked) runs.scheduleLive(code);
       else runs.cancelLive();
       measure.codeChanged(code);
@@ -202,6 +204,16 @@ const runs = new RunController({
   drawn: () => Promise.all([memory.drawn(), loop.drawn()]).then(() => {}),
   onResult: (updateMarks) => view.render(updateMarks),
   onStatus: (status, download) => loadingCard.show(status, download),
+  prepare: (code, language) => inputs.prepare(code, language),
+});
+
+// Inputs you can switch between (`viz: input`): the code window's Input menu, and the code that's run.
+const inputs: InputController = new InputController({
+  app,
+  els,
+  editor,
+  run: () => runNow(),
+  changed: () => measure.codeChanged(editor.getCode()),
 });
 
 function runNow(): void {
@@ -332,6 +344,7 @@ const measure: MeasureController = new MeasureController({
   onMeasured: () => complexity.update(),
   estimate: () => complexity.latest,
   onOpen: () => closePanelsBut("measure"),
+  prepare: (code, language) => inputs.prepare(code, language).code,
 });
 
 function closePanelsBut(open: "style" | "spacing" | "complexity" | "measure"): void {
@@ -370,6 +383,7 @@ function switchLanguage(language: LanguageId): void {
   els.language.value = language;
   showLanguageKind(LANGUAGES[currentLanguage()].kind);
   editor.setLanguage(LANGUAGES[currentLanguage()].monacoId, savedCode(currentLanguage()));
+  inputs.codeChanged(); // the new language's code (a model switch isn't an edit)
   programsController.updateUI(); // the unsaved-changes dot, for this language's code
   setBanner(null);
   view.render();

@@ -62,6 +62,8 @@ export interface MeasureOptions {
   estimate(): Estimate | null;
   /** The Measure panel opened: close the other panels. */
   onOpen(): void;
+  /** The code that's run for the editor's (the inputs chosen swapped in, app/inputController.ts). */
+  prepare?(code: string, language: LanguageId): string;
   /** Timers and the clock, replaceable in tests. */
   now?(): number;
   setInterval?(callback: () => void, ms: number): number;
@@ -179,7 +181,9 @@ export class MeasureController {
   /** Measure's result, when it's for the code in the editor now. */
   current(): Measurement | null {
     const { measured } = this;
-    return measured && measured.language === this.language && measured.code === this.options.editor.getCode()
+    return measured &&
+      measured.language === this.language &&
+      measured.code === this.ran(this.options.editor.getCode(), measured.language)
       ? measured.result
       : null;
   }
@@ -194,7 +198,12 @@ export class MeasureController {
     this.options.runs.runnerFor(this.measuringLanguage).stopMeasure();
   }
 
-  /** The code in the editor changed. */
+  /** The code that's run for the editor's: a measurement is for that (another input is another measurement). */
+  private ran(code: string, language: LanguageId): string {
+    return this.options.prepare?.(code, language) ?? code;
+  }
+
+  /** The code in the editor changed (or the input it's run with). */
   codeChanged(code: string): void {
     // The growth section reads the code's `viz: size` hints.
     this.clearTimer(this.growthTimer);
@@ -202,7 +211,7 @@ export class MeasureController {
     // A measurement is for the code it ran: once that changes, its counts would sit on the wrong lines.
     if (this.measured) {
       this.updateLabels();
-      if (this.measured.code !== code) this.panel.markStale();
+      if (this.measured.code !== this.ran(code, this.measured.language)) this.panel.markStale();
     }
   }
 
@@ -247,8 +256,8 @@ export class MeasureController {
       return;
     }
     const { runs, els, editor } = this.options;
-    const code = editor.getCode();
     const lang = this.language;
+    const code = this.ran(editor.getCode(), lang);
     this.begin(lang);
     // A traced run may be finishing: measure right after it.
     await runs.whenIdle();
@@ -310,8 +319,8 @@ export class MeasureController {
   async measureGrowth(scaled?: string[]): Promise<void> {
     if (this.measuring) return;
     const { runs, editor, app } = this.options;
-    const code = editor.getCode();
     const lang = this.language;
+    const code = this.ran(editor.getCode(), lang);
     const { vars } = findSizes(code);
     const grow = scaled ?? vars.map((v) => v.name);
     const rungs = ladder(vars, grow);

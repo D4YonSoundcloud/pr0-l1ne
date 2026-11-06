@@ -11,7 +11,14 @@ import type { Trace } from "../trace/types";
 import type { Progress } from "../trace/work";
 import type { RunnerStatus, RunOutcome, TracePart } from "../worker/runner";
 import type { BannerTone } from "./banner";
-import { LIVE_DELAY_MS, RunController, type RunnerLike, reportLink, type TracerCrash } from "./runController";
+import {
+  LIVE_DELAY_MS,
+  RunController,
+  type RunnerLike,
+  type RunOptions,
+  reportLink,
+  type TracerCrash,
+} from "./runController";
 import type { ProgressView } from "./runProgress";
 import { AppStore } from "./state";
 
@@ -135,13 +142,14 @@ class FakeProgress implements ProgressView {
   }
 }
 
-function setup(options: { layout?: LayoutService } = {}) {
+function setup(options: { layout?: LayoutService; prepare?: RunOptions["prepare"] } = {}) {
   document.body.innerHTML = `<span id="status"></span>`;
   const settings = createSettings(null);
   const app = new AppStore(settings, new ProgramStore(null));
   const runners = new Map<LanguageId, FakeRunner>();
   const banners: (string | null)[] = [];
   const marks: unknown[] = [];
+  const hintWarnings: { line: number; message: string }[][] = [];
   const results: boolean[] = [];
   const tones: (BannerTone | undefined)[] = [];
   const crashes: TracerCrash[] = [];
@@ -158,7 +166,8 @@ function setup(options: { layout?: LayoutService } = {}) {
       return Promise.resolve();
     },
     status: document.getElementById("status")!,
-    editor: { setMarks: (m) => marks.push(m), setHintWarnings: () => {} },
+    editor: { setMarks: (m) => marks.push(m), setHintWarnings: (w) => hintWarnings.push(w) },
+    prepare: options.prepare,
     setBanner: (html, tone) => {
       banners.push(html);
       tones.push(tone);
@@ -190,6 +199,7 @@ function setup(options: { layout?: LayoutService } = {}) {
     tones,
     crashes,
     marks,
+    hintWarnings,
     results,
     fireTimers,
     timers,
@@ -201,6 +211,20 @@ function setup(options: { layout?: LayoutService } = {}) {
 }
 
 describe("RunController", () => {
+  it("runs the code prepared for the editor's (inputs swapped in), but keeps the editor's as what ran, with the page's hint warnings", async () => {
+    const { runs, runners, app, hintWarnings, banners } = setup({
+      prepare: (code) => ({ code: code.replace("1", "2"), warnings: [{ line: 1, message: "about the input" }] }),
+    });
+    runs.runNow("let a = 1;");
+    const call = runners.get("javascript")!.calls[0];
+    expect(call.code).toBe("let a = 2;");
+    call.finish({ kind: "trace", trace: makeTrace(5), elapsedMs: 1 });
+    await flush();
+    expect(app.get().tracedCode).toBe("let a = 1;"); // not stale: it's the editor's code
+    expect(hintWarnings.at(-1)).toEqual([{ line: 1, message: "about the input" }]);
+    expect(banners.at(-1)).toContain("about the input");
+  });
+
   it("shows how a run is going, lets it paint 'preparing' before drawing, and Stop stops the runner", async () => {
     const { runs, runners, progress, frames, app } = setup();
     runs.runNow("let a = 1;");

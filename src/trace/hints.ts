@@ -25,6 +25,10 @@
  *   viz: size n                      n is the input size: Measure can
  *   viz: size n = 40000, k             rerun the program at smaller sizes
  *                                    to see how its cost grows
+ *   viz: input                       the next line's variable can be run
+ *   viz: input nums, target            with other values: sorted, empty, …
+ *                                    (trace/inputs.ts; nothing to apply
+ *                                    to a trace)
  */
 import { parseExpr } from "./expr";
 import {
@@ -70,6 +74,7 @@ export const KEYWORDS = [
   "graph",
   "plain",
   "size",
+  "input",
 ] as const;
 
 /** Number formats `viz: format` knows: hex, bin, oct, or [,][.N](f|e|%), or just "," or ".N". */
@@ -332,6 +337,13 @@ export function parseHints(raw: RawHint[]): VizHints {
           { name: m[1], ...(value !== undefined ? { value } : {}), line },
         ];
       }
+      continue;
+    }
+
+    if (keyword === "input") {
+      // The page swaps the value in before the run (trace/inputs.ts); here, only how it's written.
+      if (rest && names(rest).some((n) => !NAME.test(n)))
+        warn(line, `"input" looks like: viz: input  (on the line above nums = [5, 3, 8])  or  viz: input nums, target`);
       continue;
     }
 

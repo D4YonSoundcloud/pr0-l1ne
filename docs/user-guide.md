@@ -115,6 +115,30 @@ Under the code, next to **Output**, the **Changes** tab lists what changed at th
 
 The panel stays the height you give it whatever the tab shows, and a long list scrolls. Drag its top edge up or down to make it taller or shorter (or focus the edge and use `↑` / `↓`, `Home` and `End`); double-click the edge for the default height. The height is remembered.
 
+### Switching inputs
+
+An algorithm is worth watching on more than one input: already sorted, backwards, empty, a single item. Put a `viz: input` hint on the line above a variable set at the top of the program to a value written out:
+
+```python
+# viz: input
+nums = [5, 3, 8, 1]
+```
+
+An **Input** button appears in the code window's header. Its menu lists the values you can run with instead, each with the value it would be, made from the one written:
+
+| Written | Variants |
+|---|---|
+| A list of numbers | Sorted, reversed (largest first), random (as many numbers, between the least and the most written), empty, one item, all the same |
+| A list of strings | Sorted, reversed (Z to A), shuffled, empty, one item |
+| Any other list or tuple (a grid, pairs) | Reversed, shuffled, empty, one item |
+| A number | 0, 1, half, double, random |
+| A string | Reversed, shuffled, empty, one character |
+| `True` / `False` | The other one |
+
+Choose one and the program runs with it. **The code in the editor isn't changed**: the value is swapped in when it runs, on the same lines (a list written over several lines keeps its lines), so every line number and step still matches. The line is tinted, with a note after it saying what's run instead (`▸ runs with sorted: [1, 3, 5, 8]`), and the button says which (`Input: Sorted`). **Live** keeps running with your choice as you edit: change the list and "sorted" is your new list, sorted. **Random** keeps the values the menu showed until you press **↻** for new ones. **All as written** puts every input back. Measure measures the input chosen too. The choices are forgotten when you switch language or open another program.
+
+`viz: input nums, target` names the variables instead of taking the next line's, for several at once. The value must be written out: a list, a number, a string, true or false (and lists of those). A value that's worked out (`list(range(10))`, `Array.from(...)`) can't be switched, and the hint's underlined to say so.
+
 ## Layout
 
 On a wide screen, the code, the memory view and the loop history can go anywhere on the page. To begin with, the code is on the left and the memory view sits over the loop history on the right.

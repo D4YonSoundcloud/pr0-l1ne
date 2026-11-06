@@ -234,6 +234,12 @@ export const HINT_DOCS: Record<(typeof KEYWORDS)[number], HintDoc> = {
       "Marks a number set at the top of the program as the input size, so Measure can rerun it smaller to see how its cost grows.",
     example: "viz: size n = 40000",
   },
+  input: {
+    syntax: "viz: input",
+    summary:
+      "On the line above a variable set to a value written out (a list, a number, a string), lets the code window's Input menu run the program with other values made from it: sorted, reversed, random, empty, one item.",
+    example: "viz: input",
+  },
 };
 
 export const OPTION_DOCS: Record<string, string> = {
@@ -689,6 +695,10 @@ export function nameProblems(line: string, language: HintLanguage, ctx: HintCont
   }
   if (keyword === "plain") {
     for (const n of identifiers(rest, 0)) check(n.name, n.at, [...variables, ...classes], "a variable or class");
+    return out;
+  }
+  if (keyword === "input") {
+    for (const n of identifiers(rest, 0)) check(n.name, n.at, variables, "a variable");
     return out;
   }
   if (keyword === "focus") return out; // line numbers and loop kinds, not names

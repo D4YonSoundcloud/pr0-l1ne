@@ -84,7 +84,11 @@ function fakeRuns() {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function setup(code = "let a = 1;\nfor (let i = 0; i < 100; i++) a++;", storage = memoryStorage()) {
+function setup(
+  code = "let a = 1;\nfor (let i = 0; i < 100; i++) a++;",
+  storage = memoryStorage(),
+  prepare?: (code: string) => string,
+) {
   document.body.innerHTML = `
     <button id="measure">Measure</button><button id="results" hidden></button>
     <span id="status"></span><div id="host"></div>`;
@@ -116,6 +120,7 @@ function setup(code = "let a = 1;\nfor (let i = 0; i < 100; i++) a++;", storage 
     onMeasured: () => void events.push("measured"),
     estimate: () => null,
     onOpen: () => events.push("open"),
+    prepare,
     now: () => 0,
     setInterval: (callback) => {
       intervals.set(nextTimer, callback);
@@ -190,6 +195,21 @@ describe("MeasureController", () => {
     setCode("let a = 2;");
     expect(measure.current()).toBeNull();
     expect(labels.at(-1)).toEqual([]);
+  });
+
+  it("measures the code with its inputs swapped in, and a measurement is for that input", async () => {
+    let input = "1";
+    const { measure, calls } = setup(undefined, undefined, (code) => code.replace("= 1", `= ${input}`));
+    const done = measure.measure();
+    await flush();
+    expect(calls[0].code).toContain("let a = 1;");
+    calls[0].finish({ kind: "measured", result: measurement() });
+    await done;
+    expect(measure.current()).not.toBeNull();
+    input = "9"; // another input chosen: the counts aren't for it
+    expect(measure.current()).toBeNull();
+    input = "1";
+    expect(measure.current()).not.toBeNull();
   });
 
   it("Measure again while measuring stops it, and says nothing was counted", async () => {

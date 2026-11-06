@@ -13,7 +13,8 @@ export const JAVASCRIPT_EXAMPLES: Example[] = [
   {
     group: SORTING,
     name: "Bubble sort",
-    code: `const arr = [5, 2, 9, 1, 6];
+    code: `// viz: input
+const arr = [5, 2, 9, 1, 6];
 const n = arr.length;
 
 for (let i = 0; i < n; i++) {

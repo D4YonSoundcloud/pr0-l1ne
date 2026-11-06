@@ -59,6 +59,7 @@ A hint is a comment whose text starts with `viz:`:
 | `viz: graph Node(neighbors)` | Draws objects of class `Node` as a graph, with `neighbors` as the edges. It can be a list, a set, a dict (its keys label the edges) or a direct link. List several fields to use them all. |
 | `viz: plain graph` | Never draws `graph` as a graph, even though it looks like one. It's drawn as an ordinary dict or list instead. Takes variable or class names. |
 | `viz: size n` | Marks `n` as the input size, for [growth runs](user-guide.md#how-it-grows). `n` must be set to a number at the top level of the program (`n = 40000`). `viz: size n = 40000, k` names several, with an optional full size to grow to. |
+| `viz: input` | On the line above a variable set at the top level of the program to a value written out (a list, a tuple, a number, a string, `True` / `False`), lets you [run the program with other values](user-guide.md#switching-inputs) made from it: sorted, reversed, random, empty, one item and so on, from the code window's **Input** menu. Other hints can sit between it and the line. `viz: input nums, target` names the variables instead, wherever they're set at the top level. The code isn't changed. |
 
 Names are the variable or field names as written in your code. Class names in `tree`, `list` and `graph` are what the canvas shows as the box title (a Python class name, or a JavaScript constructor name). If two hints name the same class or variable, the later one wins.
 
@@ -104,7 +105,7 @@ The editor helps with hints as you type them:
 
 ## When a hint is wrong
 
-A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, window, region, compare, heatmap, table, intervals, chars, bits, format, hex, label, rows, focus, watch, check, tree, list, graph, plain, size.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
+A hint that PR0L1NE can't understand doesn't stop your program. It's ignored, and you're told why in two places: a yellow banner at the top of the canvas (`Hint on line 3: Unknown hint "colour blue". Hints are: hide, show, pointers, window, region, compare, heatmap, table, intervals, chars, bits, format, hex, label, rows, focus, watch, check, tree, list, graph, plain, size, input.`) and a yellow squiggle under the comment in the editor, which you can hover. Each message shows the form the hint should take, such as `viz: tree Node(left, right)`.
 
 A hint that's well-formed but names something that doesn't exist (`hide nmus`) does nothing, since it may refer to a variable that only exists in some runs.
 

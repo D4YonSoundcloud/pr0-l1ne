@@ -27,6 +27,8 @@ export function findElements(doc: Document = document) {
     output: byId<HTMLPreElement>("output"),
     outputTab: byId<HTMLButtonElement>("output-tab"),
     runToToggle: byId<HTMLButtonElement>("run-to-toggle"),
+    inputButton: byId<HTMLButtonElement>("input-button"),
+    inputMenu: byId<HTMLDivElement>("input-menu"),
     console: doc.querySelector<HTMLElement>(".console")!,
     consoleGrip: byId<HTMLDivElement>("console-grip"),
     find: byId<HTMLFormElement>("find"),

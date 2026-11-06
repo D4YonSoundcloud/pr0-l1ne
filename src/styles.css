@@ -2704,6 +2704,147 @@ select {
   outline: 2px solid #f6d74380;
   outline-offset: 1px;
 }
+.pane-toggle[hidden] {
+  display: none;
+}
+/* Inputs (app/inputController.ts): the button, lit while an input's switched, and its menu. */
+.input-button {
+  max-width: 220px;
+}
+.input-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.input-button[aria-expanded="true"] {
+  color: #fff;
+  background: #232a3d;
+}
+.input-button.is-switched {
+  color: #1c2233;
+  background: var(--highlight);
+  border-color: var(--highlight);
+}
+.input-button.is-switched:hover {
+  color: #000;
+}
+.input-menu {
+  position: fixed;
+  z-index: 55;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 6px 8px 8px;
+  border: 1px solid #343c55;
+  border-radius: 8px;
+  background: #1b2133;
+  color: var(--chrome-text);
+  font-size: 12px;
+  box-shadow: 0 8px 24px #0008;
+}
+.input-menu[hidden] {
+  display: none;
+}
+.input-group {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+}
+.input-group legend {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 2px;
+}
+.input-group legend code {
+  font-family: var(--font-code);
+  font-size: 13px;
+  color: #9fb4ff;
+}
+.input-line {
+  color: var(--chrome-muted);
+}
+.input-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  border-radius: 5px;
+}
+.input-option:hover,
+.input-option:focus-within {
+  background: #232a3d;
+}
+.input-option input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--highlight);
+}
+.input-option label {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.input-option-label {
+  flex: none;
+  min-width: 96px;
+}
+.input-option-value {
+  overflow: hidden;
+  font-family: var(--font-code);
+  color: var(--chrome-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.input-option input:checked + label .input-option-label {
+  color: var(--highlight);
+}
+.input-again,
+.input-reset {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid #343c55;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  color: var(--chrome-text);
+  cursor: pointer;
+}
+.input-again:hover,
+.input-reset:hover:not(:disabled) {
+  background: #2b3550;
+}
+.input-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.input-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #2a3147;
+}
+.input-note-text {
+  margin: 0;
+  color: var(--chrome-muted);
+}
+/* In the editor: an input run with another value, dimmed, and what's run instead after it. */
+.monaco-editor .input-replaced {
+  background: color-mix(in srgb, var(--highlight) 7%, transparent);
+}
+.monaco-editor .input-note {
+  font-style: italic;
+  color: var(--highlight) !important;
+  opacity: 0.85;
+}
 .editor-head .window-button:hover,
 .editor-head .window-button:focus-visible {
   color: #fff;

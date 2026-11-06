@@ -94,6 +94,12 @@ export interface RunOptions {
   layout: LayoutService;
   /** Resolves once the windows have drawn the step a new trace opened on (the card says "Drawing" until then). */
   drawn?(): Promise<void>;
+  /**
+   * The code that's run for the code in the editor (app/inputController.ts
+   * swaps in the inputs chosen, on the same lines), and problems with hints
+   * the page reads itself, shown with the trace's own.
+   */
+  prepare?(code: string, language: LanguageId): { code: string; warnings: { line: number; message: string }[] };
   setTimeout?(callback: () => void, ms: number): number;
   clearTimeout?(id: number): void;
 }
@@ -244,8 +250,9 @@ export class RunController {
     // prepares it and draws from it, and says what the page should know of it.
     const layout = this.options.layout;
     layout.begin();
+    const prepared = this.options.prepare?.(code, language) ?? { code, warnings: [] };
     const outcome = await this.runnerFor(language).run(
-      code,
+      prepared.code,
       POLICY.maxSteps,
       seconds,
       POLICY.sampling,
@@ -285,7 +292,7 @@ export class RunController {
       // Still the language on screen (it can change while a big trace is prepared)?
       if (language === this.language) {
         if (loaded.kind === "empty") this.applyFailure({ kind: "stopped", arrived: false }, language);
-        else if (loaded.kind === "ready" && this.applyTrace(loaded.info, code)) {
+        else if (loaded.kind === "ready" && this.applyTrace(loaded.info, code, prepared.warnings)) {
           // The card says "Drawing" until the windows have drawn it.
           view?.drawing();
           await this.options.drawn?.();
@@ -338,7 +345,7 @@ export class RunController {
   }
 
   /** Show a run's trace (what the page knows of it); false when there's nothing to draw (it never started). */
-  private applyTrace(trace: TraceInfo, code: string): boolean {
+  private applyTrace(trace: TraceInfo, code: string, pageWarnings: { line: number; message: string }[] = []): boolean {
     const { app, setBanner, editor, onResult } = this.options;
     if (trace.error && trace.steps === 0) {
       // Couldn't even start (usually a syntax error mid-typing). Keep the last
@@ -363,7 +370,7 @@ export class RunController {
     const { trace: before, stepIndex } = app.get();
     const wasAtEnd = !before || stepIndex >= before.steps - 1;
     if (perf.on) perf.lastTrace = trace.stats;
-    const warnings = trace.warnings;
+    const warnings = [...trace.warnings, ...pageWarnings].sort((a, b) => a.line - b.line);
     editor.setHintWarnings(warnings);
     // From the trace before its hints, so hidden variables still count as the program's.
     if (!trace.sql) editor.setHintContext?.(trace.hintContext);
