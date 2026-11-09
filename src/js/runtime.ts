@@ -42,7 +42,28 @@ interface FrameState {
   line: number;
   getter: Getter;
   loops: Map<string, LoopState>;
+  /**
+   * Objects a write or call in this frame is under way on (js/marks.ts):
+   * from the start of the expression to its end, which may be after a
+   * yield or an await, so they're kept with the frame, not the runtime.
+   */
+  pending?: unknown[];
 }
+
+/** How the tracer reads the program's objects (tests compare one way with the other). */
+export interface TracerOptions {
+  /**
+   * Read only the objects the program may have written to since they were
+   * last read (marks, js/marks.ts), reusing what's kept for the rest. Off:
+   * every object is read at every step, as the check does. On by default.
+   */
+  marks?: boolean;
+  /** Every how many recorded steps every object is read anyway and checked against what marks said (the in-run check). */
+  checkEvery?: number;
+}
+
+/** The in-run check: every this many recorded steps, and the last. */
+export const CHECK_EVERY = 500;
 
 interface Timer {
   id: number;
@@ -100,11 +121,28 @@ export class Runtime {
    */
   onProgress: ((elapsedMs: number, line: number) => void) | null = null;
 
+  // -- marks (js/marks.ts): what the program may have written to ---------------
+
+  /** Objects written to, or handed to a call, since they were last read (Serializer). */
+  private readonly marks = new WeakSet<object>();
+  /** Objects a write or call is under way on, and how many (frames' `pending`). */
+  private readonly pendingCount = new Map<unknown, number>();
+  /** Read objects by marks (off: every object every step). Turned off for the rest of a run the check finds a missed write in. */
+  private marksOn: boolean;
+  private readonly checkEvery: number;
+  /** Steps serialized: the in-run check comes every `checkEvery`. */
+  private serialized = 0;
+  /** What the in-run check found, if it found anything: a write marks missed (Trace.selfCheck). */
+  selfCheck: string | null = null;
+
   constructor(
     private readonly maxSteps: number,
     maxSeconds: number,
     sampling: SamplingPolicy,
+    options: TracerOptions = {},
   ) {
+    this.marksOn = options.marks ?? true;
+    this.checkEvery = Math.max(1, options.checkEvery ?? CHECK_EVERY);
     this.sampler = new Sampler(maxSteps, sampling, (step) => this.commit(step));
     this.started = typeof performance !== "undefined" ? performance.now() : Date.now();
     this.deadline = this.started + maxSeconds * 1000;
@@ -158,6 +196,8 @@ export class Runtime {
   }
 
   exit(frame: FrameState): void {
+    // A write or call that threw left its objects pending: done now (marked).
+    if (frame.pending?.length) this.done(frame, 0);
     const index = this.frames.lastIndexOf(frame);
     if (index >= 0) this.frames.splice(index, 1);
     this.suspended.delete(frame);
@@ -258,6 +298,68 @@ export class Runtime {
   fn<F extends Function>(fn: F, name: string, captured: Getter): F {
     this.closures.set(fn, { name, captured });
     return fn;
+  }
+
+  // -- marks: writes and calls (js/marks.ts rewrites them to these) -----------
+
+  /** A write or call starts: where its frame's pending objects are now. */
+  bg(frame: FrameState): number {
+    return frame.pending?.length ?? 0;
+  }
+
+  /**
+   * An object the write or call is on (or is given): pending, so read as
+   * written, until it's done. A bound function (a.push.bind(a)) brings what
+   * it was bound to: calling it changes them.
+   */
+  w<T>(frame: FrameState, value: T): T {
+    if ((typeof value === "object" && value !== null) || typeof value === "function") {
+      if (!frame.pending) frame.pending = [];
+      frame.pending.push(value);
+      this.pendingCount.set(value, (this.pendingCount.get(value) ?? 0) + 1);
+      const targets = typeof value === "function" ? this.bound.get(value) : undefined;
+      if (targets) for (const target of targets) if (target !== value) this.w(frame, target);
+    }
+    return value;
+  }
+
+  /** The write or call is done: what was pending since `at` is marked (read again at the next step). */
+  af<T>(frame: FrameState, at: number, result: T): T {
+    // A call that made a bound function: what it was made from (the function, `this`, the arguments) goes with it.
+    if (typeof result === "function" && result.name.startsWith("bound ") && frame.pending && frame.pending.length > at)
+      this.bound.set(result, frame.pending.slice(at) as object[]);
+    this.done(frame, at);
+    return result;
+  }
+
+  /** Bound functions, and what they were bound with (see w). */
+  // biome-ignore lint/complexity/noBannedTypes: any function the program binds
+  private readonly bound = new WeakMap<Function, object[]>();
+
+  private done(frame: FrameState, at: number): void {
+    const pending = frame.pending;
+    if (!pending) return;
+    for (let i = pending.length - 1; i >= at; i--) {
+      const value = pending[i] as object;
+      this.marks.add(value);
+      const n = this.pendingCount.get(value) ?? 1;
+      if (n <= 1) this.pendingCount.delete(value);
+      else this.pendingCount.set(value, n - 1);
+    }
+    if (pending.length > at) pending.length = at;
+  }
+
+  /** Might the program have written to this object since it was last read? */
+  private written = (obj: object): boolean => this.marks.has(obj) || this.pendingCount.has(obj);
+
+  /** The object was read: unmarked (unless a write on it is still under way). */
+  private read = (obj: object): void => {
+    this.marks.delete(obj);
+  };
+
+  /** The program does what marks can't follow (eval, new Function, with): read everything, all run. */
+  unsafe(): void {
+    this.marksOn = false;
   }
 
   // -- pausing: generators and async functions --------------------------------
@@ -525,6 +627,24 @@ export class Runtime {
     this.steps.push(step);
   }
 
+  /**
+   * The in-run check found objects marks said weren't written to that had
+   * changed: a write the marks missed (a tracer bug). This step is right
+   * (the check read everything); the rest of the run reads every object,
+   * as without marks, and the trace says what was found (Trace.selfCheck),
+   * for the page to report.
+   */
+  private missedWrites(serializer: Serializer, step: Step): void {
+    this.marksOn = false;
+    if (this.selfCheck) return;
+    const ids = serializer.missed;
+    const kinds = ids.slice(0, 3).map((id) => {
+      const obj = serializer.objects[serializer.order.indexOf(id)];
+      return obj ? `${id} (${obj.typeName || obj.kind})` : id;
+    });
+    this.selfCheck = `marks missed a write to ${ids.length === 1 ? "an object" : `${ids.length} objects`} by step ${this.steps.length + 1}, line ${step.line}: ${kinds.join(", ")}${ids.length > 3 ? ", …" : ""}`;
+  }
+
   /** Loop states on the stack, outermost first: callback runs, then loop statements. */
   private activeStates(): LoopState[] {
     const states: LoopState[] = [];
@@ -571,12 +691,16 @@ export class Runtime {
     this.report(now);
     this.recording = true;
     try {
+      // Every `checkEvery` steps, and the program's last, every object is read anyway and checked against marks.
+      const last = event === "return" && this.frames.length === 1 && this.frames[0].func === "Global";
+      const verify = ++this.serialized % this.checkEvery === 0 || last;
       const serializer = new Serializer(
         this.objectIds,
         () => `o${++this.objectCounter}`,
         this.closures,
         this.focusOf(),
         this.reuse,
+        this.marksOn ? { written: this.written, read: this.read, verify } : null,
       );
       const describe = (frame: FrameState) => serializer.frame(frame.id, frame.func, frame.line, frame.getter);
       const stack = this.frames.map(describe);
@@ -612,6 +736,7 @@ export class Runtime {
       if ("returnValue" in extra) step.returnValue = serializer.value(extra.returnValue);
       if (extra.exception) step.exception = extra.exception;
       this.sampler.considered++;
+      if (serializer.missed.length) this.missedWrites(serializer, step);
       this.made.set(step, { order: serializer.order, objects: serializer.objects, fresh: serializer.fresh });
       if (into !== RECORD) into.push(step);
       else this.commit(step);

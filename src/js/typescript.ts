@@ -24,6 +24,7 @@ import * as t from "@babel/types";
 import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrumentAst, parseProgram } from "./instrument";
+import type { TracerOptions } from "./runtime";
 import { type TraceSoFar, traceProgram } from "./trace";
 
 export function stripTypes(ast: t.File, source: string): t.File {
@@ -82,6 +83,7 @@ export function traceTypeScript(
   maxSeconds = POLICY.runSeconds,
   sampling: SamplingPolicy = POLICY.sampling,
   onProgress?: (state: TraceSoFar) => void,
+  options: TracerOptions = {},
 ): Promise<Trace> {
-  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds, sampling, onProgress);
+  return traceProgram(source, maxSteps, "typescript", instrumentTypeScript, maxSeconds, sampling, onProgress, options);
 }

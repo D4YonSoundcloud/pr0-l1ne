@@ -538,6 +538,12 @@ export interface Trace {
   /** What stopped a truncated trace: its steps or time running out, or the person (Stop: what had been recorded). */
   stoppedBy?: "steps" | "time" | "person";
   /**
+   * The JavaScript tracer's in-run check found a write its marks missed
+   * (js/marks.ts): a tracer bug. The steps are right (from that step on it
+   * read every object); the page reports it.
+   */
+  selfCheck?: string;
+  /**
    * Some long loops were sampled: their first passes, passes at round
    * numbers (10, 20 ... 100, 200 ...) and last passes were recorded; the
    * rest ran and were counted but not recorded (steps carry `skipped`).

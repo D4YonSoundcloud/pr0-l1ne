@@ -7,6 +7,7 @@
   "include": [
     "src/js/cli.ts",
     "src/js/encodeSteps.test.ts",
+    "src/js/marks.test.ts",
     "src/render/layout.test.ts",
     "src/trace/hints.test.ts",
     "src/trace/graph.test.ts",

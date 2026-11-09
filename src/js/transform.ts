@@ -8,7 +8,8 @@ import type { Analysis, LoopData } from "./analyze";
 
 /** The name the runtime is passed in as. Variables with this prefix are hidden. */
 export const RUNTIME = "__av";
-const FRAME = "__av_f";
+/** The frame of the function (or program) the code runs in, a local of each (js/marks.ts uses it too). */
+export const FRAME = "__av_f";
 const ERROR = "__av_e";
 
 /** Simple enough to evaluate one extra time: names, numbers, a.length, arithmetic. */

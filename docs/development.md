@@ -457,6 +457,9 @@ pr0-l1ne/
     │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
     │   ├── serve.ts            Worker side of the protocol, shared by JS and TS
     │   ├── encodeSteps.test.ts What's sent held to the scanning encoder (testing/heapEncoderReference.ts), byte for byte
+    │   ├── marks.ts            Marks: writes and calls bracketed, so only what may have changed is read
+    │   ├── writeCatalogue.ts   Every way a program can change an object, one small program each
+    │   ├── marks.test.ts       Marks held to reading everything: the catalogue, examples, benchmarks; the in-run check
     │   ├── javascript.worker.ts  Entry point for the JavaScript worker
     │   ├── typescript.worker.ts  Entry point for the TypeScript worker
     │   ├── cli.ts              npm run instrument / trace:js

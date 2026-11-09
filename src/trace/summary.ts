@@ -39,6 +39,8 @@ export interface TraceInfo {
   error: Trace["error"];
   truncated: boolean;
   stoppedBy?: Trace["stoppedBy"];
+  /** The JavaScript tracer's in-run check found a write its marks missed (Trace.selfCheck): reported, not shown. */
+  selfCheck?: string;
   counts?: Trace["counts"];
   /** The hints' warnings, underlined in the editor. */
   warnings: { line: number; message: string }[];
@@ -107,6 +109,7 @@ export function summarize(raw: Trace, prepared: Trace): TraceInfo {
     error: prepared.error,
     truncated: prepared.truncated,
     ...(prepared.stoppedBy ? { stoppedBy: prepared.stoppedBy } : {}),
+    ...(prepared.selfCheck ? { selfCheck: prepared.selfCheck } : {}),
     ...(prepared.counts ? { counts: prepared.counts } : {}),
     warnings: prepared.viz?.warnings ?? [],
     hintContext: context,

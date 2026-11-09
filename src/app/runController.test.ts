@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LanguageId } from "../languages";
 import { type LayoutService, LocalLayout } from "../layout/service";
 import { ProgramStore } from "../programs";
@@ -323,6 +323,27 @@ describe("RunController", () => {
     expect(app.get().trace).toBeNull();
     expect(crashes).toEqual([{ language: "javascript", message: expect.stringMatching(/isn't one the app can use/) }]);
     expect(banners.at(-1)).toContain("a bug in PR0L1NE");
+  });
+
+  it("reports a write the tracer's marks missed, and shows the trace as usual", async () => {
+    const { runs, runners, app, crashes, banners } = setup();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    runs.runNow("let a = 1;");
+    runners.get("javascript")!.calls[0].finish({
+      kind: "trace",
+      trace: makeTrace(5, { selfCheck: "marks missed a write to an object by step 3, line 2: o1 (Object)" }),
+      elapsedMs: 1,
+    });
+    await flush();
+    expect(app.get().trace?.steps).toBe(5);
+    expect(banners).toEqual([null]);
+    expect(crashes).toEqual([
+      {
+        language: "javascript",
+        message: "self-check: marks missed a write to an object by step 3, line 2: o1 (Object)",
+      },
+    ]);
+    warn.mockRestore();
   });
 
   it("runs with Run's budget and shows the trace at its last step", async () => {

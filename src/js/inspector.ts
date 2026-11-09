@@ -162,6 +162,21 @@ export interface ObjectEntry extends Partial<Reused<HeapObject>> {
   seen: number;
 }
 
+/**
+ * What marks say (js/marks.ts, js/runtime.ts): whether the program may have
+ * written to an object since it was last read. An object it can't have
+ * written to is the same as when it was read: what it was described as is
+ * used again, and what it held is followed from what it held then,
+ * without reading it. With `verify`, every object is read anyway, and one
+ * marks would have skipped that has changed is a write they missed.
+ */
+export interface MarksView {
+  written(obj: object): boolean;
+  /** The object was read just now. */
+  read(obj: object): void;
+  verify: boolean;
+}
+
 /** Each object's entry (by the object, and by its id), and each frame's last view, kept between steps (Serializer). */
 export interface ReuseCache {
   objects: Map<string, ObjectEntry>;
@@ -244,6 +259,8 @@ export class Serializer {
    */
   readonly fresh: number[] = [];
   private count = 0;
+  /** Objects marks said were unwritten that had changed (with `verify`), by id: writes marks missed. */
+  readonly missed: string[] = [];
   /** This step's number: an object whose entry was seen in it is in the heap already. */
   private readonly stepNumber: number;
   private built: Record<string, HeapObject> | null = null;
@@ -262,6 +279,8 @@ export class Serializer {
      * what it holds is visited, so the heap still has everything reachable.
      */
     private readonly reuse: ReuseCache = newReuseCache(),
+    /** Marks, to read only what may have been written to; none, every object is read. */
+    private readonly marks: MarksView | null = null,
   ) {
     this.stepNumber = ++reuse.step;
   }
@@ -375,7 +394,22 @@ export class Serializer {
       return id;
     }
     this.count++;
-    const slots = slotsOf(obj);
+    const marks = this.marks;
+    let slots: unknown[] | null;
+    if (marks && entry.slots && entry.made && !marks.written(obj)) {
+      if (!marks.verify) {
+        // Not written to since it was read: what it was, and what it held then, without reading it.
+        this.objects[at] = entry.made;
+        if (!entry.committed) this.fresh.push(at);
+        const held = entry.slots;
+        for (let i = 2; i < held.length; i++) this.visit(held[i]);
+        return id;
+      }
+      // The check: read it anyway. Changed, it's a write marks missed.
+      slots = slotsOf(obj);
+      if (!slots || !sameSlots(entry.slots, slots)) this.missed.push(id);
+    } else slots = slotsOf(obj);
+    marks?.read(obj);
     if (slots && entry.slots && sameSlots(entry.slots, slots)) {
       // Unchanged: the same heap object, and only what it holds visited (keys and values).
       this.objects[at] = entry.made!;
@@ -390,6 +424,12 @@ export class Serializer {
       entry.slots = slots;
       entry.made = made;
       entry.committed = false;
+    } else if (entry.slots) {
+      // It can't be kept this way any more (a list grown past MAX_ITEMS: its window follows its index
+      // variables): what was kept from before goes, so it's never taken as unchanged.
+      entry.slots = undefined;
+      entry.made = undefined;
+      entry.committed = undefined;
     }
     return id;
   }

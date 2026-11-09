@@ -5,7 +5,7 @@
 import { POLICY, type SamplingPolicy } from "../trace/policy";
 import type { Step, Trace } from "../trace/types";
 import { InstrumentError, type Instrumented, instrument, RUNTIME } from "./instrument";
-import { Runtime } from "./runtime";
+import { Runtime, type TracerOptions } from "./runtime";
 
 /** The app passes the budget and the sampling policy with each run; tests and the CLI can leave them to POLICY. */
 export function traceJavaScript(
@@ -14,8 +14,9 @@ export function traceJavaScript(
   maxSeconds = POLICY.runSeconds,
   sampling: SamplingPolicy = POLICY.sampling,
   onProgress?: (state: TraceSoFar) => void,
+  options: TracerOptions = {},
 ): Promise<Trace> {
-  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds, sampling, onProgress);
+  return traceProgram(source, maxSteps, "javascript", instrument, maxSeconds, sampling, onProgress, options);
 }
 
 /**
@@ -94,6 +95,7 @@ export async function traceProgram(
   maxSeconds: number,
   sampling: SamplingPolicy,
   onProgress?: (state: TraceSoFar) => void,
+  options: TracerOptions = {},
 ): Promise<Trace> {
   const trace: Trace = {
     version: 1,
@@ -120,7 +122,9 @@ export async function traceProgram(
   if (program.hints.length) trace.hints = program.hints;
   if (program.cost) trace.cost = program.cost;
 
-  const runtime = new Runtime(maxSteps, maxSeconds, sampling);
+  const runtime = new Runtime(maxSteps, maxSeconds, sampling, options);
+  // Code marks can't follow (eval, new Function, with): every object is read, every step.
+  if (program.unsafe) runtime.unsafe();
   runtime.indexNames = withPointerHints(program.indexNames, program.hints);
   if (onProgress)
     runtime.onProgress = (elapsedMs, line) =>
@@ -194,6 +198,7 @@ export async function traceProgram(
   trace.stdout = runtime.stdout;
   trace.counts = runtime.counts;
   if (runtime.sampled) trace.sampled = true;
+  if (runtime.selfCheck) trace.selfCheck = runtime.selfCheck;
   if (trace.truncated) trace.stoppedBy = runtime.stoppedBy ?? "steps";
   if (runtime.skippedAtEnd && trace.steps.length)
     trace.steps[trace.steps.length - 1].skippedAfter = runtime.skippedAtEnd;

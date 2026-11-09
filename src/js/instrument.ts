@@ -35,6 +35,7 @@ import * as t from "@babel/types";
 import type { CostInfo, GridAccess, LoopInfo, RawHint } from "../trace/types";
 import { analyze, normalize } from "./analyze";
 import { costAnalysis } from "./cost";
+import { markWrites } from "./marks";
 import { RUNTIME, transform } from "./transform";
 
 export { RUNTIME };
@@ -49,6 +50,8 @@ export interface Instrumented {
   hints: RawHint[];
   /** The code's shape, for complexity estimates (see js/cost.ts). */
   cost?: CostInfo;
+  /** Why marks can't follow this program's writes (eval, new Function, with), if they can't (js/marks.ts). */
+  unsafe?: string;
 }
 
 /** Matches a hint comment's text: "viz: hide i". */
@@ -138,11 +141,21 @@ export function instrumentAst(ast: t.File, source: string): Instrumented {
   } catch {
     // A guess about the code's shape must never stop a run.
   }
+  // Writes and calls bracketed for marks (before the runtime's own calls go in, which aren't the program's).
+  const unsafe = markWrites(ast);
   transform(ast, analysis);
 
   const loops = [...analysis.loops.values()].map((d) => d.info).sort((a, b) => a.line - b.line);
   const indexNames: Record<string, string[]> = {};
   for (const [name, subs] of analysis.indexNames) if (subs.size) indexNames[name] = [...subs].sort();
   const gridAccesses = [...analysis.gridAccesses].sort((a, b) => a.line - b.line);
-  return { code: generate(ast).code, loops, indexNames, gridAccesses, hints, ...(cost ? { cost } : {}) };
+  return {
+    code: generate(ast).code,
+    loops,
+    indexNames,
+    gridAccesses,
+    hints,
+    ...(cost ? { cost } : {}),
+    ...(unsafe ? { unsafe } : {}),
+  };
 }

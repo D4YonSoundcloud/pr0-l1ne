@@ -347,6 +347,12 @@ export class RunController {
   /** Show a run's trace (what the page knows of it); false when there's nothing to draw (it never started). */
   private applyTrace(trace: TraceInfo, code: string, pageWarnings: { line: number; message: string }[] = []): boolean {
     const { app, setBanner, editor, onResult } = this.options;
+    // The tracer's in-run check found a write its marks missed: a tracer bug. The steps are right
+    // (it read everything from then on), so it's reported, not shown.
+    if (trace.selfCheck) {
+      this.options.reportCrash?.({ language: this.language, message: `self-check: ${trace.selfCheck}` });
+      console.warn(`PR0L1NE's tracer: ${trace.selfCheck}`);
+    }
     if (trace.error && trace.steps === 0) {
       // Couldn't even start (usually a syntax error mid-typing). Keep the last
       // good picture on screen, dimmed, and point at the problem.
