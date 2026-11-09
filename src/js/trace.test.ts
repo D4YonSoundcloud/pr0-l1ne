@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POLICY } from "../trace/policy";
 import type { HeapObject, SequenceObject, Step, Trace, Value } from "../trace/types";
 import { inspect, parseParams } from "./inspector";
 import { traceJavaScript } from "./trace";
@@ -239,6 +240,22 @@ describe("errors, limits and output", () => {
     expect(t.truncated).toBe(true);
     expect(t.stoppedBy).toBe("steps");
     expect(t.steps.length).toBe(200);
+  });
+
+  it("stops when the heap records the page would keep pass their budget", async () => {
+    // 50 objects, each changed once per step: every step is a new record of all of them.
+    const code = `const xs = [];
+for (let i = 0; i < 50; i++) xs.push({ v: 0 });
+for (let r = 0; r < 100; r++) {
+  for (const x of xs) x.v = r;
+}`;
+    const sampling = { ...POLICY.sampling, maxHeapEntries: 5_000 };
+    const t = await traceJavaScript(code, 100_000, 10, sampling);
+    expect(t.truncated).toBe(true);
+    expect(t.stoppedBy).toBe("memory");
+    const whole = await traceJavaScript(code, 100_000, 10);
+    expect(whole.stoppedBy ?? null).toBeNull();
+    expect(t.steps.length).toBeLessThan(whole.steps.length);
   });
 
   it("doesn't let user code catch the step limit", async () => {

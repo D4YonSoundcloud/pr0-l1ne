@@ -173,6 +173,22 @@ describe("a run", () => {
     expect(runner.busy).toBe(false);
   });
 
+  it("the watchdog times silence: a run the tracer keeps reporting on runs past it, and one that goes quiet is stopped", async () => {
+    const { worker, run } = setup(4_000);
+    worker().ready();
+    let outcome: unknown = null;
+    void run().then((o) => (outcome = o));
+    // Twenty seconds, with word every 3: never 4 seconds of silence.
+    for (let s = 1; s <= 20; s++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      if (s % 3 === 0) worker().say({ type: "progress", runId: 1, progress: { steps: s, seconds: s, line: 1 } });
+    }
+    expect(outcome).toBeNull();
+    // Then quiet: stopped 4 seconds after the last word (at 18 s).
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(outcome).toEqual({ kind: "timeout", seconds: 4 });
+  });
+
   it("the first run waits longer while the runtime is still loading", async () => {
     const { run } = setup(4_000);
     let outcome: unknown = null;

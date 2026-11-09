@@ -40,7 +40,7 @@ export interface DataLimits {
  * Far above any real trace (the biggest examples have tens of thousands of
  * objects, nested a dozen deep), far below what would freeze a tab.
  */
-export const TRACE_LIMITS: DataLimits = { objects: 5_000_000, depth: 100, chars: 200_000_000 };
+export const TRACE_LIMITS: DataLimits = { objects: 25_000_000, depth: 100, chars: 1_000_000_000 };
 
 /** Smaller things from the runner (a Measure result, its progress). */
 export const MESSAGE_LIMITS: DataLimits = { objects: 1_000_000, depth: 100, chars: 50_000_000 };

@@ -12,8 +12,21 @@ import type { Frame, HeapObject, PrimValue, SequenceObject, Value } from "../tra
 export type Getter = () => [string, () => unknown][];
 
 export const MAX_ITEMS = 60;
+/**
+ * Entries of a Map, a Set or an object (a dict) recorded at most: far more
+ * than a list's window, since a dict has no index variables to show the
+ * part around, and a graph's adjacency dict is every node it has. The same
+ * as the Python tracer's (serialize.py MAX_ENTRIES).
+ */
+export const MAX_ENTRIES = 500;
 const MAX_REPR = 48;
-export const MAX_OBJECTS = 2000;
+/**
+ * Objects a step records at most (the rest are "…"). With marks, a step
+ * reads only what changed, so this can be far more than the Python
+ * tracer's (serialize.py MAX_OBJECTS); what a run keeps is bounded by its
+ * memory budget (policy.ts maxHeapEntries).
+ */
+export const MAX_OBJECTS = 10_000;
 
 const prim = (type: string, repr: string): PrimValue => ({
   kind: "prim",
@@ -227,20 +240,20 @@ function slotsOf(obj: object): unknown[] | null {
   }
   if (typeof obj === "function" || ArrayBuffer.isView(obj)) return null;
   if (obj instanceof Map) {
-    if (obj.size > MAX_ITEMS) return null;
+    if (obj.size > MAX_ENTRIES) return null;
     const slots: unknown[] = [Map, obj.size];
     for (const [k, v] of Map.prototype.entries.call(obj)) slots.push(k, v);
     return slots;
   }
   if (obj instanceof Set) {
-    if (obj.size > MAX_ITEMS) return null;
+    if (obj.size > MAX_ENTRIES) return null;
     return [Set, obj.size, ...Set.prototype.values.call(obj)];
   }
   const tag = Object.prototype.toString.call(obj).slice(8, -1);
   if (tag !== "Object") return null; // Dates, generators, promises...
   if (OPAQUE_TYPES.some(([type]) => obj instanceof type)) return null;
   const keys = Object.keys(obj);
-  if (keys.length > MAX_ITEMS) return null;
+  if (keys.length > MAX_ENTRIES) return null;
   const slots: unknown[] = [Object.getPrototypeOf(obj), keys.length];
   for (const key of keys) slots.push(key, own(key));
   return slots;
@@ -434,10 +447,10 @@ export class Serializer {
     return id;
   }
 
-  private items(values: Iterable<unknown>): Value[] {
+  private items(values: Iterable<unknown>, most = MAX_ITEMS): Value[] {
     const out: Value[] = [];
     for (const value of values) {
-      if (out.length >= MAX_ITEMS) break;
+      if (out.length >= most) break;
       out.push(this.value(value));
     }
     return out;
@@ -484,13 +497,19 @@ export class Serializer {
     if (obj instanceof Map) {
       const entries: [Value, Value][] = [];
       for (const [key, value] of Map.prototype.entries.call(obj)) {
-        if (entries.length >= MAX_ITEMS) break;
+        if (entries.length >= MAX_ENTRIES) break;
         entries.push([this.value(key), this.value(value)]);
       }
       return { kind: "dict", id, typeName: "Map", entries, length: obj.size };
     }
     if (obj instanceof Set) {
-      return { kind: "set", id, typeName: "Set", items: this.items(Set.prototype.values.call(obj)), length: obj.size };
+      return {
+        kind: "set",
+        id,
+        typeName: "Set",
+        items: this.items(Set.prototype.values.call(obj), MAX_ENTRIES),
+        length: obj.size,
+      };
     }
     if (typeof obj === "function") {
       const source = Function.prototype.toString.call(obj);
@@ -525,14 +544,16 @@ export class Serializer {
     if (isPlainObject(obj)) {
       // Plain objects are JavaScript's everyday dictionary, so draw them as
       // one. Keys are shown unquoted.
-      const entries: [Value, Value][] = keys.slice(0, MAX_ITEMS).map((key) => [prim("key", key), this.slot(obj, key)]);
+      const entries: [Value, Value][] = keys
+        .slice(0, MAX_ENTRIES)
+        .map((key) => [prim("key", key), this.slot(obj, key)]);
       return { kind: "dict", id, typeName: "Object", entries, length: keys.length };
     }
     return {
       kind: "object",
       id,
       typeName: constructorName(obj),
-      fields: keys.slice(0, MAX_ITEMS).map((key) => [key, this.slot(obj, key)]),
+      fields: keys.slice(0, MAX_ENTRIES).map((key) => [key, this.slot(obj, key)]),
     };
   }
 }

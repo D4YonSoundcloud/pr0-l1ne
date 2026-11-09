@@ -24,6 +24,9 @@ export type TraceFn = (
   onProgress?: (state: TraceSoFar) => void,
 ) => Promise<Trace>;
 
+/** A sent step's heap, once let go (see `piece`). */
+const SENT: Trace["steps"][number]["heap"] = Object.freeze({}) as Trace["steps"][number]["heap"];
+
 /**
  * Milliseconds between the pieces of the trace sent with the progress
  * reports: as often as they are, so each piece is small, and checking and
@@ -46,8 +49,9 @@ export async function streamTrace(
   let headerSent = false;
   let nextPiece = pieceEveryMs;
   const piece = (state: TraceSoFar): TracePiece => {
+    const fresh = state.steps.slice(sent);
     const chunk: TracePiece = {
-      steps: state.steps.slice(sent).map((step) => encoder.encode(step)),
+      steps: fresh.map((step) => encoder.encode(step)),
       stdout: state.stdout.slice(sentStdout),
       counts: state.counts,
     };
@@ -58,6 +62,10 @@ export async function streamTrace(
     }
     sent = state.steps.length;
     sentStdout = state.stdout.length;
+    // Sent: the page has these steps' heaps now, and nothing here reads them again (the runtime keeps
+    // the last heap it committed itself, and the encoder the one it last sent), so they go, and the
+    // worker holds only what it hasn't sent. A step's heap is most of what a long run keeps.
+    for (const step of fresh) step.heap = SENT;
     return chunk;
   };
   const done = await trace(source, maxSteps, maxSeconds, sampling, (state) => {

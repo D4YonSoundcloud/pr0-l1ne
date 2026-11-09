@@ -39,8 +39,12 @@ def ids_part(before: list[str] | None, ids: list[str]) -> list[Any] | None:
 
 
 class StepLog:
-    def __init__(self, max_steps: int) -> None:
+    def __init__(self, max_steps: int, max_heap_entries: float = float("inf")) -> None:
         self.max_steps = max_steps
+        # Heap entries the page will keep (SamplingPolicy.maxHeapEntries in src/trace/policy.ts): each
+        # step whose heap changed is a record of every object there.
+        self.max_heap_entries = max_heap_entries
+        self.heap_entries = 0
         self.steps: list[Step] = []
         self.known: dict[str, Any] = {}  # every object's last version sent
         self.prev_ids: list[str] | None = None
@@ -49,8 +53,12 @@ class StepLog:
         self.considered = 0  # steps recorded or buffered (for a loop's share of the budget)
 
     def full(self) -> bool:
-        """The step budget is spent."""
-        return len(self.steps) >= self.max_steps
+        """The step budget is spent, or the memory budget."""
+        return len(self.steps) >= self.max_steps or self.out_of_memory()
+
+    def out_of_memory(self) -> bool:
+        """The heap entries the page would keep are past their budget."""
+        return self.heap_entries > self.max_heap_entries
 
     def commit(self, step: Step) -> None:
         """Add a recorded step, noting how many weren't recorded before it."""
@@ -65,6 +73,9 @@ class StepLog:
         step["heap"] = {oid: obj for oid, obj in heap.items() if (p := known.get(oid)) is not obj and p != obj}
         known.update(step["heap"])
         ids = list(heap)
+        # The page builds a new record of every object for a step whose heap changed.
+        if step["heap"] or ids != self.prev_ids:
+            self.heap_entries += len(ids)
         if ids == self.prev_ids:
             step["sameIds"] = True
         else:

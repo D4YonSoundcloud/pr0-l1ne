@@ -19,6 +19,19 @@ class StepLogTests(unittest.TestCase):
         self.assertEqual([s["heap"] for s in log.steps], [{"o1": a}, {"o2": b}, {"o1": {"kind": "list", "items": [1]}}])
         self.assertEqual([s["heapIds"] for s in log.steps], [["o1"], ["o1", "o2"], ["o2", "o1"]])
 
+    def test_the_memory_budget_counts_each_changed_steps_objects(self):
+        log = StepLog(100, max_heap_entries=5)
+        a, b = {"kind": "list", "items": []}, {"kind": "dict", "entries": []}
+        log.commit(step({"o1": a, "o2": b}))  # a new record: 2 entries
+        log.commit(step({"o1": a, "o2": b}))  # the same: kept as the step before's
+        self.assertEqual(log.heap_entries, 2)
+        self.assertFalse(log.full())
+        log.commit(step({"o1": {"kind": "list", "items": [1]}, "o2": b}))
+        log.commit(step({"o1": {"kind": "list", "items": [2]}, "o2": b}))
+        self.assertEqual(log.heap_entries, 6)
+        self.assertTrue(log.out_of_memory())
+        self.assertTrue(log.full())
+
     def test_the_next_step_says_how_many_werent_recorded(self):
         log = StepLog(10)
         log.commit(step({}))

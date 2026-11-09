@@ -1,7 +1,7 @@
 {
-  "maxSteps": 20000,
-  "liveSeconds": 1.5,
-  "runSeconds": 6,
+  "maxSteps": 100000,
+  "liveSeconds": 3,
+  "runSeconds": 30,
   "measureMs": 20000,
   "sampling": {
     "first": 5,
@@ -10,6 +10,7 @@
     "sampleShare": 0.5,
     "watchShare": 0.25,
     "roundShare": 0.6,
-    "passShare": 0.25
+    "passShare": 0.25,
+    "maxHeapEntries": 12000000
   }
 }

@@ -536,7 +536,7 @@ export interface Trace {
   /** True when the step budget (or the time budget) ran out, or the person stopped it, before the program finished. */
   truncated: boolean;
   /** What stopped a truncated trace: its steps or time running out, or the person (Stop: what had been recorded). */
-  stoppedBy?: "steps" | "time" | "person";
+  stoppedBy?: "steps" | "time" | "person" | "memory";
   /**
    * The JavaScript tracer's in-run check found a write its marks missed
    * (js/marks.ts): a tracer bug. The steps are right (from that step on it

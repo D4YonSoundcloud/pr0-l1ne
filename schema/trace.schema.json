@@ -77,7 +77,8 @@
           "enum": [
             "steps",
             "time",
-            "person"
+            "person",
+            "memory"
           ],
           "description": "What stopped a truncated trace: its steps or time running out, or the person (Stop: what had been recorded)."
         },

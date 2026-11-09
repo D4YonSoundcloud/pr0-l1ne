@@ -44,8 +44,13 @@ export interface TracePiece {
   counts?: Trace["counts"];
 }
 
-/** Text a run's pieces may add up to, at most (as much as a whole trace may be: checkTrace.ts's message limit). */
-export const MAX_TRACE_CHARS = 50_000_000;
+/**
+ * Text a run's pieces may add up to, at most: a safety cap on what a run
+ * sends, well above what its step budget and memory budget allow
+ * (policy.ts maxSteps, maxHeapEntries), and within what checkTrace.ts
+ * lets a whole trace hold.
+ */
+export const MAX_TRACE_CHARS = 250_000_000;
 
 /** A trace (or piece of one) that doesn't match the trace format: a crash, saying why. */
 export class TraceFormatError extends Error {}

@@ -68,8 +68,13 @@ export interface GraphData {
   clusters?: ReadonlyMap<string, { key: string; members: readonly string[] }>;
 }
 
-const MAX_AUTO_NODES = 40;
-const MAX_NODES = 60;
+/**
+ * The most nodes a graph found in a dict (automatically) or a list (with a
+ * hint) may have: as many as a graph of node objects, since past the detail
+ * budget a big one is drawn as clusters (scene/graphClusters.ts).
+ */
+const MAX_AUTO_NODES = 500;
+const MAX_NODES = 500;
 /**
  * Graphs of node objects can be much bigger: past the detail budget they're
  * drawn as clusters (graphClusters.ts), so a few hundred people linked as

@@ -18,7 +18,11 @@ from typing import Any
 
 from sizes import list_capacity, size64
 
-MAX_ITEMS = 60  # items shown per container before truncating
+MAX_ITEMS = 60  # items shown of a list or tuple (a window around its index variables past this)
+# Entries shown of a dict or set: far more than a list's window, since a dict has no index
+# variables to show the part around, and a graph's adjacency dict is every node it has.
+# The same as the JavaScript tracer's (src/js/inspector.ts MAX_ENTRIES).
+MAX_ENTRIES = 500
 MAX_REPR = 48  # characters shown for a primitive before truncating
 MAX_OBJECTS = 2000  # heap objects serialized per step
 
@@ -136,7 +140,7 @@ def slots_of(v: Any) -> tuple | None:
     if kind is list or kind is tuple or kind is deque:
         slots = ((len(v), size64(v)), *v) if len(v) <= MAX_ITEMS else None
     elif kind is dict:
-        slots = ((len(v), size64(v)), *chain.from_iterable(v.items())) if len(v) <= MAX_ITEMS else None
+        slots = ((len(v), size64(v)), *chain.from_iterable(v.items())) if len(v) <= MAX_ENTRIES else None
     elif isinstance(v, (SEQUENCE_TYPES, dict, PAUSABLE_OBJECTS, types.ModuleType, type)) or callable(v):
         return None
     else:
@@ -264,10 +268,10 @@ class Serializer:
 
         return [item for _, item in sorted(enumerate(items), key=key)]
 
-    def items(self, iterable) -> list[Value]:
+    def items(self, iterable, most: int = MAX_ITEMS) -> list[Value]:
         out = []
         for index, item in enumerate(iterable):
-            if index >= MAX_ITEMS:
+            if index >= most:
                 break
             out.append(self.value(item))
         return out
@@ -319,7 +323,7 @@ class Serializer:
             "kind": kind,
             "id": oid,
             "typeName": type(v).__name__,
-            "items": self.items(shown),
+            "items": self.items(shown, MAX_ENTRIES if kind == "set" else MAX_ITEMS),
             "length": n,
             "size": size64(v),
         }
@@ -336,7 +340,7 @@ class Serializer:
     def dictionary(self, v: dict, oid: str) -> HeapObject:
         entries = []
         for index, (key, val) in enumerate(v.items()):
-            if index >= MAX_ITEMS:
+            if index >= MAX_ENTRIES:
                 break
             entries.append([self.value(key), self.value(val)])
         return {

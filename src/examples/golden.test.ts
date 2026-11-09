@@ -8,7 +8,7 @@
  * and commit the updated fixtures with the change, so the pull request
  * shows exactly what moved.
  *
- * Traces use the app's step budget (20,000) and a generous time budget, so
+ * Traces use the app's step budget (100,000) and a generous time budget, so
  * they stop on steps, never on the clock, and come out the same on any
  * machine. Python runs in Pyodide, the same Python the browser runs, and
  * SQL in PGlite, the same Postgres.

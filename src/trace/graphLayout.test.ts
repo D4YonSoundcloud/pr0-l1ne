@@ -147,7 +147,7 @@ describe("layered layout", () => {
     expect([...one.pos]).toEqual([...two.pos]);
     expect([...one.routes]).toEqual([...two.routes]);
     expectTidy(one);
-    // Generous for a slow test machine: graphs drawn are 60 nodes at most.
+    // Generous for a slow test machine: graphs drawn in full stay within the detail budget (bigger ones are clusters).
     expect(ms).toBeLessThan(3000);
   });
 });

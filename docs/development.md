@@ -59,7 +59,7 @@ Both builds are plain static files. You can host them anywhere that serves stati
 
 - **A failing golden test means a tracer records something differently.** The diff shows which steps changed. If the change is a bug, fix it. If it's intended, accept it with `npm run test:golden -- -u` and commit the updated fixtures in the same pull request, so reviewers see exactly what moved.
 - **The files are made for diffs.** The top of each file holds the trace's summary (loops, hints, output). Then each step takes one line and lists only the heap objects that changed since the step before.
-- **They're repeatable.** Traces stop on the 20,000-step budget, never the clock. Python runs with `PYTHONHASHSEED=0` (as the app does), and sets of objects are listed in the order the tracer first saw them, so traces come out the same on every machine and every run.
+- **They're repeatable.** Traces stop on the 100,000-step budget, never the clock. Python runs with `PYTHONHASHSEED=0` (as the app does), and sets of objects are listed in the order the tracer first saw them, so traces come out the same on every machine and every run.
 - **A new example** gets its golden file the first time the test runs locally. In CI a missing file fails the test, so commit it with the example.
 
 ### Complexity shapes

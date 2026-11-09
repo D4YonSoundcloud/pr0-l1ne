@@ -432,14 +432,14 @@ export interface LoopScene {
 }
 
 /** Rows drawn at most; earlier ones are left out. */
-const MAX_ROWS = 120;
+const MAX_ROWS = 400;
 /**
  * Earlier rows are left out this many at a time, not one per step: every
  * row left out moves every row below it up, and a row that moves is drawn
  * again (render/loopView/rowCache.ts keeps rows only where they were). So
  * between MAX_ROWS - LEAVE_OUT and MAX_ROWS rows are shown.
  */
-const LEAVE_OUT = 20;
+const LEAVE_OUT = 50;
 
 /** Graphs found in each loop row, by step and frame: the same for the whole run. */
 const graphCache = new WeakMap<Trace, Map<string, GraphData[]>>();

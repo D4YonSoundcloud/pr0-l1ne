@@ -10,7 +10,7 @@ app: the CLI and the tests.
 
 import json
 import os
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class SamplingPolicy(TypedDict):
@@ -23,6 +23,7 @@ class SamplingPolicy(TypedDict):
     watchShare: float
     roundShare: float
     passShare: float
+    maxHeapEntries: NotRequired[int]
 
 
 class Policy(TypedDict):

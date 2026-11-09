@@ -265,8 +265,10 @@ class EdgeCaseTests(unittest.TestCase):
     def test_long_iterables_and_dicts_stop_at_the_limit(self):
         s = S.Serializer({}, {})
         self.assertEqual(len(s.items(iter(range(100)))), S.MAX_ITEMS)
-        obj, _ = heap_object({i: i for i in range(100)})
-        self.assertEqual((len(obj["entries"]), obj["length"]), (S.MAX_ITEMS, 100))
+        obj, _ = heap_object({i: i for i in range(S.MAX_ENTRIES + 40)})
+        self.assertEqual((len(obj["entries"]), obj["length"]), (S.MAX_ENTRIES, S.MAX_ENTRIES + 40))
+        many = {i: i for i in range(100)}  # past a list's window, a dict's entries are all kept
+        self.assertEqual(len(heap_object(many)[0]["entries"]), 100)
 
     def test_a_closure_over_a_variable_not_yet_set(self):
         def outer():

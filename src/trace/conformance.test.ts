@@ -8,13 +8,15 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { traceJavaScript } from "../js/trace";
 import { pythonTracer, type TracePython } from "../testing/pythonTracer";
-import { POLICY, type SamplingPolicy } from "../trace/policy";
+import type { SamplingPolicy } from "../trace/policy";
 import { traceProblem } from "./checkTrace";
 import { CASES } from "./conformance.cases";
 import { shapeOf, type TraceShape } from "./shape";
 import { traceProblems } from "./validate";
 
-const MAX_STEPS = POLICY.maxSteps; // as the app
+// Not the app's (POLICY.maxSteps): a smaller budget, so the cases' long loops (10,000 passes)
+// are sampled, and an endless loop reaches sampling within its second in both languages.
+const MAX_STEPS = 20_000;
 const MAX_SECONDS = 600; // never the reason a trace stops, unless a case sets its own
 
 describe("tracer conformance: Python and JavaScript agree", () => {

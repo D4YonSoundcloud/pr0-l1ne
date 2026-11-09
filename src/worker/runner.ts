@@ -245,6 +245,9 @@ export class Runner {
         // The piece goes on to the layout worker unread, which builds and checks the trace
         // (trace/stream.ts). Here, only how much has come: no more than a whole trace may be.
         if (message.piece !== undefined && !this.passOn(pending, { kind: "piece", json: message.piece })) break;
+        // A word from the tracer: the watchdog waits again from now.
+        clearTimeout(pending.timer);
+        pending.timer = window.setTimeout(() => this.silent(message.runId), this.timeoutMs);
         pending.progress?.(progressOf(message.progress)!);
         break;
       }
@@ -367,6 +370,16 @@ export class Runner {
    * ends with what had arrived (a trace stopped by the person), or
    * "stopped" when nothing had yet.
    */
+  /** The tracer has said nothing for too long (see run): the worker is stopped, and a fresh one started. */
+  private silent(runId: number): void {
+    const pending = this.pending;
+    if (pending?.runId !== runId) return;
+    this.worker?.terminate();
+    this.pending = null;
+    pending.resolve({ kind: "timeout", seconds: Math.round(this.timeoutMs / 1000) });
+    this.start();
+  }
+
   stop(): void {
     const pending = this.pending;
     if (!pending) return;
@@ -409,15 +422,12 @@ export class Runner {
     if (failure) return Promise.resolve(failure);
     const runId = this.nextRunId++;
     return new Promise((resolve) => {
-      // The timer starts when we send, but the first run also waits for
-      // Pyodide to load, so give it extra time while not ready.
+      // The watchdog: the tracer says how it's getting on every quarter second, so this long without a
+      // word means the program is stuck where the tracer can't stop it (one long built-in call). Each
+      // word puts it off again (silence, not the run's length: a long run stops on its own time limit).
+      // The first run also waits for Pyodide to load, so it gets extra time while not ready.
       const limit = this.isReady ? this.timeoutMs : this.timeoutMs + 60_000;
-      const timer = window.setTimeout(() => {
-        this.worker?.terminate();
-        this.pending = null;
-        resolve({ kind: "timeout", seconds: Math.round(this.timeoutMs / 1000) });
-        this.start();
-      }, limit);
+      const timer = window.setTimeout(() => this.silent(runId), limit);
       this.pending = {
         runId,
         resolve,

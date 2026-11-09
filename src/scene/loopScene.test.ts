@@ -99,14 +99,14 @@ for (let i = 0; i < 6; i++) {
     expect(scene.info()?.line).toBe(2);
   });
 
-  it("a very long history leaves out its first rows, 20 at a time (so the rows shown stay put between)", async () => {
-    const { scene } = await sceneOf(`const a = [];\nfor (let i = 0; i < 150; i++) a.push(i);\n`, {}, (t) =>
+  it("a very long history leaves out its first rows, 50 at a time (so the rows shown stay put between)", async () => {
+    const { scene } = await sceneOf(`const a = [];\nfor (let i = 0; i < 450; i++) a.push(i);\n`, {}, (t) =>
       lastInLoop(t),
     );
     const shown = scene.items.filter((i) => i.kind === "row").length;
-    expect(shown).toBeGreaterThan(100);
-    expect(shown).toBeLessThanOrEqual(120);
-    expect(scene.hiddenRows % 20).toBe(0);
+    expect(shown).toBeGreaterThan(350);
+    expect(shown).toBeLessThanOrEqual(400);
+    expect(scene.hiddenRows % 50).toBe(0);
     expect(scene.hiddenRows).toBe(scene.rows.length - shown);
   });
 });

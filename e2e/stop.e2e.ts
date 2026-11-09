@@ -24,8 +24,8 @@ test("a long run shows its progress, and Stop keeps what was recorded", async ({
   }, SLOW);
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");
-  // Live runs it first, for its shorter time limit, and draws that.
-  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 30_000 });
+  // The page runs it as it opens (Run's 30 seconds), and draws that.
+  await expect(page.locator("#step-label")).toContainText(" of ", { timeout: 45_000 });
   await expect(page.locator("#run-progress")).toBeHidden();
 
   await page.locator("#run").click();
@@ -42,7 +42,7 @@ test("a long run shows its progress, and Stop keeps what was recorded", async ({
   const started = Date.now();
   await card.getByRole("button", { name: "Stop and show what's recorded" }).click();
   await expect(page.locator(".banner")).toContainText("You stopped the run", { timeout: 5_000 });
-  expect(Date.now() - started).toBeLessThan(4_000); // well before its 6 second limit
+  expect(Date.now() - started).toBeLessThan(4_000); // well before its 30 second limit
   await expect(card).toBeHidden();
   await expect(page.locator("#run-progress")).toBeHidden();
   await expect(page.locator("#canvas")).not.toHaveClass(/is-running/);

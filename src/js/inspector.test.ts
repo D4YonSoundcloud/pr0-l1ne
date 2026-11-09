@@ -6,6 +6,7 @@ import {
   errorName,
   type Getter,
   inspect,
+  MAX_ENTRIES,
   MAX_ITEMS,
   MAX_OBJECTS,
   newReuseCache,
@@ -92,13 +93,17 @@ describe("lists", () => {
 });
 
 describe("maps, sets and objects", () => {
-  it("draw Maps and Sets with their first items and their size", () => {
-    const big = new Map(Array.from({ length: 100 }, (_, i) => [i, i]));
-    expect(serialize(big).obj).toMatchObject({ kind: "dict", typeName: "Map", length: 100 });
-    expect((serialize(big).obj as { entries: unknown[] }).entries).toHaveLength(MAX_ITEMS);
-    const set = serialize(new Set(Array.from({ length: 100 }, (_, i) => i))).obj;
-    expect(set).toMatchObject({ kind: "set", length: 100 });
-    expect((set as { items: unknown[] }).items).toHaveLength(MAX_ITEMS);
+  it("draw Maps and Sets with their first entries and their size", () => {
+    const n = MAX_ENTRIES + 40;
+    const big = new Map(Array.from({ length: n }, (_, i) => [i, i]));
+    expect(serialize(big).obj).toMatchObject({ kind: "dict", typeName: "Map", length: n });
+    expect((serialize(big).obj as { entries: unknown[] }).entries).toHaveLength(MAX_ENTRIES);
+    const set = serialize(new Set(Array.from({ length: n }, (_, i) => i))).obj;
+    expect(set).toMatchObject({ kind: "set", length: n });
+    expect((set as { items: unknown[] }).items).toHaveLength(MAX_ENTRIES);
+    // Past a list's window (MAX_ITEMS), a Map's entries are all kept.
+    const some = serialize(new Map(Array.from({ length: MAX_ITEMS + 40 }, (_, i) => [i, i]))).obj;
+    expect((some as { entries: unknown[] }).entries).toHaveLength(MAX_ITEMS + 40);
   });
 
   it("draw plain objects as dictionaries, and others with their class name", () => {
@@ -135,7 +140,8 @@ describe("maps, sets and objects", () => {
   });
 
   it("stop drawing new objects past the limit", () => {
-    const many = Array.from({ length: 60 }, () => Array.from({ length: 60 }, () => ({})));
+    // A list's window is 60 items, a Map's entries 500: 200 × 60 objects in reach.
+    const many = new Map(Array.from({ length: 200 }, (_, i) => [i, Array.from({ length: 60 }, () => ({}))]));
     const { heap } = serialize(many);
     const cut = Object.values(heap).filter((o) => o.kind === "opaque" && o.repr === "…");
     expect(Object.keys(heap).length - cut.length).toBe(MAX_OBJECTS); // drawn in full

@@ -26,7 +26,8 @@ import { type LoopState, RECORD, Sampler } from "./sampling";
 
 export type { Getter } from "./inspector";
 
-const MAX_DEPTH = 250;
+/** Calls nested at most (a recursion deeper than this is taken for a missing base case). */
+const MAX_DEPTH = 1000;
 
 /** Thrown to stop the program when the step budget runs out. */
 /** A step's heap until it's committed (and built): never seen outside the runtime. */
@@ -98,7 +99,10 @@ export class Runtime {
 
   /** Everything that happens is counted, recorded or not. */
   readonly counts = { steps: 0, calls: {} as Record<string, number>, depth: {} as Record<string, number> };
-  stoppedBy: "steps" | "time" | null = null;
+  stoppedBy: "steps" | "time" | "memory" | null = null;
+  /** Heap entries kept so far (SamplingPolicy.maxHeapEntries): each new heap record's objects. */
+  private heapEntries = 0;
+  private readonly maxHeapEntries: number;
   private tick = 1000;
   private readonly deadline: number;
   /** The function being called again and again from one line (a callback given to map, Array.from...). */
@@ -142,6 +146,7 @@ export class Runtime {
     options: TracerOptions = {},
   ) {
     this.marksOn = options.marks ?? true;
+    this.maxHeapEntries = sampling.maxHeapEntries ?? Number.POSITIVE_INFINITY;
     this.checkEvery = Math.max(1, options.checkEvery ?? CHECK_EVERY);
     this.sampler = new Sampler(maxSteps, sampling, (step) => this.commit(step));
     this.started = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -623,6 +628,13 @@ export class Runtime {
       this.lastHeap = heap;
       this.lastHeapIds = order;
       noteHeap(heap, order, changed);
+      // A new record: the page keeps one of every object for this step. Past the budget, the run
+      // stops at the next event, as when its steps run out.
+      this.heapEntries += order.length;
+      if (this.heapEntries > this.maxHeapEntries && !this.aborted) {
+        this.aborted = true;
+        this.stoppedBy = "memory";
+      }
     }
     this.steps.push(step);
   }

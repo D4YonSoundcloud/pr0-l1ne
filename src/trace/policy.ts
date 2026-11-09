@@ -27,6 +27,16 @@ export interface SamplingPolicy {
   roundShare: number;
   /** One pass of a buffered loop keeps at most this share of the whole budget. */
   passShare: number;
+  /**
+   * The most heap entries a run may keep: each step whose heap changed (a
+   * new object, a changed one, one gone) keeps a record of every object
+   * (trace/delta.ts HeapExpander, on the page), so a run's memory grows
+   * with its objects times those steps, about 60 bytes an entry. Past
+   * this, the run stops as it does when its steps run out
+   * (`stoppedBy: "memory"`). Sent with every run with the sampling rules,
+   * as both tracers count it.
+   */
+  maxHeapEntries?: number;
 }
 
 export interface Policy {
@@ -42,9 +52,9 @@ export interface Policy {
 }
 
 export const POLICY: Policy = {
-  maxSteps: 20_000,
-  liveSeconds: 1.5,
-  runSeconds: 6,
+  maxSteps: 100_000,
+  liveSeconds: 3,
+  runSeconds: 30,
   measureMs: 20_000,
   sampling: {
     first: 5,
@@ -54,6 +64,7 @@ export const POLICY: Policy = {
     watchShare: 0.25,
     roundShare: 0.6,
     passShare: 0.25,
+    maxHeapEntries: 12_000_000,
   },
 };
 

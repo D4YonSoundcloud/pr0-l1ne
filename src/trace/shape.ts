@@ -38,7 +38,7 @@ export interface TraceShape {
   output: string;
   error: string | null;
   truncated: boolean;
-  stoppedBy?: "steps" | "time" | "person";
+  stoppedBy?: "steps" | "time" | "person" | "memory";
   sampled: boolean;
   loops: LoopShape[];
   globals: Record<string, Shaped>;

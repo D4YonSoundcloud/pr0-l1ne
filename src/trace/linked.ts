@@ -48,8 +48,8 @@ export interface LinkedRow {
 
 /** Field names that suggest a link even when every value seen is null. */
 const LINK_NAMES = new Set(["next", "prev", "previous", "left", "right", "parent", "child", "head", "tail"]);
-/** The loop history draws a row's nodes in columns: this many at most. */
-const MAX_NODES = 40;
+/** The loop history draws a row's nodes in columns: this many at most (more are summarized, scene/loopSummaries.ts). */
+const MAX_NODES = 200;
 /**
  * The memory view draws one step: a tree or list of up to this many nodes
  * is still drawn as one (summaries.ts folds what's too much to read, and

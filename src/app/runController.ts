@@ -418,6 +418,8 @@ export class RunController {
           : "";
       return `Traced for ${seconds} seconds and stopped${ran}: this is the start of the run, with long loops sampled.${runLonger} If that's unexpected, look for a loop that never ends. ${measure}`;
     }
+    if (t.stoppedBy === "memory")
+      return `Stopped after ${t.steps.toLocaleString()} recorded steps${ran}: its objects changed at so many of them that keeping a picture of each would take more memory than a browser tab has. This is the start of the run. A smaller input shows all of it; ${measure}`;
     return `Stopped after ${POLICY.maxSteps.toLocaleString()} recorded steps${ran}. If that's unexpected, look for a loop that never ends. ${measure}`;
   }
 }

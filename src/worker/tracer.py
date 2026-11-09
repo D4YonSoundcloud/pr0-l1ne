@@ -102,7 +102,7 @@ class Tracer:
         self.next_report = 0.0
         self.next_piece = 0.0
         self.max_seconds = max_seconds
-        self.log = StepLog(max_steps)
+        self.log = StepLog(max_steps, sampling.get("maxHeapEntries") or float("inf"))
         self.stdout = io.StringIO()
         # Every object and frame seen, kept alive for the run so CPython can't
         # reuse its id() for another (see Serializer.new_id).
@@ -281,7 +281,7 @@ class Tracer:
         """Snapshot the program now: its stack, its heap, what it printed. Into the
         trace, or `into` a long loop's buffer of last passes."""
         if into is None and self.log.full():
-            self.stopped_by = "steps"
+            self.stopped_by = "memory" if self.log.out_of_memory() else "steps"
             raise StepLimitExceeded()
         # A recorded step can take milliseconds (a big heap): check the clock
         # each time, not only every CLOCK_EVERY events, or a run can go far past its time.
