@@ -109,8 +109,13 @@ export function traceStats(trace: {
 }): TraceStats {
   let max = 0;
   let sum = 0;
+  let counted: Record<string, unknown> | null = null;
+  let n = 0;
   for (const step of trace.steps) {
-    const n = Object.keys(step.heap).length;
+    if (step.heap !== counted) {
+      counted = step.heap;
+      n = Object.keys(step.heap).length;
+    }
     sum += n;
     if (n > max) max = n;
   }

@@ -37,6 +37,8 @@ export interface MemoryShow {
   tall: boolean;
   /** Summaries and clusters the person opened, by key. */
   expanded: string[];
+  /** Show all: nothing summarized (every node of a big tree or list, every call). */
+  all?: boolean;
 }
 
 /** How the memory window looks at it (MemoryRenderer.layoutView). */

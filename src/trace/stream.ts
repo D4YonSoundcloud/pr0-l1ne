@@ -70,12 +70,19 @@ export class TraceStream {
   private readonly expander = new HeapExpander();
   private readonly check = new TraceCheck();
 
-  /** Rebuild a step as sent, check it, and keep it. */
+  /**
+   * Check a step as it was sent, rebuild it, and keep it. As sent, a step
+   * holds only what's new (the objects not sent before, its frames that
+   * changed, its ids): everything a rebuilt step holds was sent in this
+   * step or one before it, and was checked then. So checking the step as
+   * sent checks all of it, at the cost of what changed, not of every
+   * object again at every step. The rebuilt trace's shape is checked
+   * whole at the end (`checked`).
+   */
   private keep(sent: Step): void {
-    const step = this.expander.add(sent);
-    const problem = this.check.step(step, this.steps.length);
+    const problem = this.check.step(sent, this.steps.length);
     if (problem) throw new TraceFormatError(problem);
-    this.steps.push(step);
+    this.steps.push(this.expander.add(sent));
   }
 
   /** The trace, checked whole (its steps were as they came). */

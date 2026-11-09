@@ -86,6 +86,9 @@ async function traceOf(name: string, code: string): Promise<Trace> {
   return t;
 }
 
+/** Each example stepped through end to end: seconds on a slow machine, not the default 5. */
+const SWEEP_TIMEOUT = 30_000;
+
 describe("drawings sent to the page", () => {
   it("text, numbers, styles and the level built at arrive as they were", () => {
     const encoder = new MarkEncoder();
@@ -198,39 +201,47 @@ describe("drawings sent to the page", () => {
   });
 
   for (const example of JAVASCRIPT_EXAMPLES) {
-    it(`${example.name}: the memory window, stepping about, with kept boxes and cells`, async () => {
-      const trace = await traceOf(example.name, example.code);
-      function* drawings() {
-        for (const mode of ["arrows", "nested"] as const) {
-          const boxes = new BoxCache();
-          for (const i of visits(trace.steps.length)) {
-            const scene = memoryScene(trace, i, diffSteps(trace.steps[i - 1], trace.steps[i]), { mode });
-            yield {
-              drawing: memoryDrawing(scene, { positions: new Map(), boxes }),
-              where: `${example.name}, ${mode}, step ${i + 1}`,
-              focus: i % 3 === 0 ? (scene.objects.at(-1)?.key ?? null) : undefined,
-            };
+    it(
+      `${example.name}: the memory window, stepping about, with kept boxes and cells`,
+      async () => {
+        const trace = await traceOf(example.name, example.code);
+        function* drawings() {
+          for (const mode of ["arrows", "nested"] as const) {
+            const boxes = new BoxCache();
+            for (const i of visits(trace.steps.length)) {
+              const scene = memoryScene(trace, i, diffSteps(trace.steps[i - 1], trace.steps[i]), { mode });
+              yield {
+                drawing: memoryDrawing(scene, { positions: new Map(), boxes }),
+                where: `${example.name}, ${mode}, step ${i + 1}`,
+                focus: i % 3 === 0 ? (scene.objects.at(-1)?.key ?? null) : undefined,
+              };
+            }
           }
         }
-      }
-      const kept = follow(drawings());
-      if (trace.steps.length > 5) expect(kept).toBeGreaterThan(0);
-    });
+        const kept = follow(drawings());
+        if (trace.steps.length > 5) expect(kept).toBeGreaterThan(0);
+      },
+      SWEEP_TIMEOUT,
+    );
 
-    it(`${example.name}: the loop history, stepping about, with kept rows`, async () => {
-      const trace = await traceOf(example.name, example.code);
-      function* drawings() {
-        for (const vertical of [false, true]) {
-          const rows = new RowCache();
-          for (const i of visits(trace.steps.length)) {
-            const history = buildNestedHistory(trace, i) ?? buildLoopHistory(trace, i, null);
-            if (!history?.rows.length) continue;
-            const scene = loopScene(trace, history, { hideQuiet: true });
-            yield { drawing: loopDrawing(scene, { vertical, rows }), where: `${example.name}, step ${i + 1}` };
+    it(
+      `${example.name}: the loop history, stepping about, with kept rows`,
+      async () => {
+        const trace = await traceOf(example.name, example.code);
+        function* drawings() {
+          for (const vertical of [false, true]) {
+            const rows = new RowCache();
+            for (const i of visits(trace.steps.length)) {
+              const history = buildNestedHistory(trace, i) ?? buildLoopHistory(trace, i, null);
+              if (!history?.rows.length) continue;
+              const scene = loopScene(trace, history, { hideQuiet: true });
+              yield { drawing: loopDrawing(scene, { vertical, rows }), where: `${example.name}, step ${i + 1}` };
+            }
           }
         }
-      }
-      follow(drawings());
-    });
+        follow(drawings());
+      },
+      SWEEP_TIMEOUT,
+    );
   }
 });

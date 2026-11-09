@@ -129,7 +129,7 @@ export class LayoutSession {
       output: show.output,
       dimForOutput: show.dimForOutput,
       tall: show.tall,
-      detail: { budget: view.budget, expanded: new Set(show.expanded) },
+      detail: show.all ? undefined : { budget: view.budget, expanded: new Set(show.expanded) },
     });
     const positions = new Map(view.positions);
     let boxes = this.boxes.get(channel);

@@ -8,7 +8,7 @@
  * sampling.ts's decision; how values look is inspector.ts's.
  */
 
-import { sameData } from "../trace/delta";
+import { noteHeap, sameData } from "../trace/delta";
 import type { SamplingPolicy } from "../trace/policy";
 import type { HeapObject, LoopContext, Step } from "../trace/types";
 import {
@@ -29,6 +29,9 @@ export type { Getter } from "./inspector";
 const MAX_DEPTH = 250;
 
 /** Thrown to stop the program when the step budget runs out. */
+/** A step's heap until it's committed (and built): never seen outside the runtime. */
+const NOT_YET: Record<string, HeapObject> = Object.freeze({}) as Record<string, HeapObject>;
+
 export class StepLimit {
   readonly reason = "step limit";
 }
@@ -463,38 +466,61 @@ export class Runtime {
 
   /** Every object's last version in a committed step, to share unchanged objects with. */
   private known = new Map<string, HeapObject>();
-  /** The last committed step's heap, and how many objects are in it. */
+  /** The last committed step's heap, and its ids in order. */
   private lastHeap: Record<string, HeapObject> | null = null;
   private lastHeapIds: string[] = [];
+  /** What the serializer made a step's heap of (its ids and objects in order, and where the fresh ones are), until it's committed. */
+  private made = new WeakMap<Step, { order: string[]; objects: HeapObject[]; fresh: number[] }>();
 
   private commit(step: Step): void {
     if (this.sampler.skipped) {
       step.skipped = this.sampler.skipped;
       this.sampler.skipped = 0;
     }
+    const made = this.made.get(step);
+    if (!made) throw new Error("a step committed that wasn't made here");
+    this.made.delete(step);
+    const { order, objects, fresh } = made;
     // An object that didn't change since the step before is the same
     // object: steps share it, here and (structured clone keeps sharing)
     // on the page. See trace/delta.ts.
-    // (Its last version from any step before: an object out of reach for a while is shared when it's back.)
+    // Only the serializer's fresh objects can be new: every other one is a committed step's already.
+    // (A fresh one equal to its last committed version, from any step before, is that version:
+    // an object out of reach for a while is shared when it's back.)
     const known = this.known;
+    const changed: string[] = [];
+    for (const at of fresh) {
+      const id = order[at];
+      const obj = objects[at];
+      const before = known.get(id);
+      const entry = this.reuse.objects.get(id);
+      if (before === obj || (before && sameData(before, obj))) {
+        objects[at] = before;
+        // The serializer reuses the committed object from now on, so it isn't fresh again next step.
+        if (entry?.made === obj || entry?.made === before) {
+          entry.made = before;
+          entry.committed = true;
+        }
+        continue;
+      }
+      known.set(id, obj);
+      if (entry?.made === obj) entry.committed = true;
+      changed.push(id);
+    }
+    // Nothing in the heap changed (the same objects, in the same order: what the layout places them by):
+    // the step before's heap itself (most steps change only variables), so what's worked out about a heap
+    // can be kept by the heap (trace/graph.ts sameHeap). Only a heap that changed is built.
     const last = this.lastHeap;
     const lastIds = this.lastHeapIds;
-    let same = !!last;
-    let count = 0;
-    for (const id in step.heap) {
-      const before = known.get(id);
-      if (before && before !== step.heap[id] && sameData(before, step.heap[id])) step.heap[id] = before;
-      else known.set(id, step.heap[id]);
-      // The same objects in the same order (the order is what the layout places them by).
-      if (same && (lastIds[count] !== id || last![id] !== step.heap[id])) same = false;
-      count++;
-    }
-    // Nothing in the heap changed: the step before's heap itself (most steps change only variables), so
-    // what's worked out about a heap can be kept by the heap (trace/graph.ts sameHeap).
-    if (same && last && count === lastIds.length) step.heap = last;
+    if (last && !changed.length && order.length === lastIds.length && order.every((id, i) => id === lastIds[i]))
+      step.heap = last;
     else {
-      this.lastHeap = step.heap;
-      this.lastHeapIds = Object.keys(step.heap);
+      const heap: Record<string, HeapObject> = {};
+      for (let i = 0; i < order.length; i++) heap[order[i]] = objects[i];
+      step.heap = heap;
+      this.lastHeap = heap;
+      this.lastHeapIds = order;
+      noteHeap(heap, order, changed);
     }
     this.steps.push(step);
   }
@@ -569,7 +595,7 @@ export class Runtime {
         event,
         line: this.frames[this.frames.length - 1]?.line ?? 0,
         stack,
-        heap: serializer.heap,
+        heap: NOT_YET, // built as it's committed (commit), from what the serializer reached
         stdoutLength: this.stdout.length,
         loops,
       };
@@ -578,7 +604,7 @@ export class Runtime {
         const refs: string[] = [];
         for (const obj of this.pendingOutput.objects) {
           const id = this.objectIds.get(obj);
-          if (id && serializer.heap[id] && !refs.includes(id)) refs.push(id);
+          if (id && serializer.holds(id) && !refs.includes(id)) refs.push(id);
         }
         step.output = { line: this.pendingOutput.line, refs };
         this.pendingOutput = null;
@@ -586,6 +612,7 @@ export class Runtime {
       if ("returnValue" in extra) step.returnValue = serializer.value(extra.returnValue);
       if (extra.exception) step.exception = extra.exception;
       this.sampler.considered++;
+      this.made.set(step, { order: serializer.order, objects: serializer.objects, fresh: serializer.fresh });
       if (into !== RECORD) into.push(step);
       else this.commit(step);
     } finally {

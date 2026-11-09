@@ -377,7 +377,9 @@ function objectsOfType(heap: Record<string, HeapObject>, type: string): HeapObje
       if (list) list.push(obj);
       else facts.byType.set(t, [obj]);
     }
-    for (const list of facts.byType.values()) list.sort((a, b) => idNumber(a.id) - idNumber(b.id));
+    // In id order; a class with more objects than a graph takes is only counted (objectGraphOf), so not sorted.
+    for (const list of facts.byType.values())
+      if (list.length <= MAX_OBJECT_NODES) list.sort((a, b) => idNumber(a.id) - idNumber(b.id));
   }
   return facts.byType.get(type) ?? [];
 }

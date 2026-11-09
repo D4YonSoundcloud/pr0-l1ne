@@ -234,21 +234,23 @@ export function evaluatedHeader(info: LoopInfo, call: string): string {
   return at >= 0 ? `${info.header.slice(0, at)} in ${call}` : call;
 }
 
-/** One snapshot per step (by its heap) and frame, so what's worked out about it (trace/linked.ts) is kept. */
-const stepSnapshots = new WeakMap<object, Map<string, RowSnapshot>>();
-function stepSnapshot(
-  step: { heap: RowSnapshot["heap"] },
-  frame: { id: string; locals: RowSnapshot["locals"] },
-): RowSnapshot {
-  let byFrame = stepSnapshots.get(step.heap);
-  if (!byFrame) {
-    byFrame = new Map();
-    stepSnapshots.set(step.heap, byFrame);
+/**
+ * One snapshot per heap and variables, so what's worked out about it
+ * (trace/linked.ts) is kept. Both are its key: steps that change only
+ * variables share their heap (`slow = slow.next` moves no object), and
+ * their pointers are each step's own.
+ */
+const stepSnapshots = new WeakMap<object, WeakMap<object, RowSnapshot>>();
+function stepSnapshot(step: { heap: RowSnapshot["heap"] }, frame: { locals: RowSnapshot["locals"] }): RowSnapshot {
+  let byLocals = stepSnapshots.get(step.heap);
+  if (!byLocals) {
+    byLocals = new WeakMap();
+    stepSnapshots.set(step.heap, byLocals);
   }
-  let snap = byFrame.get(frame.id);
+  let snap = byLocals.get(frame.locals);
   if (!snap) {
     snap = { locals: frame.locals, heap: step.heap };
-    byFrame.set(frame.id, snap);
+    byLocals.set(frame.locals, snap);
   }
   return snap;
 }
@@ -616,7 +618,11 @@ export function loopScene(trace: Trace, history: LoopHistory, options: LoopScene
   const hasContent = containers.length > 0 || !!track || !!firstGraph;
 
   // Which rows changed something compared with the row before?
-  const trackSignature = (i: number) => (trackRows[i] ? linkedSignature(trackRows[i]!) : "");
+  // A pointer moving along the list (curr = curr.next) is a change too, though no node changed.
+  const trackSignature = (i: number) => {
+    const row = trackRows[i];
+    return row ? `${linkedSignature(row)}#${row.pointers.map((p) => `${p.name}@${p.index}`).join(",")}` : "";
+  };
   const changed = rows.map(
     (row, i) =>
       i === 0 ||

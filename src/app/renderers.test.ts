@@ -179,10 +179,10 @@ function setup() {
 const CODE = "const nums = [3, 1, 2];\nfor (let i = 0; i < nums.length; i++) {\n  nums[i] *= 2;\n}\n";
 
 describe("the memory window, through its renderer", () => {
-  it("starts with Auto-fit on (nothing saved yet) and a Reset layout control", () => {
+  it("starts with Auto-fit on (nothing saved yet), and Reset layout and Show all controls", () => {
     const { fakes } = setup();
     expect(fakes.memory.called("setViewport")[0].args[0]).toEqual({ autoFit: { on: true, mode: "both" } });
-    expect(fakes.memory.called("addControl").map((c) => c.args[0])).toEqual(["Reset layout"]);
+    expect(fakes.memory.called("addControl").map((c) => c.args[0])).toEqual(["Reset layout", "Show all"]);
   });
 
   it("hands over a drawing per step, laid out for the renderer's view, and its animation", async () => {

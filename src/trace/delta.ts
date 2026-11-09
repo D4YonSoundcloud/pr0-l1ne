@@ -112,32 +112,104 @@ export class HeapExpander {
 }
 
 /**
+ * What made a heap, as the JavaScript runtime noted it when it committed
+ * the step (js/runtime.ts): its ids in order, and the ids whose object
+ * changed since it was last in a committed step (or is new). The encoder
+ * reads these instead of scanning every object of every step. A heap with
+ * no note (a step built some other way) is scanned as before.
+ */
+const heapNotes = new WeakMap<object, { ids: string[]; changed: string[] }>();
+
+/** Note how a committed step's heap was made (see heapNotes). */
+export function noteHeap(heap: Record<string, HeapObject>, ids: string[], changed: string[]): void {
+  heapNotes.set(heap, { ids, changed });
+}
+
+/**
+ * This step's ids as a change to the step before's: [how many of its first
+ * ids are kept, how many of its last, and the ids between] (a new node at
+ * the head of a list is one id, not every id again). Null when that saves
+ * little. The same as the Python tracer's (worker/steplog.py ids_part).
+ */
+export function idsPart(before: readonly string[] | null, ids: readonly string[]): [number, number, string[]] | null {
+  if (!before) return null;
+  const n = before.length;
+  const m = ids.length;
+  const limit = Math.min(n, m);
+  let head = 0;
+  while (head < limit && before[head] === ids[head]) head++;
+  let tail = 0;
+  while (tail < limit - head && before[n - 1 - tail] === ids[m - 1 - tail]) tail++;
+  if (head + tail < Math.floor(m / 2) || m < 16) return null;
+  return [head, tail, ids.slice(head, m - tail)];
+}
+
+/**
  * The other way: full steps (a JavaScript trace's, whose unchanged objects
  * are the same objects from step to step) as deltas, for sending a trace a
  * piece at a time (js/serve.ts). Each object is sent when it isn't the one
- * last sent under its id; frames are sent whole.
+ * last sent under its id; the ids as the same as the step before's, or a
+ * change to them; and a frame that's the same as in the step before as its
+ * id and `same`, as the Python tracer sends them. (A call 12 deep otherwise
+ * sends all 12 frames every step: most of a recursive program's trace.)
  */
 export class HeapEncoder {
   private readonly sent = new Map<string, HeapObject>();
   private prevIds: string[] | null = null;
+  private prevFrames = new Map<string, Frame>();
+  private prevHeap: Record<string, HeapObject> | null = null;
 
   /** `step` as sent: a copy, its heap only the objects not sent before. */
   encode(step: Step): Step {
     const heap: Record<string, HeapObject> = {};
-    const ids: string[] = [];
-    for (const id in step.heap) {
-      ids.push(id);
-      const obj = step.heap[id];
-      if (this.sent.get(id) !== obj) {
-        heap[id] = obj;
-        this.sent.set(id, obj);
+    let ids: string[];
+    const note = heapNotes.get(step.heap);
+    if (step.heap === this.prevHeap && this.prevIds) {
+      // The step before's heap itself: nothing to send, the same ids.
+      ids = this.prevIds;
+    } else if (note) {
+      // The runtime said what changed: only those can be ones not sent before.
+      ids = note.ids;
+      for (const id of note.changed) {
+        const obj = step.heap[id];
+        if (this.sent.get(id) !== obj) {
+          heap[id] = obj;
+          this.sent.set(id, obj);
+        }
+      }
+    } else {
+      ids = [];
+      for (const id in step.heap) {
+        ids.push(id);
+        const obj = step.heap[id];
+        if (this.sent.get(id) !== obj) {
+          heap[id] = obj;
+          this.sent.set(id, obj);
+        }
       }
     }
+    this.prevHeap = step.heap;
     const out: SentStep = { ...step, heap };
     const prev = this.prevIds;
-    if (prev && prev.length === ids.length && prev.every((id, i) => id === ids[i])) out.sameIds = true;
-    else out.heapIds = ids;
+    if (prev && (prev === ids || (prev.length === ids.length && prev.every((id, i) => id === ids[i]))))
+      out.sameIds = true;
+    else {
+      const part = idsPart(prev, ids);
+      if (part) out.heapIdsPart = part;
+      else out.heapIds = ids;
+    }
     this.prevIds = ids;
+    // Frames: the same as last step's (by id, and equal) as just their id.
+    const frames = new Map<string, Frame>();
+    const sendFrames = (list: Frame[]): SentFrame[] =>
+      list.map((frame) => {
+        frames.set(frame.id, frame);
+        const before = this.prevFrames.get(frame.id);
+        return before && (before === frame || sameData(before, frame)) ? { id: frame.id, same: true } : frame;
+      });
+    (out as { stack: SentFrame[] }).stack = sendFrames(step.stack);
+    if (step.suspended) (out as { suspended?: SentFrame[] }).suspended = sendFrames(step.suspended);
+    this.prevFrames = frames;
     return out;
   }
 }

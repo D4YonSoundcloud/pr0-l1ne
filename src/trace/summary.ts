@@ -60,6 +60,9 @@ export function summarize(raw: Trace, prepared: Trace): TraceInfo {
   const skipped: number[] = [];
   let maxHeap = 0;
   let heapSum = 0;
+  // Steps that changed only variables share the step before's heap record: counted once.
+  let counted: Step["heap"] | null = null;
+  let size = 0;
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     lines.push(step.line);
@@ -67,7 +70,11 @@ export function summarize(raw: Trace, prepared: Trace): TraceInfo {
     labels.push(describe(step, steps[i - 1]));
     stdoutLengths.push(step.stdoutLength);
     skipped.push(step.skipped ?? 0);
-    const size = Object.keys(step.heap).length;
+    if (step.heap !== counted) {
+      counted = step.heap;
+      size = 0;
+      for (const _ in step.heap) size++;
+    }
     maxHeap = Math.max(maxHeap, size);
     heapSum += size;
   }

@@ -78,6 +78,9 @@ export class MemoryController {
   private readonly resetButton: HTMLButtonElement;
   /** Summaries the person opened, by key (scene/summaries.ts): drawn in full, step after step. */
   private readonly expanded = new Set<string>();
+  /** Show all: nothing summarized. */
+  private showAll = false;
+  private readonly showAllButton: HTMLButtonElement;
 
   constructor(private readonly options: MemoryOptions) {
     const { els, settings } = options;
@@ -117,11 +120,23 @@ export class MemoryController {
       () => {
         this.renderer.resetLayout();
         this.expanded.clear();
+        this.setShowAll(false);
         this.render();
         this.updateResetButton();
       },
     );
     this.updateResetButton();
+    // Big trees, long lists, deep recursion: drawn summarized (scene/summaries.ts); this draws them in full.
+    this.showAllButton = this.renderer.addControl(
+      "Show all",
+      "Draw every node of big trees and long lists, and every call, instead of summarizing them (zoom in to read them)",
+      () => {
+        this.setShowAll(!this.showAll);
+        this.render();
+      },
+    );
+    this.showAllButton.classList.add("show-all");
+    this.showAllButton.hidden = true;
 
     els.modeArrows.addEventListener("click", () => this.setMode("arrows"));
     els.modeNested.addEventListener("click", () => this.setMode("nested"));
@@ -214,8 +229,19 @@ export class MemoryController {
   reset(): void {
     this.renderer.resetLayout();
     this.expanded.clear();
+    this.setShowAll(false);
     this.updateResetButton();
     this.renderer.setViewport({ refit: true });
+  }
+
+  private setShowAll(on: boolean): void {
+    this.showAll = on;
+    this.showAllButton.textContent = on ? "Summarize" : "Show all";
+    this.showAllButton.setAttribute("aria-pressed", String(on));
+    this.showAllButton.title = on
+      ? "Summarize big trees, long lists and deep recursion again"
+      : "Draw every node of big trees and long lists, and every call, instead of summarizing them (zoom in to read them)";
+    if (!on) this.showAllButton.hidden = true;
   }
 
   private updateResetButton(): void {
@@ -243,6 +269,7 @@ export class MemoryController {
       dimForOutput: this.dimForOutput,
       tall: isTall(this.options.els.memory),
       expanded: [...this.expanded],
+      all: this.showAll,
     };
     this.shown = show;
     // How this step animates in, as it is now (the next may be asked for before this one's back).
@@ -257,6 +284,8 @@ export class MemoryController {
         this.renderer.setAppearance({ step: animation });
         timed("memory.render", () => this.renderer.show(laidOut));
         this.updateTotal(laidOut.total);
+        // Show all is offered while something's summarized (and kept while it's on).
+        this.showAllButton.hidden = !this.showAll && !laidOut.summaryKeys?.length;
         if (asked === this.asked) this.layAhead(show, trace.steps);
       })
       .catch((error: unknown) => console.error("Memory window:", error))

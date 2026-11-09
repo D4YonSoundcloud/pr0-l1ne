@@ -23,7 +23,7 @@
  * in shows more, zooming out less. A structure the person expanded (by
  * clicking its summary) is drawn in full, by its key.
  */
-import { fieldsOf, findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
+import { fieldsOf, findLinkedTrack, linkedRow, MEMORY_MAX_NODES, treeDepths } from "../trace/linked";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
 import { valuesOf } from "./nesting";
 
@@ -131,7 +131,7 @@ export function summarize(
 
   // One linked class at a time, as the loop history finds it.
   const row = { locals: liveFrames(step).flatMap((f) => f.locals), heap: step.heap };
-  const track = findLinkedTrack([row], trace.viz?.linked, trace.viz?.labels);
+  const track = findLinkedTrack([row], trace.viz?.linked, trace.viz?.labels, MEMORY_MAX_NODES);
   if (track && !track.links.length) return none;
   const ofType = (id: string | null | undefined): id is string =>
     !!id && step.heap[id]?.typeName === track?.typeName && !skip.has(id);

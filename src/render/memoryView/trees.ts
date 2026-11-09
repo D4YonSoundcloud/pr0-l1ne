@@ -1,6 +1,7 @@
 /**
  * Binary trees in the memory view, laid out as one block: each node in its
- * in-order slot, at the height of its depth.
+ * column (its in-order slot, or a big tree's tidy one: scene/memoryScene.ts),
+ * at the height of its depth.
  */
 import type { SceneTree } from "../../scene/memoryScene";
 import { onSpacingChange, spacing } from "../spacing";
@@ -36,6 +37,8 @@ export function measureBlock(block: TreeBlock, shapes: Map<string, Shape>): void
   const levelGap = Math.max(LEVEL_GAP, spacing.topGap + 8);
   block.levelH = Math.max(...sizes.map((shape) => shape.h)) + levelGap;
   const levels = Math.max(...[...block.nodes.values()].map((n) => n.depth)) + 1;
-  block.w = block.inOrder.length * (block.slotW + treeGap()) - treeGap();
+  // As many slots as its columns span (one per node in order, fewer laid out tidily).
+  const columns = Math.max(...[...block.nodes.values()].map((n) => n.x)) + 1;
+  block.w = Math.ceil(columns * (block.slotW + treeGap()) - treeGap());
   block.h = levels * block.levelH - levelGap;
 }

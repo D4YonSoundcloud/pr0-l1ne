@@ -20,6 +20,7 @@
   "include": ["src"],
   "exclude": [
     "src/js/cli.ts",
+    "src/js/encodeSteps.test.ts",
     "src/render/layout.test.ts",
     "src/render/memoryView/boxCache.python.test.ts",
     "src/trace/changes.python.test.ts",

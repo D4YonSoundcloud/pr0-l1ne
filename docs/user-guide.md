@@ -141,7 +141,7 @@ Choose one and the program runs with it. **The code in the editor isn't changed*
 
 ## Layout
 
-On a wide screen, the code, the memory view and the loop history can go anywhere on the page. To begin with, the code is on the left and the memory view sits over the loop history on the right.
+On a wide screen, the code, the memory view and the loop history can go anywhere on the page. To begin with, the code is on the left and the memory view sits over the loop history on the right. Each window keeps what it shows inside it, however narrow: a narrow code window's switches (**Run to line**, **Input**) show only their icons, and its find box moves under the **Output** and **Changes** tabs.
 
 **Moving a window.** Drag a window by its header: anywhere on it that isn't a button, a menu or a checkbox, such as its name, the grip (⠿) at its left, or the space between its tools. A box shows where the window will go and glides there as you move:
 
@@ -367,7 +367,7 @@ The card is as wide as the call stack's column, which widens for a program that 
 
 ### Trees
 
-A binary tree is drawn **top-down**, like in a textbook: each node sits at the height of its depth and in its in-order position, so a binary search tree reads sorted from left to right. Arrows leave a node's `left` and `right` cells, drop into the gap below it, and enter each child from the top.
+A binary tree is drawn **top-down**, like in a textbook: each node sits at the height of its depth and in its in-order position, so a binary search tree reads sorted from left to right. A tree of 64 nodes or more is drawn compactly instead: each parent centered over its children and each subtree packed as close to its neighbor as its nodes allow, so it's as wide as its bottom level rather than a column per node (about half as wide). A node with one child still has it on the correct side. Arrows leave a node's `left` and `right` cells, drop into the gap below it, and enter each child from the top.
 
 ![A binary search tree in the memory view](tree-memory.png)
 
@@ -444,7 +444,7 @@ A trace records the program step by step, which is what lets you scrub back and 
 
 **Long chains, big trees and deep recursion are summarized.** In the memory view, more than 64 nodes in a row of a linked list are drawn as the first and last of them with one dashed box between, "86 more Nodes", linked like a node. A binary tree that big shows the levels that fit and draws each subtree below them as a triangle with its node count. More than 64 calls of one function in a row on the call stack show the outermost and innermost calls with one frame between, "fib() × 336 more". Whatever your code holds is never summarized: a node a variable points to stays, with the nodes around it, so walking a list shows its head, where you are, and its tail, and the path down a tree to a variable's node stays open.
 
-Click a summary to show everything it stands for. It stays open as you step, until **Reset layout** (next to the zoom controls) summarizes it again. With Auto-fit off, zooming out summarizes sooner (from 48 nodes in a row down to 8 at the smallest zooms) and zooming back in draws them again, once the zoom settles.
+Click a summary to show everything it stands for. It stays open as you step, until **Reset layout** (next to the zoom controls) summarizes it again. To see everything at once, press **Show all** beside the zoom controls (it's there while something is summarized): every node of every tree and list, and every call, is drawn, however many, and Auto-fit fits it all in; zoom in to read the nodes. **Summarize** folds them again. A tree of a thousand nodes is drawn as one tree, never as its top and a pile of loose boxes. With Auto-fit off, zooming out summarizes sooner (from 48 nodes in a row down to 8 at the smallest zooms) and zooming back in draws them again, once the zoom settles.
 
 **Big graphs are drawn as clusters.** A graph of more than 64 nodes (a few hundred people linked as friends, say) is drawn as its closely linked groups, each one dashed, stacked node with its count, "25 nodes", and the edges between groups gathered into one, labelled with how many ("×3"). The groups are found from the whole run, so they're the same at every step. What your algorithm marks is gathered onto them: a group whose nodes are all visited is filled in, one partly visited says how many ("12 seen"), one holding the next node out of the queue gets its number, and variables pointing at a node in it point at the group. Click a group to show its nodes, laid out with the other groups; it stays open as you step, until **Reset layout**. Zoomed out, graphs are grouped sooner, as other summaries are. In the loop history, a big graph is grouped the same way in every row; clicking a group there opens it in every row, until **Fold again**.
 

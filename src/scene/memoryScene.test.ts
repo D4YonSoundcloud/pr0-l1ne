@@ -8,7 +8,7 @@ import { diffSteps } from "../trace/diff";
 import { applyHints } from "../trace/hints";
 import { SIZE_MODELS } from "../trace/memory";
 import type { Trace } from "../trace/types";
-import { boxValues, type MemorySceneOptions, memoryScene, nodeKey } from "./memoryScene";
+import { boxValues, type MemorySceneOptions, memoryScene, nodeKey, TIDY_TREE_FROM, tidyColumns } from "./memoryScene";
 
 /** The scene at a step (the last, by default) of a JavaScript program. */
 async function sceneOf(code: string, options: MemorySceneOptions = {}, at?: (t: Trace) => number) {
@@ -136,6 +136,92 @@ const root = new T(2, new T(1), new T(3));
     expect([...tree.nodes.values()].map((n) => n.depth).sort()).toEqual([0, 1, 1]);
     expect(new Set(scene.objects.filter((o) => tree.nodes.has(o.id)).map((o) => o.depth))).toEqual(new Set([0]));
     expect((await sceneOf(code, { mode: "nested" })).scene.trees).toEqual([]);
+  });
+
+  it("a big tree is one tree, however many nodes (not only its first 40), laid out tidily", async () => {
+    const code = `class T { constructor(v) { this.v = v; this.left = null; this.right = null; } }
+function build(lo, hi) {
+  if (lo > hi) return null;
+  const mid = (lo + hi) >> 1;
+  const t = new T(mid);
+  t.left = build(lo, mid - 1);
+  t.right = build(mid + 1, hi);
+  return t;
+}
+const root = build(0, 126);
+`;
+    const trace = applyHints(await traceJavaScript(code, 20_000)); // all of it: some 2,000 steps
+    const last = trace.steps.length - 1;
+    const scene = memoryScene(trace, last, diffSteps(trace.steps[last - 1], trace.steps[last]), {});
+    expect(scene.trees).toHaveLength(1);
+    const [tree] = scene.trees;
+    expect(tree.inOrder).toHaveLength(127);
+    expect(127).toBeGreaterThanOrEqual(TIDY_TREE_FROM);
+    // 64 leaves a slot apart: 64 columns, not 127.
+    const xs = [...tree.nodes.values()].map((n) => n.x);
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(63);
+  });
+});
+
+describe("a tidy tree layout", () => {
+  /** A tree from nested arrays: [left, right], null for none; ids by preorder. */
+  function treeOf(shape: unknown) {
+    const kids = new Map<string, [string | null, string | null]>();
+    let n = 0;
+    const make = (s: unknown): string | null => {
+      if (s === null) return null;
+      const id = `n${n++}`;
+      const [l, r] = (s as [unknown, unknown]) ?? [null, null];
+      kids.set(id, [null, null]);
+      kids.set(id, [make(l ?? null), make(r ?? null)]);
+      return id;
+    };
+    const root = make(shape)!;
+    return { root, kids: (id: string) => kids.get(id)! };
+  }
+  const leaf: unknown = [null, null];
+
+  it("puts parents over their children, an only child to its side, and no two nodes of a level closer than a slot", () => {
+    const shapes: unknown[] = [
+      [leaf, leaf],
+      [
+        [leaf, null],
+        [null, leaf],
+      ],
+      [
+        [
+          [leaf, leaf],
+          [leaf, [leaf, leaf]],
+        ],
+        [null, [leaf, null]],
+      ],
+      [[[[leaf, null], null], null], leaf], // a long left arm
+    ];
+    for (const shape of shapes) {
+      const { root, kids } = treeOf(shape);
+      const x = tidyColumns(root, kids);
+      const depth = new Map<string, number>([[root, 0]]);
+      const order: string[] = [root];
+      for (const id of order)
+        for (const k of kids(id)) {
+          if (!k) continue;
+          depth.set(k, depth.get(id)! + 1);
+          order.push(k);
+        }
+      expect(Math.min(...x.values())).toBe(0);
+      for (const id of order) {
+        const [l, r] = kids(id);
+        if (l && r) expect(x.get(id)).toBeCloseTo((x.get(l)! + x.get(r)!) / 2);
+        if (l && !r) expect(x.get(id)! - x.get(l)!).toBe(0.5);
+        if (r && !l) expect(x.get(r)! - x.get(id)!).toBe(0.5);
+      }
+      // Level by level, in order left to right, a slot apart at least.
+      const levels = new Map<number, number[]>();
+      for (const id of order) levels.set(depth.get(id)!, [...(levels.get(depth.get(id)!) ?? []), x.get(id)!]);
+      for (const xs of levels.values())
+        for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(1);
+    }
   });
 });
 

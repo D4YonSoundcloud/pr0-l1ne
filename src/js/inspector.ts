@@ -148,15 +148,38 @@ export const isListLike = (v: unknown): v is ArrayLike<unknown> =>
 export interface Reused<T> {
   slots: unknown[];
   made: T;
+  /** `made` is in a committed step (js/runtime.ts commit sets it): reused, it's nothing new. */
+  committed?: boolean;
 }
 
-/** Each object's last heap object, and each frame's last view, kept between steps (Serializer). */
+/**
+ * What's kept about an object between steps: its id, the last step it was
+ * reached in (`seen`, a step's number), and, once it's been described from
+ * slots, what from and what it was (Reused).
+ */
+export interface ObjectEntry extends Partial<Reused<HeapObject>> {
+  id: string;
+  seen: number;
+}
+
+/** Each object's entry (by the object, and by its id), and each frame's last view, kept between steps (Serializer). */
 export interface ReuseCache {
-  objects: Map<string, Reused<HeapObject>>;
+  objects: Map<string, ObjectEntry>;
+  byObject: WeakMap<object, ObjectEntry>;
   frames: Map<string, Reused<Frame>>;
+  /** The number of the last step serialized (ObjectEntry.seen). */
+  step: number;
 }
 
-export const newReuseCache = (): ReuseCache => ({ objects: new Map(), frames: new Map() });
+export const newReuseCache = (): ReuseCache => ({
+  objects: new Map(),
+  byObject: new WeakMap(),
+  frames: new Map(),
+  step: 0,
+});
+
+/** Where an object goes in the heap's order until it's described (a cycle back to it finds its id already). */
+const PLACEHOLDER: HeapObject = { kind: "opaque", id: "", typeName: "", repr: "" };
 
 /** A getter in a slot (its value isn't read) or a variable before its declaration. */
 const UNREAD = Symbol("unread");
@@ -209,8 +232,21 @@ function slotsOf(obj: object): unknown[] | null {
 }
 
 export class Serializer {
-  readonly heap: Record<string, HeapObject> = {};
+  /** The heap's ids in the order they're reached (the heap's keys' order), and each one's heap object. */
+  readonly order: string[] = [];
+  readonly objects: HeapObject[] = [];
+  /**
+   * Where in `order` the objects are that aren't ones a committed step
+   * already holds (their entry isn't marked `committed`): described this
+   * step, or reused from a step that was never committed (a sampled pass
+   * dropped). Only these can be new to the trace; every other object is the
+   * same one as before. In the heap's order.
+   */
+  readonly fresh: number[] = [];
   private count = 0;
+  /** This step's number: an object whose entry was seen in it is in the heap already. */
+  private readonly stepNumber: number;
+  private built: Record<string, HeapObject> | null = null;
 
   constructor(
     private readonly ids: WeakMap<object, string>,
@@ -226,7 +262,24 @@ export class Serializer {
      * what it holds is visited, so the heap still has everything reachable.
      */
     private readonly reuse: ReuseCache = newReuseCache(),
-  ) {}
+  ) {
+    this.stepNumber = ++reuse.step;
+  }
+
+  /** The heap: each object reached, by id, in the order reached (built when first asked for). */
+  get heap(): Record<string, HeapObject> {
+    if (!this.built) {
+      const heap: Record<string, HeapObject> = {};
+      for (let i = 0; i < this.order.length; i++) heap[this.order[i]] = this.objects[i];
+      this.built = heap;
+    }
+    return this.built;
+  }
+
+  /** Is the object with this id in the heap (reached this step)? */
+  holds(id: string): boolean {
+    return this.reuse.objects.get(id)?.seen === this.stepNumber;
+  }
 
   /** A frame of the stack: the same view as last step if its line and variables are the same. */
   frame(id: string, func: string, line: number, getter: Getter): Frame {
@@ -297,28 +350,47 @@ export class Serializer {
   }
 
   private ref(obj: object): string {
-    let id = this.ids.get(obj);
-    if (!id) {
-      id = this.newId();
-      this.ids.set(obj, id);
+    // One lookup, by the object: its id, and whether it's been reached this step.
+    let entry = this.reuse.byObject.get(obj);
+    if (!entry) {
+      let id = this.ids.get(obj);
+      if (!id) {
+        id = this.newId();
+        this.ids.set(obj, id);
+      }
+      entry = this.reuse.objects.get(id) ?? { id, seen: 0 };
+      this.reuse.byObject.set(obj, entry);
+      this.reuse.objects.set(id, entry);
     }
-    if (id in this.heap) return id;
+    const id = entry.id;
+    if (entry.seen === this.stepNumber) return id;
+    entry.seen = this.stepNumber;
+    // Its place, as it's reached (before what it holds): the heap's order.
+    const at = this.order.length;
+    this.order.push(id);
+    this.objects.push(PLACEHOLDER);
     if (this.count >= MAX_OBJECTS) {
-      this.heap[id] = { kind: "opaque", id, typeName: constructorName(obj), repr: "…" };
+      this.objects[at] = { kind: "opaque", id, typeName: constructorName(obj), repr: "…" };
+      this.fresh.push(at);
       return id;
     }
     this.count++;
-    this.heap[id] = { kind: "opaque", id, typeName: "", repr: "" }; // placeholder for cycles
     const slots = slotsOf(obj);
-    const known = slots ? this.reuse.objects.get(id) : undefined;
-    if (slots && known && sameSlots(known.slots, slots)) {
+    if (slots && entry.slots && sameSlots(entry.slots, slots)) {
       // Unchanged: the same heap object, and only what it holds visited (keys and values).
-      this.heap[id] = known.made;
+      this.objects[at] = entry.made!;
+      if (!entry.committed) this.fresh.push(at);
       for (let i = 2; i < slots.length; i++) this.visit(slots[i]);
       return id;
     }
-    this.heap[id] = this.describe(obj, id);
-    if (slots) this.reuse.objects.set(id, { slots, made: this.heap[id] });
+    this.fresh.push(at);
+    const made = this.describe(obj, id);
+    this.objects[at] = made;
+    if (slots) {
+      entry.slots = slots;
+      entry.made = made;
+      entry.committed = false;
+    }
     return id;
   }
 

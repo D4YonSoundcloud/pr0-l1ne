@@ -48,7 +48,14 @@ export interface LinkedRow {
 
 /** Field names that suggest a link even when every value seen is null. */
 const LINK_NAMES = new Set(["next", "prev", "previous", "left", "right", "parent", "child", "head", "tail"]);
+/** The loop history draws a row's nodes in columns: this many at most. */
 const MAX_NODES = 40;
+/**
+ * The memory view draws one step: a tree or list of up to this many nodes
+ * is still drawn as one (summaries.ts folds what's too much to read, and
+ * Show all draws it in full).
+ */
+export const MEMORY_MAX_NODES = 20_000;
 
 /** A plain object's fields, worked out once per object (heap objects never change once traced). */
 const plainFields = new WeakMap<HeapObject, [string, Value][] | null>();
@@ -179,6 +186,8 @@ export function findLinkedTrack(
   rows: RowSnapshot[],
   hints: LinkedHint[] = [],
   labels: LabelHint[] = [],
+  /** The most nodes it takes: the loop history draws each row's, so a few (MAX_NODES); the memory view many (MEMORY_MAX_NODES). */
+  maxNodes = MAX_NODES,
 ): LinkedTrack | null {
   // `viz: label Node by val` says which field a node shows.
   const labelOf = (type: string, fields: string[]) => {
@@ -196,7 +205,7 @@ export function findLinkedTrack(
     const valueField =
       labelOf(hint.typeName, others) ?? others.find((f) => isMostlyPrimitive(rows, hint.typeName, f)) ?? null;
     const track: LinkedTrack = { typeName: hint.typeName, links: hint.links, valueField, order: [], shape: hint.shape };
-    track.order = columnOrder(rows, track);
+    track.order = columnOrder(rows, track, maxNodes);
     if (track.order.length) return track;
   }
 
@@ -245,7 +254,7 @@ export function findLinkedTrack(
     null;
   const track: LinkedTrack = { typeName: best, links, valueField, order: [], shape: "list" };
   if (links.length === 2 && rows.every((row) => maxIndegree(row, best!, links) <= 1)) track.shape = "tree";
-  track.order = columnOrder(rows, track);
+  track.order = columnOrder(rows, track, maxNodes);
   return track.order.length ? track : null;
 }
 
@@ -319,26 +328,55 @@ const linkTarget = (fields: [string, Value][], field: string): string | null => 
  * end. Binary trees use in-order, so a search tree reads sorted, and
  * drawn top-down (in-order x, depth y) it's the classic tree picture.
  */
-function columnOrder(rows: RowSnapshot[], track: LinkedTrack): string[] {
+function columnOrder(rows: RowSnapshot[], track: LinkedTrack, maxNodes: number): string[] {
   const order: string[] = [];
+  const placed = new Set<string>();
   const inOrder = track.shape === "tree";
+  const place = (id: string) => {
+    if (placed.has(id) || order.length >= maxNodes) return;
+    placed.add(id);
+    order.push(id);
+  };
   for (const row of rows) {
     const seen = new Set<string>();
-    const visit = (id: string | null) => {
-      if (!id || seen.has(id) || order.length >= MAX_NODES) return;
+    const node = (id: string | null): [string, Value][] | null => {
+      if (!id || seen.has(id)) return null;
       const fields = fieldsOf(row.heap[id]);
-      if (!fields || row.heap[id].typeName !== track.typeName) return;
-      seen.add(id);
-      if (inOrder) {
-        visit(linkTarget(fields, track.links[0]));
-        if (!order.includes(id)) order.push(id);
-        visit(linkTarget(fields, track.links[1]));
-      } else {
-        if (!order.includes(id)) order.push(id);
-        for (const link of track.links) visit(linkTarget(fields, link));
-      }
+      return fields && row.heap[id].typeName === track.typeName ? fields : null;
     };
-    for (const root of roots(row, track.typeName)) visit(root.id);
+    // Walked with a stack of its own, not by recursion: a list or a lopsided tree can be thousands of nodes long.
+    for (const root of roots(row, track.typeName)) {
+      if (order.length >= maxNodes) break;
+      if (inOrder) {
+        // In order: left subtree, the node, right subtree.
+        const stack: string[] = [];
+        let at: string | null = root.id;
+        while ((at && node(at)) || stack.length) {
+          while (at && node(at)) {
+            seen.add(at);
+            stack.push(at);
+            at = linkTarget(fieldsOf(row.heap[at])!, track.links[0]);
+          }
+          const id = stack.pop()!;
+          place(id);
+          at = linkTarget(fieldsOf(row.heap[id])!, track.links[1]);
+        }
+      } else {
+        // Depth first, each node before what it links to, links in field order.
+        const stack: string[] = [root.id];
+        while (stack.length) {
+          const id = stack.pop()!;
+          const fields = node(id);
+          if (!fields) continue;
+          seen.add(id);
+          place(id);
+          for (let k = track.links.length - 1; k >= 0; k--) {
+            const target = linkTarget(fields, track.links[k]);
+            if (target) stack.push(target);
+          }
+        }
+      }
+    }
   }
   return order;
 }
@@ -354,6 +392,7 @@ export function linkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
 
 function makeLinkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
   const nodes = new Map<string, NodeState>();
+  const inTrack = new Set(track.order);
   for (const id of track.order) {
     const fields = fieldsOf(row.heap[id]);
     if (!fields) continue;
@@ -362,21 +401,24 @@ function makeLinkedRow(track: LinkedTrack, row: RowSnapshot): LinkedRow {
       value: track.valueField ? fields.find(([n]) => n === track.valueField)?.[1] : undefined,
       links: track.links.map((link) => {
         const target = linkTarget(fields, link);
-        return target && track.order.includes(target) ? target : null;
+        return target && inTrack.has(target) ? target : null;
       }),
     });
   }
   const reachable = new Set<string>();
-  const walk = (id: string | null) => {
-    if (!id || reachable.has(id) || !nodes.has(id)) return;
-    reachable.add(id);
-    for (const target of nodes.get(id)!.links) walk(target);
-  };
   const named = roots(row, track.typeName);
-  for (const root of named) walk(root.id);
+  // A stack of its own, not recursion: a long list is thousands of nodes deep.
+  const stack = named.map((r) => r.id);
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (reachable.has(id) || !nodes.has(id)) continue;
+    reachable.add(id);
+    for (const target of nodes.get(id)!.links) if (target) stack.push(target);
+  }
   for (const id of [...nodes.keys()]) if (!reachable.has(id)) nodes.delete(id);
 
-  const pointers = named.map(({ name, id }) => ({ name, index: track.order.indexOf(id) })).filter((p) => p.index >= 0);
+  const column = new Map(track.order.map((id, i) => [id, i]));
+  const pointers = named.map(({ name, id }) => ({ name, index: column.get(id) ?? -1 })).filter((p) => p.index >= 0);
   return { nodes, pointers };
 }
 
@@ -403,12 +445,18 @@ export function treeDepths(state: LinkedRow): Map<string, number> {
   const targets = new Set<string>();
   for (const node of state.nodes.values()) for (const t of node.links) if (t) targets.add(t);
   const depth = new Map<string, number>();
-  const walk = (id: string, d: number) => {
-    if (depth.has(id) || !state.nodes.has(id)) return;
-    depth.set(id, d);
-    for (const child of state.nodes.get(id)!.links) if (child) walk(child, d + 1);
+  // Depth first, as recursion would go (each child before its next sibling), with a stack of its own.
+  const walk = (root: string) => {
+    const stack: [string, number][] = [[root, 0]];
+    while (stack.length) {
+      const [id, d] = stack.pop()!;
+      if (depth.has(id) || !state.nodes.has(id)) continue;
+      depth.set(id, d);
+      const links = state.nodes.get(id)!.links;
+      for (let k = links.length - 1; k >= 0; k--) if (links[k]) stack.push([links[k]!, d + 1]);
+    }
   };
-  for (const id of state.nodes.keys()) if (!targets.has(id)) walk(id, 0);
-  for (const id of state.nodes.keys()) walk(id, 0); // a cycle with no root
+  for (const id of state.nodes.keys()) if (!targets.has(id)) walk(id);
+  for (const id of state.nodes.keys()) walk(id); // a cycle with no root
   return depth;
 }

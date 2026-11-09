@@ -167,6 +167,37 @@ for (const n of [b, c]) { head.next = n; head = n; }
     expect(scene.track?.chains().flat().sort()).toEqual([...scene.track!.track.order].sort());
   });
 
+  it("a linked list's pointers are each row's own, though the nodes never change (Floyd's slow and fast)", async () => {
+    const { scene } = await sceneOf(`class Node { constructor(v) { this.val = v; this.next = null; } }
+const head = new Node(1);
+head.next = new Node(2);
+head.next.next = new Node(3);
+head.next.next.next = new Node(4);
+head.next.next.next.next = new Node(5);
+head.next.next.next.next.next = head.next.next;
+let slow = head;
+let fast = head;
+let hasCycle = false;
+while (fast && fast.next) {
+  slow = slow.next;
+  fast = fast.next.next;
+  if (slow === fast) {
+    hasCycle = true;
+    break;
+  }
+}
+`);
+    const at = (row: number, name: string) =>
+      scene.track!.rows[row].pointers.find((p) => p.name === name)?.index ?? null;
+    const { order } = scene.track!.track;
+    const val = (index: number | null) => (index === null ? null : order[index]);
+    // Before, then each pass: slow one node on, fast two.
+    const ids = order; // nodes 1..5 in column order
+    expect([0, 1, 2, 3].map((r) => val(at(r, "slow")))).toEqual([ids[0], ids[1], ids[2], ids[3]]);
+    expect([0, 1, 2, 3].map((r) => val(at(r, "fast")))).toEqual([ids[0], ids[2], ids[4], ids[3]]);
+    expect(scene.track!.rows.every((r) => r.pointers.some((p) => p.name === "head" && p.index === 0))).toBe(true);
+  });
+
   it("pointers come from the row's own variables, and sizes from its own step", async () => {
     const { scene } = await sceneOf(`const nums = [5, 6, 7];\nfor (let i = 0; i < 3; i++) nums[i] += 1;\n`, {
       sizes: SIZE_MODELS.javascript[0].value,

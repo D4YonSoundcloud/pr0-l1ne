@@ -395,7 +395,7 @@ function layoutMemoryOnce(scene: MemoryScene, layout: MemoryLayout): Mark {
       drawNode(
         key,
         shape,
-        block.origin.x + slot.index * (block.slotW + treeGap()) + Math.round((block.slotW - shape.w) / 2),
+        block.origin.x + Math.round(slot.x * (block.slotW + treeGap()) + (block.slotW - shape.w) / 2),
         block.origin.y + slot.depth * block.levelH,
       );
       return;

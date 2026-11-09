@@ -456,6 +456,7 @@ pr0-l1ne/
     │   ├── inspector.ts        How values look: the heap (Serializer) and console.log
     │   ├── trace.ts            traceJavaScript(): instrument, run, return a Trace
     │   ├── serve.ts            Worker side of the protocol, shared by JS and TS
+    │   ├── encodeSteps.test.ts What's sent held to the scanning encoder (testing/heapEncoderReference.ts), byte for byte
     │   ├── javascript.worker.ts  Entry point for the JavaScript worker
     │   ├── typescript.worker.ts  Entry point for the TypeScript worker
     │   ├── cli.ts              npm run instrument / trace:js

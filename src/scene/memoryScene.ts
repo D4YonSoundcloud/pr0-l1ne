@@ -22,7 +22,7 @@ import {
   stepScopes,
 } from "../trace/graph";
 import { focusLines, type GridFocus, gridCells, gridFocus } from "../trace/gridFocus";
-import { findLinkedTrack, linkedRow, treeDepths } from "../trace/linked";
+import { findLinkedTrack, linkedRow, MEMORY_MAX_NODES, treeDepths } from "../trace/linked";
 import { type SizeModel, type StepSizes, stepSizes } from "../trace/memory";
 import { type Printed, printedAt } from "../trace/output";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
@@ -99,9 +99,65 @@ export interface SceneGraph {
 /** A binary tree of objects, drawn top-down as one block. */
 export interface SceneTree {
   root: string;
-  /** Node id -> its in-order position, its depth, and its children's ids. */
-  nodes: Map<string, { index: number; depth: number; children: string[] }>;
+  /**
+   * Node id -> its in-order position, its depth, its children's ids, and
+   * its column (`x`, in slots, maybe a half): its in-order position, or in a
+   * big tree its place in a tidy layout (tidyColumns).
+   */
+  nodes: Map<string, { index: number; depth: number; children: string[]; x: number }>;
   inOrder: string[];
+}
+
+/**
+ * From this many nodes, a tree is laid out tidily (tidyColumns), not one
+ * column per node: as wide as its leaves, not its nodes, so about half as
+ * wide. Smaller trees keep a column per node, in order: a search tree reads
+ * sorted left to right.
+ */
+export const TIDY_TREE_FROM = 64;
+
+/**
+ * A tidy layout of a binary tree (Reingold and Tilford's): each subtree laid
+ * out on its own, then the right one moved as close to the left as its
+ * nodes allow, level by level (a slot apart), and the parent centered over
+ * them; an only child half a slot to its side, so left is still left. Each
+ * node's column, in slots from 0.
+ */
+export function tidyColumns(root: string, kids: (id: string) => [string | null, string | null]): Map<string, number> {
+  const offset = new Map<string, number>(); // from its parent
+  // Each subtree's leftmost and rightmost column at each depth, relative to its root.
+  const lay = (id: string): { l: number[]; r: number[] } => {
+    const [left, right] = kids(id);
+    const a = left ? lay(left) : null;
+    const b = right ? lay(right) : null;
+    if (a && b) {
+      let gap = 1;
+      for (let d = 0; d < Math.min(a.r.length, b.l.length); d++) gap = Math.max(gap, 1 + a.r[d] - b.l[d]);
+      offset.set(left!, -gap / 2);
+      offset.set(right!, gap / 2);
+      const depth = Math.max(a.l.length, b.l.length);
+      const l = [0];
+      const r = [0];
+      for (let d = 0; d < depth; d++) {
+        l.push(d < a.l.length ? a.l[d] - gap / 2 : b.l[d] + gap / 2);
+        r.push(d < b.r.length ? b.r[d] + gap / 2 : a.r[d] - gap / 2);
+      }
+      return { l, r };
+    }
+    const only = a ?? b;
+    if (!only) return { l: [0], r: [0] };
+    const shift = a ? -0.5 : 0.5;
+    offset.set((left ?? right)!, shift);
+    return { l: [0, ...only.l.map((v) => v + shift)], r: [0, ...only.r.map((v) => v + shift)] };
+  };
+  const { l } = lay(root);
+  const columns = new Map<string, number>();
+  const place = (id: string, x: number) => {
+    columns.set(id, x);
+    for (const kid of kids(id)) if (kid) place(kid, x + offset.get(kid)!);
+  };
+  place(root, -Math.min(...l));
+  return columns;
 }
 
 /** An arrow between two boxes, by key: a reference, or from what was printed to an object it printed. */
@@ -193,7 +249,7 @@ function longestLine(trace: Trace): number {
 function findTrees(trace: Trace, step: Step, mode: MemoryMode): SceneTree[] {
   if (mode === "nested") return [];
   const row = { locals: liveFrames(step).flatMap((frame) => frame.locals), heap: step.heap };
-  const track = findLinkedTrack([row], trace.viz?.linked, trace.viz?.labels);
+  const track = findLinkedTrack([row], trace.viz?.linked, trace.viz?.labels, MEMORY_MAX_NODES);
   if (track?.shape !== "tree") return [];
   const state = linkedRow(track, row);
   const depths = treeDepths(state);
@@ -202,20 +258,29 @@ function findTrees(trace: Trace, step: Step, mode: MemoryMode): SceneTree[] {
   for (const [id] of state.nodes) {
     if (depths.get(id) !== 0 || placed.has(id)) continue;
     const tree: SceneTree = { root: id, nodes: new Map(), inOrder: [] };
-    const visit = (nodeId: string | null, depth: number) => {
-      if (!nodeId || placed.has(nodeId) || !state.nodes.has(nodeId)) return;
+    /** Each node's children as the walk placed them (a link back to a node already placed isn't one). */
+    const kids = new Map<string, [string | null, string | null]>();
+    const visit = (nodeId: string | null, depth: number): boolean => {
+      if (!nodeId || placed.has(nodeId) || !state.nodes.has(nodeId)) return false;
       placed.add(nodeId);
       const [left, right] = state.nodes.get(nodeId)!.links;
-      visit(left, depth + 1);
+      const placedLeft = visit(left, depth + 1);
       tree.nodes.set(nodeId, {
         index: tree.inOrder.length,
         depth,
         children: [left, right].filter((c): c is string => !!c),
+        x: tree.inOrder.length,
       });
       tree.inOrder.push(nodeId);
-      visit(right, depth + 1);
+      const placedRight = visit(right, depth + 1);
+      kids.set(nodeId, [placedLeft ? left : null, placedRight ? right : null]);
+      return true;
     };
     visit(id, 0);
+    if (tree.inOrder.length >= TIDY_TREE_FROM) {
+      const columns = tidyColumns(id, (n) => kids.get(n) ?? [null, null]);
+      for (const [n, x] of columns) tree.nodes.get(n)!.x = x;
+    }
     if (tree.inOrder.length >= 2) trees.push(tree);
   }
   return trees;

@@ -2,6 +2,8 @@
  * Summaries in real browsers (scene/summaries.ts): a long list is drawn as
  * its first and last nodes and a summary between; clicking the summary
  * shows every node, and Reset layout summarizes it again. In both renderers.
+ * A big tree is one tree (not its first 40 nodes and the rest as boxes),
+ * and Show all draws every node of it.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { rendererFor } from "./renderer";
@@ -12,7 +14,7 @@ for (let i = 150; i > 0; i--) head = new Node(i, head);
 let done = 1;
 `;
 
-async function open(page: Page, renderer: "svg" | "canvas") {
+async function open(page: Page, renderer: "svg" | "canvas", code = LIST) {
   await page.addInitScript(
     ([code, r]) => {
       if (sessionStorage.getItem("set")) return;
@@ -21,7 +23,7 @@ async function open(page: Page, renderer: "svg" | "canvas") {
       localStorage.setItem("pr0l1ne:code:javascript", code);
       localStorage.setItem("pr0l1ne:renderer", r);
     },
-    [LIST, rendererFor(renderer)],
+    [code, rendererFor(renderer)],
   );
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.goto("/javascript");
@@ -95,4 +97,45 @@ test("zoomed out by hand, long runs are summarized sooner; zoomed back in, they'
   await expect.poll(() => nodes.count()).toBeLessThan(full / 2);
   await page.keyboard.press("0");
   await expect.poll(() => nodes.count()).toBe(full);
+});
+
+const TREE = `class T { constructor(v) { this.v = v; this.left = null; this.right = null; } }
+function build(lo, hi) {
+  if (lo > hi) return null;
+  const mid = (lo + hi) >> 1;
+  const t = new T(mid);
+  t.left = build(lo, mid - 1);
+  t.right = build(mid + 1, hi);
+  return t;
+}
+const root = build(0, 126);
+`;
+
+test("svg: a big tree is drawn as one tree, summarized; Show all draws every node, Summarize folds it again", async ({
+  page,
+}) => {
+  await open(page, "svg", TREE);
+  const memory = page.locator("#memory");
+  const nodes = memory.locator('.viewport-layer .node[data-node-key^="obj:"]');
+  const summaries = memory.locator(".viewport-layer .node.is-summary");
+  await expect.poll(() => summaries.count()).toBeGreaterThan(0);
+  expect(await nodes.count()).toBeLessThan(127);
+  const showAll = memory.locator(".viewport-controls .show-all");
+  await expect(showAll).toBeVisible();
+  await showAll.click();
+  await expect(summaries).toHaveCount(0);
+  await expect.poll(() => nodes.count()).toBeGreaterThanOrEqual(127);
+  await expect(showAll).toHaveText("Summarize");
+  // Laid out as a tree: every node's in one of its 7 levels.
+  const levels = await nodes.evaluateAll((els) => [
+    ...new Set(
+      els
+        .filter((e) => /^T\b/.test(e.getAttribute("data-title") ?? ""))
+        .map((e) => Math.round(Number(e.getAttribute("data-y")))),
+    ),
+  ]);
+  expect(levels).toHaveLength(7);
+  await showAll.click();
+  await expect.poll(() => summaries.count()).toBeGreaterThan(0);
+  await expect(showAll).toHaveText("Show all");
 });
