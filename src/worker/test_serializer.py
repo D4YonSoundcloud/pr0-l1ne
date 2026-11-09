@@ -169,7 +169,8 @@ class ObjectTests(unittest.TestCase):
 
     def test_the_heap_is_capped(self):
         s = S.Serializer({}, {})
-        s.value([[[j] for j in range(S.MAX_ITEMS)] for _ in range(S.MAX_ITEMS)])  # 3,661 objects, 60 per list
+        # A list's window is 60 items, a dict's entries 500: 200 × 60 lists in reach.
+        s.value({i: [[j] for j in range(S.MAX_ITEMS)] for i in range(200)})
         # Past the cap, objects still appear (so arrows have somewhere to
         # point) but as "…" placeholders instead of full descriptions.
         placeholders = [o for o in s.heap.values() if o["kind"] == "opaque" and o["repr"] == "…"]

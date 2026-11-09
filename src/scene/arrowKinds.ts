@@ -15,6 +15,8 @@
  * it has one, and otherwise by the order the links are reached from the
  * variables.
  */
+
+import { heapIds } from "../trace/heapStore";
 import type { HeapObject, Step, Value } from "../trace/types";
 
 export type LinkKind = "ref" | "tree" | "next" | "back" | "cycle";
@@ -70,7 +72,7 @@ export function linkKinds(step: Step): (from: string, to: string) => LinkKind {
   const roots: string[] = [];
   for (const frame of [...step.stack, ...(step.suspended ?? [])])
     for (const [, value] of frame.locals) if (value.kind === "ref") roots.push(value.id);
-  roots.push(...Object.keys(heap));
+  roots.push(...heapIds(heap));
   for (const root of roots) {
     if (state.has(root) || !heap[root]) continue;
     const stack: { id: string; next: number }[] = [{ id: root, next: 0 }];

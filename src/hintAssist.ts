@@ -9,6 +9,8 @@
  * numbers, its classes and their links) comes from the last run's trace
  * (hintContext), so suggestions use the program's real names.
  */
+
+import { heapValues } from "./trace/heapStore";
 import { KEYWORDS, parseBound } from "./trace/hints";
 import { GRAPH_OPTIONS, type HeapObject, type Trace, type Value } from "./trace/types";
 
@@ -48,7 +50,7 @@ export function hintContext(trace: Trace): HintContext {
     }
     if (seen.has(step.heap)) continue; // the same record as a step before
     seen.add(step.heap);
-    for (const obj of Object.values(step.heap)) {
+    for (const obj of heapValues(step.heap)) {
       if (obj.kind !== "object" || seen.has(obj)) continue;
       seen.add(obj);
       const fields = fieldsOf.get(obj.typeName) ?? new Set<string>();

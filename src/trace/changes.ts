@@ -11,6 +11,7 @@
  * moving along isn't a change.
  */
 import { slotsOf, valueKey } from "./diff";
+import { heapEntries } from "./heapStore";
 import type { ValueTarget } from "./history";
 import { type Frame, type HeapObject, liveFrames, type Step, type Value } from "./types";
 
@@ -77,7 +78,7 @@ export function stepChanges(prev: Step | undefined, step: Step, max = MAX_CHANGE
 
   // What's inside objects, by the shortest name each has from a variable.
   const names = objectNames(step, orderFrames(frames, running));
-  for (const [id, obj] of Object.entries(step.heap)) {
+  for (const [id, obj] of heapEntries(step.heap)) {
     const old = prev.heap[id];
     if (!old || old.kind !== obj.kind) continue;
     const name = names.get(id) ?? obj.typeName;

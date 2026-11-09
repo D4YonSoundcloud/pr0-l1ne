@@ -8,6 +8,7 @@
  * turning around while the nodes stay put.
  */
 import { valueKey } from "./diff";
+import { heapValues } from "./heapStore";
 import type { HeapObject, LabelHint, LinkedHint, Value } from "./types";
 
 /** The parts of a loop row this module needs. */
@@ -276,7 +277,7 @@ function countIndegree(row: RowSnapshot, type: string, links: string[]): number 
 
 function nodesOfType(row: RowSnapshot, type: string): [string, [string, Value][]][] {
   return kept(row, `nodes|${type}`, () =>
-    Object.values(row.heap)
+    heapValues(row.heap)
       .filter((obj) => typeOf(obj) === type)
       .map((obj): [string, [string, Value][]] => [obj.id, fieldsOf(obj)!]),
   );

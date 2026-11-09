@@ -26,11 +26,13 @@ import sys
 import time
 import warnings
 from collections.abc import Callable
+from functools import partial
 from itertools import chain
-from types import CodeType, FrameType
+from types import BuiltinMethodType, CodeType, FrameType, MethodType, MethodWrapperType
 from typing import Any
 
 from analysis import USER_FILENAME, analyze, collect_hints, last_user_line
+from marks import add_marks, helpers
 from policy import SamplingPolicy, load_policy
 from sampling import RECORD, LoopLengths, Sampler, user_frames
 from serialize import (
@@ -38,6 +40,7 @@ from serialize import (
     MAX_ITEMS,
     MAX_OBJECTS,
     PRIMITIVE_TYPES,
+    MarksView,
     Serializer,
     is_hidden_name,
     keeps_nothing_alive,
@@ -72,6 +75,11 @@ warnings.filterwarnings("ignore", message="assigning None to unbound local", cat
 CLOCK_EVERY = 1000  # events between checks of the clock
 REPORT_EVERY = 0.25  # seconds between progress reports (run_trace_streaming)
 PIECE_EVERY = 0.25  # seconds between the pieces of the trace sent with them (small: each is one task for the page)
+CHECK_EVERY = 500  # recorded steps between the in-run checks of marks (as the JavaScript tracer's)
+MAX_MARKED = 200_000  # marks kept before those of objects never seen are dropped
+# A callee marked (push = xs.append; push(1)) is also a mark on what it's bound to.
+BOUND = (MethodType, BuiltinMethodType, MethodWrapperType)
+BOUND_OR_PARTIAL = frozenset((*BOUND, partial))
 
 
 class StepLimitExceeded(BaseException):
@@ -90,8 +98,27 @@ class Tracer:
         max_seconds: float,
         sampling: SamplingPolicy,
         report: Callable[[str, str], None] | None = None,
+        marks: bool = True,
+        check_every: int = CHECK_EVERY,
     ) -> None:
         self.source = source
+        # Marks (marks.py): read only the objects the program may have written to.
+        # Off for code they can't follow, and for the rest of a run the in-run
+        # check finds a write they missed in.
+        self.marks_on = marks
+        self.check_every = max(1, check_every)
+        self.serialized = 0  # steps serialized: the check comes every check_every
+        self.self_check: str | None = None  # what the check found (Trace.selfCheck)
+        # What the rewritten program noted it may write to, in order (its helper is
+        # this list's append), and where each frame's notes start: a frame's notes
+        # are done when it next has an event (its statement finished).
+        self.recent: list[Any] = []
+        self.starts: dict[FrameType, int] = {}
+        self.parked: dict[FrameType, list[Any]] = {}  # notes of statements paused at a yield or await
+        self.synced = 0  # recent's first entries that are counted in `pending`
+        self.marked: set[int] = set()  # ids written to since they were read
+        self.pending: dict[int, int] = {}  # ids in recent, not yet done: kept marked
+        self.untrusted: set[int] = set()  # ids held by another library's objects
         # Progress, and the trace a piece at a time, to the page (see `report_progress`).
         self.report = report
         self.result: dict[str, Any] | None = None
@@ -149,6 +176,8 @@ class Tracer:
         """sys.settrace's hook: called on every event in the program's own code."""
         if frame.f_code.co_filename != USER_FILENAME:
             return None  # don't trace library code
+        if self.recent or event == "call":
+            self.settle_marks(frame, event)
         fid = self.frame_id(frame)
         prev_line = self.sampler.last_line.get(fid)
         kind = self.classify(frame, fid, event, arg)
@@ -163,6 +192,124 @@ class Tracer:
             if kind in ("return", "yield", "await"):
                 self.sampler.left(fid)
         return self.trace
+
+    # -- marks -------------------------------------------------------------
+
+    def settle_marks(self, frame: FrameType, event: str) -> None:
+        """A frame's notes of what it may write to (marks.py) are done when it next
+        has an event: they're marks from then on, until the object is read."""
+        recent = self.recent
+        if not self.marks_on:
+            recent.clear()  # turned off part-way: the program's notes are dropped
+            return
+        if event == "call":
+            self.starts[frame] = len(recent)  # (a generator resuming, too)
+            parked = self.parked.pop(frame, None)
+            if parked:
+                # Resuming part-way through a statement: its notes are this frame's again.
+                self.count_pending(parked, -1)
+                recent.extend(parked)
+            return
+        start = self.starts.get(frame)
+        if event == "return":
+            self.starts.pop(frame, None)
+        if start is not None and len(recent) > start:
+            self.finish_notes(frame, event, start)
+
+    def finish_notes(self, frame: FrameType, event: str, start: int) -> None:
+        """The frame's notes from `start` on: marks now (or parked, if it's pausing)."""
+        recent = self.recent
+        done = recent[start:]
+        del recent[start:]
+        counted = self.synced - start  # of these, the first ones counted as pending
+        if event == "return" and self.pausing(frame):
+            # Paused part-way through a statement (self.out.append(await f())): the write
+            # lands when it resumes, so its notes stay marked until then.
+            self.count_pending(done[max(counted, 0) :], 1)
+            self.parked[frame] = done
+            if counted > 0:
+                self.synced = start
+            return
+        if counted <= 0 and BOUND_OR_PARTIAL.isdisjoint(map(type, done)):
+            # Most often: plain objects, none of them counted yet.
+            self.marked.update(map(id, done))
+            return
+        pending, marked = self.pending, self.marked
+        for i, obj in enumerate(done):
+            for key in self.ids_of(obj):
+                marked.add(key)
+                if i < counted:
+                    n = pending[key] - 1
+                    if n:
+                        pending[key] = n
+                    else:
+                        del pending[key]
+        if counted > 0:
+            self.synced = start
+
+    def pausing(self, frame: FrameType) -> bool:
+        """Is this "return" a generator or coroutine pausing at a yield or await (see returned)?"""
+        code = frame.f_code
+        if not code.co_flags & CO_PAUSABLE or frame.f_lasti < 0 or code.co_code[frame.f_lasti] not in PAUSE_OPS:
+            return False
+        return self.frame_ids.get(id(frame)) not in self.unwinding
+
+    def count_pending(self, notes: list[Any], by: int) -> None:
+        """Count notes as pending (by 1), or not any more (by -1)."""
+        pending = self.pending
+        for obj in notes:
+            for key in self.ids_of(obj):
+                n = pending.get(key, 0) + by
+                if n:
+                    pending[key] = n
+                else:
+                    del pending[key]
+
+    @staticmethod
+    def ids_of(obj: Any) -> tuple[int, ...]:
+        """The ids a note marks: the object's, and for a bound method or a partial,
+        what it's bound to (calling it may write to that)."""
+        kind = type(obj)
+        if kind in BOUND:
+            return (id(obj), id(obj.__self__))
+        if kind is partial:
+            parts = [id(obj), *Tracer.ids_of(obj.func)]
+            parts.extend(map(id, obj.args))
+            parts.extend(map(id, obj.keywords.values()))
+            return tuple(parts)
+        return (id(obj),)
+
+    def marks_view(self, verify: bool) -> MarksView:
+        """Marks as a step reads them: the notes so far of statements not done yet count as marks too."""
+        pending = self.pending
+        for obj in self.recent[self.synced :]:
+            for key in self.ids_of(obj):
+                pending[key] = pending.get(key, 0) + 1
+        self.synced = len(self.recent)
+        if len(self.marked) > MAX_MARKED:
+            # Marks on objects never read (a temporary, a number) only make the set big.
+            self.marked.intersection_update(self.object_ids)
+        return MarksView(self.marked, self.pending, self.untrusted, verify)
+
+    def missed_writes(self, serializer: Serializer, step: Step) -> None:
+        """The in-run check found objects marks said weren't written to that had
+        changed: a write the marks missed (a tracer bug). This step is right (the
+        check read everything); the rest of the run reads every object, as without
+        marks, and the trace says what was found (Trace.selfCheck), for the page to report."""
+        self.marks_on = False
+        if self.self_check:
+            return
+        ids = serializer.missed
+        kinds = [
+            "%s (%s)" % (oid, serializer.heap[oid].get("typeName") or serializer.heap[oid]["kind"]) for oid in ids[:3]
+        ]
+        self.self_check = "marks missed a write to %s by step %d, line %d: %s%s" % (
+            "an object" if len(ids) == 1 else "%d objects" % len(ids),
+            len(self.log.steps) + 1,
+            step["line"],
+            ", ".join(kinds),
+            ", …" if len(ids) > 3 else "",
+        )
 
     def classify(self, frame: FrameType, fid: str, event: str, arg: Any) -> str | None:
         """What the event is in the program's terms: a generator resuming, a coroutine
@@ -291,7 +438,15 @@ class Tracer:
             raise StepLimitExceeded()
         self.report_progress(now, frame.f_lineno)
         frames = user_frames(frame)
-        serializer = Serializer(self.keepalive, self.object_ids, focus=self.focus_of(frames), cache=self.heap_cache)
+        marks = None
+        if self.marks_on:
+            # Every check_every steps, and the program's last, every object is read anyway and checked against marks.
+            self.serialized += 1
+            last = event == "return" and frame.f_code.co_name == "<module>"
+            marks = self.marks_view(self.serialized % self.check_every == 0 or last)
+        serializer = Serializer(
+            self.keepalive, self.object_ids, focus=self.focus_of(frames), cache=self.heap_cache, marks=marks
+        )
         # Serializing follows references depth first: a long chain of objects
         # needs more room than the program's own recursion limit leaves.
         limit = sys.getrecursionlimit()
@@ -324,6 +479,8 @@ class Tracer:
             exc_type, exc_value, _ = arg
             step["exception"] = {"type": exc_type.__name__, "message": str(exc_value)}
         self.log.considered += 1
+        if serializer.missed:
+            self.missed_writes(serializer, step)
         if into is not None:
             into.append(step)
         else:
@@ -439,6 +596,8 @@ class Tracer:
         result["counts"] = self.counts
         if self.sampler.sampled:
             result["sampled"] = True
+        if self.self_check:
+            result["selfCheck"] = self.self_check
         self.log.finish()
         return result
 
@@ -461,6 +620,15 @@ class Tracer:
             except Exception:  # a guess about the code's shape must never stop a run
                 pass
             tree = LoopLengths().visit(ast.parse(self.source, USER_FILENAME))
+            if self.marks_on:
+                marked, unsafe = add_marks(tree)
+                if unsafe is None:
+                    try:
+                        return compile(marked, USER_FILENAME, "exec")
+                    except SyntaxError:  # a rewrite Python won't take: run it as written, without marks
+                        pass
+                self.marks_on = False
+                tree = LoopLengths().visit(ast.parse(self.source, USER_FILENAME))
             return compile(ast.fix_missing_locations(tree), USER_FILENAME, "exec")
         except SyntaxError as exc:
             result["error"] = {"type": "SyntaxError", "message": exc.msg or str(exc), "line": exc.lineno}
@@ -477,6 +645,7 @@ class Tracer:
             "input": no_input,
             "print": self.make_print(),
             "__viz_len__": self.sampler.loop_length,
+            **helpers(self.recent),
         }
         old_stdout = sys.stdout
         sys.stdout = self.stdout
@@ -526,19 +695,22 @@ def run_trace(
     max_steps: int = 2000,
     max_seconds: float | None = None,
     sampling: str | SamplingPolicy | None = None,
+    marks: bool = True,
+    check_every: int = CHECK_EVERY,
 ) -> str:
     """Entry point called from the Pyodide worker. Returns a JSON string.
 
     The worker passes the run's time limit and sampling rules (sampling as
     JSON). Left out, as from the CLI or a test, they're the policy in
     fixtures/policy.json: how long a Run may take, and how it samples.
+    `marks` and `check_every` are for tests (marks.py, test_marks.py).
     """
     if max_seconds is None or sampling is None:
         policy = load_policy()
         max_seconds = policy["runSeconds"] if max_seconds is None else max_seconds
         sampling = policy["sampling"] if sampling is None else sampling
     rules: SamplingPolicy = json.loads(sampling) if isinstance(sampling, str) else sampling
-    tracer = Tracer(source, int(max_steps), float(max_seconds), rules)
+    tracer = Tracer(source, int(max_steps), float(max_seconds), rules, marks=marks, check_every=check_every)
     result = tracer.run()
     tracer.keepalive.clear()
     return json.dumps(result)

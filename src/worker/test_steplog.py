@@ -20,15 +20,19 @@ class StepLogTests(unittest.TestCase):
         self.assertEqual([s["heapIds"] for s in log.steps], [["o1"], ["o1", "o2"], ["o2", "o1"]])
 
     def test_the_memory_budget_counts_each_changed_steps_objects(self):
-        log = StepLog(100, max_heap_entries=5)
-        a, b = {"kind": "list", "items": []}, {"kind": "dict", "entries": []}
-        log.commit(step({"o1": a, "o2": b}))  # a new record: 2 entries
-        log.commit(step({"o1": a, "o2": b}))  # the same: kept as the step before's
-        self.assertEqual(log.heap_entries, 2)
+        log = StepLog(100, max_heap_entries=12)
+        a, b = {"kind": "list", "items": []}, {"kind": "dict", "entries": [[1, 2]]}
+        # Both sent: a is an entry (and one for its id), b an entry and its key and value (and its id),
+        # and the ids, a full list for every 64 versions: 2 + 4 + 1.
+        log.commit(step({"o1": a, "o2": b}))
+        log.commit(step({"o1": a, "o2": b}))  # nothing changed: kept as the step before's
+        self.assertEqual(log.heap_entries, 7)
         self.assertFalse(log.full())
-        log.commit(step({"o1": {"kind": "list", "items": [1]}, "o2": b}))
+        log.commit(step({"o1": {"kind": "list", "items": [1]}, "o2": b}))  # only o1 sent: 3 + 1
+        self.assertEqual(log.heap_entries, 11)
+        self.assertFalse(log.full())
         log.commit(step({"o1": {"kind": "list", "items": [2]}, "o2": b}))
-        self.assertEqual(log.heap_entries, 6)
+        self.assertEqual(log.heap_entries, 15)
         self.assertTrue(log.out_of_memory())
         self.assertTrue(log.full())
 

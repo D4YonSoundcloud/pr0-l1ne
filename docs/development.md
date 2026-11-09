@@ -84,7 +84,7 @@ The trace (`src/trace/types.ts`) is what the tracers and the rest of the app agr
 
 `npm run test:coverage` reports which lines the tests run. Use it as a map of untested code, not a score to chase.
 
-Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_hooks.py`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. `test_tracer.py` traces whole programs end to end. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py`, `test_virtual_asyncio.py` and `test_measure.py`.
+Python pauses all other tracing and monitoring while a trace hook runs, so a coverage tool never sees code that runs inside the tracer's own hook. So the tracer keeps as little as possible there: `Tracer.trace()` hands each event to methods that the tests also call directly, on frames of a program's own code (`test_hooks.py`), and sampling (`sampling.py`) is driven by hand in `test_sampling.py`. Only `trace()` itself shows as "missing"; every trace runs it, and the golden traces check what it records. `test_tracer.py` traces whole programs end to end. Each of the other Python modules has its own test file: `test_analysis.py`, `test_shape.py`, `test_serializer.py`, `test_sizes.py`, `test_steplog.py`, `test_virtual_asyncio.py`, `test_measure.py` and `test_marks.py` (marks held to reading everything: the write catalogue, traced with marks and without, and the in-run check).
 
 The JavaScript tracer has no such blind spot, so its modules are tested both end to end (`trace.test.ts`, `async.test.ts`) and directly (`inspector.test.ts`, `sampling.test.ts`, `instrument.test.ts`, `cost.test.ts`). The cost tables in `src/js/costs/` are tested entry by entry: `checkTable()` in `tableTests.ts` writes a call to each method and checks the estimate does what the entry says (a loop, a linear or n log n operation, a copy, growth, a result as long as its receiver). A new method goes in its table and is tested from there. Every file in `src/js/` has at least 80% of its branches covered.
 
@@ -321,7 +321,8 @@ pr0-l1ne/
     │   ├── measurement.ts      What a Measure run reports, and formatting it
     │   ├── growth.ts           Growth runs: size hints, the ladder, fitting, the code's estimate
     │   ├── growth.test.ts      Growth tests
-    │   ├── delta.ts            Rebuilding heaps sent as deltas; deep equality
+    │   ├── delta.ts            Rebuilding steps sent as deltas; deep equality
+    │   ├── heapStore.ts        Heaps kept as what changed: each step's heap a view of its version
     │   ├── stream.ts           A streamed trace put back together from its pieces, and checked as they arrive
     │   ├── summary.ts          What the page knows of a trace (TraceInfo): lines, labels, output, banners, estimate
     │   ├── describe.ts         A step's label: "Ran line 2, next is line 3"
@@ -489,6 +490,7 @@ pr0-l1ne/
         ├── shape_loops.py      ...how many passes a while loop makes
         ├── shape_costs.py      ...what expressions and calls cost
         ├── serialize.py        Python values -> trace values and heap objects
+        ├── marks.py            Marks: the program rewritten to note what it may write to, so only that is read
         ├── sizes.py            Memory sizes, as a 64-bit Python reports them
         ├── test_*.py           Python tests, one file per module
         ├── measure.py          Measure for Python: run at full size with counters

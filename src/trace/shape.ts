@@ -45,7 +45,7 @@ export interface TraceShape {
 }
 
 export function shapeOf(trace: Trace, options: { ignore?: string[] } = {}): TraceShape {
-  const full = expandHeaps(structuredClone(trace));
+  const full = trace.heapDelta ? expandHeaps(structuredClone(trace)) : trace; // (expanded, its heaps are views: read only, and not clonable)
   const ignore = new Set(options.ignore ?? []);
   const last = full.steps[full.steps.length - 1];
 

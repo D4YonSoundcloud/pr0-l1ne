@@ -14,6 +14,7 @@ import { emptyContext, type HintContext, hintContext } from "../hintAssist";
 import type { TraceStats } from "../perf";
 import { type Estimate, estimateComplexity } from "./complexity";
 import { describe } from "./describe";
+import { heapSize } from "./heapStore";
 import type { Step, Trace } from "./types";
 
 export interface TraceInfo {
@@ -74,8 +75,7 @@ export function summarize(raw: Trace, prepared: Trace): TraceInfo {
     skipped.push(step.skipped ?? 0);
     if (step.heap !== counted) {
       counted = step.heap;
-      size = 0;
-      for (const _ in step.heap) size++;
+      size = heapSize(step.heap);
     }
     maxHeap = Math.max(maxHeap, size);
     heapSum += size;

@@ -5,13 +5,15 @@
  * `heapIdsPart` [first ids kept, last ids kept, the ids between]. A
  * frame that didn't change since the step before comes as just its id and
  * `same` (Python's tracer: a deep call stack is otherwise most of a
- * trace). Rebuilt here into full heaps and stacks that share what didn't
- * change, so a long trace costs memory for what changes rather than for
- * every snapshot.
+ * trace). Rebuilt here into full stacks that share what didn't change, and
+ * heaps kept as what changed (trace/heapStore.ts: each step's heap a view
+ * of its version), so a long trace costs memory for what changes rather
+ * than for every snapshot.
  *
  * Objects are shared between steps, so nothing may change a trace's
  * objects in place (nothing does: renderers and applyHints only read).
  */
+import { HeapStore } from "./heapStore";
 import type { Frame, HeapObject, Step, Trace } from "./types";
 
 /** A frame as sent: whole, or only its id when it's the same as in the step before. */
@@ -37,9 +39,8 @@ export function expandHeaps(trace: Trace): Trace {
  * would change the heap's prototype instead of adding an object).
  */
 export class HeapExpander {
-  /** Every object's last version, from whichever step sent it. */
-  private readonly known = new Map<string, HeapObject>();
-  private prevIds: string[] = [];
+  /** The heaps so far, as what changed. */
+  private readonly store = new HeapStore();
   private prevHeap: Record<string, HeapObject> | null = null;
   private prevFrames = new Map<string, Frame>();
 
@@ -65,25 +66,19 @@ export class HeapExpander {
 
     // The ids: as sent, the same as before, or a change to the step before's.
     const part = step.heapIdsPart;
-    if (part !== undefined && (!Array.isArray(part) || !Array.isArray(part[2])))
+    if (
+      part !== undefined &&
+      (!Array.isArray(part) || !Array.isArray(part[2]) || !Number.isInteger(part[0]) || !Number.isInteger(part[1]))
+    )
       throw new Error("a step's heap ids aren't a list");
-    const ids = step.sameIds
-      ? this.prevIds
-      : part
-        ? [...this.prevIds.slice(0, part[0]), ...part[2], ...this.prevIds.slice(this.prevIds.length - part[1])]
-        : step.heapIds;
     const changed = step.heap;
-    for (const id in changed) {
-      if (id === "__proto__") throw new Error('it has a "__proto__" key');
-      this.known.set(id, changed[id]);
-    }
-    if (!ids) {
-      // A full heap.
-      this.prevIds = Object.keys(step.heap);
+    for (const id in changed) if (id === "__proto__") throw new Error('it has a "__proto__" key');
+    if (!step.sameIds && !part && step.heapIds === undefined) {
+      // A full heap (a trace not sent as deltas): as it is.
       this.prevHeap = step.heap;
       return step;
     }
-    if (!Array.isArray(ids)) throw new Error("a step's heap ids aren't a list");
+    if (!step.sameIds && !part && !Array.isArray(step.heapIds)) throw new Error("a step's heap ids aren't a list");
     // The same ids and nothing sent: the step before's heap itself (trace/graph.ts keeps what it worked out by heap).
     let sentAny = false;
     for (const _ in changed) {
@@ -95,18 +90,15 @@ export class HeapExpander {
       delete step.sameIds;
       return step;
     }
-    const heap: Record<string, HeapObject> = {};
-    for (const id of ids) {
-      if (id === "__proto__") throw new Error('it has a "__proto__" key');
-      const obj = this.known.get(id);
-      if (obj) heap[id] = obj;
-    }
+    const heap = this.store.add(
+      step.sameIds ? { same: true } : part ? { part } : { full: step.heapIds as string[] },
+      changed,
+    );
     step.heap = heap;
     this.prevHeap = heap;
     delete step.heapIds;
     delete step.sameIds;
     delete step.heapIdsPart;
-    this.prevIds = ids;
     return step;
   }
 }

@@ -34,6 +34,8 @@
  *   layout.roundtrip  from asking the worker to its answer, waiting included
  *   layout.ahead    a step asked for ahead while playing (a count); layout.ahead.used, one that was the answer
  */
+import { type Heap, heapSize } from "./trace/heapStore";
+
 export const perf = {
   on: false,
   /** Draw everything in full at every zoom (?nolod): to measure what levels of detail save. */
@@ -114,7 +116,7 @@ export function traceStats(trace: {
   for (const step of trace.steps) {
     if (step.heap !== counted) {
       counted = step.heap;
-      n = Object.keys(step.heap).length;
+      n = heapSize(step.heap as Heap);
     }
     sum += n;
     if (n > max) max = n;

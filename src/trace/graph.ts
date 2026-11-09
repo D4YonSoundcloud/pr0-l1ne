@@ -20,6 +20,7 @@
  */
 
 import { computeLayout, type GraphLayout } from "./graphLayout";
+import { heapValues } from "./heapStore";
 import { fieldsOf } from "./linked";
 import type { GraphHint, GraphOption, HeapObject, Step, Trace, Value } from "./types";
 import { finishNow, stepOf, type Work } from "./work";
@@ -315,18 +316,40 @@ function linkClasses(heap: Record<string, HeapObject>): Map<string, string[]> {
 /**
  * An object's fields that hold a list or dict of objects of its own class,
  * kept with the object while what those fields hold is the same (objects
- * are shared between steps until they change).
+ * are shared between steps until they change). Only the fields that held a
+ * container are looked at again: an id is one object, of one kind, for a
+ * whole run, so a field holding another node (a tree's left and right)
+ * can't start holding a list without the object changing.
  */
-const objectLinks = new WeakMap<HeapObject, { inners: (HeapObject | undefined)[]; fields: string[] }>();
+const objectLinks = new WeakMap<
+  HeapObject,
+  { at: number[]; inners: (HeapObject | undefined)[]; fields: string[]; heap: Record<string, HeapObject> }
+>();
 
 function linkFields(obj: Extract<HeapObject, { kind: "object" }>, heap: Record<string, HeapObject>): string[] {
-  const inners = obj.fields.map(([, value]) => (value.kind === "ref" ? heap[value.id] : undefined));
   const known = objectLinks.get(obj);
-  if (known && sameObjects(known.inners, inners)) return known.fields;
+  if (known) {
+    if (known.heap === heap || known.at.length === 0) return known.fields;
+    let same = true;
+    for (let i = 0; i < known.at.length && same; i++) {
+      const value = obj.fields[known.at[i]][1];
+      same = value.kind === "ref" && heap[value.id] === known.inners[i];
+    }
+    if (same) {
+      known.heap = heap;
+      return known.fields;
+    }
+  }
   const fields: string[] = [];
-  obj.fields.forEach(([field], i) => {
-    const inner = inners[i];
+  const at: number[] = [];
+  const inners: (HeapObject | undefined)[] = [];
+  obj.fields.forEach(([field, value], i) => {
+    const inner = value.kind === "ref" ? heap[value.id] : undefined;
     let links = false;
+    if (isSeq(inner) || inner?.kind === "dict") {
+      at.push(i);
+      inners.push(inner);
+    }
     if (isSeq(inner) && inner.items.length) {
       links = inner.items.every((item) => item.kind === "ref" && typeOf(heap[item.id]) === obj.typeName);
     } else if (inner?.kind === "dict" && inner.entries.length) {
@@ -336,7 +359,7 @@ function linkFields(obj: Extract<HeapObject, { kind: "object" }>, heap: Record<s
     }
     if (links) fields.push(field);
   });
-  objectLinks.set(obj, { inners, fields });
+  objectLinks.set(obj, { at, inners, fields, heap });
   return fields;
 }
 
@@ -403,7 +426,7 @@ function sameHeap(heap: Record<string, HeapObject>): HeapFacts {
   const known = lastHeap;
   if (known?.heap === heap) return known;
   // Each object knows its id: the same objects in the same order are the same heap.
-  const objects = Object.values(heap);
+  const objects = heapValues(heap);
   if (known && sameObjects(known.objects, objects)) {
     known.heap = heap;
     return known;
@@ -617,7 +640,7 @@ export function findGraphs(trace: Trace, scopes: Scope[], heap: Record<string, H
     const found = lookup(hint.target);
     if (found && found[1].kind === "ref" && heap[found[1].id]) {
       add(containerGraph(heap[found[1].id], heap, found[0], hint));
-    } else if (Object.values(heap).some((obj) => typeOf(obj) === hint.target)) {
+    } else if (heapValues(heap).some((obj) => typeOf(obj) === hint.target)) {
       add(objectGraph(heap, hint.target, null, hint)); // a class, links found automatically
     }
   }

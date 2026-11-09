@@ -3,6 +3,7 @@
  * them ("container in container"), and which stay boxes of their own.
  */
 import { slotsOf } from "../trace/diff";
+import { heapEntries, heapValues } from "../trace/heapStore";
 import { type HeapObject, liveFrames, type Step, type Value } from "../trace/types";
 
 /** Nesting deeper than this switches back to arrows, so boxes stay readable. */
@@ -31,7 +32,7 @@ export function incomingCounts(step: Step): Map<string, number> {
   };
   for (const frame of liveFrames(step)) for (const [, value] of frame.locals) count(value);
   count(step.returnValue);
-  for (const obj of Object.values(step.heap)) for (const value of valuesOf(obj)) count(value);
+  for (const obj of heapValues(step.heap)) for (const value of valuesOf(obj)) count(value);
   return incoming;
 }
 
@@ -60,7 +61,7 @@ export function chooseNested(step: Step): Set<string> {
   for (const frame of liveFrames(step))
     for (const [, value] of frame.locals) if (value.kind === "ref") tryNest(value.id, 1);
   if (step.returnValue?.kind === "ref") tryNest(step.returnValue.id, 1);
-  for (const [id, obj] of Object.entries(step.heap)) {
+  for (const [id, obj] of heapEntries(step.heap)) {
     if (nested.has(id)) continue;
     visited.add(id);
     for (const child of nestableChildren(obj)) tryNest(child, 1);

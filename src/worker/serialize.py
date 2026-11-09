@@ -13,7 +13,7 @@ import operator
 import types
 import weakref
 from collections import deque
-from itertools import chain, islice
+from itertools import chain, islice, repeat
 from typing import Any
 
 from sizes import list_capacity, size64
@@ -24,7 +24,7 @@ MAX_ITEMS = 60  # items shown of a list or tuple (a window around its index vari
 # The same as the JavaScript tracer's (src/js/inspector.ts MAX_ENTRIES).
 MAX_ENTRIES = 500
 MAX_REPR = 48  # characters shown for a primitive before truncating
-MAX_OBJECTS = 2000  # heap objects serialized per step
+MAX_OBJECTS = 10_000  # heap objects serialized per step (as the JavaScript tracer's, src/js/inspector.ts)
 
 PRIMITIVE_TYPES = (bool, int, float, complex, str, bytes, type(None))
 SEQUENCE_TYPES = (list, tuple, set, frozenset, deque)
@@ -132,23 +132,91 @@ def slots_of(v: Any) -> tuple | None:
     holds (and its names), after a header of its length or class and size, to tell
     cheaply whether it changed since the last step.
     None for what isn't worth it, or can't be told this way: long lists (whose
-    window follows the index variables), sets (whose order depends on ids),
-    generators (whose state isn't in their slots)."""
+    window follows the index variables), sets of objects (whose order is by the
+    ids the objects get, see stable_order), generators (whose state isn't in their slots).
+    What it returns may hold a generator: it's kept to compare with only if it
+    doesn't (keeps_nothing_alive, checked when it's kept, not every step)."""
     kind = type(v)
     # The header: what describe() shows that isn't an object held (its size changes
-    # with a list's room, or an instance's dict as its class gains attributes).
+    # with a list's room, or an instance's class).
     if kind is list or kind is tuple or kind is deque:
         slots = ((len(v), size64(v)), *v) if len(v) <= MAX_ITEMS else None
     elif kind is dict:
         slots = ((len(v), size64(v)), *chain.from_iterable(v.items())) if len(v) <= MAX_ENTRIES else None
+    elif kind is set or kind is frozenset:
+        # Of primitives only (a set of objects is shown in the order they got their ids),
+        # in Python's order, which is the same while the set is.
+        if len(v) > MAX_ENTRIES:
+            return None
+        slots = ((len(v), size64(v)), *v)
+        if not all(map(isinstance, islice(slots, 1, None), repeat(PRIMITIVE_TYPES))):
+            return None
     elif isinstance(v, (SEQUENCE_TYPES, dict, PAUSABLE_OBJECTS, types.ModuleType, type)) or callable(v):
         return None
     else:
         attrs = getattr(v, "__dict__", None)
         if type(attrs) is not dict or getattr(type(v), "__slots__", None):
             return None
-        slots = ((kind, size64(v), size64(attrs)), *chain.from_iterable(attrs.items()))
-    return slots if slots is None or keeps_nothing_alive(slots) else None
+        slots = ((kind, size64(v)), *chain.from_iterable(attrs.items()))
+    return slots
+
+
+ATTRS_SIZES: dict[int, int] = {}
+
+
+def attrs_size(attrs: dict) -> int:
+    """An instance's attribute dict's size: a dict's, with as many names put in one
+    at a time. Not getsizeof of the dict itself: instances of a class share their
+    names' table, and its share of that is counted in each one's size, so it
+    changes as other instances are made (and as the dict is first looked at),
+    though nothing in the object did."""
+    n = len(attrs)
+    size = ATTRS_SIZES.get(n)
+    if size is None:
+        names: dict[str, None] = {}
+        for i in range(n):
+            names["a%d" % i] = None
+        size = ATTRS_SIZES[n] = size64(names) or 0
+    return size
+
+
+def held_objects(slots: tuple) -> tuple:
+    """What a slots_of tuple holds that's an object (not a primitive): what's visited
+    when its object is unchanged (the first slot is the header)."""
+    return tuple(item for item in islice(slots, 1, None) if not isinstance(item, PRIMITIVE_TYPES))
+
+
+# Types whose objects change only by what marks see (marks.py): the builtin
+# containers kept by slots_of, and classes of the program's own (all their code
+# is rewritten). Another library's objects change themselves (a queue.Queue's
+# put appends to the deque it holds), so they, and what they hold, are always read.
+TRUSTED: dict[type, bool] = {list: True, tuple: True, dict: True, deque: True, set: True, frozenset: True}
+
+
+def trusted_type(cls: type) -> bool:
+    known = TRUSTED.get(cls)
+    if known is None:
+        known = TRUSTED[cls] = all(c is object or getattr(c, "__module__", None) == "__main__" for c in cls.__mro__)
+    return known
+
+
+KEPT = object()  # read_marked: the object is as it was when last read
+
+
+class MarksView:
+    """What marks say (marks.py, Tracer): the ids of objects that may have been
+    written to since they were read (`marked`, and `pending`: written to by a
+    statement that isn't done yet, kept marked until it is), objects held by
+    another library's (`untrusted`, always read), and whether to read every
+    object anyway and check (`verify`)."""
+
+    __slots__ = ("marked", "pending", "untrusted", "verify")
+
+    def __init__(self, marked: set[int], pending: dict[int, int], untrusted: set[int], verify: bool) -> None:
+        self.marked = marked
+        self.pending = pending
+        self.untrusted = untrusted
+        self.verify = verify
 
 
 def keeps_nothing_alive(items: tuple) -> bool:
@@ -173,9 +241,14 @@ class Serializer:
         keepalive: dict[str, object],
         ids: dict[Any, Any],
         focus: dict[int, list[int]] | None = None,
-        cache: dict[str, tuple[tuple, HeapObject]] | None = None,
+        cache: dict[str, tuple[tuple, HeapObject, tuple]] | None = None,
+        marks: MarksView | None = None,
     ):
         self.cache = cache if cache is not None else {}
+        # Marks, to read only what may have been written to; None, every object is read.
+        self.marks = marks
+        # Objects marks said weren't written to that had changed (with verify): writes marks missed.
+        self.missed: list[str] = []
         self.heap: dict[str, HeapObject] = {}
         # Every object ever seen, kept alive for the run (see ref).
         self.keepalive = keepalive
@@ -211,20 +284,52 @@ class Serializer:
         # Reserve the slot before recursing so cycles terminate (None until
         # describe returns; nothing reads the heap in between).
         self.heap[oid] = None  # pyright: ignore[reportArgumentType]
-        slots = slots_of(v)
+        slots = slots_of(v) if self.marks is None else self.read_marked(v, oid)
+        if slots is KEPT:
+            return oid
         known = self.cache.get(oid) if slots is not None else None
         if known is not None and same_items(known[0], slots):  # pyright: ignore[reportArgumentType]
-            # Unchanged: the same heap object, and only what it holds visited.
-            self.heap[oid] = known[1]
-            # (The first slot is the header, not something it holds.)
-            for item in islice(slots, 1, None):  # pyright: ignore[reportArgumentType]
-                if not isinstance(item, PRIMITIVE_TYPES):
-                    self.value(item)
+            # Unchanged: the same heap object, and only the objects it holds visited.
+            self.keep(oid, known)
             return oid
-        self.heap[oid] = self.describe(v, oid)
-        if slots is not None:
-            self.cache[oid] = (slots, self.heap[oid])
+        made = self.heap[oid] = self.describe(v, oid)
+        if slots is not None and keeps_nothing_alive(slots):
+            self.cache[oid] = (slots, made, held_objects(slots))
+        elif known is not None or (slots is None and oid in self.cache):
+            # It can't be kept this way now (a list grown past MAX_ITEMS: its window follows
+            # its index variables): what was kept from before goes, so it's never taken as unchanged.
+            del self.cache[oid]
         return oid
+
+    def read_marked(self, v: object, oid: str) -> Any:
+        """With marks: v's slots (slots_of), or KEPT when it can't have been written
+        to since it was read, and is taken as it was then, without reading it."""
+        marks = self.marks
+        assert marks is not None
+        key = id(v)
+        trusted = key not in marks.untrusted and trusted_type(type(v))
+        known = self.cache.get(oid)
+        if known is not None and trusted and key not in marks.marked and key not in marks.pending:
+            if not marks.verify:
+                self.keep(oid, known)
+                return KEPT
+            # The check: read it anyway. Changed, it's a write marks missed.
+            slots = slots_of(v)
+            if slots is None or not same_items(known[0], slots):
+                self.missed.append(oid)
+        else:
+            slots = slots_of(v)
+        marks.marked.discard(key)
+        if not trusted and slots is not None:
+            marks.untrusted.update(map(id, held_objects(slots)))
+        return slots
+
+    def keep(self, oid: str, known: tuple[tuple, HeapObject, tuple]) -> None:
+        """The heap object kept for oid, and the objects it held visited."""
+        self.heap[oid] = known[1]
+        ref = self.ref
+        for item in known[2]:
+            ref(item)
 
     def new_id(self, v: object) -> str:
         """The next id, for an object seen for the first time."""
@@ -379,7 +484,7 @@ class Serializer:
         size = size64(v)
         attrs = getattr(v, "__dict__", None)
         if size is not None and isinstance(attrs, dict):
-            size += size64(attrs) or 0
+            size += attrs_size(attrs)
         return {"kind": "object", "id": oid, "typeName": type(v).__name__, "fields": fields, "size": size}
 
     def instance_fields(self, v: object) -> list | None:

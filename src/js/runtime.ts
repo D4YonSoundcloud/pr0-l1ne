@@ -9,6 +9,7 @@
  */
 
 import { noteHeap, sameData } from "../trace/delta";
+import { CHECKPOINT_EVERY, keptEntries } from "../trace/heapStore";
 import type { SamplingPolicy } from "../trace/policy";
 import type { HeapObject, LoopContext, Step } from "../trace/types";
 import {
@@ -628,9 +629,12 @@ export class Runtime {
       this.lastHeap = heap;
       this.lastHeapIds = order;
       noteHeap(heap, order, changed);
-      // A new record: the page keeps one of every object for this step. Past the budget, the run
-      // stops at the next event, as when its steps run out.
-      this.heapEntries += order.length;
+      // What the page keeps of this step's heap (trace/heapStore.ts): the objects that changed, by what
+      // they hold, and its ids (a change, and a full list every CHECKPOINT_EVERY versions). Past the
+      // budget, the run stops at the next event, as when its steps run out.
+      let kept = Math.ceil(order.length / CHECKPOINT_EVERY);
+      for (const id of changed) kept += 1 + keptEntries(known.get(id)!);
+      this.heapEntries += kept;
       if (this.heapEntries > this.maxHeapEntries && !this.aborted) {
         this.aborted = true;
         this.stoppedBy = "memory";

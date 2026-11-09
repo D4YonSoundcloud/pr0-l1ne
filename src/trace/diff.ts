@@ -2,6 +2,8 @@
  * Compares two consecutive snapshots and reports what changed. The renderer
  * uses this to highlight cells and variables; it never inspects code.
  */
+
+import { heapEntries } from "./heapStore";
 import { type HeapObject, liveFrames, type Step, type Value } from "./types";
 
 /** A string that is equal for equal values, used for comparison and as map keys. */
@@ -94,7 +96,7 @@ export function diffSteps(prev: Step | undefined, next: Step): StepDiff {
     }
   }
 
-  for (const [id, obj] of Object.entries(next.heap)) {
+  for (const [id, obj] of heapEntries(next.heap)) {
     const before = prev.heap[id];
     if (!before) {
       diff.newObjects.add(id);

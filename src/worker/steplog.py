@@ -38,11 +38,29 @@ def ids_part(before: list[str] | None, ids: list[str]) -> list[Any] | None:
     return [head, tail, ids[head : m - tail]]
 
 
+# The page keeps a heap's ids in full this often, in versions (src/trace/heapStore.ts CHECKPOINT_EVERY).
+CHECKPOINT_EVERY = 64
+
+
+def kept_entries(obj: dict[str, Any]) -> int:
+    """What keeping a sent object costs the page, in heap entries: one, and one for each
+    thing it holds (an item, a field, an entry's key and its value). As
+    src/trace/heapStore.ts keptEntries counts it."""
+    strip = obj.get("strip")
+    return (
+        1
+        + len(obj.get("items") or ())
+        + 2 * len(obj.get("entries") or ())
+        + len(obj.get("fields") or ())
+        + -(-len(strip["values"]) // 8 if strip else 0)
+    )
+
+
 class StepLog:
     def __init__(self, max_steps: int, max_heap_entries: float = float("inf")) -> None:
         self.max_steps = max_steps
-        # Heap entries the page will keep (SamplingPolicy.maxHeapEntries in src/trace/policy.ts): each
-        # step whose heap changed is a record of every object there.
+        # Heap entries the page will keep (SamplingPolicy.maxHeapEntries in src/trace/policy.ts): the
+        # objects sent, by what they hold, and the ids' changes (src/trace/heapStore.ts).
         self.max_heap_entries = max_heap_entries
         self.heap_entries = 0
         self.steps: list[Step] = []
@@ -73,9 +91,12 @@ class StepLog:
         step["heap"] = {oid: obj for oid, obj in heap.items() if (p := known.get(oid)) is not obj and p != obj}
         known.update(step["heap"])
         ids = list(heap)
-        # The page builds a new record of every object for a step whose heap changed.
+        # The page keeps the objects that changed and, for a heap that did, its ids (a change, and a
+        # full list every CHECKPOINT_EVERY versions).
         if step["heap"] or ids != self.prev_ids:
-            self.heap_entries += len(ids)
+            self.heap_entries += -(-len(ids) // CHECKPOINT_EVERY) + sum(
+                1 + kept_entries(o) for o in step["heap"].values()
+            )
         if ids == self.prev_ids:
             step["sameIds"] = True
         else:

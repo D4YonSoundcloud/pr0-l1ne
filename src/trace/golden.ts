@@ -10,17 +10,18 @@
  * steps it touched.
  */
 import { expandHeaps, sameData } from "./delta";
+import { heapIds } from "./heapStore";
 import type { HeapObject, Trace } from "./types";
 
 export function goldenText(trace: Trace): string {
-  const full = expandHeaps(structuredClone(trace));
+  const full = trace.heapDelta ? expandHeaps(structuredClone(trace)) : trace; // (expanded, its heaps are views: read only, and not clonable)
   const { steps, ...meta } = full;
 
   let prev: Record<string, HeapObject> = {};
-  let prevOrder: string[] = [];
+  let prevOrder: readonly string[] = [];
   const lines = steps.map((step) => {
     const { heap, heapIds: _ignored, ...rest } = step;
-    const order = Object.keys(heap);
+    const order = heapIds(heap);
     const changed: Record<string, HeapObject> = {};
     for (const id of order) {
       if (!sameData(heap[id], prev[id])) changed[id] = heap[id];

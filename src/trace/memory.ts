@@ -19,6 +19,8 @@
  * header and slots) and its total (own plus everything it holds, with
  * anything reachable twice counted once).
  */
+
+import { heapEntries } from "./heapStore";
 import { type Frame, type HeapObject, liveFrames, type PrimValue, type Step, type Trace, type Value } from "./types";
 
 export type SizeModel = "python" | "textbook" | "v8";
@@ -294,7 +296,7 @@ export function stepSizes(step: Step, model: SizeModel): StepSizes {
   // Everything at this step, each object once.
   const everything = new Set<string>();
   let program = 0;
-  for (const [id, obj] of Object.entries(heap)) {
+  for (const [id, obj] of heapEntries(heap)) {
     everything.add(id);
     program += own(id) ?? 0;
     for (const v of valuesOf(obj)) if (v.kind === "prim") program += extra(v, obj);

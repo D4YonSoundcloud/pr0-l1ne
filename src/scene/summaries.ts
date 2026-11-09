@@ -23,6 +23,8 @@
  * in shows more, zooming out less. A structure the person expanded (by
  * clicking its summary) is drawn in full, by its key.
  */
+
+import { heapEntries, heapIds, heapValues } from "../trace/heapStore";
 import { fieldsOf, findLinkedTrack, linkedRow, MEMORY_MAX_NODES, treeDepths } from "../trace/linked";
 import { type Frame, type HeapObject, liveFrames, type Step, type Trace, type Value } from "../trace/types";
 import { valuesOf } from "./nesting";
@@ -156,7 +158,7 @@ export function summarize(
   // Whatever pointed into what a summary stands for points to the summary.
   const heap: Record<string, HeapObject> = {};
   const hidden = new Set(hiddenBy.keys());
-  for (const [id, obj] of Object.entries(step.heap)) {
+  for (const [id, obj] of heapEntries(step.heap)) {
     if (hidden.has(id)) continue;
     const own = replaced.get(id) ?? obj;
     heap[id] = refersTo(own, hidden) ? mapRefs(own, (to) => hiddenBy.get(to) ?? to) : own;
@@ -173,7 +175,7 @@ export function summarize(
     // outside the chain does (a doubly linked list's back links are the chain's own).
     const pred = new Map<string, string>();
     const otherRefs = new Map<string, number>();
-    for (const obj of Object.values(step.heap)) {
+    for (const obj of heapValues(step.heap)) {
       const own = ofType(obj.id);
       const inChain = new Set(own ? track.links.map((l) => linkOf(obj.id, l)).filter(ofType) : []);
       const next = own ? linkOf(obj.id, link) : null;
@@ -199,7 +201,7 @@ export function summarize(
       return at;
     };
     const done = new Set<string>();
-    for (const start of Object.keys(step.heap)) {
+    for (const start of heapIds(step.heap)) {
       if (!ofType(start) || done.has(start) || hideable(start)) continue;
       // From a node that stays (or starts a chain), each run of hideable nodes after it.
       let at: string | null = start;

@@ -28,13 +28,15 @@ export interface SamplingPolicy {
   /** One pass of a buffered loop keeps at most this share of the whole budget. */
   passShare: number;
   /**
-   * The most heap entries a run may keep: each step whose heap changed (a
-   * new object, a changed one, one gone) keeps a record of every object
-   * (trace/delta.ts HeapExpander, on the page), so a run's memory grows
-   * with its objects times those steps, about 60 bytes an entry. Past
-   * this, the run stops as it does when its steps run out
-   * (`stoppedBy: "memory"`). Sent with every run with the sampling rules,
-   * as both tracers count it.
+   * The most heap entries a run may keep. The page keeps a heap as what
+   * changed (trace/heapStore.ts): each object sent, which costs an entry
+   * and one for each thing it holds (an item, a field, an entry's key and
+   * its value: keptEntries), and the ids of a heap that changed (a full
+   * list every CHECKPOINT_EVERY versions). So what fills it is big objects
+   * changed at many steps (a 500-entry dict written in a long loop), about
+   * 60 bytes an entry. Past this, the run stops as it does when its steps
+   * run out (`stoppedBy: "memory"`). Sent with every run with the sampling
+   * rules, as both tracers count it.
    */
   maxHeapEntries?: number;
 }
